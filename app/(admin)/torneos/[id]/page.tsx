@@ -1,31 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Trophy, Users, Calendar, ChevronLeft, MapPin,
-  Check, X, Clock, Download, Search, MoreHorizontal,
+  Trophy, Calendar, ChevronLeft, MapPin,
+  Check, X, Clock, Download, Search, Loader2,
+  GitBranch, CheckCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { AdminRegistration, RegistrationStatus } from "@/types";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª",
-  "4a": "4ª", "5a": "5ª", "6a": "6ª", "iniciacion": "Inic.",
-};
-const GENDER_SHORT: Record<string, string> = { M: "Masc.", F: "Fem." };
+import { downloadCsv } from "@/lib/utils/csv";
+import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import type { AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
 
 const STATUS_CONFIG: Record<RegistrationStatus, { label: string; color: string; icon: React.ElementType }> = {
-  confirmed: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",  icon: Check  },
-  pending:   { label: "Pendiente",  color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30", icon: Clock  },
-  waitlist:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",    icon: Clock  },
+  confirmed: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",    icon: Check },
+  pending:   { label: "Pendiente",  color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30", icon: Clock },
+  waitlist:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",       icon: Clock },
 };
 
-type Tab = "resumen" | "inscripciones" | "calendario";
+const GENDER_SHORT = { M: "Masc.", F: "Fem." };
+
+type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro";
 
 function StatusBadge({ status }: { status: RegistrationStatus }) {
   const cfg = STATUS_CONFIG[status];
@@ -40,12 +39,12 @@ function StatusBadge({ status }: { status: RegistrationStatus }) {
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router  = useRouter();
-  const qc      = useQueryClient();
-  const [tab,            setTab]            = useState<Tab>("resumen");
-  const [regFilter,      setRegFilter]      = useState<"all" | RegistrationStatus>("all");
-  const [regSearch,      setRegSearch]      = useState("");
-  const [updatingId,     setUpdatingId]     = useState<string | null>(null);
+  const qc     = useQueryClient();
+  const [tab,          setTab]          = useState<Tab>("resumen");
+  const [regFilter,    setRegFilter]    = useState<"all" | RegistrationStatus>("all");
+  const [regSearch,    setRegSearch]    = useState("");
+  const [updatingId,   setUpdatingId]   = useState<string | null>(null);
+  const [bracketCatId, setBracketCatId] = useState("");
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["tournament", id],
@@ -58,6 +57,12 @@ export default function TorneoDetailPage() {
     enabled:  tab === "inscripciones",
   });
 
+  const { data: matches = [], isLoading: loadingMatches } = useQuery({
+    queryKey: ["matches", id],
+    queryFn:  () => adminService.matches.list(id),
+    enabled:  tab === "calendario",
+  });
+
   const updateStatus = useMutation({
     mutationFn: ({ regId, status }: { regId: string; status: string }) =>
       adminService.registrations.updateStatus(regId, status),
@@ -67,6 +72,15 @@ export default function TorneoDetailPage() {
     },
     onError: (err: Error) => toast.error(err.message),
     onSettled: () => setUpdatingId(null),
+  });
+
+  const generateBracket = useMutation({
+    mutationFn: () => adminService.tournaments.generateBracket(id, bracketCatId),
+    onSuccess:  () => {
+      toast.success("Cuadro generado correctamente");
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const handleStatus = (regId: string, status: string) => {
@@ -199,6 +213,7 @@ export default function TorneoDetailPage() {
             { key: "resumen",       label: "Resumen"        },
             { key: "inscripciones", label: `Inscripciones (${registrations.length || "…"})` },
             { key: "calendario",    label: "Calendario"     },
+            { key: "cuadro",        label: "Cuadro"         },
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
             <button
               key={key}
@@ -240,7 +255,7 @@ export default function TorneoDetailPage() {
                     return (
                       <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-foreground">
-                          {GENDER_SHORT[cat.gender]} {CATEGORY_LABEL[cat.level]}
+                          {GENDER_SHORT[cat.gender]} {CATEGORY_LABEL_SHORT[cat.level]}
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">{cat.totalSpots}</td>
                         <td className="px-4 py-3 text-sm text-foreground">{cat.registeredCount}</td>
@@ -269,7 +284,7 @@ export default function TorneoDetailPage() {
                 {tournament.categories.map((cat) => (
                   <div key={cat.id} className="flex items-center gap-3">
                     <span className="text-xs text-muted-foreground w-24 shrink-0">
-                      {GENDER_SHORT[cat.gender]} {CATEGORY_LABEL[cat.level]}
+                      {GENDER_SHORT[cat.gender]} {CATEGORY_LABEL_SHORT[cat.level]}
                     </span>
                     <div className="flex-1 h-1 bg-secondary rounded-full" />
                     <span className="text-xs text-[#D4AF37] w-32 text-right shrink-0">
@@ -417,10 +432,180 @@ export default function TorneoDetailPage() {
 
         {/* ── CALENDARIO TAB ── */}
         {tab === "calendario" && (
-          <div className="bg-card border border-border rounded-lg p-6 flex items-center justify-center min-h-[300px]">
-            <div className="text-center space-y-2">
-              <Calendar size={36} className="text-muted-foreground mx-auto" />
-              <p className="text-sm text-muted-foreground">Calendario de partidos próximamente</p>
+          <div className="space-y-4">
+            {loadingMatches ? (
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-16 rounded-lg bg-card border border-border animate-pulse" />
+                ))}
+              </div>
+            ) : matches.length === 0 ? (
+              <div className="bg-card border border-border rounded-lg p-12 flex flex-col items-center gap-3">
+                <Calendar size={36} className="text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No hay partidos registrados aún</p>
+              </div>
+            ) : (
+              (() => {
+                // Group by date
+                const byDate = (matches as MatchResult[]).reduce<Record<string, MatchResult[]>>((acc, m) => {
+                  const date = m.date.includes("T") ? m.date.split("T")[0] : m.date;
+                  if (!acc[date]) acc[date] = [];
+                  acc[date].push(m);
+                  return acc;
+                }, {});
+
+                return Object.entries(byDate).map(([date, dayMatches]) => {
+                  const label = new Date(date + "T12:00:00").toLocaleDateString("es-ES", {
+                    weekday: "long", day: "numeric", month: "long",
+                  });
+                  const pending  = dayMatches.filter((m) => !m.isResult).length;
+                  const finished = dayMatches.filter((m) =>  m.isResult).length;
+
+                  return (
+                    <div key={date} className="bg-card border border-border rounded-lg overflow-hidden">
+                      {/* Day header */}
+                      <div className="flex items-center justify-between px-5 py-3 bg-secondary/50 border-b border-border">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground capitalize">{label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{dayMatches.length} partidos</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          {finished > 0 && (
+                            <span className="flex items-center gap-1 text-green-400">
+                              <CheckCircle size={12} /> {finished} completados
+                            </span>
+                          )}
+                          {pending > 0 && (
+                            <span className="flex items-center gap-1 text-yellow-400">
+                              <Clock size={12} /> {pending} pendientes
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Matches grid */}
+                      <div className="divide-y divide-border">
+                        {dayMatches.map((m: MatchResult) => {
+                          const time = m.date.includes("T")
+                            ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+                            : "—";
+                          return (
+                            <div key={m.id} className="flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors">
+                              {/* Time */}
+                              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
+
+                              {/* Court */}
+                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
+
+                              {/* Phase badge */}
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
+                                {m.phase}
+                              </span>
+
+                              {/* Teams */}
+                              <div className="flex-1 flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-medium text-foreground truncate">{m.team1.join(" / ")}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">vs</span>
+                                <span className="text-sm font-medium text-foreground truncate">{m.team2.join(" / ")}</span>
+                              </div>
+
+                              {/* Result / Status */}
+                              {m.isResult && m.sets1 && m.sets2 ? (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <CheckCircle size={13} className="text-green-400" />
+                                  <span className="text-xs font-mono text-foreground">
+                                    {m.sets1.map((s, i) => `${s}-${m.sets2![i]}`).join(", ")}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
+                                  <Clock size={12} /> Pendiente
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                });
+              })()
+            )}
+          </div>
+        )}
+
+        {/* ── CUADRO TAB ── */}
+        {tab === "cuadro" && (
+          <div className="space-y-4">
+            {/* Generate bracket */}
+            {tournament.status !== "finished" && (
+              <div className="bg-card border border-border rounded-lg p-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Generar cuadro automático</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Genera el cuadro de eliminatorias en base a los resultados de la fase de grupos
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={bracketCatId}
+                      onChange={(e) => setBracketCatId(e.target.value)}
+                      className="h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    >
+                      <option value="">Seleccionar categoría...</option>
+                      {tournament.categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => generateBracket.mutate()}
+                      disabled={!bracketCatId || generateBracket.isPending}
+                      className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
+                    >
+                      {generateBracket.isPending
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <GitBranch size={14} />
+                      }
+                      Generar cuadro
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bracket preview per category */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {tournament.categories.map((cat) => (
+                <div key={cat.id} className="bg-card border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                    </h4>
+                    <span className="text-xs text-[#D4AF37]">
+                      {cat.currentPhaseLabel ?? cat.currentPhase}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {[
+                      { label: "Grupos",          done: ["groups","r16","qf","sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Octavos",          done: ["r16","qf","sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Cuartos",          done: ["qf","sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Semis",            done: ["sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Final",            done: ["final","finished"].includes(cat.currentPhase) },
+                    ].map(({ label, done }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${done ? "bg-[#D4AF37] border-[#D4AF37]" : "border-border"}`}>
+                          {done && <Check size={9} className="text-[#0C0C0C]" />}
+                        </div>
+                        <span className={`text-xs ${done ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

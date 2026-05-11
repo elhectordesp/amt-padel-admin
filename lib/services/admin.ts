@@ -17,6 +17,8 @@ export const adminService = {
       api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     publish: (id: string) =>
       api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
+    generateBracket: (id: string, categoryId: string) =>
+      api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId }).then((r) => r.data),
   },
 
   registrations: {
