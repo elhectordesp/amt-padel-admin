@@ -107,6 +107,26 @@ export interface MatchResult {
   status:      "pending" | "finished";
 }
 
+export interface FinanceStats {
+  period: "month" | "year";
+  revenue: {
+    registrations: number;
+    sponsorships:  number;
+    merchandise:   number;
+    total:         number;
+  };
+  costs: {
+    operational: number;
+    total:       number;
+  };
+  profit: {
+    gross:     number;
+    net:       number;
+    vatAmount: number;
+  };
+  chart: { month: string; revenue: number; profit: number }[];
+}
+
 // Form types for creating a tournament
 export interface CreateTournamentPayload {
   name:        string;

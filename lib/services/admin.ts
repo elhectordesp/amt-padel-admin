@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import type {
   AdminStats, Tournament, AdminRegistration,
-  Player, MatchResult, CreateTournamentPayload,
+  Player, MatchResult, CreateTournamentPayload, FinanceStats,
 } from "@/types";
 
 export const adminService = {
@@ -53,5 +53,10 @@ export const adminService = {
       api.get<Player[]>("/ranking", { params: { gender } }).then((r) => r.data),
     recalculate: () =>
       api.post("/admin/rankings/recalculate").then((r) => r.data),
+  },
+
+  finance: {
+    stats: (period: "month" | "year") =>
+      api.get<FinanceStats>("/admin/stats/finance", { params: { period } }).then((r) => r.data),
   },
 };
