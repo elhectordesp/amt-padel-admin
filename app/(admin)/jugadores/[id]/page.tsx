@@ -1,0 +1,290 @@
+"use client";
+
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  ChevronLeft, MapPin, Mail, Phone, Trophy,
+  TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3,
+} from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Header } from "@/components/admin/header";
+import { adminService } from "@/lib/services/admin";
+import type { CategoryLevel } from "@/types";
+
+const CATEGORY_LABEL: Record<string, string> = {
+  "1a": "1ª", "2a": "2ª", "3a": "3ª",
+  "4a": "4ª", "5a": "5ª", "6a": "6ª", "iniciacion": "Iniciación",
+};
+const LEVELS: CategoryLevel[] = ["1a","2a","3a","4a","5a","6a","iniciacion"];
+
+const changeCatSchema = z.object({
+  level:  z.string().min(1, "Selecciona una categoría"),
+  reason: z.string().min(5, "Añade una razón (mínimo 5 caracteres)"),
+});
+type ChangeCatForm = z.infer<typeof changeCatSchema>;
+
+function StatBox({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div className="text-center py-4 border-r border-border last:border-0">
+      <p className="text-2xl font-heading text-[#D4AF37]">{value}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      {sub && <p className="text-[10px] text-muted-foreground/60 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+export default function JugadorDetailPage() {
+  const { id }  = useParams<{ id: string }>();
+  const router  = useRouter();
+  const qc      = useQueryClient();
+  const [showCatModal, setShowCatModal] = useState(false);
+
+  const { data: player, isLoading } = useQuery({
+    queryKey: ["player", id],
+    queryFn:  () => adminService.players.detail(id),
+  });
+
+  const catForm = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
+
+  const changeCat = useMutation({
+    mutationFn: (data: ChangeCatForm) =>
+      adminService.players.changeLevel(id, data.level, data.reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["player", id] });
+      qc.invalidateQueries({ queryKey: ["players"] });
+      toast.success("Categoría actualizada");
+      setShowCatModal(false);
+      catForm.reset();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <Header title="Jugador" />
+        <div className="p-6 space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-20 rounded-lg bg-card animate-pulse border border-border" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!player) return null;
+
+  const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
+  const initials = player.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  const TrendIcon = player.trend === "up"   ? TrendingUp :
+                    player.trend === "down" ? TrendingDown : Minus;
+  const trendColor = player.trend === "up" ? "text-green-400" :
+                     player.trend === "down" ? "text-destructive" : "text-muted-foreground";
+
+  return (
+    <>
+      <div className="flex flex-col min-h-full">
+        <Header title="Perfil de jugador" />
+
+        <div className="flex-1 p-6 space-y-5 max-w-5xl">
+
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Link href="/jugadores" className="hover:text-foreground flex items-center gap-1">
+              <ChevronLeft size={14} /> Jugadores
+            </Link>
+            <span>/</span>
+            <span className="text-foreground">{player.name}</span>
+          </div>
+
+          {/* Hero card */}
+          <div className="bg-card border border-border rounded-lg p-6">
+            <div className="flex items-start gap-6 flex-wrap">
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                {player.photoUrl
+                  ? <img src={player.photoUrl} alt={player.name} className="w-20 h-20 rounded-full object-cover border-2 border-[#D4AF37]" />
+                  : (
+                    <div className="w-20 h-20 rounded-full bg-[rgba(212,175,55,0.1)] border-2 border-[#D4AF37] flex items-center justify-center">
+                      <span className="font-heading text-2xl text-[#D4AF37]">{initials}</span>
+                    </div>
+                  )
+                }
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-card" />
+              </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="font-heading text-xl text-foreground">{player.name}</h2>
+                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
+                    {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
+                  </span>
+                  <div className={`flex items-center gap-1 ${trendColor}`}>
+                    <TrendIcon size={14} />
+                    <span className="text-xs font-medium capitalize">{player.trend}</span>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
+                  {player.city && (
+                    <span className="flex items-center gap-1.5"><MapPin size={13} className="text-[#D4AF37]" />{player.city}</span>
+                  )}
+                  {player.email && (
+                    <span className="flex items-center gap-1.5"><Mail size={13} className="text-[#D4AF37]" />{player.email}</span>
+                  )}
+                  {player.phone && (
+                    <span className="flex items-center gap-1.5"><Phone size={13} className="text-[#D4AF37]" />{player.phone}</span>
+                  )}
+                </div>
+
+                {player.bio && (
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-xl">{player.bio}</p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 shrink-0">
+                <button
+                  onClick={() => setShowCatModal(true)}
+                  className="px-4 py-2 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-sm text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
+                >
+                  Cambiar categoría
+                </button>
+              </div>
+            </div>
+
+            {/* Stats strip */}
+            <div className="mt-5 pt-5 border-t border-border grid grid-cols-4">
+              <StatBox label="Puntos AMT"    value={player.points.toLocaleString()} />
+              <StatBox label="Partidos"      value={player.played} />
+              <StatBox label="% Victorias"   value={`${winRate}%`} sub={`${player.wins} ganados`} />
+              <StatBox label="Ranking"       value={`—`} sub={`${player.gender === "M" ? "Masc." : "Fem."} ${CATEGORY_LABEL[player.level]}`} />
+            </div>
+          </div>
+
+          {/* Partner */}
+          {player.partner && (
+            <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
+              <div className="p-2 rounded-md bg-[rgba(212,175,55,0.1)]">
+                <Trophy size={16} className="text-[#D4AF37]" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Compañero habitual</p>
+                <p className="text-sm font-medium text-foreground">{player.partner}</p>
+              </div>
+              {player.partnerId && (
+                <Link href={`/jugadores/${player.partnerId}`} className="ml-auto text-xs text-[#D4AF37] hover:underline">
+                  Ver perfil →
+                </Link>
+              )}
+            </div>
+          )}
+
+          {/* Quick stats cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { label: "Victorias",  value: player.wins,              icon: TrendingUp,  color: "text-green-400" },
+              { label: "Derrotas",   value: player.played - player.wins, icon: TrendingDown, color: "text-destructive" },
+              { label: "% Win",      value: `${winRate}%`,            icon: BarChart3,   color: "text-[#D4AF37]" },
+              { label: "Categoría",  value: CATEGORY_LABEL[player.level], icon: Trophy,   color: "text-[#D4AF37]" },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div key={label} className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
+                <div className="p-2 rounded-md bg-secondary">
+                  <Icon size={16} className={color} />
+                </div>
+                <div>
+                  <p className="text-lg font-heading text-foreground">{value}</p>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── Change Category Modal ── */}
+      {showCatModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCatModal(false)} />
+          <div className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-heading text-lg text-foreground">Cambiar categoría</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{player.name}</p>
+              </div>
+              <button onClick={() => setShowCatModal(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Current */}
+            <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-md border border-border">
+              <span className="text-xs text-muted-foreground">Categoría actual</span>
+              <span className="ml-auto font-semibold text-sm text-foreground">
+                {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
+              </span>
+            </div>
+
+            <form onSubmit={catForm.handleSubmit((d) => changeCat.mutate(d))} className="space-y-4">
+              {/* New level */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nueva categoría</label>
+                <select
+                  {...catForm.register("level")}
+                  className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                >
+                  <option value="">Seleccionar...</option>
+                  {LEVELS.filter((l) => l !== player.level).map((l) => (
+                    <option key={l} value={l}>{CATEGORY_LABEL[l]}</option>
+                  ))}
+                </select>
+                {catForm.formState.errors.level && (
+                  <p className="text-xs text-destructive">{catForm.formState.errors.level.message}</p>
+                )}
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Motivo del cambio</label>
+                <textarea
+                  {...catForm.register("reason")}
+                  rows={3}
+                  placeholder="Ej: Solicitud del jugador, resultados consistentes en categoría superior..."
+                  className="w-full px-3 py-2 rounded-md bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
+                />
+                {catForm.formState.errors.reason && (
+                  <p className="text-xs text-destructive">{catForm.formState.errors.reason.message}</p>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCatModal(false)}
+                  className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={changeCat.isPending}
+                  className="flex-1 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+                >
+                  {changeCat.isPending && <Loader2 size={14} className="animate-spin" />}
+                  Confirmar cambio
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
