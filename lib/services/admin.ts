@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import type {
   AdminStats, Tournament, AdminRegistration,
-  Player, MatchResult, CreateTournamentPayload, FinanceStats,
+  Player, MatchResult, CreateTournamentPayload, FinanceStats, AdminAlert,
 } from "@/types";
 
 export const adminService = {
@@ -59,4 +59,7 @@ export const adminService = {
     stats: (period: "month" | "year") =>
       api.get<FinanceStats>("/admin/stats/finance", { params: { period } }).then((r) => r.data),
   },
+
+  alerts: () =>
+    api.get<AdminAlert[]>("/admin/alerts").then((r) => r.data).catch(() => [] as AdminAlert[]),
 };

@@ -31,14 +31,23 @@ function StatCard({
   );
 }
 
-function AlertItem({ text, icon: Icon }: { text: string; icon: React.ElementType }) {
-  return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 cursor-pointer hover:bg-secondary/50 px-1 rounded transition-colors">
+const ALERT_ICON: Record<string, React.ElementType> = {
+  match:        Calendar,
+  player:       Users,
+  registration: Trophy,
+  payment:      DollarSign,
+  system:       AlertTriangle,
+};
+
+function AlertItem({ text, href, icon: Icon }: { text: string; href?: string; icon: React.ElementType }) {
+  const inner = (
+    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 hover:bg-secondary/50 px-1 rounded transition-colors cursor-pointer">
       <Icon size={14} className="text-[#D4AF37] shrink-0" />
       <span className="text-sm text-foreground flex-1">{text}</span>
       <span className="text-muted-foreground text-xs">›</span>
     </div>
   );
+  return href ? <a href={href}>{inner}</a> : inner;
 }
 
 export default function DashboardPage() {
@@ -51,6 +60,12 @@ export default function DashboardPage() {
   const { data: tournaments = [], isLoading: loadingTournaments } = useQuery({
     queryKey: ["tournaments"],
     queryFn:  adminService.tournaments.list,
+  });
+
+  const { data: alerts = [] } = useQuery({
+    queryKey:       ["admin-alerts"],
+    queryFn:        adminService.alerts,
+    refetchInterval: 60_000,
   });
 
   const activeTournaments = tournaments.filter((t) => t.status !== "finished");
@@ -93,15 +108,28 @@ export default function DashboardPage() {
           {/* Alertas */}
           <div className="bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground text-sm">Alertas</h3>
+              <h3 className="font-semibold text-foreground text-sm">
+                Alertas
+                {alerts.length > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded-full bg-[#D4AF37] text-[#0C0C0C] text-[9px] font-bold">
+                    {alerts.length}
+                  </span>
+                )}
+              </h3>
             </div>
-            <div>
-              <AlertItem icon={AlertTriangle} text="Revisa torneos sin pistas asignadas" />
-              <AlertItem icon={Users}         text="Jugadores sin disponibilidad completa" />
-              <AlertItem icon={Trophy}        text="Categorías próximas a llenarse"       />
-              <AlertItem icon={DollarSign}    text="Pagos pendientes de revisión"          />
-              <AlertItem icon={TrendingUp}    text="Solicitudes de cambio de categoría"   />
-            </div>
+            {alerts.length === 0 ? (
+              <div className="py-6 text-center">
+                <TrendingUp size={24} className="text-green-400 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Todo en orden</p>
+              </div>
+            ) : (
+              <div>
+                {alerts.map((a) => {
+                  const Icon = ALERT_ICON[a.type] ?? AlertTriangle;
+                  return <AlertItem key={a.id} icon={Icon} text={a.message} href={a.href} />;
+                })}
+              </div>
+            )}
           </div>
 
           {/* Torneos próximos */}

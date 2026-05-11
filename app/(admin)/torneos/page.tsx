@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   getFilteredRowModel, flexRender,
@@ -34,6 +35,7 @@ function SortIcon({ column }: { column: { getIsSorted: () => false | "asc" | "de
 }
 
 export default function TorneosPage() {
+  const router = useRouter();
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -236,7 +238,11 @@ export default function TorneosPage() {
                   </tr>
                 ) : (
                   table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                    <tr
+                      key={row.id}
+                      onClick={() => router.push(`/torneos/${row.original.id}`)}
+                      className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors cursor-pointer"
+                    >
                       {row.getVisibleCells().map((cell) => (
                         <td key={cell.id} className="px-5 py-4">
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}

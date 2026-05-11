@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Check, Clock, X, Download, ChevronRight } from "lucide-react";
+import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -148,7 +149,17 @@ export default function InscripcionesPage() {
                   className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
                 />
               </div>
-              <button className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors ml-auto">
+              <button
+                onClick={() => downloadCsv(`inscripciones-${tournamentId}`, filtered.map((r: AdminRegistration) => ({
+                  "Jugador 1": r.player1Name,
+                  "Jugador 2": r.player2Name ?? "",
+                  "Categoría": r.categoryDisplay,
+                  "Estado":    r.status,
+                  "Pago":      r.paid ? "Sí" : "No",
+                  "Fecha":     new Date(r.createdAt).toLocaleDateString("es-ES"),
+                })))}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors ml-auto"
+              >
                 <Download size={13} />
                 Exportar CSV
               </button>

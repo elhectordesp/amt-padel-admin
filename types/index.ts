@@ -107,6 +107,13 @@ export interface MatchResult {
   status:      "pending" | "finished";
 }
 
+export interface AdminAlert {
+  id:      string;
+  type:    "match" | "player" | "registration" | "payment" | "system";
+  message: string;
+  href?:   string;
+}
+
 export interface FinanceStats {
   period: "month" | "year";
   revenue: {

@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { useState } from "react";
+import { NavProgress } from "@/components/admin/nav-progress";
+import { SearchModal } from "@/components/admin/search-modal";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -16,6 +18,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <NavProgress />
+      <SearchModal />
       {children}
       <Toaster
         theme="dark"

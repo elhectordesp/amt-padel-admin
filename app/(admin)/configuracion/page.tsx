@@ -90,8 +90,7 @@ export default function ConfiguracionPage() {
   });
 
   const handleGeneralSave = (data: GeneralForm) => {
-    // Would call API: PATCH /admin/config
-    console.log("Save config:", data);
+    // TODO: connect to PATCH /admin/config when endpoint is available
     toast.success("Configuración guardada");
   };
 

@@ -97,19 +97,22 @@ export default function NuevoTorneoPage() {
   const [configData, setConfigData] = useState<ConfigData | null>(null);
 
   // ── Step 1: Info ───────────────────────────────────────────────────────
-  const infoForm = useForm<InfoData>({ resolver: zodResolver(infoSchema) });
+  const infoForm = useForm<InfoData>({
+    resolver:      zodResolver(infoSchema),
+    defaultValues: infoData ?? undefined,
+  });
 
   // ── Step 2: Categories ────────────────────────────────────────────────
   const catForm = useForm<CatData>({
-    resolver: zodResolver(catSchema),
-    defaultValues: { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25 }] },
+    resolver:      zodResolver(catSchema),
+    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25 }] },
   });
   const { fields, append, remove } = useFieldArray({ control: catForm.control, name: "categories" });
 
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
-    resolver: zodResolver(configSchema),
-    defaultValues: { format: "eliminatoria", scoringSystem: "AMT+ELO+SPA" },
+    resolver:      zodResolver(configSchema),
+    defaultValues: configData ?? { format: "eliminatoria", scoringSystem: "AMT+ELO+SPA" },
   });
 
   // ── Mutation ──────────────────────────────────────────────────────────
