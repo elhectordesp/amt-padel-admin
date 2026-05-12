@@ -1,309 +1,321 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Settings, Bell, CreditCard, Shield, Loader2, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Save, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { adminService } from "@/lib/services/admin";
+import type { SpaConfig } from "@/types";
 
-const generalSchema = z.object({
-  platformName:   z.string().min(2),
-  supportEmail:   z.string().email(),
-  supportPhone:   z.string().optional(),
-  defaultCurrency:z.string().min(1),
-});
-type GeneralForm = z.infer<typeof generalSchema>;
-
-type Tab = "general" | "notificaciones" | "pagos" | "permisos";
-
-function Field({ label, hint, error, children }: {
-  label:    string;
-  hint?:    string;
-  error?:   string;
-  children: React.ReactNode;
+// ── Small helpers ────────────────────────────────────────────────────────
+function Section({
+  title, description, children, collapsible = false,
+}: {
+  title: string; description?: string; children: React.ReactNode; collapsible?: boolean;
 }) {
+  const [open, setOpen] = useState(true);
   return (
-    <div className="space-y-1.5">
-      <div>
-        <label className="text-sm font-medium text-foreground">{label}</label>
-        {hint && <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>}
-      </div>
-      {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-5 py-4 border-b border-border hover:bg-secondary/30 transition-colors"
+        onClick={() => collapsible && setOpen((o) => !o)}
+        type="button"
+      >
+        <div className="text-left">
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+        </div>
+        {collapsible && (open
+          ? <ChevronUp size={15} className="text-muted-foreground shrink-0" />
+          : <ChevronDown size={15} className="text-muted-foreground shrink-0" />
+        )}
+      </button>
+      {open && <div className="p-5">{children}</div>}
     </div>
   );
 }
 
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+function NumInput({
+  label, value, onChange, step = 1, min, suffix,
+}: {
+  label: string; value: number; onChange: (v: number) => void;
+  step?: number; min?: number; suffix?: string;
+}) {
   return (
-    <input
-      {...props}
-      className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
-    />
+    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-border last:border-0">
+      <span className="text-sm text-muted-foreground flex-1">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          value={value}
+          step={step}
+          min={min}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-24 h-8 px-2 text-right rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+        />
+        {suffix && <span className="text-xs text-muted-foreground w-6">{suffix}</span>}
+      </div>
+    </div>
   );
 }
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex items-center justify-between cursor-pointer py-3 border-b border-border last:border-0">
-      <span className="text-sm text-foreground">{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative w-10 h-5 rounded-full transition-colors ${checked ? "bg-[#D4AF37]" : "bg-secondary border border-border"}`}
-      >
-        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${checked ? "left-[22px]" : "left-0.5"}`} />
-      </button>
-    </label>
-  );
-}
-
-const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-  { key: "general",        label: "General",        icon: Settings    },
-  { key: "notificaciones", label: "Notificaciones", icon: Bell        },
-  { key: "pagos",          label: "Pagos",          icon: CreditCard  },
-  { key: "permisos",       label: "Permisos",       icon: Shield      },
-];
-
+// ── Page ─────────────────────────────────────────────────────────────────
 export default function ConfiguracionPage() {
-  const [tab, setTab] = useState<Tab>("general");
+  const qc = useQueryClient();
+  const [showRecalcModal, setShowRecalcModal] = useState(false);
+  const [local, setLocal] = useState<SpaConfig | null>(null);
 
-  const [notifSettings, setNotifSettings] = useState({
-    newRegistration:  true,
-    paymentReceived:  true,
-    matchResult:      true,
-    categoryChange:   false,
-    systemAlerts:     true,
-    weeklyReport:     true,
+  const { data: config, isLoading } = useQuery({
+    queryKey: ["spa-config"],
+    queryFn:  adminService.spa.config,
   });
 
-  const generalForm = useForm<GeneralForm>({
-    resolver: zodResolver(generalSchema),
-    defaultValues: {
-      platformName:    "AMT Padel Tournaments",
-      supportEmail:    "soporte@amttournaments.com",
-      supportPhone:    "+34 600 123 456",
-      defaultCurrency: "EUR",
+  useEffect(() => {
+    if (config && !local) setLocal(structuredClone(config));
+  }, [config]);
+
+  const cfg: SpaConfig | undefined = local ?? config;
+
+  const save = useMutation({
+    mutationFn: () => adminService.spa.updateConfig(local!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["spa-config"] });
+      toast.success("Configuración SPA guardada correctamente");
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
-  const handleGeneralSave = (data: GeneralForm) => {
-    // TODO: connect to PATCH /admin/config when endpoint is available
-    toast.success("Configuración guardada");
-  };
+  const recalculate = useMutation({
+    mutationFn: adminService.spa.recalculate,
+    onSuccess: () => {
+      toast.success("Recalculación iniciada — puede tardar varios minutos");
+      setShowRecalcModal(false);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const setNested = (key: keyof SpaConfig, subKey: string, val: number) =>
+    setLocal((p) => p ? { ...p, [key]: { ...(p[key] as Record<string, number>), [subKey]: val } } : p);
+
+  const isDirty = local && config && JSON.stringify(local) !== JSON.stringify(config);
+
+  if (isLoading || !cfg) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <Header title="Configuración" />
+        <div className="p-6 space-y-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-36 rounded-lg bg-card animate-pulse border border-border" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-full">
       <Header title="Configuración" />
 
-      <div className="flex-1 p-6 max-w-4xl space-y-5">
+      <div className="flex-1 p-6 space-y-5 max-w-4xl">
 
-        {/* Tabs */}
-        <div className="flex items-center gap-0 border-b border-border">
-          {TABS.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                tab === key
-                  ? "border-[#D4AF37] text-[#D4AF37]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon size={15} />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── GENERAL ── */}
-        {tab === "general" && (
-          <form onSubmit={generalForm.handleSubmit(handleGeneralSave)} className="space-y-5">
-            <div className="bg-card border border-border rounded-lg p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-foreground">Información de la plataforma</h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field
-                  label="Nombre de la plataforma"
-                  error={generalForm.formState.errors.platformName?.message}
-                >
-                  <Input {...generalForm.register("platformName")} />
-                </Field>
-                <Field
-                  label="Moneda por defecto"
-                  error={generalForm.formState.errors.defaultCurrency?.message}
-                >
-                  <select
-                    {...generalForm.register("defaultCurrency")}
-                    className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                  >
-                    <option value="EUR">EUR — Euro</option>
-                    <option value="USD">USD — Dólar</option>
-                    <option value="GBP">GBP — Libra</option>
-                  </select>
-                </Field>
-                <Field
-                  label="Email de soporte"
-                  error={generalForm.formState.errors.supportEmail?.message}
-                >
-                  <Input {...generalForm.register("supportEmail")} type="email" />
-                </Field>
-                <Field label="Teléfono de contacto">
-                  <Input {...generalForm.register("supportPhone")} type="tel" />
-                </Field>
-              </div>
-            </div>
-
-            <div className="flex justify-end">
+        {/* Unsaved changes bar */}
+        {isDirty && (
+          <div className="flex items-center justify-between gap-4 px-4 py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
+            <span className="text-sm text-[#D4AF37] font-medium">Hay cambios sin guardar</span>
+            <div className="flex gap-2">
               <button
-                type="submit"
-                disabled={generalForm.formState.isSubmitting}
-                className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
+                onClick={() => setLocal(structuredClone(config!))}
+                className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary transition-colors"
               >
-                {generalForm.formState.isSubmitting
-                  ? <Loader2 size={14} className="animate-spin" />
-                  : <Check size={14} />
-                }
-                Guardar cambios
+                Descartar
               </button>
-            </div>
-          </form>
-        )}
-
-        {/* ── NOTIFICACIONES ── */}
-        {tab === "notificaciones" && (
-          <div className="bg-card border border-border rounded-lg p-5 space-y-1">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Notificaciones por email</h3>
-            <Toggle
-              label="Nueva inscripción recibida"
-              checked={notifSettings.newRegistration}
-              onChange={(v) => setNotifSettings((s) => ({ ...s, newRegistration: v }))}
-            />
-            <Toggle
-              label="Pago confirmado"
-              checked={notifSettings.paymentReceived}
-              onChange={(v) => setNotifSettings((s) => ({ ...s, paymentReceived: v }))}
-            />
-            <Toggle
-              label="Resultado de partido introducido"
-              checked={notifSettings.matchResult}
-              onChange={(v) => setNotifSettings((s) => ({ ...s, matchResult: v }))}
-            />
-            <Toggle
-              label="Solicitud de cambio de categoría"
-              checked={notifSettings.categoryChange}
-              onChange={(v) => setNotifSettings((s) => ({ ...s, categoryChange: v }))}
-            />
-            <Toggle
-              label="Alertas del sistema"
-              checked={notifSettings.systemAlerts}
-              onChange={(v) => setNotifSettings((s) => ({ ...s, systemAlerts: v }))}
-            />
-            <Toggle
-              label="Resumen semanal"
-              checked={notifSettings.weeklyReport}
-              onChange={(v) => setNotifSettings((s) => ({ ...s, weeklyReport: v }))}
-            />
-            <div className="pt-3">
               <button
-                onClick={() => toast.success("Preferencias guardadas")}
-                className="px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors"
+                onClick={() => save.mutate()}
+                disabled={save.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
               >
-                Guardar preferencias
+                {save.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                Guardar
               </button>
             </div>
           </div>
         )}
 
-        {/* ── PAGOS ── */}
-        {tab === "pagos" && (
-          <div className="space-y-4">
-            <div className="bg-card border border-border rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-4">Métodos de pago</h3>
-              <div className="space-y-3">
-                {[
-                  { name: "Stripe", desc: "Tarjetas de crédito y débito", active: true  },
-                  { name: "Bizum", desc: "Pago móvil instantáneo (España)", active: false },
-                  { name: "Transferencia bancaria", desc: "SEPA / SWIFT", active: true  },
-                ].map((m) => (
-                  <div key={m.name} className="flex items-center gap-4 p-3 bg-secondary/50 rounded-md border border-border">
-                    <div className="w-8 h-8 rounded bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.2)] flex items-center justify-center">
-                      <CreditCard size={14} className="text-[#D4AF37]" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{m.name}</p>
-                      <p className="text-xs text-muted-foreground">{m.desc}</p>
-                    </div>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${m.active ? "text-green-400 bg-green-400/10 border-green-400/30" : "text-muted-foreground bg-secondary border-border"}`}>
-                      {m.active ? "Activo" : "Inactivo"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="bg-card border border-border rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-4">IVA y facturación</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Tipo de IVA (%)">
-                  <Input type="number" defaultValue={21} min={0} max={100} />
-                </Field>
-                <Field label="Prefijo de factura">
-                  <Input defaultValue="AMT-" />
-                </Field>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={() => toast.success("Configuración de pagos guardada")}
-                  className="px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors"
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
+        {/* K-factors */}
+        <Section
+          title="K-factors — Volatilidad"
+          description="Cuántos puntos SPA se mueven por partido según el historial del jugador"
+        >
+          <NumInput
+            label="Calibrando (< partidos de calibración)"
+            value={cfg.k_factors.calibrating}
+            onChange={(v) => setNested("k_factors", "calibrating", v)}
+            min={1}
+          />
+          <NumInput
+            label="Asentando (fiabilidad < 60%)"
+            value={cfg.k_factors.settling}
+            onChange={(v) => setNested("k_factors", "settling", v)}
+            min={1}
+          />
+          <NumInput
+            label="Estable (fiabilidad ≥ 60%)"
+            value={cfg.k_factors.stable}
+            onChange={(v) => setNested("k_factors", "stable", v)}
+            min={1}
+          />
+        </Section>
+
+        {/* Tier multipliers */}
+        <Section
+          title="Multiplicadores por tier de torneo"
+          description="Los puntos SPA y de circuito se multiplican según el tier del torneo"
+        >
+          <NumInput label="⚪ Open"   value={cfg.tier_multipliers.open}   onChange={(v) => setNested("tier_multipliers", "open",   v)} step={0.1} min={0.1} />
+          <NumInput label="🥈 Silver" value={cfg.tier_multipliers.silver} onChange={(v) => setNested("tier_multipliers", "silver", v)} step={0.1} min={0.1} />
+          <NumInput label="🥇 Gold"   value={cfg.tier_multipliers.gold}   onChange={(v) => setNested("tier_multipliers", "gold",   v)} step={0.1} min={0.1} />
+        </Section>
+
+        {/* Round multipliers */}
+        <Section
+          title="Multiplicadores por ronda"
+          description="Los puntos base se multiplican según la importancia del partido dentro del torneo"
+        >
+          <NumInput label="Fase de grupos"  value={cfg.round_multipliers.groups}       onChange={(v) => setNested("round_multipliers", "groups",       v)} step={0.05} min={0.1} />
+          <NumInput label="R16 / Previas"   value={cfg.round_multipliers.r16}          onChange={(v) => setNested("round_multipliers", "r16",          v)} step={0.05} min={0.1} />
+          <NumInput label="Cuartos de final" value={cfg.round_multipliers.quarterfinal} onChange={(v) => setNested("round_multipliers", "quarterfinal", v)} step={0.05} min={0.1} />
+          <NumInput label="Semifinal"        value={cfg.round_multipliers.semifinal}    onChange={(v) => setNested("round_multipliers", "semifinal",    v)} step={0.05} min={0.1} />
+          <NumInput label="Final"            value={cfg.round_multipliers.final}        onChange={(v) => setNested("round_multipliers", "final",        v)} step={0.05} min={0.1} />
+        </Section>
+
+        {/* Circuit base points */}
+        <Section
+          title="Puntos de circuito base (torneo Open)"
+          description="Puntos que otorga cada ronda en un Open. Se multiplican por el tier del torneo."
+          collapsible
+        >
+          <NumInput label="Ganador"        value={cfg.circuit_base_points.winner}       onChange={(v) => setNested("circuit_base_points", "winner",       v)} min={0} />
+          <NumInput label="Finalista"      value={cfg.circuit_base_points.finalist}     onChange={(v) => setNested("circuit_base_points", "finalist",     v)} min={0} />
+          <NumInput label="Semifinal"      value={cfg.circuit_base_points.semifinal}    onChange={(v) => setNested("circuit_base_points", "semifinal",    v)} min={0} />
+          <NumInput label="Cuartos"        value={cfg.circuit_base_points.quarterfinal} onChange={(v) => setNested("circuit_base_points", "quarterfinal", v)} min={0} />
+          <NumInput label="R16"            value={cfg.circuit_base_points.r16}          onChange={(v) => setNested("circuit_base_points", "r16",          v)} min={0} />
+          <NumInput label="Fase de grupos" value={cfg.circuit_base_points.groups}       onChange={(v) => setNested("circuit_base_points", "groups",       v)} min={0} />
+
+          {/* Preview table */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Vista previa puntos por tier</p>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Ronda", "⚪ Open", "🥈 Silver", "🥇 Gold"].map((h) => (
+                    <th key={h} className="pb-2 text-left text-muted-foreground font-semibold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(["winner","finalist","semifinal","quarterfinal","r16","groups"] as const).map((round) => {
+                  const base = cfg.circuit_base_points[round];
+                  const labels: Record<string, string> = { winner: "Ganador", finalist: "Finalista", semifinal: "Semifinal", quarterfinal: "Cuartos", r16: "R16", groups: "Grupos" };
+                  return (
+                    <tr key={round} className="border-b border-border last:border-0">
+                      <td className="py-1.5 text-muted-foreground">{labels[round]}</td>
+                      <td className="py-1.5 text-foreground font-medium">{Math.round(base * cfg.tier_multipliers.open)}</td>
+                      <td className="py-1.5 text-foreground font-medium">{Math.round(base * cfg.tier_multipliers.silver)}</td>
+                      <td className="py-1.5 text-[#D4AF37] font-bold">{Math.round(base * cfg.tier_multipliers.gold)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
+        </Section>
 
-        {/* ── PERMISOS ── */}
-        {tab === "permisos" && (
-          <div className="bg-card border border-border rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Roles de administrador</h3>
-            <div className="space-y-3">
-              {[
-                { name: "Super Admin", email: "admin@amt.com",        perms: ["Acceso total"],                               active: true  },
-                { name: "Árbitro",     email: "arbitro@amt.com",      perms: ["Resultados", "Calendario"],                  active: true  },
-                { name: "Coordinador", email: "coord@amt.com",        perms: ["Torneos", "Inscripciones"],                  active: false },
-              ].map((admin) => (
-                <div key={admin.email} className="flex items-center gap-4 p-3 bg-secondary/50 rounded-md border border-border">
-                  <div className="w-9 h-9 rounded-full bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.2)] flex items-center justify-center shrink-0">
-                    <span className="text-[11px] font-bold text-[#D4AF37]">{admin.name[0]}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{admin.name}</p>
-                    <p className="text-xs text-muted-foreground">{admin.email}</p>
-                    <div className="flex gap-1.5 mt-1 flex-wrap">
-                      {admin.perms.map((p) => (
-                        <span key={p} className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <span className={`text-[10px] font-semibold shrink-0 px-2 py-0.5 rounded-full border ${admin.active ? "text-green-400 bg-green-400/10 border-green-400/30" : "text-muted-foreground bg-secondary border-border"}`}>
-                    {admin.active ? "Activo" : "Inactivo"}
-                  </span>
+        {/* General */}
+        <Section
+          title="Parámetros generales"
+          description="SPA inicial de nuevos jugadores y umbral de calibración"
+          collapsible
+        >
+          <NumInput
+            label="SPA inicial (nuevos jugadores)"
+            value={cfg.starting_spa}
+            onChange={(v) => setLocal((p) => p ? { ...p, starting_spa: v } : p)}
+            min={0}
+          />
+          <NumInput
+            label="Partidos para calibración completa"
+            value={cfg.calibration_matches}
+            onChange={(v) => setLocal((p) => p ? { ...p, calibration_matches: v } : p)}
+            min={1}
+            suffix="prt"
+          />
+        </Section>
+
+        {/* Thresholds */}
+        <Section
+          title="Umbrales de categoría SPA"
+          description="Rango de puntos SPA que define cada nivel. Cambiar estos valores requiere recalcular."
+          collapsible
+        >
+          <div className="space-y-0">
+            {(Object.entries(cfg.thresholds) as [string, [number, number]][]).map(([level, [min, max]]) => {
+              const label = level === "iniciacion" ? "Iniciación" : level.replace("a", "ª");
+              return (
+                <div key={level} className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+                  <span className="text-sm text-muted-foreground w-24">{label}</span>
+                  <input
+                    type="number" value={min} min={0}
+                    onChange={(e) => setLocal((p) => p ? { ...p, thresholds: { ...p.thresholds, [level]: [Number(e.target.value), max] as [number, number] } } : p)}
+                    className="w-24 h-8 px-2 text-right rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                  <span className="text-xs text-muted-foreground">—</span>
+                  <input
+                    type="number" value={max} min={0}
+                    onChange={(e) => setLocal((p) => p ? { ...p, thresholds: { ...p.thresholds, [level]: [min, Number(e.target.value)] as [number, number] } } : p)}
+                    className="w-24 h-8 px-2 text-right rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                  <span className="text-xs text-muted-foreground ml-auto">SPA</span>
                 </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-4">
-              La gestión completa de permisos estará disponible próximamente.
+              );
+            })}
+          </div>
+        </Section>
+
+        {/* Danger zone */}
+        <div className="bg-card border border-destructive/30 rounded-lg p-5 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <AlertTriangle size={14} className="text-destructive" />
+              Zona de peligro — Recalcular SPA
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+              Recalcula los puntos SPA de todos los jugadores desde el historial de partidos usando la configuración actual. El proceso corre en background y puede tardar varios minutos. Los rankings actuales serán sobreescritos.
             </p>
           </div>
-        )}
+          <button
+            onClick={() => setShowRecalcModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-destructive/40 text-sm text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+          >
+            <RefreshCw size={14} />
+            Recalcular todo
+          </button>
+        </div>
 
       </div>
+
+      <ConfirmModal
+        open={showRecalcModal}
+        title="¿Recalcular todo el SPA?"
+        description="Se recalcularán los puntos SPA de todos los jugadores desde el inicio usando la configuración actual. Esta acción no se puede deshacer."
+        confirmLabel="Sí, recalcular"
+        danger
+        loading={recalculate.isPending}
+        onClose={() => setShowRecalcModal(false)}
+        onConfirm={() => recalculate.mutate()}
+      />
     </div>
   );
 }

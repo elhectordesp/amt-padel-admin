@@ -33,6 +33,7 @@ const catSchema = z.object({
 });
 
 const configSchema = z.object({
+  tier:                z.enum(["open", "silver", "gold"]),
   format:              z.string().min(1),
   scoringSystem:       z.string().min(1),
   registrationDeadline:z.string().optional(),
@@ -60,6 +61,12 @@ const SCORING_LABEL: Record<string, string> = {
   "AMT+ELO+SPA": "Puntos AMT + ELO + SPA",
   "AMT":         "Solo Puntos AMT",
   "ELO":         "Solo ELO",
+};
+
+const TIER_LABEL: Record<string, string> = {
+  "open":   "⚪ Open",
+  "silver": "🥈 Silver",
+  "gold":   "🥇 Gold",
 };
 
 const STEPS = [
@@ -141,14 +148,17 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { format: "eliminatoria", scoringSystem: "AMT+ELO+SPA" },
+    defaultValues: configData ?? { tier: "open", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA" },
   });
 
   // ── Mutation ──────────────────────────────────────────────────────────
   const create = useMutation({
     mutationFn: () => adminService.tournaments.create({
       ...infoData!,
-      ...configData!,
+      tier:        configData!.tier,
+      format:      configData!.format,
+      scoringSystem: configData!.scoringSystem,
+      registrationDeadline: configData!.registrationDeadline,
       categories: catData!.categories.map((c) => ({
         gender:     c.gender as Gender,
         level:      c.level  as CategoryLevel,
@@ -343,6 +353,13 @@ export default function NuevoTorneoPage() {
                 <p className="text-sm text-muted-foreground mt-0.5">Formato, puntuación y plazos</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Tier del torneo">
+                  <Select {...configForm.register("tier")}>
+                    <option value="open">⚪ Open</option>
+                    <option value="silver">🥈 Silver</option>
+                    <option value="gold">🥇 Gold</option>
+                  </Select>
+                </Field>
                 <Field label="Formato" error={configForm.formState.errors.format?.message}>
                   <Select {...configForm.register("format")}>
                     <option value="eliminatoria">Eliminatoria + Consolación</option>
@@ -414,6 +431,7 @@ export default function NuevoTorneoPage() {
                 <div className="bg-secondary/50 rounded-lg border border-border p-4 space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Configuración</p>
                   {[
+                    ["Tier",         TIER_LABEL[configData.tier] ?? configData.tier],
                     ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Cierre insc.", configData.registrationDeadline ?? "—"],

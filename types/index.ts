@@ -1,7 +1,9 @@
 export type Gender             = "M" | "F";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
 export type TournamentStatus   = "open" | "ongoing" | "finished";
+export type TournamentTier     = "open" | "silver" | "gold";
 export type RegistrationStatus = "pending" | "confirmed" | "waitlist";
+export type RankingType        = "spa" | "circuit";
 
 export interface AdminStats {
   activeTournaments: number;
@@ -41,6 +43,8 @@ export interface Tournament {
   city?:       string;
   prize?:      string;
   status:      TournamentStatus;
+  tier?:       TournamentTier;
+  spaTier?:    TournamentTier;
   categories:  TournamentCategory[];
   schedule?:   TournamentScheduleDay[];
   hasShirts?:  boolean;
@@ -49,6 +53,47 @@ export interface Tournament {
   scoringSystem?: string;
   registrationDeadline?: string;
   courts?:     string[];
+  season?:     number;
+}
+
+export interface SpaProfile {
+  spaPoints:      number;
+  spaLevel:       CategoryLevel;
+  spaProgression: number;
+  spaReliability: number;
+  spaMatches:     number;
+  isCalibrating:  boolean;
+}
+
+export interface SpaConfig {
+  starting_spa:        number;
+  calibration_matches: number;
+  k_factors: {
+    calibrating: number;
+    settling:    number;
+    stable:      number;
+  };
+  round_multipliers: {
+    groups:       number;
+    r16:          number;
+    quarterfinal: number;
+    semifinal:    number;
+    final:        number;
+  };
+  tier_multipliers: {
+    open:   number;
+    silver: number;
+    gold:   number;
+  };
+  circuit_base_points: {
+    winner:       number;
+    finalist:     number;
+    semifinal:    number;
+    quarterfinal: number;
+    r16:          number;
+    groups:       number;
+  };
+  thresholds: Record<CategoryLevel, [number, number]>;
 }
 
 export interface AdminRegistration {
@@ -159,6 +204,7 @@ export interface CreateTournamentPayload {
   startDate:   string;
   endDate:     string;
   prize?:      string;
+  tier:        TournamentTier;
   format?:     string;
   scoringSystem?: string;
   registrationDeadline?: string;

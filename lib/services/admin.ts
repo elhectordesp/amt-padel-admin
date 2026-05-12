@@ -3,6 +3,7 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
+  SpaConfig, RankingType,
 } from "@/types";
 
 export const adminService = {
@@ -45,12 +46,19 @@ export const adminService = {
     categoryHistory: (id: string)                  => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data).catch(() => [] as CategoryChange[]),
   },
 
-  rankings: {
-    list:        (gender: string) => api.get<Player[]>("/ranking", { params: { gender } }).then((r) => r.data),
-    recalculate: ()               => api.post("/admin/rankings/recalculate").then((r) => r.data),
-  },
-
   finance: {
     stats: (period: "month" | "year") => api.get<FinanceStats>("/admin/stats/finance", { params: { period } }).then((r) => r.data),
+  },
+
+  spa: {
+    config:      ()                        => api.get<SpaConfig>("/admin/spa/config").then((r) => r.data),
+    updateConfig:(data: Partial<SpaConfig>)=> api.put<SpaConfig>("/admin/spa/config", data).then((r) => r.data),
+    recalculate: ()                        => api.post("/admin/spa/recalculate").then((r) => r.data),
+  },
+
+  rankings: {
+    list:        (gender: string, type: RankingType = "circuit", season?: number) =>
+      api.get<Player[]>("/ranking", { params: { gender, type, ...(season ? { season } : {}) } }).then((r) => r.data),
+    recalculate: () => api.post("/admin/rankings/recalculate").then((r) => r.data),
   },
 };

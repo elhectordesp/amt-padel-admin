@@ -19,6 +19,7 @@ const schema = z.object({
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
+  tier:                 z.enum(["open", "silver", "gold"]).optional(),
   format:               z.string().optional(),
   scoringSystem:        z.string().optional(),
   registrationDeadline: z.string().optional(),
@@ -82,6 +83,7 @@ export default function EditarTorneoPage() {
       scoringSystem:        tournament.scoringSystem        ?? "",
       registrationDeadline: tournament.registrationDeadline ?? "",
       status:               tournament.status,
+      tier:                 tournament.spaTier ?? tournament.tier ?? "open",
     });
   }, [tournament, reset]);
 
@@ -168,6 +170,13 @@ export default function EditarTorneoPage() {
                   <option value="open">Abierto</option>
                   <option value="ongoing">En curso</option>
                   <option value="finished">Finalizado</option>
+                </Select>
+              </Field>
+              <Field label="Tier">
+                <Select {...register("tier")}>
+                  <option value="open">⚪ Open</option>
+                  <option value="silver">🥈 Silver</option>
+                  <option value="gold">🥇 Gold</option>
                 </Select>
               </Field>
               <Field label="Formato">
