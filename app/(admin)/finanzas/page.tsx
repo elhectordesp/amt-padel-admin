@@ -88,10 +88,10 @@ export default function FinanzasPage() {
     queryFn:  () => adminService.finance.stats(period),
   });
 
-  // Derived values (with/without VAT)
-  const totalWithVat    = data?.revenue.total ?? 0;
-  const totalWithoutVat = totalWithVat / (1 + VAT_RATE);
-  const vatAmount       = data?.profit.vatAmount ?? totalWithVat - totalWithoutVat;
+  // Use backend values directly — avoid frontend rounding drift
+  const totalWithVat    = data?.revenue.total   ?? 0;
+  const vatAmount       = data?.profit.vatAmount ?? 0;
+  const totalWithoutVat = totalWithVat - vatAmount;
   const costsWithVat    = Math.abs(data?.costs.total ?? 0);
   const netProfit       = data?.profit.net ?? 0;
   const grossProfit     = data?.profit.gross ?? 0;

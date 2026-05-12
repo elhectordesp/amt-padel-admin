@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle } from "lucide-react";
+import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activity, Clock } from "lucide-react";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 
@@ -68,6 +68,12 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
+  const { data: activity = [] } = useQuery({
+    queryKey:       ["admin-activity"],
+    queryFn:        adminService.activity,
+    refetchInterval: 60_000,
+  });
+
   const activeTournaments = tournaments.filter((t) => t.status !== "finished");
 
   return (
@@ -104,35 +110,70 @@ export default function DashboardPage() {
         </div>
 
         {/* Middle row */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Alertas */}
-          <div className="bg-card border border-border rounded-lg p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground text-sm">
-                Alertas
-                {alerts.length > 0 && (
-                  <span className="ml-2 px-1.5 py-0.5 rounded-full bg-[#D4AF37] text-[#0C0C0C] text-[9px] font-bold">
-                    {alerts.length}
-                  </span>
-                )}
-              </h3>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+
+          {/* Col 1: alertas + actividad */}
+          <div className="space-y-5">
+            {/* Alertas */}
+            <div className="bg-card border border-border rounded-lg p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground text-sm">
+                  Alertas
+                  {alerts.length > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded-full bg-[#D4AF37] text-[#0C0C0C] text-[9px] font-bold">
+                      {alerts.length}
+                    </span>
+                  )}
+                </h3>
+              </div>
+              {alerts.length === 0 ? (
+                <div className="py-6 text-center">
+                  <TrendingUp size={24} className="text-green-400 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Todo en orden</p>
+                </div>
+              ) : (
+                <div>
+                  {alerts.map((a) => {
+                    const Icon = ALERT_ICON[a.type] ?? AlertTriangle;
+                    return <AlertItem key={a.id} icon={Icon} text={a.message} href={a.href} />;
+                  })}
+                </div>
+              )}
             </div>
-            {alerts.length === 0 ? (
-              <div className="py-6 text-center">
-                <TrendingUp size={24} className="text-green-400 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Todo en orden</p>
+
+            {/* Activity feed */}
+            <div className="bg-card border border-border rounded-lg p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity size={15} className="text-[#D4AF37]" />
+                <h3 className="font-semibold text-foreground text-sm">Actividad reciente</h3>
               </div>
-            ) : (
-              <div>
-                {alerts.map((a) => {
-                  const Icon = ALERT_ICON[a.type] ?? AlertTriangle;
-                  return <AlertItem key={a.id} icon={Icon} text={a.message} href={a.href} />;
-                })}
-              </div>
-            )}
+              {activity.length === 0 ? (
+                <div className="py-6 text-center">
+                  <Clock size={24} className="text-muted-foreground mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Sin actividad reciente</p>
+                </div>
+              ) : (
+                <div>
+                  {activity.slice(0, 8).map((item) => {
+                    const inner = (
+                      <div className="flex items-start gap-3 py-2.5 border-b border-border last:border-0">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-foreground leading-snug">{item.message}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.time}</p>
+                        </div>
+                      </div>
+                    );
+                    return item.href
+                      ? <a key={item.id} href={item.href} className="block hover:bg-secondary/50 -mx-1 px-1 rounded transition-colors">{inner}</a>
+                      : <div key={item.id}>{inner}</div>;
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Torneos próximos */}
+          {/* Col 2-3: Torneos próximos */}
           <div className="xl:col-span-2 bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-foreground text-sm">Torneos activos y próximos</h3>

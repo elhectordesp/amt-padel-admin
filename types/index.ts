@@ -134,6 +134,23 @@ export interface FinanceStats {
   chart: { month: string; revenue: number; profit: number }[];
 }
 
+export interface CategoryChange {
+  id:        string;
+  date:      string;
+  from:      CategoryLevel;
+  to:        CategoryLevel;
+  reason:    string;
+  adminName: string;
+}
+
+export interface ActivityItem {
+  id:      string;
+  type:    "registration" | "result" | "player" | "tournament" | "payment";
+  message: string;
+  href?:   string;
+  time:    string;
+}
+
 // Form types for creating a tournament
 export interface CreateTournamentPayload {
   name:        string;

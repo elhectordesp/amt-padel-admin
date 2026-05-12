@@ -6,11 +6,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Trophy, Calendar, ChevronLeft, MapPin,
   Check, X, Clock, Download, Search, Loader2,
-  GitBranch, CheckCircle,
+  GitBranch, CheckCircle, Copy, Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
@@ -39,12 +41,14 @@ function StatusBadge({ status }: { status: RegistrationStatus }) {
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const qc     = useQueryClient();
-  const [tab,          setTab]          = useState<Tab>("resumen");
-  const [regFilter,    setRegFilter]    = useState<"all" | RegistrationStatus>("all");
-  const [regSearch,    setRegSearch]    = useState("");
-  const [updatingId,   setUpdatingId]   = useState<string | null>(null);
-  const [bracketCatId, setBracketCatId] = useState("");
+  const [tab,            setTab]          = useState<Tab>("resumen");
+  const [regFilter,      setRegFilter]    = useState<"all" | RegistrationStatus>("all");
+  const [regSearch,      setRegSearch]    = useState("");
+  const [updatingId,     setUpdatingId]   = useState<string | null>(null);
+  const [bracketCatId,   setBracketCatId] = useState("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["tournament", id],
@@ -72,6 +76,26 @@ export default function TorneoDetailPage() {
     },
     onError: (err: Error) => toast.error(err.message),
     onSettled: () => setUpdatingId(null),
+  });
+
+  const duplicate = useMutation({
+    mutationFn: () => adminService.tournaments.duplicate(id),
+    onSuccess:  (t) => {
+      qc.invalidateQueries({ queryKey: ["tournaments"] });
+      toast.success("Torneo duplicado");
+      router.push(`/torneos/${t.id}`);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteTournament = useMutation({
+    mutationFn: () => adminService.tournaments.delete(id),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ["tournaments"] });
+      toast.success("Torneo eliminado");
+      router.push("/torneos");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const generateBracket = useMutation({
@@ -131,6 +155,7 @@ export default function TorneoDetailPage() {
   };
 
   return (
+    <>
     <div className="flex flex-col min-h-full">
       <Header title={tournament.name} />
 
@@ -174,6 +199,21 @@ export default function TorneoDetailPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => duplicate.mutate()}
+                disabled={duplicate.isPending}
+                title="Duplicar torneo"
+                className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+              >
+                {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                title="Eliminar torneo"
+                className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
+              >
+                <Trash2 size={15} />
+              </button>
               <Link
                 href={`/torneos/${id}/editar`}
                 className="px-4 py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors"
@@ -612,5 +652,17 @@ export default function TorneoDetailPage() {
 
       </div>
     </div>
+
+    <ConfirmModal
+      open={showDeleteModal}
+      title="Eliminar torneo"
+      description={`¿Seguro que quieres eliminar "${tournament?.name}"? Esta acción no se puede deshacer.`}
+      confirmLabel="Eliminar"
+      danger
+      loading={deleteTournament.isPending}
+      onClose={() => setShowDeleteModal(false)}
+      onConfirm={() => deleteTournament.mutate()}
+    />
+    </>
   );
 }

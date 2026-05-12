@@ -123,7 +123,7 @@ export default function ResultadosPage() {
     queryFn:  adminService.tournaments.list,
   });
 
-  const ongoingTournaments = tournaments.filter((t: Tournament) => t.status === "ongoing");
+  const ongoingTournaments = tournaments.filter((t: Tournament) => t.status === "ongoing" || t.status === "open");
   const [tournamentId, setTournamentId] = useState<string>("");
 
   const { data: matches = [], isLoading } = useQuery({

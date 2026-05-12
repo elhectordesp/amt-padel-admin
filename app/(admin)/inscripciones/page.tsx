@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Clock, X, Download, ChevronRight } from "lucide-react";
+import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -22,6 +22,8 @@ const STATUS_CFG: Record<RegistrationStatus, { label: string; cls: string }> = {
 
 type StatusFilter = "all" | RegistrationStatus;
 
+const PAGE_SIZE = 20;
+
 export default function InscripcionesPage() {
   const qc = useQueryClient();
 
@@ -29,6 +31,8 @@ export default function InscripcionesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search,       setSearch]       = useState("");
   const [updatingId,   setUpdatingId]   = useState<string | null>(null);
+  const [selected,     setSelected]     = useState<Set<string>>(new Set());
+  const [page,         setPage]         = useState(0);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -56,6 +60,29 @@ export default function InscripcionesPage() {
     setUpdatingId(regId);
     updateStatus.mutate({ regId, status });
   };
+
+  const bulkStatus = useMutation({
+    mutationFn: (status: string) =>
+      adminService.registrations.bulkStatus(Array.from(selected), status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      toast.success(`${selected.size} inscripción(es) actualizadas`);
+      setSelected(new Set());
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const toggleAll = (ids: string[]) =>
+    setSelected((prev) =>
+      ids.every((id) => prev.has(id)) ? new Set() : new Set(ids),
+    );
 
   const filtered = useMemo(() =>
     registrations
@@ -89,7 +116,7 @@ export default function InscripcionesPage() {
         <div className="flex items-center gap-4 flex-wrap">
           <select
             value={tournamentId}
-            onChange={(e) => { setTournamentId(e.target.value); setStatusFilter("all"); setSearch(""); }}
+            onChange={(e) => { setTournamentId(e.target.value); setStatusFilter("all"); setSearch(""); setSelected(new Set()); setPage(0); }}
             className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] min-w-[280px]"
           >
             <option value="">Selecciona un torneo...</option>
@@ -165,102 +192,193 @@ export default function InscripcionesPage() {
               </button>
             </div>
 
+            {/* Bulk action bar */}
+            {selected.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
+                <Users size={14} className="text-[#D4AF37]" />
+                <span className="text-sm font-medium text-[#D4AF37]">{selected.size} seleccionadas</span>
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    onClick={() => bulkStatus.mutate("confirmed")}
+                    disabled={bulkStatus.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-500/10 border border-green-500/30 text-xs font-medium text-green-400 hover:bg-green-500/20 disabled:opacity-50 transition-colors"
+                  >
+                    <Check size={12} /> Confirmar
+                  </button>
+                  <button
+                    onClick={() => bulkStatus.mutate("waitlist")}
+                    disabled={bulkStatus.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/30 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-50 transition-colors"
+                  >
+                    <Clock size={12} /> En espera
+                  </button>
+                  <button
+                    onClick={() => bulkStatus.mutate("cancelled")}
+                    disabled={bulkStatus.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-xs font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50 transition-colors"
+                  >
+                    <X size={12} /> Rechazar
+                  </button>
+                  <button
+                    onClick={() => setSelected(new Set())}
+                    className="text-xs text-muted-foreground hover:text-foreground ml-1 transition-colors"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Table */}
-            <div className="bg-card border border-border rounded-lg overflow-hidden">
-              {isLoading ? (
-                <div className="space-y-0">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="flex gap-4 px-5 py-4 border-b border-border">
-                      <div className="h-4 w-44 rounded bg-secondary animate-pulse" />
-                      <div className="h-4 w-24 rounded bg-secondary animate-pulse" />
-                      <div className="h-4 w-20 rounded bg-secondary animate-pulse ml-auto" />
-                    </div>
-                  ))}
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  No hay inscripciones para estos filtros
-                </div>
-              ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-secondary/50">
-                      {["Pareja", "Categoría", "Fecha", "Estado", "Pago", "Acciones"].map((h) => (
-                        <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {h}
-                        </th>
+            {(() => {
+              const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+              const pageIds   = pageItems.map((r: AdminRegistration) => r.id);
+              const allPageSelected = pageIds.length > 0 && pageIds.every((id: string) => selected.has(id));
+
+              return (
+                <div className="bg-card border border-border rounded-lg overflow-hidden">
+                  {isLoading ? (
+                    <div className="space-y-0">
+                      {[...Array(6)].map((_, i) => (
+                        <div key={i} className="flex gap-4 px-5 py-4 border-b border-border">
+                          <div className="h-4 w-44 rounded bg-secondary animate-pulse" />
+                          <div className="h-4 w-24 rounded bg-secondary animate-pulse" />
+                          <div className="h-4 w-20 rounded bg-secondary animate-pulse ml-auto" />
+                        </div>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((reg: AdminRegistration) => {
-                      const scfg = STATUS_CFG[reg.status];
-                      return (
-                        <tr key={reg.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                          <td className="px-5 py-3.5">
-                            <p className="text-sm font-medium text-foreground">{reg.player1Name}</p>
-                            {reg.player2Name
-                              ? <p className="text-xs text-muted-foreground">{reg.player2Name}</p>
-                              : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
-                            }
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">{reg.categoryDisplay}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(reg.createdAt).toLocaleDateString("es-ES")}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
-                              {scfg.label}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
-                              {reg.paid ? "Pagado" : "Pendiente"}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-1">
-                              {reg.status !== "confirmed" && (
-                                <button
-                                  onClick={() => handleStatus(reg.id, "confirmed")}
-                                  disabled={updatingId === reg.id}
-                                  title="Confirmar"
-                                  className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 disabled:opacity-40 transition-colors"
-                                >
-                                  <Check size={14} />
-                                </button>
-                              )}
-                              {reg.status !== "waitlist" && (
-                                <button
-                                  onClick={() => handleStatus(reg.id, "waitlist")}
-                                  disabled={updatingId === reg.id}
-                                  title="Mover a espera"
-                                  className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 disabled:opacity-40 transition-colors"
-                                >
-                                  <Clock size={14} />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleStatus(reg.id, "cancelled")}
-                                disabled={updatingId === reg.id}
-                                title="Cancelar"
-                                className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                    </div>
+                  ) : filtered.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-muted-foreground">
+                      No hay inscripciones para estos filtros
+                    </div>
+                  ) : (
+                    <>
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border bg-secondary/50">
+                            <th className="px-4 py-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={allPageSelected}
+                                onChange={() => toggleAll(pageIds)}
+                                className="rounded border-border accent-[#D4AF37] cursor-pointer"
+                              />
+                            </th>
+                            {["Pareja", "Categoría", "Fecha", "Estado", "Pago", "Acciones"].map((h) => (
+                              <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pageItems.map((reg: AdminRegistration) => {
+                            const scfg     = STATUS_CFG[reg.status];
+                            const isSelected = selected.has(reg.id);
+                            return (
+                              <tr
+                                key={reg.id}
+                                className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : ""}`}
                               >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                                <td className="px-4 py-3.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelect(reg.id)}
+                                    className="rounded border-border accent-[#D4AF37] cursor-pointer"
+                                  />
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <p className="text-sm font-medium text-foreground">{reg.player1Name}</p>
+                                  {reg.player2Name
+                                    ? <p className="text-xs text-muted-foreground">{reg.player2Name}</p>
+                                    : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
+                                  }
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className="text-xs text-muted-foreground">{reg.categoryDisplay}</span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(reg.createdAt).toLocaleDateString("es-ES")}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
+                                    {scfg.label}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
+                                    {reg.paid ? "Pagado" : "Pendiente"}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <div className="flex items-center gap-1">
+                                    {reg.status !== "confirmed" && (
+                                      <button
+                                        onClick={() => handleStatus(reg.id, "confirmed")}
+                                        disabled={updatingId === reg.id}
+                                        title="Confirmar"
+                                        className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 disabled:opacity-40 transition-colors"
+                                      >
+                                        <Check size={14} />
+                                      </button>
+                                    )}
+                                    {reg.status !== "waitlist" && (
+                                      <button
+                                        onClick={() => handleStatus(reg.id, "waitlist")}
+                                        disabled={updatingId === reg.id}
+                                        title="Mover a espera"
+                                        className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 disabled:opacity-40 transition-colors"
+                                      >
+                                        <Clock size={14} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleStatus(reg.id, "cancelled")}
+                                      disabled={updatingId === reg.id}
+                                      title="Cancelar"
+                                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {filtered.length > PAGE_SIZE && (
+                        <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+                          <span className="text-xs text-muted-foreground">
+                            Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPage((p) => p - 1)}
+                              disabled={page === 0}
+                              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
+                            >
+                              <ChevronLeft size={15} />
+                            </button>
+                            <button
+                              onClick={() => setPage((p) => p + 1)}
+                              disabled={(page + 1) * PAGE_SIZE >= filtered.length}
+                              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
+                            >
+                              <ChevronRight size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>

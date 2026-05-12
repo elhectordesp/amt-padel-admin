@@ -8,13 +8,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
-  TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3,
+  TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { CategoryLevel } from "@/types";
+import type { CategoryLevel, CategoryChange } from "@/types";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "1a": "1ª", "2a": "2ª", "3a": "3ª",
@@ -47,6 +47,11 @@ export default function JugadorDetailPage() {
   const { data: player, isLoading } = useQuery({
     queryKey: ["player", id],
     queryFn:  () => adminService.players.detail(id),
+  });
+
+  const { data: catHistory = [] } = useQuery({
+    queryKey: ["player-cat-history", id],
+    queryFn:  () => adminService.players.categoryHistory(id),
   });
 
   const catForm = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
@@ -204,6 +209,50 @@ export default function JugadorDetailPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Category change history */}
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <History size={15} className="text-[#D4AF37]" />
+              <h3 className="text-sm font-semibold text-foreground">Historial de categoría</h3>
+            </div>
+            {catHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Sin cambios de categoría registrados</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-secondary/50">
+                    {["Fecha", "De", "A", "Motivo", "Admin"].map((h) => (
+                      <th key={h} className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(catHistory as CategoryChange[]).map((ch) => (
+                    <tr key={ch.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                      <td className="px-5 py-3 text-xs text-muted-foreground">
+                        {new Date(ch.date).toLocaleDateString("es-ES")}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+                          {CATEGORY_LABEL[ch.from]}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
+                          {CATEGORY_LABEL[ch.to]}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-muted-foreground max-w-xs truncate">{ch.reason}</td>
+                      <td className="px-5 py-3 text-xs text-muted-foreground">{ch.adminName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, ChevronRight, ChevronLeft, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import type { Gender, CategoryLevel } from "@/types";
 
@@ -48,6 +49,18 @@ const LEVELS: { value: CategoryLevel; label: string }[] = [
   { value: "5a", label: "5ª" }, { value: "6a", label: "6ª" },
   { value: "iniciacion", label: "Iniciación" },
 ];
+
+const FORMAT_LABEL: Record<string, string> = {
+  "eliminatoria":        "Eliminatoria + Consolación",
+  "grupos+eliminatoria": "Grupos + Eliminatoria",
+  "round-robin":         "Round Robin",
+};
+
+const SCORING_LABEL: Record<string, string> = {
+  "AMT+ELO+SPA": "Puntos AMT + ELO + SPA",
+  "AMT":         "Solo Puntos AMT",
+  "ELO":         "Solo ELO",
+};
 
 const STEPS = [
   { num: 1, label: "Información"  },
@@ -90,6 +103,7 @@ export default function NuevoTorneoPage() {
   const router = useRouter();
   const qc     = useQueryClient();
   const [step, setStep] = useState(1);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // Accumulated form data
   const [infoData,   setInfoData]   = useState<InfoData   | null>(null);
@@ -101,6 +115,21 @@ export default function NuevoTorneoPage() {
     resolver:      zodResolver(infoSchema),
     defaultValues: infoData ?? undefined,
   });
+
+  // Warn on accidental navigation away (must be after infoForm declaration)
+  useEffect(() => {
+    const dirty = step > 1 || infoForm.formState.isDirty;
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [step, infoForm.formState.isDirty]);
+
+  const handleCancel = () => {
+    const dirty = step > 1 || infoForm.formState.isDirty;
+    if (dirty) setShowLeaveModal(true);
+    else router.push("/torneos");
+  };
 
   // ── Step 2: Categories ────────────────────────────────────────────────
   const catForm = useForm<CatData>({
@@ -385,8 +414,8 @@ export default function NuevoTorneoPage() {
                 <div className="bg-secondary/50 rounded-lg border border-border p-4 space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Configuración</p>
                   {[
-                    ["Formato",     configData.format],
-                    ["Puntuación",  configData.scoringSystem],
+                    ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
+                    ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Cierre insc.", configData.registrationDeadline ?? "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
@@ -404,7 +433,7 @@ export default function NuevoTorneoPage() {
         <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={step === 1 ? () => router.push("/torneos") : goBack}
+            onClick={step === 1 ? handleCancel : goBack}
             className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
           >
             <ChevronLeft size={15} />
@@ -423,6 +452,16 @@ export default function NuevoTorneoPage() {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showLeaveModal}
+        title="¿Salir sin guardar?"
+        description="Perderás todos los datos introducidos en el formulario."
+        confirmLabel="Salir"
+        danger
+        onClose={() => setShowLeaveModal(false)}
+        onConfirm={() => router.push("/torneos")}
+      />
     </div>
   );
 }

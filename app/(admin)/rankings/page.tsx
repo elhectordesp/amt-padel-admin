@@ -2,20 +2,23 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Gender } from "@/types";
+import { CATEGORY_LABEL_SHORT } from "@/lib/constants";
+import { downloadCsv } from "@/lib/utils/csv";
+import type { Gender, Player } from "@/types";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  "1a": "1ª","2a": "2ª","3a": "3ª","4a": "4ª","5a": "5ª","6a": "6ª","iniciacion": "Inic.",
-};
+const CATEGORY_LABEL = CATEGORY_LABEL_SHORT;
+
+const PAGE_SIZE = 20;
 
 export default function RankingsPage() {
-  const qc = useQueryClient();
+  const qc   = useQueryClient();
   const [gender, setGender] = useState<Gender>("M");
+  const [page,   setPage]   = useState(0);
 
   const { data: players = [], isLoading } = useQuery({
     queryKey: ["ranking-admin", gender],
@@ -66,16 +69,30 @@ export default function RankingsPage() {
             ))}
           </div>
 
-          <button
-            onClick={() => recalculate.mutate()}
-            disabled={recalculate.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
-          >
-            {recalculate.isPending
-              ? <Loader2 size={15} className="animate-spin" />
-              : <RefreshCw size={15} />}
-            {recalculate.isPending ? "Recalculando..." : "Recalcular ranking"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => downloadCsv(`ranking-${gender}`, players.map((p: Player, i: number) => ({
+                "#":          i + 1,
+                Jugador:      p.name,
+                Compañero:    p.partner ?? "",
+                Categoría:    CATEGORY_LABEL[p.level],
+                Puntos:       p.points,
+                "% Victorias": p.played > 0 ? Math.round((p.wins / p.played) * 100) + "%" : "0%",
+                Tendencia:    p.trend,
+              })))}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors"
+            >
+              <Download size={13} /> Exportar CSV
+            </button>
+            <button
+              onClick={() => recalculate.mutate()}
+              disabled={recalculate.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
+            >
+              {recalculate.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+              {recalculate.isPending ? "Recalculando..." : "Recalcular ranking"}
+            </button>
+          </div>
         </div>
 
         {/* Podium top 3 */}
@@ -119,6 +136,7 @@ export default function RankingsPage() {
               ))}
             </div>
           ) : (
+            <>
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
@@ -130,14 +148,15 @@ export default function RankingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {players.map((player, idx) => {
+                {players.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((player, idx) => {
+                  const absIdx = page * PAGE_SIZE + idx;
                   const trend = TREND[player.trend] ?? TREND.stable;
                   const TIcon = trend.icon;
                   return (
                     <tr key={player.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                       <td className="px-5 py-3.5 w-12">
-                        <span className={`text-sm font-bold ${idx < 3 ? medalColors[idx] : "text-muted-foreground"}`}>
-                          {idx + 1}
+                        <span className={`text-sm font-bold ${absIdx < 3 ? medalColors[absIdx] : "text-muted-foreground"}`}>
+                          {absIdx + 1}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
@@ -178,6 +197,24 @@ export default function RankingsPage() {
                 })}
               </tbody>
             </table>
+            {players.length > PAGE_SIZE && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+                <span className="text-xs text-muted-foreground">
+                  Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, players.length)} de {players.length}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage((p) => p - 1)} disabled={page === 0}
+                    className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors">
+                    <ChevronLeft size={15} />
+                  </button>
+                  <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * PAGE_SIZE >= players.length}
+                    className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors">
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
