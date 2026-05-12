@@ -243,7 +243,7 @@ export default function JugadorDetailPage() {
                   <p className="text-xs text-muted-foreground mt-0.5">SPA pts</p>
                 </div>
                 <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <p className="text-2xl font-heading text-foreground">{player.spa.matchesPlayed}</p>
+                  <p className="text-2xl font-heading text-foreground">{player.spa.spaMatches}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Partidos SPA</p>
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-lg">
@@ -264,24 +264,25 @@ export default function JugadorDetailPage() {
               </div>
               <div className="mt-3 pt-3 border-t border-border">
                 <p className="text-xs text-muted-foreground mb-1.5">Fiabilidad</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${player.spa.reliability}%`,
-                        backgroundColor: player.spa.reliability >= 70
-                          ? "#34D399"
-                          : player.spa.reliability >= 40
-                          ? "#D4AF37"
-                          : "#EF4444",
-                      }}
-                    />
-                  </div>
-                  <span className="text-xs font-semibold text-foreground w-10 text-right">
-                    {player.spa.reliability}%
-                  </span>
-                </div>
+                {(() => {
+                  const reliabilityPct = Math.round(player.spa.spaReliability * 100);
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${reliabilityPct}%`,
+                            backgroundColor: reliabilityPct >= 70 ? "#34D399" : reliabilityPct >= 40 ? "#D4AF37" : "#EF4444",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-foreground w-10 text-right">
+                        {reliabilityPct}%
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
