@@ -114,6 +114,7 @@ export interface AdminRegistration {
 export interface Player {
   id:          string;
   name:        string;
+  spa?:        SpaProfile;
   firstName?:  string;
   lastName?:   string;
   email?:      string;

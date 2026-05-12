@@ -2,27 +2,39 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Download, ChevronLeft, ChevronRight, BarChart2, Trophy } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT } from "@/lib/constants";
 import { downloadCsv } from "@/lib/utils/csv";
-import type { Gender, Player } from "@/types";
+import type { Gender, Player, RankingType } from "@/types";
+
+const LEVEL_COLOR: Record<string, string> = {
+  "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
+  "4a":"#34D399","5a":"#A78BFA","6a":"#FB923C","iniciacion":"#94A3B8",
+};
 
 const CATEGORY_LABEL = CATEGORY_LABEL_SHORT;
 
 const PAGE_SIZE = 20;
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 export default function RankingsPage() {
-  const qc   = useQueryClient();
-  const [gender, setGender] = useState<Gender>("M");
-  const [page,   setPage]   = useState(0);
+  const qc       = useQueryClient();
+  const [gender,   setGender]   = useState<Gender>("M");
+  const [rankType, setRankType] = useState<RankingType>("circuit");
+  const [page,     setPage]     = useState(0);
 
   const { data: players = [], isLoading } = useQuery({
-    queryKey: ["ranking-admin", gender],
-    queryFn:  () => adminService.rankings.list(gender),
+    queryKey: ["ranking-admin", gender, rankType],
+    queryFn:  () => adminService.rankings.list(
+      gender,
+      rankType,
+      rankType === "circuit" ? CURRENT_YEAR : undefined,
+    ),
   });
 
   const recalculate = useMutation({
@@ -33,6 +45,8 @@ export default function RankingsPage() {
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  const handleTypeChange = (t: RankingType) => { setRankType(t); setPage(0); };
 
   const TREND = {
     up:     { icon: TrendingUp,   color: "text-green-400"       },
@@ -47,6 +61,27 @@ export default function RankingsPage() {
       <Header title="Rankings" />
 
       <div className="flex-1 p-6 space-y-5">
+
+        {/* Rank type toggle */}
+        <div className="flex items-center gap-2">
+          {([
+            { key: "circuit", label: `Circuito ${CURRENT_YEAR}`, icon: Trophy   },
+            { key: "spa",     label: "Nivel SPA",                icon: BarChart2 },
+          ] as { key: RankingType; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => handleTypeChange(key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md border text-sm font-medium transition-colors ${
+                rankType === key
+                  ? "bg-[rgba(212,175,55,0.12)] text-[#D4AF37] border-[rgba(212,175,55,0.4)]"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
 
         {/* Controls */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -140,7 +175,10 @@ export default function RankingsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
-                  {["#", "Jugador", "Categoría", "Puntos", "Tendencia", ""].map((h) => (
+                  {(rankType === "spa"
+                    ? ["#", "Jugador", "Nivel SPA", "SPA pts", "Progresión", ""]
+                    : ["#", "Jugador", "Categoría", "Puntos", "Tendencia",   ""]
+                  ).map((h) => (
                     <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {h}
                     </th>
@@ -176,17 +214,54 @@ export default function RankingsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
-                          {CATEGORY_LABEL[player.level]}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-sm font-bold text-foreground">{player.points.toLocaleString()}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <TIcon size={15} className={trend.color} />
-                      </td>
+                      {rankType === "spa" ? (
+                        <>
+                          <td className="px-5 py-3.5">
+                            {player.spa ? (
+                              <span
+                                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border"
+                                style={{ color: LEVEL_COLOR[player.spa.spaLevel], backgroundColor: LEVEL_COLOR[player.spa.spaLevel] + "22", borderColor: LEVEL_COLOR[player.spa.spaLevel] + "55" }}
+                              >
+                                {CATEGORY_LABEL[player.spa.spaLevel]}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-bold text-foreground">
+                              {player.spa ? player.spa.spaPoints.toFixed(0) : "—"}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {player.spa && (
+                              <div className="flex items-center gap-2 w-28">
+                                <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{ width: `${(player.spa.spaProgression / 10) * 100}%`, backgroundColor: LEVEL_COLOR[player.spa.spaLevel] }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-muted-foreground">{player.spa.spaProgression.toFixed(1)}</span>
+                              </div>
+                            )}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-5 py-3.5">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
+                              {CATEGORY_LABEL[player.level]}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-bold text-foreground">{player.points.toLocaleString()}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <TIcon size={15} className={trend.color} />
+                          </td>
+                        </>
+                      )}
                       <td className="px-5 py-3.5">
                         <Link href={`/jugadores/${player.id}`} className="text-xs text-[#D4AF37] hover:underline">
                           Ver →
