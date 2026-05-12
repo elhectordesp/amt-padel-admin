@@ -25,6 +25,9 @@ const STATUS_COLOR: Record<string, string> = {
   finished: "text-muted-foreground bg-secondary border-border",
 };
 
+const TIER_LABEL: Record<string, string> = { gold: "Gold", silver: "Silver", open: "Open" };
+const TIER_COLOR: Record<string, string> = { gold: "#D4AF37", silver: "#C0C0C0", open: "#94A3B8" };
+
 type FilterStatus = "all" | "open" | "ongoing" | "finished";
 
 function SortIcon({ column }: { column: { getIsSorted: () => false | "asc" | "desc" } }) {
@@ -61,12 +64,26 @@ export default function TorneosPage() {
           Torneo <SortIcon column={column} />
         </button>
       ),
-      cell: ({ row }) => (
-        <div>
-          <p className="font-semibold text-sm text-foreground">{row.original.name}</p>
-          <p className="text-xs text-muted-foreground">{row.original.venue}</p>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const tier = row.original.spaTier ?? row.original.tier;
+        const color = tier ? TIER_COLOR[tier] : null;
+        return (
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-sm text-foreground">{row.original.name}</p>
+              {tier && tier !== "open" && color && (
+                <span
+                  className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border"
+                  style={{ color, backgroundColor: color + "22", borderColor: color + "55" }}
+                >
+                  {TIER_LABEL[tier].toUpperCase()}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{row.original.venue}</p>
+          </div>
+        );
+      },
     },
     {
       accessorKey: "dates",

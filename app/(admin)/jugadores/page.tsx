@@ -21,6 +21,11 @@ const CATEGORY_LABEL: Record<string, string> = {
   "4a": "4ª", "5a": "5ª", "6a": "6ª", "iniciacion": "Inic.",
 };
 
+const LEVEL_COLOR: Record<string, string> = {
+  "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
+  "4a":"#34D399","5a":"#A78BFA","6a":"#FB923C","iniciacion":"#94A3B8",
+};
+
 const TREND_ICON: Record<string, React.ReactNode> = {
   up:     <TrendingUp   size={13} className="text-green-400" />,
   down:   <TrendingDown size={13} className="text-destructive" />,
@@ -125,6 +130,26 @@ export default function JugadoresPage() {
           {TREND_ICON[row.original.trend]}
         </div>
       ),
+    },
+    {
+      id:     "spa",
+      header: () => <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">SPA</span>,
+      cell:   ({ row }) => {
+        const spa = row.original.spa;
+        if (!spa) return <span className="text-xs text-muted-foreground">—</span>;
+        const color = LEVEL_COLOR[spa.spaLevel];
+        return (
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border"
+              style={{ color, backgroundColor: color + "22", borderColor: color + "55" }}
+            >
+              {CATEGORY_LABEL[spa.spaLevel]}
+            </span>
+            <span className="text-xs text-muted-foreground">{spa.spaPoints.toFixed(0)} pts</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: "played",

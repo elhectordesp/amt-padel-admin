@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
-  TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History,
+  TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -21,6 +21,11 @@ const CATEGORY_LABEL: Record<string, string> = {
   "4a": "4ª", "5a": "5ª", "6a": "6ª", "iniciacion": "Iniciación",
 };
 const LEVELS: CategoryLevel[] = ["1a","2a","3a","4a","5a","6a","iniciacion"];
+
+const LEVEL_COLOR: Record<string, string> = {
+  "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
+  "4a":"#34D399","5a":"#A78BFA","6a":"#FB923C","iniciacion":"#94A3B8",
+};
 
 const changeCatSchema = z.object({
   level:  z.string().min(1, "Selecciona una categoría"),
@@ -210,6 +215,76 @@ export default function JugadorDetailPage() {
               </div>
             ))}
           </div>
+
+          {/* SPA Profile */}
+          {player.spa && (
+            <div className="bg-card border border-border rounded-lg p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap size={15} className="text-[#D4AF37]" />
+                <h3 className="text-sm font-semibold text-foreground">Perfil SPA</h3>
+                {player.spa.isCalibrating && (
+                  <span className="ml-auto px-2 py-0.5 rounded-full bg-yellow-400/10 border border-yellow-400/30 text-[10px] font-semibold text-yellow-400">
+                    Calibrando
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                  <p
+                    className="text-2xl font-heading"
+                    style={{ color: LEVEL_COLOR[player.spa.spaLevel] }}
+                  >
+                    {CATEGORY_LABEL[player.spa.spaLevel]}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Nivel SPA</p>
+                </div>
+                <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                  <p className="text-2xl font-heading text-foreground">{player.spa.spaPoints.toFixed(0)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">SPA pts</p>
+                </div>
+                <div className="text-center p-3 bg-secondary/50 rounded-lg">
+                  <p className="text-2xl font-heading text-foreground">{player.spa.matchesPlayed}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Partidos SPA</p>
+                </div>
+                <div className="p-3 bg-secondary/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground mb-2">Progresión</p>
+                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${(player.spa.spaProgression / 10) * 100}%`,
+                        backgroundColor: LEVEL_COLOR[player.spa.spaLevel],
+                      }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1 text-right">
+                    {player.spa.spaProgression.toFixed(1)} / 10
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-border">
+                <p className="text-xs text-muted-foreground mb-1.5">Fiabilidad</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${player.spa.reliability}%`,
+                        backgroundColor: player.spa.reliability >= 70
+                          ? "#34D399"
+                          : player.spa.reliability >= 40
+                          ? "#D4AF37"
+                          : "#EF4444",
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs font-semibold text-foreground w-10 text-right">
+                    {player.spa.reliability}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Category change history */}
           <div className="bg-card border border-border rounded-lg overflow-hidden">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Download, ChevronLeft, ChevronRight, BarChart2, Trophy } from "lucide-react";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -24,9 +25,10 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 export default function RankingsPage() {
   const qc       = useQueryClient();
-  const [gender,   setGender]   = useState<Gender>("M");
-  const [rankType, setRankType] = useState<RankingType>("circuit");
-  const [page,     setPage]     = useState(0);
+  const [gender,             setGender]             = useState<Gender>("M");
+  const [rankType,           setRankType]           = useState<RankingType>("circuit");
+  const [page,               setPage]               = useState(0);
+  const [showRecalcConfirm,  setShowRecalcConfirm]  = useState(false);
 
   const { data: players = [], isLoading } = useQuery({
     queryKey: ["ranking-admin", gender, rankType],
@@ -120,7 +122,7 @@ export default function RankingsPage() {
               <Download size={13} /> Exportar CSV
             </button>
             <button
-              onClick={() => recalculate.mutate()}
+              onClick={() => setShowRecalcConfirm(true)}
               disabled={recalculate.isPending}
               className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
             >
@@ -293,6 +295,16 @@ export default function RankingsPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={showRecalcConfirm}
+        title="Recalcular ranking"
+        description="Esta operación recalcula los puntos de circuito y SPA para todos los jugadores. Puede tardar unos segundos. ¿Continuar?"
+        confirmLabel="Recalcular"
+        onClose={() => setShowRecalcConfirm(false)}
+        onConfirm={() => { setShowRecalcConfirm(false); recalculate.mutate(); }}
+        loading={recalculate.isPending}
+      />
     </div>
   );
 }

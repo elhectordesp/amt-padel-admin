@@ -131,6 +131,10 @@ export default function TorneoDetailPage() {
   const totalRegistered = tournament.categories.reduce((s, c) => s + c.registeredCount, 0);
   const fillPct         = totalSpots > 0 ? Math.round((totalRegistered / totalSpots) * 100) : 0;
 
+  const TIER_LABEL_T: Record<string, string> = { gold: "Gold", silver: "Silver", open: "Open" };
+  const TIER_COLOR_T: Record<string, string>  = { gold: "#D4AF37", silver: "#C0C0C0", open: "#94A3B8" };
+  const tournamentTier = tournament.spaTier ?? tournament.tier;
+
   const STATUS_LABEL_T: Record<string, string> = { open: "Abierto", ongoing: "En curso", finished: "Finalizado" };
   const STATUS_COLOR_T: Record<string, string> = {
     open: "text-green-400 bg-green-400/10 border-green-400/30",
@@ -174,11 +178,23 @@ export default function TorneoDetailPage() {
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="space-y-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLOR_T[tournament.status]}`}>
                   {STATUS_LABEL_T[tournament.status]}
                 </span>
+                {tournamentTier && tournamentTier !== "open" && (
+                  <span
+                    className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border"
+                    style={{
+                      color: TIER_COLOR_T[tournamentTier],
+                      backgroundColor: TIER_COLOR_T[tournamentTier] + "22",
+                      borderColor:     TIER_COLOR_T[tournamentTier] + "55",
+                    }}
+                  >
+                    {TIER_LABEL_T[tournamentTier].toUpperCase()}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5">

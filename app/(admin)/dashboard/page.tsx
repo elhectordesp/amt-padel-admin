@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activity, Clock } from "lucide-react";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { api } from "@/lib/api";
 
 function StatCard({
   label, value, sub, icon: Icon, loading,
@@ -50,7 +51,17 @@ function AlertItem({ text, href, icon: Icon }: { text: string; href?: string; ic
   return href ? <a href={href}>{inner}</a> : inner;
 }
 
+function useAdminUser() {
+  return useQuery({
+    queryKey: ["admin-me"],
+    queryFn:  () => api.get<{ name: string; email: string }>("/users/me").then((r) => r.data),
+    staleTime: Infinity,
+  });
+}
+
 export default function DashboardPage() {
+  const { data: adminUser } = useAdminUser();
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ["admin-stats"],
     queryFn:  adminService.stats,
@@ -82,7 +93,9 @@ export default function DashboardPage() {
 
       <div className="flex-1 p-6 space-y-6">
         <div>
-          <h2 className="font-heading text-2xl text-foreground">¡Bienvenido, Admin! 👋</h2>
+          <h2 className="font-heading text-2xl text-foreground">
+            ¡Bienvenido{adminUser?.name ? `, ${adminUser.name.split(" ")[0]}` : ""}! 👋
+          </h2>
           <p className="text-sm text-muted-foreground mt-0.5">Aquí tienes el resumen de la plataforma.</p>
         </div>
 
