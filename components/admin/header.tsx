@@ -72,7 +72,7 @@ export function Header({ title }: HeaderProps) {
               <p className="text-xs font-semibold text-foreground leading-none truncate max-w-[120px]">
                 {me?.name ?? "Admin AMT"}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Super Admin</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{me?.email ?? "Super Admin"}</p>
             </div>
           </button>
         </div>

@@ -20,7 +20,8 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const from         = searchParams.get("from") ?? "/dashboard";
 
-  const [showPass, setShowPass] = useState(false);
+  const [showPass,  setShowPass]  = useState(false);
+  const [apiError,  setApiError]  = useState<string | null>(null);
 
   const {
     register,
@@ -29,11 +30,14 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const onSubmit = async (data: FormData) => {
+    setApiError(null);
     try {
       await login(data.email, data.password);
       router.replace(from);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al iniciar sesión");
+      const msg = err instanceof Error ? err.message : "Error al iniciar sesión";
+      setApiError(msg);
+      toast.error(msg);
     }
   };
 
@@ -126,6 +130,12 @@ export default function LoginPage() {
                 <p className="text-xs text-destructive">{errors.password.message}</p>
               )}
             </div>
+
+            {apiError && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-md bg-destructive/10 border border-destructive/30">
+                <span className="text-xs text-destructive">{apiError}</span>
+              </div>
+            )}
 
             <button
               type="submit"

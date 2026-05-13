@@ -209,6 +209,7 @@ export interface CreateTournamentPayload {
   format?:     string;
   scoringSystem?: string;
   registrationDeadline?: string;
+  hasShirts?:  boolean;
   courts?:     string[];
   categories:  {
     gender:     Gender;

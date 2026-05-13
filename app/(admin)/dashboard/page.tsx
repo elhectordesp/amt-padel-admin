@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activity, Clock } from "lucide-react";
+import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { api } from "@/lib/api";
@@ -205,7 +206,11 @@ export default function DashboardPage() {
                       const statusColor = t.status === "open" ? "text-green-400" : t.status === "ongoing" ? "text-yellow-400" : "text-muted-foreground";
                       const statusLabel = t.status === "open" ? "Abierto" : t.status === "ongoing" ? "En curso" : "Finalizado";
                       return (
-                        <div key={t.id} className="flex items-center gap-4 py-2.5 border-b border-border last:border-0">
+                        <Link
+                          key={t.id}
+                          href={`/torneos/${t.id}`}
+                          className="flex items-center gap-4 py-2.5 border-b border-border last:border-0 hover:bg-secondary/40 -mx-5 px-5 transition-colors rounded"
+                        >
                           <div className="w-8 h-8 rounded bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.2)] flex items-center justify-center shrink-0">
                             <Trophy size={14} className="text-[#D4AF37]" />
                           </div>
@@ -217,7 +222,7 @@ export default function DashboardPage() {
                             <p className="text-[11px] text-muted-foreground">{totalRegistered}/{totalSpots}</p>
                             <p className={`text-[10px] font-semibold ${statusColor}`}>{statusLabel}</p>
                           </div>
-                        </div>
+                        </Link>
                       );
                     })}
                   </div>

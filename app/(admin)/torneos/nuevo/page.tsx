@@ -37,6 +37,8 @@ const configSchema = z.object({
   format:              z.string().min(1),
   scoringSystem:       z.string().min(1),
   registrationDeadline:z.string().optional(),
+  hasShirts:           z.boolean(),
+  courts:              z.string(), // comma-separated list, split on save
 });
 
 type InfoData   = z.infer<typeof infoSchema>;
@@ -98,10 +100,17 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select
-      {...props}
-      className={`w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors ${props.className ?? ""}`}
-    />
+    <div className="relative">
+      <select
+        {...props}
+        className={`w-full h-9 pl-3 pr-8 rounded-md bg-input border border-border text-sm text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors cursor-pointer ${props.className ?? ""}`}
+      />
+      <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -148,7 +157,7 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "open", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA" },
+    defaultValues: configData ?? { tier: "open", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", hasShirts: false, courts: "" },
   });
 
   // ── Mutation ──────────────────────────────────────────────────────────
@@ -158,7 +167,11 @@ export default function NuevoTorneoPage() {
       tier:        configData!.tier,
       format:      configData!.format,
       scoringSystem: configData!.scoringSystem,
-      registrationDeadline: configData!.registrationDeadline,
+      registrationDeadline: configData!.registrationDeadline || undefined,
+      hasShirts:   configData!.hasShirts,
+      courts:      configData!.courts
+        ? configData!.courts.split(",").map((c) => c.trim()).filter(Boolean)
+        : [],
       categories: catData!.categories.map((c) => ({
         gender:     c.gender as Gender,
         level:      c.level  as CategoryLevel,
@@ -195,7 +208,12 @@ export default function NuevoTorneoPage() {
     }
   };
 
-  const goBack = () => setStep((s) => s - 1);
+  const goBack = () => {
+    if (step === 2 && infoData)   infoForm.reset(infoData);
+    if (step === 3 && catData)    catForm.reset({ categories: catData.categories });
+    if (step === 4 && configData) configForm.reset(configData);
+    setStep((s) => s - 1);
+  };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -380,7 +398,27 @@ export default function NuevoTorneoPage() {
                     type="datetime-local"
                   />
                 </Field>
+                <Field label="Pistas disponibles">
+                  <Input
+                    {...configForm.register("courts")}
+                    placeholder="Pista 1, Pista 2, Pista 3..."
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">Separadas por coma</p>
+                </Field>
               </div>
+
+              {/* Camisetas */}
+              <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
+                <input
+                  type="checkbox"
+                  {...configForm.register("hasShirts")}
+                  className="w-4 h-4 accent-[#D4AF37]"
+                />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Incluir camisetas</p>
+                  <p className="text-xs text-muted-foreground">Los jugadores deberán indicar su talla al inscribirse</p>
+                </div>
+              </label>
             </div>
           )}
 
@@ -435,6 +473,8 @@ export default function NuevoTorneoPage() {
                     ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Cierre insc.", configData.registrationDeadline ?? "—"],
+                    ["Camisetas",    configData.hasShirts ? "Sí" : "No"],
+                    ["Pistas",       configData.courts || "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>
