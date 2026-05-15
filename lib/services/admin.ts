@@ -6,7 +6,12 @@ import type {
   SpaConfig, RankingType,
 } from "@/types";
 
+export interface AdminUser { name: string; email: string }
+
 export const adminService = {
+  me: () =>
+    api.get<AdminUser>("/users/me").then((r) => r.data),
+
   stats: () =>
     api.get<AdminStats>("/admin/stats").then((r) => r.data),
 
@@ -25,6 +30,7 @@ export const adminService = {
     duplicate:       (id: string)                  => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
     generateBracket: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId }).then((r) => r.data),
+    autoSchedule:    (id: string)                  => api.post<{ count: number }>(`/admin/tournaments/${id}/auto-schedule`).then((r) => r.data),
   },
 
   registrations: {

@@ -12,23 +12,10 @@ import { Plus, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight } from "luc
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Tournament } from "@/types";
+import { TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR, resolveTier } from "@/lib/constants";
+import type { Tournament, TournamentStatus } from "@/types";
 
-const STATUS_LABEL: Record<string, string> = {
-  open:     "Abierto",
-  ongoing:  "En curso",
-  finished: "Finalizado",
-};
-const STATUS_COLOR: Record<string, string> = {
-  open:     "text-green-400 bg-green-400/10 border-green-400/30",
-  ongoing:  "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
-  finished: "text-muted-foreground bg-secondary border-border",
-};
-
-const TIER_LABEL: Record<string, string> = { gold: "Gold", silver: "Silver", open: "Open" };
-const TIER_COLOR: Record<string, string> = { gold: "#D4AF37", silver: "#C0C0C0", open: "#94A3B8" };
-
-type FilterStatus = "all" | "open" | "ongoing" | "finished";
+type FilterStatus = "all" | TournamentStatus;
 
 function SortIcon({ column }: { column: { getIsSorted: () => false | "asc" | "desc" } }) {
   const sorted = column.getIsSorted();
@@ -65,18 +52,17 @@ export default function TorneosPage() {
         </button>
       ),
       cell: ({ row }) => {
-        const tier = row.original.spaTier ?? row.original.tier;
-        const color = tier ? TIER_COLOR[tier] : null;
+        const tierDisplay = resolveTier(row.original.spaTier, row.original.tier);
         return (
           <div>
             <div className="flex items-center gap-2">
               <p className="font-semibold text-sm text-foreground">{row.original.name}</p>
-              {tier && tier !== "open" && color && (
+              {tierDisplay && (
                 <span
                   className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border"
-                  style={{ color, backgroundColor: color + "22", borderColor: color + "55" }}
+                  style={{ color: tierDisplay.color, backgroundColor: tierDisplay.color + "22", borderColor: tierDisplay.color + "55" }}
                 >
-                  {TIER_LABEL[tier].toUpperCase()}
+                  {tierDisplay.label.toUpperCase()}
                 </span>
               )}
             </div>
@@ -134,10 +120,10 @@ export default function TorneosPage() {
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estado</span>
       ),
       cell: ({ getValue }) => {
-        const s = getValue() as string;
+        const s = getValue() as TournamentStatus;
         return (
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_COLOR[s]}`}>
-            {STATUS_LABEL[s]}
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TOURNAMENT_STATUS_COLOR[s]}`}>
+            {TOURNAMENT_STATUS_LABEL[s]}
           </span>
         );
       },
@@ -168,10 +154,11 @@ export default function TorneosPage() {
   });
 
   const FILTERS: { key: FilterStatus; label: string }[] = [
-    { key: "all",      label: `Todos (${all.length})` },
-    { key: "open",     label: `Abiertos (${all.filter((t) => t.status === "open").length})` },
-    { key: "ongoing",  label: `En curso (${all.filter((t) => t.status === "ongoing").length})` },
-    { key: "finished", label: `Finalizados (${all.filter((t) => t.status === "finished").length})` },
+    { key: "all",       label: `Todos (${all.length})` },
+    { key: "OPEN",      label: `Abiertos (${all.filter((t) => t.status === "OPEN").length})` },
+    { key: "ONGOING",   label: `En curso (${all.filter((t) => t.status === "ONGOING").length})` },
+    { key: "FINISHED",  label: `Finalizados (${all.filter((t) => t.status === "FINISHED").length})` },
+    { key: "CANCELLED", label: `Cancelados (${all.filter((t) => t.status === "CANCELLED").length})` },
   ];
 
   return (

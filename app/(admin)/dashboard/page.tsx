@@ -5,7 +5,6 @@ import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activit
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import { api } from "@/lib/api";
 
 function StatCard({
   label, value, sub, icon: Icon, loading,
@@ -54,8 +53,8 @@ function AlertItem({ text, href, icon: Icon }: { text: string; href?: string; ic
 
 function useAdminUser() {
   return useQuery({
-    queryKey: ["admin-me"],
-    queryFn:  () => api.get<{ name: string; email: string }>("/users/me").then((r) => r.data),
+    queryKey:  ["admin-me"],
+    queryFn:   adminService.me,
     staleTime: Infinity,
   });
 }
@@ -86,7 +85,7 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
-  const activeTournaments = tournaments.filter((t) => t.status !== "finished");
+  const activeTournaments = tournaments.filter((t) => t.status !== "FINISHED");
 
   return (
     <div className="flex flex-col min-h-full">
@@ -203,8 +202,8 @@ export default function DashboardPage() {
                     {activeTournaments.slice(0, 5).map((t) => {
                       const totalSpots      = t.categories.reduce((s, c) => s + c.totalSpots, 0);
                       const totalRegistered = t.categories.reduce((s, c) => s + c.registeredCount, 0);
-                      const statusColor = t.status === "open" ? "text-green-400" : t.status === "ongoing" ? "text-yellow-400" : "text-muted-foreground";
-                      const statusLabel = t.status === "open" ? "Abierto" : t.status === "ongoing" ? "En curso" : "Finalizado";
+                      const statusColor = t.status === "OPEN" ? "text-green-400" : t.status === "ONGOING" ? "text-yellow-400" : "text-muted-foreground";
+                      const statusLabel = t.status === "OPEN" ? "Abierto" : t.status === "ONGOING" ? "En curso" : "Finalizado";
                       return (
                         <Link
                           key={t.id}

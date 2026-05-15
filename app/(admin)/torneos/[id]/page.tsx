@@ -1,22 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Trophy, Calendar, ChevronLeft, MapPin,
   Check, X, Clock, Download, Search, Loader2,
-  GitBranch, CheckCircle, Copy, Trash2,
+  GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
+  Square, CheckSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { ErrorState } from "@/components/admin/error-state";
+import { CustomSelect } from "@/components/admin/form";
 import { adminService } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
+import {
+  CATEGORY_LABEL_SHORT, GENDER_LABEL,
+  TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
+  resolveTier,
+} from "@/lib/constants";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus } from "@/types";
+
+// ── Constants ─────────────────────────────────────────────────────────────
+const PAGE_SIZE = 25;
 
 const STATUS_CONFIG: Record<RegistrationStatus, { label: string; color: string; icon: React.ElementType }> = {
   confirmed: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",    icon: Check },
@@ -24,10 +34,7 @@ const STATUS_CONFIG: Record<RegistrationStatus, { label: string; color: string; 
   waitlist:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",       icon: Clock },
 };
 
-const GENDER_SHORT = { M: "Masc.", F: "Fem." };
-
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro";
-
+// ── Sub-components ─────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: RegistrationStatus }) {
   const cfg = STATUS_CONFIG[status];
   const Icon = cfg.icon;
@@ -39,34 +46,165 @@ function StatusBadge({ status }: { status: RegistrationStatus }) {
   );
 }
 
+function CalendarTab({
+  matches, loading, isError, refetch, autoSchedule,
+}: {
+  matches:      MatchResult[];
+  loading:      boolean;
+  isError:      boolean;
+  refetch:      () => void;
+  autoSchedule: { mutate: () => void; isPending: boolean };
+}) {
+  const byDate = useMemo(() =>
+    matches.reduce<Record<string, MatchResult[]>>((acc, m) => {
+      const date = m.date.includes("T") ? m.date.split("T")[0] : m.date;
+      (acc[date] ??= []).push(m);
+      return acc;
+    }, {}),
+  [matches]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <Calendar size={14} className="text-[#D4AF37]" />
+          Partidos ({matches.length})
+        </h3>
+        <button
+          onClick={autoSchedule.mutate}
+          disabled={autoSchedule.isPending || matches.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
+        >
+          {autoSchedule.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
+          Asignar horarios automáticamente
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-16 rounded-lg bg-card border border-border animate-pulse" />
+          ))}
+        </div>
+      ) : isError ? (
+        <div className="bg-card border border-border rounded-lg">
+          <ErrorState message="No se pudieron cargar los partidos." onRetry={refetch} />
+        </div>
+      ) : matches.length === 0 ? (
+        <div className="bg-card border border-border rounded-lg p-12 flex flex-col items-center gap-3">
+          <Calendar size={36} className="text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">No hay partidos registrados aún</p>
+        </div>
+      ) : (
+        Object.entries(byDate).map(([date, dayMatches]) => {
+          const label    = new Date(date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+          const pending  = dayMatches.filter((m) => !m.isResult).length;
+          const finished = dayMatches.filter((m) =>  m.isResult).length;
+
+          return (
+            <div key={date} className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 bg-secondary/50 border-b border-border">
+                <div>
+                  <p className="text-sm font-semibold text-foreground capitalize">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{dayMatches.length} partidos</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {finished > 0 && (
+                    <span className="flex items-center gap-1 text-green-400">
+                      <CheckCircle size={12} /> {finished} completados
+                    </span>
+                  )}
+                  {pending > 0 && (
+                    <span className="flex items-center gap-1 text-yellow-400">
+                      <Clock size={12} /> {pending} pendientes
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="divide-y divide-border">
+                {dayMatches.map((m) => {
+                  const time = m.date.includes("T")
+                    ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+                    : "—";
+                  return (
+                    <div key={m.id} className="flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors">
+                      <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
+                      <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
+                        {m.phase}
+                      </span>
+                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-foreground truncate">{m.team1.join(" / ")}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">vs</span>
+                        <span className="text-sm font-medium text-foreground truncate">{m.team2.join(" / ")}</span>
+                      </div>
+                      {m.isResult && m.sets1 && m.sets2 ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <CheckCircle size={13} className="text-green-400" />
+                          <span className="text-xs font-mono text-foreground">
+                            {m.sets1.map((s, i) => `${s}-${m.sets2![i]}`).join(", ")}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
+                          <Clock size={12} /> Pendiente
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────
+type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro";
+
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const qc     = useQueryClient();
-  const [tab,            setTab]          = useState<Tab>("resumen");
-  const [regFilter,      setRegFilter]    = useState<"all" | RegistrationStatus>("all");
-  const [regSearch,      setRegSearch]    = useState("");
-  const [updatingId,     setUpdatingId]   = useState<string | null>(null);
-  const [bracketCatId,   setBracketCatId] = useState("");
+  const router  = useRouter();
+  const qc      = useQueryClient();
+
+  const [tab,             setTab]           = useState<Tab>("resumen");
+  const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
+  const [regSearch,       setRegSearch]     = useState("");
+  const [regPage,         setRegPage]       = useState(0);
+  const [selectedIds,     setSelectedIds]   = useState<Set<string>>(new Set());
+  const [updatingId,      setUpdatingId]    = useState<string | null>(null);
+  const [bracketCatId,    setBracketCatId]  = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const { data: tournament, isLoading } = useQuery({
+  // ── Queries ──────────────────────────────────────────────────────────────
+  const {
+    data: tournament, isLoading, isError: isErrorTournament, refetch: refetchTournament,
+  } = useQuery({
     queryKey: ["tournament", id],
     queryFn:  () => adminService.tournaments.detail(id),
   });
 
-  const { data: registrations = [], isLoading: loadingRegs } = useQuery({
+  const {
+    data: registrations = [], isLoading: loadingRegs, isError: isErrorRegs, refetch: refetchRegs,
+  } = useQuery({
     queryKey: ["registrations", id],
     queryFn:  () => adminService.registrations.list(id),
     enabled:  tab === "inscripciones",
   });
 
-  const { data: matches = [], isLoading: loadingMatches } = useQuery({
+  const {
+    data: matches = [], isLoading: loadingMatches, isError: isErrorMatches, refetch: refetchMatches,
+  } = useQuery({
     queryKey: ["matches", id],
     queryFn:  () => adminService.matches.list(id),
     enabled:  tab === "calendario",
   });
 
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const updateStatus = useMutation({
     mutationFn: ({ regId, status }: { regId: string; status: string }) =>
       adminService.registrations.updateStatus(regId, status),
@@ -74,8 +212,19 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["registrations", id] });
       toast.success("Estado actualizado");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError:   (err: Error) => toast.error(err.message),
     onSettled: () => setUpdatingId(null),
+  });
+
+  const bulkStatus = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
+      adminService.registrations.bulkStatus(ids, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations", id] });
+      setSelectedIds(new Set());
+      toast.success("Estado actualizado en lote");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const duplicate = useMutation({
@@ -107,11 +256,81 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const autoSchedule = useMutation({
+    mutationFn: () => adminService.tournaments.autoSchedule(id),
+    onSuccess:  (res) => {
+      toast.success(`Se han asignado horarios a ${res.count} partidos`);
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const handleStatus = (regId: string, status: string) => {
     setUpdatingId(regId);
     updateStatus.mutate({ regId, status });
   };
 
+  // ── Derived state ─────────────────────────────────────────────────────────
+  const filteredRegs = useMemo(() =>
+    registrations
+      .filter((r) => regFilter === "all" || r.status === regFilter)
+      .filter((r) => {
+        if (!regSearch.trim()) return true;
+        const q = regSearch.toLowerCase();
+        return r.player1Name.toLowerCase().includes(q) ||
+               (r.player2Name ?? "").toLowerCase().includes(q);
+      }),
+  [registrations, regFilter, regSearch]);
+
+  const totalPages  = Math.ceil(filteredRegs.length / PAGE_SIZE);
+  const pagedRegs   = filteredRegs.slice(regPage * PAGE_SIZE, (regPage + 1) * PAGE_SIZE);
+
+  const regCounts = useMemo(() => ({
+    all:       registrations.length,
+    confirmed: registrations.filter((r) => r.status === "confirmed").length,
+    pending:   registrations.filter((r) => r.status === "pending").length,
+    waitlist:  registrations.filter((r) => r.status === "waitlist").length,
+  }), [registrations]);
+
+  const allPageSelected = pagedRegs.length > 0 && pagedRegs.every((r) => selectedIds.has(r.id));
+
+  const toggleSelectAll = () => {
+    if (allPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pagedRegs.forEach((r) => next.delete(r.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pagedRegs.forEach((r) => next.add(r.id));
+        return next;
+      });
+    }
+  };
+
+  const toggleSelect = (regId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(regId) ? next.delete(regId) : next.add(regId);
+      return next;
+    });
+  };
+
+  // Reset page when filter/search changes
+  const handleFilterChange = (f: "all" | RegistrationStatus) => {
+    setRegFilter(f);
+    setRegPage(0);
+    setSelectedIds(new Set());
+  };
+  const handleSearchChange = (v: string) => {
+    setRegSearch(v);
+    setRegPage(0);
+    setSelectedIds(new Set());
+  };
+
+  // ── Loading / error states ────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex flex-col min-h-full">
@@ -125,38 +344,30 @@ export default function TorneoDetailPage() {
     );
   }
 
-  if (!tournament) return null;
+  if (isErrorTournament || !tournament) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <Header title="Torneo" />
+        <ErrorState
+          message="No se pudo cargar el torneo."
+          onRetry={refetchTournament}
+        />
+      </div>
+    );
+  }
 
   const totalSpots      = tournament.categories.reduce((s, c) => s + c.totalSpots, 0);
   const totalRegistered = tournament.categories.reduce((s, c) => s + c.registeredCount, 0);
   const fillPct         = totalSpots > 0 ? Math.round((totalRegistered / totalSpots) * 100) : 0;
+  const tierDisplay     = resolveTier(tournament.spaTier, tournament.tier);
 
-  const TIER_LABEL_T: Record<string, string> = { gold: "Gold", silver: "Silver", open: "Open" };
-  const TIER_COLOR_T: Record<string, string>  = { gold: "#D4AF37", silver: "#C0C0C0", open: "#94A3B8" };
-  const tournamentTier = tournament.spaTier ?? tournament.tier;
-
-  const STATUS_LABEL_T: Record<string, string> = { open: "Abierto", ongoing: "En curso", finished: "Finalizado" };
-  const STATUS_COLOR_T: Record<string, string> = {
-    open: "text-green-400 bg-green-400/10 border-green-400/30",
-    ongoing: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
-    finished: "text-muted-foreground bg-secondary border-border",
-  };
-
-  const filteredRegs = registrations
-    .filter((r) => regFilter === "all" || r.status === regFilter)
-    .filter((r) => {
-      if (!regSearch.trim()) return true;
-      const q = regSearch.toLowerCase();
-      return r.player1Name.toLowerCase().includes(q) ||
-             (r.player2Name ?? "").toLowerCase().includes(q);
-    });
-
-  const regCounts = {
-    all:       registrations.length,
-    confirmed: registrations.filter((r) => r.status === "confirmed").length,
-    pending:   registrations.filter((r) => r.status === "pending").length,
-    waitlist:  registrations.filter((r) => r.status === "waitlist").length,
-  };
+  const catOptions = [
+    { value: "", label: "Seleccionar categoría..." },
+    ...tournament.categories.map((cat) => ({
+      value: cat.id,
+      label: `${GENDER_LABEL[cat.gender].short} ${CATEGORY_LABEL_SHORT[cat.level]}`,
+    })),
+  ];
 
   return (
     <>
@@ -180,19 +391,15 @@ export default function TorneoDetailPage() {
             <div className="space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
-                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLOR_T[tournament.status]}`}>
-                  {STATUS_LABEL_T[tournament.status]}
+                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${TOURNAMENT_STATUS_COLOR[tournament.status as TournamentStatus]}`}>
+                  {TOURNAMENT_STATUS_LABEL[tournament.status as TournamentStatus]}
                 </span>
-                {tournamentTier && tournamentTier !== "open" && (
+                {tierDisplay && (
                   <span
                     className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border"
-                    style={{
-                      color: TIER_COLOR_T[tournamentTier],
-                      backgroundColor: TIER_COLOR_T[tournamentTier] + "22",
-                      borderColor:     TIER_COLOR_T[tournamentTier] + "55",
-                    }}
+                    style={{ color: tierDisplay.color, backgroundColor: tierDisplay.color + "22", borderColor: tierDisplay.color + "55" }}
                   >
-                    {TIER_LABEL_T[tournamentTier].toUpperCase()}
+                    {tierDisplay.label.toUpperCase()}
                   </span>
                 )}
               </div>
@@ -288,30 +495,25 @@ export default function TorneoDetailPage() {
         {/* ── RESUMEN TAB ── */}
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Categories */}
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+              <div className="px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">Categorías</h3>
               </div>
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-secondary/50">
                     {["Categoría", "Plazas", "Inscritos", "Ocupación"].map((h) => (
-                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {h}
-                      </th>
+                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {tournament.categories.map((cat) => {
-                    const pct = cat.totalSpots > 0
-                      ? Math.round((cat.registeredCount / cat.totalSpots) * 100)
-                      : 0;
+                    const pct = cat.totalSpots > 0 ? Math.round((cat.registeredCount / cat.totalSpots) * 100) : 0;
                     return (
                       <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-foreground">
-                          {GENDER_SHORT[cat.gender]} {CATEGORY_LABEL_SHORT[cat.level]}
+                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">{cat.totalSpots}</td>
                         <td className="px-4 py-3 text-sm text-foreground">{cat.registeredCount}</td>
@@ -333,14 +535,13 @@ export default function TorneoDetailPage() {
               </table>
             </div>
 
-            {/* Phase progress */}
             <div className="bg-card border border-border rounded-lg p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Fase actual por categoría</h3>
               <div className="space-y-3">
                 {tournament.categories.map((cat) => (
                   <div key={cat.id} className="flex items-center gap-3">
                     <span className="text-xs text-muted-foreground w-24 shrink-0">
-                      {GENDER_SHORT[cat.gender]} {CATEGORY_LABEL_SHORT[cat.level]}
+                      {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
                     </span>
                     <div className="flex-1 h-1 bg-secondary rounded-full" />
                     <span className="text-xs text-[#D4AF37] w-32 text-right shrink-0">
@@ -356,7 +557,7 @@ export default function TorneoDetailPage() {
         {/* ── INSCRIPCIONES TAB ── */}
         {tab === "inscripciones" && (
           <div className="space-y-4">
-            {/* Sub-filters + search */}
+            {/* Filters + search */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-1.5 bg-secondary rounded-lg p-1">
                 {([
@@ -367,7 +568,7 @@ export default function TorneoDetailPage() {
                 ] as { key: "all" | RegistrationStatus; label: string }[]).map((f) => (
                   <button
                     key={f.key}
-                    onClick={() => setRegFilter(f.key)}
+                    onClick={() => handleFilterChange(f.key)}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       regFilter === f.key
                         ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
@@ -384,19 +585,70 @@ export default function TorneoDetailPage() {
                   <Search size={14} className="text-muted-foreground shrink-0" />
                   <input
                     value={regSearch}
-                    onChange={(e) => setRegSearch(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder="Buscar pareja o jugador..."
                     className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-48"
                   />
                 </div>
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors">
+                <button
+                  onClick={() => {
+                    const rows = filteredRegs.map((r) => ({
+                      Jugador1:  r.player1Name,
+                      Jugador2:  r.player2Name ?? "",
+                      Categoría: r.categoryDisplay,
+                      Estado:    r.status,
+                      Pago:      r.paid ? "Sí" : "No",
+                      Fecha:     r.createdAt,
+                    }));
+                    downloadCsv(`inscripciones-${id}`, rows);
+                  }}
+                  disabled={filteredRegs.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-40"
+                >
                   <Download size={13} />
                   Exportar
                 </button>
               </div>
             </div>
 
-            {/* Registrations table */}
+            {/* Bulk action bar */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)]">
+                <span className="text-xs font-medium text-[#D4AF37]">{selectedIds.size} seleccionados</span>
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "confirmed" })}
+                    disabled={bulkStatus.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-400/10 border border-green-400/30 text-xs text-green-400 font-medium hover:bg-green-400/20 transition-colors disabled:opacity-50"
+                  >
+                    {bulkStatus.isPending ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                    Confirmar
+                  </button>
+                  <button
+                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "waitlist" })}
+                    disabled={bulkStatus.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-400/10 border border-blue-400/30 text-xs text-blue-400 font-medium hover:bg-blue-400/20 transition-colors disabled:opacity-50"
+                  >
+                    <Clock size={11} /> En espera
+                  </button>
+                  <button
+                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "cancelled" })}
+                    disabled={bulkStatus.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive font-medium hover:bg-destructive/20 transition-colors disabled:opacity-50"
+                  >
+                    <X size={11} /> Rechazar
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               {loadingRegs ? (
                 <div className="space-y-0">
@@ -408,193 +660,142 @@ export default function TorneoDetailPage() {
                     </div>
                   ))}
                 </div>
+              ) : isErrorRegs ? (
+                <ErrorState message="No se pudieron cargar las inscripciones." onRetry={refetchRegs} />
               ) : (
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
+                      <th className="px-4 py-3 w-10">
+                        <button onClick={toggleSelectAll} className="text-muted-foreground hover:text-foreground transition-colors">
+                          {allPageSelected
+                            ? <CheckSquare size={15} className="text-[#D4AF37]" />
+                            : <Square size={15} />
+                          }
+                        </button>
+                      </th>
                       {["Pareja / Jugador", "Categoría", "Estado", "Pago", "Acciones"].map((h) => (
-                        <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {h}
-                        </th>
+                        <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRegs.length === 0 ? (
+                    {pagedRegs.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="text-center py-10 text-sm text-muted-foreground">
+                        <td colSpan={6} className="text-center py-10 text-sm text-muted-foreground">
                           No hay inscripciones
                         </td>
                       </tr>
-                    ) : filteredRegs.map((reg) => (
-                      <tr key={reg.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                        <td className="px-5 py-3.5">
-                          <p className="text-sm font-medium text-foreground">{reg.player1Name}</p>
-                          {reg.player2Name && (
-                            <p className="text-xs text-muted-foreground">{reg.player2Name}</p>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs text-muted-foreground">{reg.categoryDisplay}</span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <StatusBadge status={reg.status} />
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
-                            {reg.paid ? "Pagado" : "Pendiente"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-1">
-                            {reg.status !== "confirmed" && (
-                              <button
-                                onClick={() => handleStatus(reg.id, "confirmed")}
-                                disabled={updatingId === reg.id}
-                                className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
-                                title="Confirmar"
-                              >
-                                <Check size={14} />
-                              </button>
-                            )}
-                            {reg.status !== "waitlist" && (
-                              <button
-                                onClick={() => handleStatus(reg.id, "waitlist")}
-                                disabled={updatingId === reg.id}
-                                className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
-                                title="Mover a espera"
-                              >
-                                <Clock size={14} />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleStatus(reg.id, "cancelled")}
-                              disabled={updatingId === reg.id}
-                              className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                              title="Rechazar"
-                            >
-                              <X size={14} />
+                    ) : pagedRegs.map((reg: AdminRegistration) => {
+                      const isSelected = selectedIds.has(reg.id);
+                      return (
+                        <tr
+                          key={reg.id}
+                          className={`border-b border-border last:border-0 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : "hover:bg-secondary/30"}`}
+                        >
+                          <td className="px-4 py-3.5">
+                            <button onClick={() => toggleSelect(reg.id)} className="text-muted-foreground hover:text-foreground transition-colors">
+                              {isSelected
+                                ? <CheckSquare size={15} className="text-[#D4AF37]" />
+                                : <Square size={15} />
+                              }
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <p className="text-sm font-medium text-foreground">{reg.player1Name}</p>
+                            {reg.player2Name && <p className="text-xs text-muted-foreground">{reg.player2Name}</p>}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs text-muted-foreground">{reg.categoryDisplay}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <StatusBadge status={reg.status} />
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
+                              {reg.paid ? "Pagado" : "Pendiente"}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-1">
+                              {reg.status !== "confirmed" && (
+                                <button
+                                  onClick={() => handleStatus(reg.id, "confirmed")}
+                                  disabled={updatingId === reg.id}
+                                  className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
+                                  title="Confirmar"
+                                >
+                                  <Check size={14} />
+                                </button>
+                              )}
+                              {reg.status !== "waitlist" && (
+                                <button
+                                  onClick={() => handleStatus(reg.id, "waitlist")}
+                                  disabled={updatingId === reg.id}
+                                  className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
+                                  title="Mover a espera"
+                                >
+                                  <Clock size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleStatus(reg.id, "cancelled")}
+                                disabled={updatingId === reg.id}
+                                className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                                title="Rechazar"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{filteredRegs.length} inscripciones · página {regPage + 1} de {totalPages}</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setRegPage((p) => p - 1)}
+                    disabled={regPage === 0}
+                    className="p-1.5 rounded-md border border-border hover:bg-secondary disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronLeft size={13} />
+                  </button>
+                  <button
+                    onClick={() => setRegPage((p) => p + 1)}
+                    disabled={regPage >= totalPages - 1}
+                    className="p-1.5 rounded-md border border-border hover:bg-secondary disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* ── CALENDARIO TAB ── */}
         {tab === "calendario" && (
-          <div className="space-y-4">
-            {loadingMatches ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-16 rounded-lg bg-card border border-border animate-pulse" />
-                ))}
-              </div>
-            ) : matches.length === 0 ? (
-              <div className="bg-card border border-border rounded-lg p-12 flex flex-col items-center gap-3">
-                <Calendar size={36} className="text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">No hay partidos registrados aún</p>
-              </div>
-            ) : (
-              (() => {
-                // Group by date
-                const byDate = (matches as MatchResult[]).reduce<Record<string, MatchResult[]>>((acc, m) => {
-                  const date = m.date.includes("T") ? m.date.split("T")[0] : m.date;
-                  if (!acc[date]) acc[date] = [];
-                  acc[date].push(m);
-                  return acc;
-                }, {});
-
-                return Object.entries(byDate).map(([date, dayMatches]) => {
-                  const label = new Date(date + "T12:00:00").toLocaleDateString("es-ES", {
-                    weekday: "long", day: "numeric", month: "long",
-                  });
-                  const pending  = dayMatches.filter((m) => !m.isResult).length;
-                  const finished = dayMatches.filter((m) =>  m.isResult).length;
-
-                  return (
-                    <div key={date} className="bg-card border border-border rounded-lg overflow-hidden">
-                      {/* Day header */}
-                      <div className="flex items-center justify-between px-5 py-3 bg-secondary/50 border-b border-border">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground capitalize">{label}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{dayMatches.length} partidos</p>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          {finished > 0 && (
-                            <span className="flex items-center gap-1 text-green-400">
-                              <CheckCircle size={12} /> {finished} completados
-                            </span>
-                          )}
-                          {pending > 0 && (
-                            <span className="flex items-center gap-1 text-yellow-400">
-                              <Clock size={12} /> {pending} pendientes
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Matches grid */}
-                      <div className="divide-y divide-border">
-                        {dayMatches.map((m: MatchResult) => {
-                          const time = m.date.includes("T")
-                            ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-                            : "—";
-                          return (
-                            <div key={m.id} className="flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors">
-                              {/* Time */}
-                              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
-
-                              {/* Court */}
-                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
-
-                              {/* Phase badge */}
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
-                                {m.phase}
-                              </span>
-
-                              {/* Teams */}
-                              <div className="flex-1 flex items-center gap-2 min-w-0">
-                                <span className="text-sm font-medium text-foreground truncate">{m.team1.join(" / ")}</span>
-                                <span className="text-xs text-muted-foreground shrink-0">vs</span>
-                                <span className="text-sm font-medium text-foreground truncate">{m.team2.join(" / ")}</span>
-                              </div>
-
-                              {/* Result / Status */}
-                              {m.isResult && m.sets1 && m.sets2 ? (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <CheckCircle size={13} className="text-green-400" />
-                                  <span className="text-xs font-mono text-foreground">
-                                    {m.sets1.map((s, i) => `${s}-${m.sets2![i]}`).join(", ")}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
-                                  <Clock size={12} /> Pendiente
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                });
-              })()
-            )}
-          </div>
+          <CalendarTab
+            matches={matches}
+            loading={loadingMatches}
+            isError={isErrorMatches}
+            refetch={refetchMatches}
+            autoSchedule={autoSchedule}
+          />
         )}
 
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {/* Generate bracket */}
-            {tournament.status !== "finished" && (
+            {tournament.status !== "FINISHED" && (
               <div className="bg-card border border-border rounded-lg p-5">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
@@ -604,27 +805,19 @@ export default function TorneoDetailPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <select
-                      value={bracketCatId}
-                      onChange={(e) => setBracketCatId(e.target.value)}
-                      className="h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                    >
-                      <option value="">Seleccionar categoría...</option>
-                      {tournament.categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="w-56">
+                      <CustomSelect
+                        options={catOptions}
+                        value={bracketCatId}
+                        onChange={setBracketCatId}
+                      />
+                    </div>
                     <button
                       onClick={() => generateBracket.mutate()}
                       disabled={!bracketCatId || generateBracket.isPending}
                       className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
                     >
-                      {generateBracket.isPending
-                        ? <Loader2 size={14} className="animate-spin" />
-                        : <GitBranch size={14} />
-                      }
+                      {generateBracket.isPending ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
                       Generar cuadro
                     </button>
                   </div>
@@ -632,7 +825,6 @@ export default function TorneoDetailPage() {
               </div>
             )}
 
-            {/* Bracket preview per category */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {tournament.categories.map((cat) => (
                 <div key={cat.id} className="bg-card border border-border rounded-lg p-4">
@@ -646,11 +838,11 @@ export default function TorneoDetailPage() {
                   </div>
                   <div className="space-y-1.5">
                     {[
-                      { label: "Grupos",          done: ["groups","r16","qf","sf","final","finished"].includes(cat.currentPhase) },
-                      { label: "Octavos",          done: ["r16","qf","sf","final","finished"].includes(cat.currentPhase) },
-                      { label: "Cuartos",          done: ["qf","sf","final","finished"].includes(cat.currentPhase) },
-                      { label: "Semis",            done: ["sf","final","finished"].includes(cat.currentPhase) },
-                      { label: "Final",            done: ["final","finished"].includes(cat.currentPhase) },
+                      { label: "Grupos",  done: ["groups","r16","qf","sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Octavos", done: ["r16","qf","sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Cuartos", done: ["qf","sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Semis",   done: ["sf","final","finished"].includes(cat.currentPhase) },
+                      { label: "Final",   done: ["final","finished"].includes(cat.currentPhase) },
                     ].map(({ label, done }) => (
                       <div key={label} className="flex items-center gap-2">
                         <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${done ? "bg-[#D4AF37] border-[#D4AF37]" : "border-border"}`}>

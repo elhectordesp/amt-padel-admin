@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { Header } from "@/components/admin/header";
+import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
+import { adminService } from "@/lib/services/admin";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
-import { adminService } from "@/lib/services/admin";
+import { z } from "zod";
 
+// ── Schema ───────────────────────────────────────────────────────────────
 const schema = z.object({
   name:                 z.string().min(3, "Nombre requerido"),
   venue:                z.string().min(2, "Sede requerida"),
@@ -19,43 +21,17 @@ const schema = z.object({
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
-  tier:                 z.enum(["open", "silver", "gold"]).optional(),
+  tier:                 z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:               z.string().optional(),
   scoringSystem:        z.string().optional(),
+  matchDuration:        z.number().optional(),
   registrationDeadline: z.string().optional(),
-  status:               z.enum(["open", "ongoing", "finished"]),
+  status:               z.enum(["OPEN", "ONGOING", "FINISHED", "CANCELLED"]),
 });
 
 type FormData = z.infer<typeof schema>;
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
-      {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
-    </div>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors ${props.className ?? ""}`}
-    />
-  );
-}
-
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={`w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors ${props.className ?? ""}`}
-    />
-  );
-}
-
+// ── Main Page ─────────────────────────────────────────────────────────────
 export default function EditarTorneoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -66,24 +42,38 @@ export default function EditarTorneoPage() {
     queryFn:  () => adminService.tournaments.detail(id),
   });
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
   useEffect(() => {
     if (!tournament) return;
+    
+    // Convert to Date strings for input type="date"
+    const startStr = tournament.startDate ? new Date(tournament.startDate).toISOString().split("T")[0] : "";
+    const endStr   = tournament.endDate   ? new Date(tournament.endDate).toISOString().split("T")[0] : "";
+    
+    // Format datetime-local
+    let regDeadline = "";
+    if (tournament.registrationDeadline) {
+      const d = new Date(tournament.registrationDeadline);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      regDeadline = d.toISOString().slice(0, 16);
+    }
+
     reset({
       name:                 tournament.name,
       venue:                tournament.venue,
       city:                 tournament.city ?? "",
-      startDate:            tournament.startDate ?? "",
-      endDate:              tournament.endDate   ?? "",
-      prize:                tournament.prize     ?? "",
-      format:               tournament.format    ?? "",
-      scoringSystem:        tournament.scoringSystem        ?? "",
-      registrationDeadline: tournament.registrationDeadline ?? "",
-      status:               tournament.status,
-      tier:                 tournament.spaTier ?? tournament.tier ?? "open",
+      startDate:            startStr,
+      endDate:              endStr,
+      prize:                tournament.prize ?? "",
+      format:               tournament.format ?? "",
+      scoringSystem:        tournament.scoringSystem ?? "",
+      matchDuration:        tournament.matchDuration ?? 60,
+      registrationDeadline: regDeadline,
+      status:               tournament.status as FormData["status"],
+      tier:                 tournament.tier ?? "BRONZE",
     });
   }, [tournament, reset]);
 
@@ -102,7 +92,7 @@ export default function EditarTorneoPage() {
     return (
       <div className="flex flex-col min-h-full">
         <Header title="Editar torneo" />
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-w-3xl mx-auto w-full">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-14 rounded-lg bg-card animate-pulse border border-border" />
           ))}
@@ -124,14 +114,16 @@ export default function EditarTorneoPage() {
             <ChevronLeft size={14} /> Torneos
           </Link>
           <span>/</span>
-          <Link href={`/torneos/${id}`} className="hover:text-foreground">{tournament.name}</Link>
+          <Link href={`/torneos/${id}`} className="hover:text-foreground truncate max-w-[200px]">
+            {tournament.name}
+          </Link>
           <span>/</span>
           <span className="text-foreground">Editar</span>
         </div>
 
         <form onSubmit={handleSubmit((data) => save.mutate(data))} className="space-y-6">
           {/* Basic info */}
-          <div className="bg-card border border-border rounded-lg p-6 space-y-5">
+          <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
             <div>
               <h3 className="font-heading text-lg text-foreground">Información básica</h3>
               <p className="text-sm text-muted-foreground mt-0.5">Datos generales del torneo</p>
@@ -159,41 +151,67 @@ export default function EditarTorneoPage() {
           </div>
 
           {/* Config */}
-          <div className="bg-card border border-border rounded-lg p-6 space-y-5">
+          <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
             <div>
               <h3 className="font-heading text-lg text-foreground">Configuración</h3>
               <p className="text-sm text-muted-foreground mt-0.5">Formato, puntuación y estado</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <Field label="Tier del torneo">
+              <TierPicker
+                value={watch("tier") ?? "BRONZE"}
+                onChange={(v) => setValue("tier", v as FormData["tier"], { shouldValidate: true, shouldDirty: true })}
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <Field label="Estado">
-                <Select {...register("status")}>
-                  <option value="open">Abierto</option>
-                  <option value="ongoing">En curso</option>
-                  <option value="finished">Finalizado</option>
-                </Select>
-              </Field>
-              <Field label="Tier">
-                <Select {...register("tier")}>
-                  <option value="open">⚪ Open</option>
-                  <option value="silver">🥈 Silver</option>
-                  <option value="gold">🥇 Gold</option>
-                </Select>
+                <CustomSelect
+                  options={[
+                    { value: "OPEN", label: "🟢 Abierto (Inscripciones)" },
+                    { value: "ONGOING", label: "🔵 En curso" },
+                    { value: "FINISHED", label: "⚫ Finalizado" },
+                    { value: "CANCELLED", label: "🔴 Cancelado" },
+                  ]}
+                  value={watch("status") ?? "OPEN"}
+                  onChange={(v) => setValue("status", v as FormData["status"], { shouldValidate: true, shouldDirty: true })}
+                />
               </Field>
               <Field label="Formato">
-                <Select {...register("format")}>
-                  <option value="">— Sin especificar —</option>
-                  <option value="eliminatoria">Eliminatoria + Consolación</option>
-                  <option value="grupos+eliminatoria">Grupos + Eliminatoria</option>
-                  <option value="round-robin">Round Robin</option>
-                </Select>
+                <CustomSelect
+                  options={[
+                    { value: "", label: "— Sin especificar —" },
+                    { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
+                    { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
+                    { value: "round-robin",         label: "Round Robin" },
+                    { value: "cuadro",              label: "Cuadro" },
+                  ]}
+                  value={watch("format") ?? ""}
+                  onChange={(v) => setValue("format", v, { shouldValidate: true, shouldDirty: true })}
+                />
               </Field>
               <Field label="Sistema de puntuación">
-                <Select {...register("scoringSystem")}>
-                  <option value="">— Sin especificar —</option>
-                  <option value="AMT+ELO+SPA">Puntos AMT + ELO + SPA</option>
-                  <option value="AMT">Solo Puntos AMT</option>
-                  <option value="ELO">Solo ELO</option>
-                </Select>
+                <CustomSelect
+                  options={[
+                    { value: "", label: "— Sin especificar —" },
+                    { value: "AMT+ELO+SPA", label: "Puntos AMT + ELO + SPA" },
+                    { value: "AMT",         label: "Solo Puntos AMT" },
+                    { value: "ELO",         label: "Solo ELO" },
+                  ]}
+                  value={watch("scoringSystem") ?? ""}
+                  onChange={(v) => setValue("scoringSystem", v, { shouldValidate: true, shouldDirty: true })}
+                />
+              </Field>
+              <Field label="Duración por partido">
+                <CustomSelect
+                  options={[
+                    { value: "60", label: "60 minutos" },
+                    { value: "90", label: "90 minutos" },
+                    { value: "120", label: "120 minutos" },
+                  ]}
+                  value={String(watch("matchDuration") ?? 60)}
+                  onChange={(v) => setValue("matchDuration", Number(v), { shouldValidate: true, shouldDirty: true })}
+                />
               </Field>
               <Field label="Cierre de inscripciones">
                 <Input {...register("registrationDeadline")} type="datetime-local" />
@@ -202,7 +220,7 @@ export default function EditarTorneoPage() {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pt-2">
             <Link
               href={`/torneos/${id}`}
               className="px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"

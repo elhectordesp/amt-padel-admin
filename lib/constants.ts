@@ -1,4 +1,4 @@
-import type { CategoryLevel, Gender } from "@/types";
+import type { CategoryLevel, Gender, TournamentStatus, TournamentTier } from "@/types";
 
 export const CATEGORY_LABEL: Record<CategoryLevel, string> = {
   "1a":        "1ª",
@@ -29,14 +29,60 @@ export const LEVELS: CategoryLevel[] = [
   "1a","2a","3a","4a","5a","6a","iniciacion",
 ];
 
-export const STATUS_LABEL: Record<string, string> = {
-  open:     "Abierto",
-  ongoing:  "En curso",
-  finished: "Finalizado",
+// Tournament status — keys match TournamentStatus (uppercase, from DB)
+export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
+  OPEN:      "Abierto",
+  ONGOING:   "En curso",
+  FINISHED:  "Finalizado",
+  CANCELLED: "Cancelado",
 };
 
-export const STATUS_COLOR: Record<string, string> = {
-  open:     "text-green-400 bg-green-400/10 border-green-400/30",
-  ongoing:  "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
-  finished: "text-muted-foreground bg-secondary border-border",
+export const TOURNAMENT_STATUS_COLOR: Record<TournamentStatus, string> = {
+  OPEN:      "text-green-400 bg-green-400/10 border-green-400/30",
+  ONGOING:   "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
+  FINISHED:  "text-muted-foreground bg-secondary border-border",
+  CANCELLED: "text-red-400 bg-red-400/10 border-red-400/30",
 };
+
+// Tier display — keys match TournamentTier (uppercase, from DB)
+export const TIER_LABEL: Record<TournamentTier, string> = {
+  BRONZE:   "Open",
+  SILVER:   "Silver",
+  GOLD:     "Gold",
+  PLATINUM: "Platinum",
+};
+
+export const TIER_COLOR: Record<TournamentTier, string> = {
+  BRONZE:   "#CD7F32",
+  SILVER:   "#C0C0C0",
+  GOLD:     "#D4AF37",
+  PLATINUM: "#E5E4E2",
+};
+
+// spaTier comes lowercase from the mobile API — map to display values
+export const SPA_TIER_LABEL: Record<string, string> = {
+  open:     "Open",
+  silver:   "Silver",
+  gold:     "Gold",
+  platinum: "Platinum",
+};
+
+export const SPA_TIER_COLOR: Record<string, string> = {
+  open:     "#CD7F32",
+  silver:   "#C0C0C0",
+  gold:     "#D4AF37",
+  platinum: "#E5E4E2",
+};
+
+// Resolves whichever tier field is present and returns { label, color } for display
+export function resolveTier(spaTier?: string, tier?: TournamentTier): { label: string; color: string } | null {
+  if (spaTier) {
+    const label = SPA_TIER_LABEL[spaTier];
+    const color = SPA_TIER_COLOR[spaTier];
+    if (label && color) return { label, color };
+  }
+  if (tier && tier !== "BRONZE") {
+    return { label: TIER_LABEL[tier], color: TIER_COLOR[tier] };
+  }
+  return null;
+}

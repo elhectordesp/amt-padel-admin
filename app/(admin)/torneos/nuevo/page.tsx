@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, ChevronRight, ChevronLeft, Check, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { Header } from "@/components/admin/header";
+import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { adminService } from "@/lib/services/admin";
-import type { Gender, CategoryLevel } from "@/types";
+import { TIER_LABEL } from "@/lib/constants";
+import type { CategoryLevel, Gender } from "@/types";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 const infoSchema = z.object({
@@ -21,7 +23,10 @@ const infoSchema = z.object({
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:     z.string().optional(),
-});
+}).refine(
+  (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
+  { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
+);
 
 const catSchema = z.object({
   categories: z.array(z.object({
@@ -33,17 +38,29 @@ const catSchema = z.object({
 });
 
 const configSchema = z.object({
-  tier:                z.enum(["open", "silver", "gold"]),
+  tier:                z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:              z.string().min(1),
   scoringSystem:       z.string().min(1),
+  matchDuration:       z.number().int().min(10).max(180),
   registrationDeadline:z.string().optional(),
   hasShirts:           z.boolean(),
   courts:              z.string(), // comma-separated list, split on save
 });
 
-type InfoData   = z.infer<typeof infoSchema>;
-type CatData    = z.infer<typeof catSchema>;
-type ConfigData = z.infer<typeof configSchema>;
+const scheduleSchema = z.object({
+  days: z.array(z.object({
+    date: z.string(),
+    blocks: z.array(z.object({
+      start: z.string(),
+      end: z.string(),
+    })).min(1),
+  })),
+});
+
+type InfoData     = z.infer<typeof infoSchema>;
+type CatData      = z.infer<typeof catSchema>;
+type ConfigData   = z.infer<typeof configSchema>;
+type ScheduleData = z.infer<typeof scheduleSchema>;
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const LEVELS: { value: CategoryLevel; label: string }[] = [
@@ -57,6 +74,7 @@ const FORMAT_LABEL: Record<string, string> = {
   "eliminatoria":        "Eliminatoria + Consolación",
   "grupos+eliminatoria": "Grupos + Eliminatoria",
   "round-robin":         "Round Robin",
+  "cuadro":              "Cuadro",
 };
 
 const SCORING_LABEL: Record<string, string> = {
@@ -65,54 +83,14 @@ const SCORING_LABEL: Record<string, string> = {
   "ELO":         "Solo ELO",
 };
 
-const TIER_LABEL: Record<string, string> = {
-  "open":   "⚪ Open",
-  "silver": "🥈 Silver",
-  "gold":   "🥇 Gold",
-};
 
 const STEPS = [
   { num: 1, label: "Información"  },
   { num: 2, label: "Categorías"   },
   { num: 3, label: "Configuración"},
-  { num: 4, label: "Confirmación" },
+  { num: 4, label: "Horarios"     },
+  { num: 5, label: "Confirmación" },
 ];
-
-// ── Helper components ─────────────────────────────────────────────────────
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
-      {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
-    </div>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors ${props.className ?? ""}`}
-    />
-  );
-}
-
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className="relative">
-      <select
-        {...props}
-        className={`w-full h-9 pl-3 pr-8 rounded-md bg-input border border-border text-sm text-foreground appearance-none focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors cursor-pointer ${props.className ?? ""}`}
-      />
-      <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </div>
-    </div>
-  );
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function NuevoTorneoPage() {
@@ -122,9 +100,10 @@ export default function NuevoTorneoPage() {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // Accumulated form data
-  const [infoData,   setInfoData]   = useState<InfoData   | null>(null);
-  const [catData,    setCatData]    = useState<CatData    | null>(null);
-  const [configData, setConfigData] = useState<ConfigData | null>(null);
+  const [infoData,     setInfoData]     = useState<InfoData     | null>(null);
+  const [catData,      setCatData]      = useState<CatData      | null>(null);
+  const [configData,   setConfigData]   = useState<ConfigData   | null>(null);
+  const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null);
 
   // ── Step 1: Info ───────────────────────────────────────────────────────
   const infoForm = useForm<InfoData>({
@@ -157,8 +136,32 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "open", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", hasShirts: false, courts: "" },
+    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, hasShirts: false, courts: "" },
   });
+
+  // ── Step 4: Schedule ──────────────────────────────────────────────────
+  const scheduleForm = useForm<ScheduleData>({
+    resolver:      zodResolver(scheduleSchema),
+    defaultValues: scheduleData ?? { days: [] },
+  });
+
+  // Auto-generate days when reaching step 4
+  useEffect(() => {
+    if (step === 4 && infoData && (scheduleForm.getValues().days.length === 0)) {
+      const start = new Date(infoData.startDate);
+      const end   = new Date(infoData.endDate);
+      const days: ScheduleData["days"] = [];
+      let curr = new Date(start);
+      while (curr <= end) {
+        days.push({
+          date: curr.toISOString().split("T")[0],
+          blocks: [{ start: "16:00", end: "21:00" }],
+        });
+        curr.setDate(curr.getDate() + 1);
+      }
+      scheduleForm.reset({ days });
+    }
+  }, [step, infoData, scheduleForm]);
 
   // ── Mutation ──────────────────────────────────────────────────────────
   const create = useMutation({
@@ -167,6 +170,7 @@ export default function NuevoTorneoPage() {
       tier:        configData!.tier,
       format:      configData!.format,
       scoringSystem: configData!.scoringSystem,
+      matchDuration: configData!.matchDuration,
       registrationDeadline: configData!.registrationDeadline || undefined,
       hasShirts:   configData!.hasShirts,
       courts:      configData!.courts
@@ -177,6 +181,10 @@ export default function NuevoTorneoPage() {
         level:      c.level  as CategoryLevel,
         totalSpots: c.totalSpots,
         price:      c.price,
+      })),
+      schedule: scheduleData?.days.map(d => ({
+        date: d.date,
+        blocks: d.blocks
       })),
     }),
     onSuccess: (t) => {
@@ -204,6 +212,11 @@ export default function NuevoTorneoPage() {
       setConfigData(configForm.getValues());
       setStep(4);
     } else if (step === 4) {
+      const ok = await scheduleForm.trigger();
+      if (!ok) return;
+      setScheduleData(scheduleForm.getValues());
+      setStep(5);
+    } else if (step === 5) {
       create.mutate();
     }
   };
@@ -212,6 +225,7 @@ export default function NuevoTorneoPage() {
     if (step === 2 && infoData)   infoForm.reset(infoData);
     if (step === 3 && catData)    catForm.reset({ categories: catData.categories });
     if (step === 4 && configData) configForm.reset(configData);
+    if (step === 5 && scheduleData) scheduleForm.reset(scheduleData);
     setStep((s) => s - 1);
   };
 
@@ -328,37 +342,47 @@ export default function NuevoTorneoPage() {
                   ))}
                 </div>
 
-                {fields.map((field, index) => (
-                  <div key={field.id} className="grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center p-3 bg-secondary/50 rounded-md border border-border">
-                    <Select {...catForm.register(`categories.${index}.gender`)}>
-                      <option value="M">Masculino</option>
-                      <option value="F">Femenino</option>
-                    </Select>
-                    <Select {...catForm.register(`categories.${index}.level`)}>
-                      {LEVELS.map((l) => (
-                        <option key={l.value} value={l.value}>{l.label}</option>
-                      ))}
-                    </Select>
-                    <Input
-                      type="number"
-                      {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })}
-                      min={4} max={128}
-                    />
-                    <Input
-                      type="number"
-                      {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })}
-                      min={0} step={0.5}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => remove(index)}
-                      disabled={fields.length === 1}
-                      className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+                {fields.map((field, index) => {
+                  const genderVal = catForm.watch(`categories.${index}.gender`);
+                  const levelVal  = catForm.watch(`categories.${index}.level`);
+                  return (
+                    <div key={field.id} className="grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center p-3 bg-secondary/50 rounded-md border border-border">
+                      <CustomSelect
+                        compact
+                        options={[
+                          { value: "M", label: "Masculino" },
+                          { value: "F", label: "Femenino" },
+                        ]}
+                        value={genderVal}
+                        onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")}
+                      />
+                      <CustomSelect
+                        compact
+                        options={LEVELS.map((l) => ({ value: l.value, label: l.label }))}
+                        value={levelVal}
+                        onChange={(v) => catForm.setValue(`categories.${index}.level`, v)}
+                      />
+                      <Input
+                        type="number"
+                        {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })}
+                        min={4} max={128}
+                      />
+                      <Input
+                        type="number"
+                        {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })}
+                        min={0} step={0.5}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => remove(index)}
+                        disabled={fields.length === 1}
+                        className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -370,27 +394,48 @@ export default function NuevoTorneoPage() {
                 <h3 className="font-heading text-lg text-foreground">Configuración general</h3>
                 <p className="text-sm text-muted-foreground mt-0.5">Formato, puntuación y plazos</p>
               </div>
+              {/* Tier picker — full width, card style */}
+              <Field label="Tier del torneo">
+                <TierPicker
+                  value={configForm.watch("tier")}
+                  onChange={(v) => configForm.setValue("tier", v as ConfigData["tier"], { shouldValidate: true })}
+                />
+              </Field>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Tier del torneo">
-                  <Select {...configForm.register("tier")}>
-                    <option value="open">⚪ Open</option>
-                    <option value="silver">🥈 Silver</option>
-                    <option value="gold">🥇 Gold</option>
-                  </Select>
-                </Field>
                 <Field label="Formato" error={configForm.formState.errors.format?.message}>
-                  <Select {...configForm.register("format")}>
-                    <option value="eliminatoria">Eliminatoria + Consolación</option>
-                    <option value="grupos+eliminatoria">Grupos + Eliminatoria</option>
-                    <option value="round-robin">Round Robin</option>
-                  </Select>
+                  <CustomSelect
+                    options={[
+                      { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
+                      { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
+                      { value: "round-robin", label: "Round Robin" },
+                      { value: "cuadro",              label: "Cuadro" },
+                    ]}
+                    value={configForm.watch("format")}
+                    onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
+                  />
                 </Field>
                 <Field label="Sistema de puntuación" error={configForm.formState.errors.scoringSystem?.message}>
-                  <Select {...configForm.register("scoringSystem")}>
-                    <option value="AMT+ELO+SPA">Puntos AMT + ELO + SPA</option>
-                    <option value="AMT">Solo Puntos AMT</option>
-                    <option value="ELO">Solo ELO</option>
-                  </Select>
+                  <CustomSelect
+                    options={[
+                      { value: "AMT+ELO+SPA", label: "Puntos AMT + ELO + SPA" },
+                      { value: "AMT",         label: "Solo Puntos AMT" },
+                      { value: "ELO",         label: "Solo ELO" },
+                    ]}
+                    value={configForm.watch("scoringSystem")}
+                    onChange={(v) => configForm.setValue("scoringSystem", v, { shouldValidate: true })}
+                  />
+                </Field>
+                <Field label="Duración por partido" error={configForm.formState.errors.matchDuration?.message}>
+                  <CustomSelect
+                    options={[
+                      { value: "60", label: "60 minutos" },
+                      { value: "90", label: "90 minutos" },
+                      { value: "120", label: "120 minutos" },
+                    ]}
+                    value={String(configForm.watch("matchDuration"))}
+                    onChange={(v) => configForm.setValue("matchDuration", Number(v), { shouldValidate: true })}
+                  />
                 </Field>
                 <Field label="Cierre de inscripciones" error={configForm.formState.errors.registrationDeadline?.message}>
                   <Input
@@ -422,8 +467,83 @@ export default function NuevoTorneoPage() {
             </div>
           )}
 
-          {/* ── STEP 4: CONFIRMATION ── */}
-          {step === 4 && infoData && catData && configData && (
+          {/* ── STEP 4: SCHEDULE ── */}
+          {step === 4 && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="font-heading text-lg text-foreground">Horarios por jornada</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">Configura los tramos de mañana y tarde para cada día</p>
+              </div>
+              
+              <div className="space-y-4">
+                {scheduleForm.watch("days").map((day, dIdx) => (
+                  <div key={day.date} className="p-4 bg-secondary/30 rounded-lg border border-border space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-foreground capitalize">
+                        {new Date(day.date).toLocaleDateString("es-ES", { weekday: 'long', day: 'numeric', month: 'long' })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const blocks = [...scheduleForm.getValues().days[dIdx].blocks, { start: "16:00", end: "21:00" }];
+                          scheduleForm.setValue(`days.${dIdx}.blocks`, blocks);
+                        }}
+                        className="text-[10px] font-bold text-[#D4AF37] uppercase hover:underline"
+                      >
+                        + Añadir tramo
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {day.blocks.map((block, bIdx) => (
+                        <div key={bIdx} className="flex items-center gap-3">
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <Field label="Inicio">
+                              <Input
+                                type="time"
+                                value={block.start}
+                                onChange={(e) => {
+                                  const b = [...scheduleForm.getValues().days[dIdx].blocks];
+                                  b[bIdx].start = e.target.value;
+                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b);
+                                }}
+                              />
+                            </Field>
+                            <Field label="Fin">
+                              <Input
+                                type="time"
+                                value={block.end}
+                                onChange={(e) => {
+                                  const b = [...scheduleForm.getValues().days[dIdx].blocks];
+                                  b[bIdx].end = e.target.value;
+                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b);
+                                }}
+                              />
+                            </Field>
+                          </div>
+                          {day.blocks.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const b = scheduleForm.getValues().days[dIdx].blocks.filter((_, i) => i !== bIdx);
+                                scheduleForm.setValue(`days.${dIdx}.blocks`, b);
+                              }}
+                              className="p-2 mt-5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 5: CONFIRMATION ── */}
+          {step === 5 && infoData && catData && configData && (
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Confirmar creación</h3>
@@ -472,6 +592,7 @@ export default function NuevoTorneoPage() {
                     ["Tier",         TIER_LABEL[configData.tier] ?? configData.tier],
                     ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
+                    ["Duración part.", `${configData.matchDuration} mins`],
                     ["Cierre insc.", configData.registrationDeadline ?? "—"],
                     ["Camisetas",    configData.hasShirts ? "Sí" : "No"],
                     ["Pistas",       configData.courts || "—"],
@@ -479,6 +600,21 @@ export default function NuevoTorneoPage() {
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>
                       <span className="text-foreground font-medium">{v}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Schedule summary */}
+                <div className="bg-secondary/50 rounded-lg border border-border p-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Horarios</p>
+                  {scheduleData?.days.map((d) => (
+                    <div key={d.date} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground capitalize">
+                        {new Date(d.date).toLocaleDateString("es-ES", { weekday: 'short', day: 'numeric' })}
+                      </span>
+                      <span className="text-foreground">
+                        {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -505,8 +641,8 @@ export default function NuevoTorneoPage() {
             className="flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
           >
             {create.isPending && <Loader2 size={14} className="animate-spin" />}
-            {step === 4 ? (create.isPending ? "Creando..." : "Crear torneo") : "Siguiente"}
-            {step < 4 && <ChevronRight size={15} />}
+            {step === 5 ? (create.isPending ? "Creando..." : "Crear torneo") : "Siguiente"}
+            {step < 5 && <ChevronRight size={15} />}
           </button>
         </div>
       </div>

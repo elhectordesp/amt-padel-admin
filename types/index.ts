@@ -1,7 +1,7 @@
 export type Gender             = "M" | "F";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
-export type TournamentStatus   = "open" | "ongoing" | "finished";
-export type TournamentTier     = "open" | "silver" | "gold";
+export type TournamentStatus   = "OPEN" | "ONGOING" | "FINISHED" | "CANCELLED";
+export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "pending" | "confirmed" | "waitlist";
 export type RankingType        = "spa" | "circuit";
 
@@ -43,8 +43,8 @@ export interface Tournament {
   city?:       string;
   prize?:      string;
   status:      TournamentStatus;
-  tier?:       TournamentTier;
-  spaTier?:    TournamentTier;
+  tier?:       TournamentTier;   // DB enum — usado por el admin
+  spaTier?:    string;            // Clave SPA traducida — usado por la app móvil
   categories:  TournamentCategory[];
   schedule?:   TournamentScheduleDay[];
   hasShirts?:  boolean;
@@ -53,6 +53,7 @@ export interface Tournament {
   scoringSystem?: string;
   registrationDeadline?: string;
   courts?:     string[];
+  matchDuration?: number;
   season?:     number;
 }
 
@@ -81,9 +82,15 @@ export interface SpaConfig {
     final:        number;
   };
   tier_multipliers: {
-    open:   number;
-    silver: number;
-    gold:   number;
+    BRONZE:   number;
+    SILVER:   number;
+    GOLD:     number;
+    PLATINUM: number;
+    // aliases internos usados por el motor SPA
+    open:     number;
+    silver:   number;
+    gold:     number;
+    platinum: number;
   };
   circuit_base_points: {
     winner:       number;
@@ -210,11 +217,19 @@ export interface CreateTournamentPayload {
   scoringSystem?: string;
   registrationDeadline?: string;
   hasShirts?:  boolean;
+  matchDuration?: number;
   courts?:     string[];
   categories:  {
     gender:     Gender;
     level:      CategoryLevel;
     totalSpots: number;
     price:      number;
+  }[];
+  schedule?: {
+    date:   string;
+    blocks: {
+      start: string;
+      end:   string;
+    }[];
   }[];
 }
