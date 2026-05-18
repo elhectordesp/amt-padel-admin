@@ -44,6 +44,7 @@ const configSchema = z.object({
   matchDuration:       z.number().int().min(10).max(180),
   registrationDeadline:z.string().optional(),
   hasShirts:           z.boolean(),
+  useSeeding:          z.boolean(),
   courts:              z.string(), // comma-separated list, split on save
 });
 
@@ -136,7 +137,7 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, hasShirts: false, courts: "" },
+    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, hasShirts: false, useSeeding: false, courts: "" },
   });
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
@@ -173,6 +174,7 @@ export default function NuevoTorneoPage() {
       matchDuration: configData!.matchDuration,
       registrationDeadline: configData!.registrationDeadline || undefined,
       hasShirts:   configData!.hasShirts,
+      useSeeding:  configData!.useSeeding,
       courts:      configData!.courts
         ? configData!.courts.split(",").map((c) => c.trim()).filter(Boolean)
         : [],
@@ -389,81 +391,104 @@ export default function NuevoTorneoPage() {
 
           {/* ── STEP 3: CONFIG ── */}
           {step === 3 && (
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Configuración general</h3>
                 <p className="text-sm text-muted-foreground mt-0.5">Formato, puntuación y plazos</p>
               </div>
-              {/* Tier picker — full width, card style */}
-              <Field label="Tier del torneo">
-                <TierPicker
-                  value={configForm.watch("tier")}
-                  onChange={(v) => configForm.setValue("tier", v as ConfigData["tier"], { shouldValidate: true })}
-                />
-              </Field>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Formato" error={configForm.formState.errors.format?.message}>
-                  <CustomSelect
-                    options={[
-                      { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
-                      { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
-                      { value: "round-robin", label: "Round Robin" },
-                      { value: "cuadro",              label: "Cuadro" },
-                    ]}
-                    value={configForm.watch("format")}
-                    onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
+              {/* Grupo 1: Formato del torneo */}
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border pb-2">
+                  Formato del torneo
+                </p>
+                <Field label="Tier del torneo">
+                  <TierPicker
+                    value={configForm.watch("tier")}
+                    onChange={(v) => configForm.setValue("tier", v as ConfigData["tier"], { shouldValidate: true })}
                   />
                 </Field>
-                <Field label="Sistema de puntuación" error={configForm.formState.errors.scoringSystem?.message}>
-                  <CustomSelect
-                    options={[
-                      { value: "AMT+ELO+SPA", label: "Puntos AMT + ELO + SPA" },
-                      { value: "AMT",         label: "Solo Puntos AMT" },
-                      { value: "ELO",         label: "Solo ELO" },
-                    ]}
-                    value={configForm.watch("scoringSystem")}
-                    onChange={(v) => configForm.setValue("scoringSystem", v, { shouldValidate: true })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Formato" error={configForm.formState.errors.format?.message}>
+                    <CustomSelect
+                      options={[
+                        { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
+                        { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
+                        { value: "round-robin",         label: "Round Robin" },
+                        { value: "cuadro",              label: "Cuadro" },
+                      ]}
+                      value={configForm.watch("format")}
+                      onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
+                    />
+                  </Field>
+                  <Field label="Sistema de puntuación" error={configForm.formState.errors.scoringSystem?.message}>
+                    <CustomSelect
+                      options={[
+                        { value: "AMT+ELO+SPA", label: "Puntos AMT + ELO + SPA" },
+                        { value: "AMT",         label: "Solo Puntos AMT" },
+                        { value: "ELO",         label: "Solo ELO" },
+                      ]}
+                      value={configForm.watch("scoringSystem")}
+                      onChange={(v) => configForm.setValue("scoringSystem", v, { shouldValidate: true })}
+                    />
+                  </Field>
+                </div>
+                <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
+                  <input
+                    type="checkbox"
+                    {...configForm.register("useSeeding")}
+                    className="w-4 h-4 accent-[#D4AF37]"
                   />
-                </Field>
-                <Field label="Duración por partido" error={configForm.formState.errors.matchDuration?.message}>
-                  <CustomSelect
-                    options={[
-                      { value: "60", label: "60 minutos" },
-                      { value: "90", label: "90 minutos" },
-                      { value: "120", label: "120 minutos" },
-                    ]}
-                    value={String(configForm.watch("matchDuration"))}
-                    onChange={(v) => configForm.setValue("matchDuration", Number(v), { shouldValidate: true })}
-                  />
-                </Field>
-                <Field label="Cierre de inscripciones" error={configForm.formState.errors.registrationDeadline?.message}>
-                  <Input
-                    {...configForm.register("registrationDeadline")}
-                    type="datetime-local"
-                  />
-                </Field>
-                <Field label="Pistas disponibles">
-                  <Input
-                    {...configForm.register("courts")}
-                    placeholder="Pista 1, Pista 2, Pista 3..."
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1">Separadas por coma</p>
-                </Field>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Cabezas de serie (seeding por SPA)</p>
+                    <p className="text-xs text-muted-foreground">Los equipos se distribuyen en grupos/cuadro según su ranking SPA. Sin activar, el sorteo es aleatorio.</p>
+                  </div>
+                </label>
               </div>
 
-              {/* Camisetas */}
-              <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
-                <input
-                  type="checkbox"
-                  {...configForm.register("hasShirts")}
-                  className="w-4 h-4 accent-[#D4AF37]"
-                />
-                <div>
-                  <p className="text-sm font-medium text-foreground">Incluir camisetas</p>
-                  <p className="text-xs text-muted-foreground">Los jugadores deberán indicar su talla al inscribirse</p>
+              {/* Grupo 2: Logística */}
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border pb-2">
+                  Logística
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Duración por partido" error={configForm.formState.errors.matchDuration?.message}>
+                    <CustomSelect
+                      options={[
+                        { value: "60",  label: "60 minutos" },
+                        { value: "90",  label: "90 minutos" },
+                        { value: "120", label: "120 minutos" },
+                      ]}
+                      value={String(configForm.watch("matchDuration"))}
+                      onChange={(v) => configForm.setValue("matchDuration", Number(v), { shouldValidate: true })}
+                    />
+                  </Field>
+                  <Field label="Cierre de inscripciones" error={configForm.formState.errors.registrationDeadline?.message}>
+                    <Input
+                      {...configForm.register("registrationDeadline")}
+                      type="datetime-local"
+                    />
+                  </Field>
+                  <Field label="Pistas disponibles">
+                    <Input
+                      {...configForm.register("courts")}
+                      placeholder="Pista 1, Pista 2, Pista 3..."
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">Separadas por coma</p>
+                  </Field>
                 </div>
-              </label>
+                <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
+                  <input
+                    type="checkbox"
+                    {...configForm.register("hasShirts")}
+                    className="w-4 h-4 accent-[#D4AF37]"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Incluir camisetas</p>
+                    <p className="text-xs text-muted-foreground">Los jugadores deberán indicar su talla al inscribirse</p>
+                  </div>
+                </label>
+              </div>
             </div>
           )}
 
@@ -594,7 +619,8 @@ export default function NuevoTorneoPage() {
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Duración part.", `${configData.matchDuration} mins`],
                     ["Cierre insc.", configData.registrationDeadline ?? "—"],
-                    ["Camisetas",    configData.hasShirts ? "Sí" : "No"],
+                    ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
+                    ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
                     ["Pistas",       configData.courts || "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">

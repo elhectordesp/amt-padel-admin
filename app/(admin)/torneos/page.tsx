@@ -221,6 +221,7 @@ export default function TorneosPage() {
               ))}
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 {table.getHeaderGroups().map((hg) => (
@@ -257,6 +258,7 @@ export default function TorneosPage() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

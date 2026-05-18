@@ -2,13 +2,14 @@
 
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -36,6 +37,7 @@ export default function EditarTorneoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const qc     = useQueryClient();
+  const [pendingData, setPendingData] = useState<FormData | null>(null);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["tournament", id],
@@ -48,18 +50,32 @@ export default function EditarTorneoPage() {
 
   useEffect(() => {
     if (!tournament) return;
-    
-    // Convert to Date strings for input type="date"
-    const startStr = tournament.startDate ? new Date(tournament.startDate).toISOString().split("T")[0] : "";
-    const endStr   = tournament.endDate   ? new Date(tournament.endDate).toISOString().split("T")[0] : "";
-    
-    // Format datetime-local
-    let regDeadline = "";
-    if (tournament.registrationDeadline) {
-      const d = new Date(tournament.registrationDeadline);
-      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      regDeadline = d.toISOString().slice(0, 16);
-    }
+
+    // Convierte una fecha a string YYYY-MM-DD en hora local (no UTC)
+    const toDateInput = (val: string | null | undefined): string => {
+      if (!val) return "";
+      const d = new Date(val);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+
+    // Convierte a string YYYY-MM-DDTHH:mm en hora local para datetime-local input
+    const toDateTimeInput = (val: string | null | undefined): string => {
+      if (!val) return "";
+      const d = new Date(val);
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const h = String(d.getHours()).padStart(2, "0");
+      const min = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${mo}-${day}T${h}:${min}`;
+    };
+
+    const startStr   = toDateInput(tournament.startDate);
+    const endStr     = toDateInput(tournament.endDate);
+    const regDeadline = toDateTimeInput(tournament.registrationDeadline);
 
     reset({
       name:                 tournament.name,
@@ -121,7 +137,27 @@ export default function EditarTorneoPage() {
           <span className="text-foreground">Editar</span>
         </div>
 
-        <form onSubmit={handleSubmit((data) => save.mutate(data))} className="space-y-6">
+        <ConfirmModal
+          open={!!pendingData}
+          title="Cambio de estado"
+          description={`¿Confirmas cambiar el estado a "${pendingData?.status}"? Esta acción puede afectar a inscripciones y partidos en curso.`}
+          confirmLabel="Sí, cambiar estado"
+          danger
+          onConfirm={() => { if (pendingData) save.mutate(pendingData); setPendingData(null); }}
+          onClose={() => setPendingData(null)}
+        />
+
+        <form
+          onSubmit={handleSubmit((data) => {
+            const DESTRUCTIVE = ["ONGOING", "FINISHED", "CANCELLED"];
+            if (tournament && data.status !== tournament.status && DESTRUCTIVE.includes(data.status)) {
+              setPendingData(data);
+            } else {
+              save.mutate(data);
+            }
+          })}
+          className="space-y-6"
+        >
           {/* Basic info */}
           <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
             <div>

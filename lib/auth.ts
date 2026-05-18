@@ -1,4 +1,4 @@
-import { api, setToken, removeToken } from "./api";
+import { api, setToken, setRefreshToken, removeTokens, getRefreshToken } from "./api";
 
 export interface AdminUser {
   id:    string;
@@ -7,32 +7,38 @@ export interface AdminUser {
   role:  string;
 }
 
-function decodeJwt(token: string): { role?: string; exp?: number } | null {
-  try {
-    const payload = token.split(".")[1];
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-}
-
 export async function login(email: string, password: string): Promise<AdminUser> {
-  const res = await api.post<{ token: string; user: AdminUser }>("/auth/login", {
-    email,
-    password,
-  });
-  const { token, user } = res.data as unknown as { token: string; user: AdminUser };
+  const res = await api.post("/auth/login", { email, password });
+  const { token, refreshToken } = res.data as unknown as {
+    token: string;
+    refreshToken: string;
+    user: AdminUser;
+  };
 
-  const payload = decodeJwt(token);
-  if (payload?.role !== "admin") {
+  // Guardar el token antes de verificar el rol para que el interceptor lo adjunte
+  setToken(token);
+  if (refreshToken) setRefreshToken(refreshToken);
+
+  // Verificar el rol en el servidor, no decodificando el JWT en el cliente
+  // (un JWT local puede estar manipulado o desactualizado)
+  // El interceptor de axios ya desenvuelve res.data.data → recibimos AdminUser directamente
+  const me = await api.get("/users/me") as unknown as AdminUser;
+  if (me?.role !== "admin" && me?.role !== "ADMIN") {
+    removeTokens();
     throw new Error("No tienes permisos de administrador.");
   }
 
-  setToken(token);
-  return user;
+  return me;
 }
 
-export function logout() {
-  removeToken();
+export async function logout() {
+  const refreshToken = getRefreshToken();
+  // Intentar revocar el refresh token en el servidor (best-effort)
+  if (refreshToken) {
+    api.post("/auth/logout", { refreshToken }).catch((e) => {
+      console.error("[auth] Error revocando refresh token:", e);
+    });
+  }
+  removeTokens();
   window.location.href = "/login";
 }

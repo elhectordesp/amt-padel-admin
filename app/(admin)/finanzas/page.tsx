@@ -6,7 +6,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from "recharts";
-import { TrendingUp, DollarSign, Receipt, PieChart } from "lucide-react";
+import { TrendingUp, DollarSign, Receipt, PieChart, Download } from "lucide-react";
+import { downloadCsv } from "@/lib/utils/csv";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 
@@ -127,8 +128,8 @@ export default function FinanzasPage() {
 
       <div className="flex-1 p-6 space-y-6">
 
-        {/* Period selector */}
-        <div className="flex items-center gap-3">
+        {/* Period selector + export */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
             {([
               { key: "month", label: "Este mes" },
@@ -147,6 +148,25 @@ export default function FinanzasPage() {
               </button>
             ))}
           </div>
+
+          <button
+            onClick={() => {
+              const VAT = 0.21;
+              const rows = [
+                { Concepto: "Ingresos por inscripciones", "Con IVA (€)": fmt(data?.revenue.registrations ?? 0), "Sin IVA (€)": fmt((data?.revenue.registrations ?? 0) / (1 + VAT)), "IVA (€)": fmt((data?.revenue.registrations ?? 0) - (data?.revenue.registrations ?? 0) / (1 + VAT)) },
+                { Concepto: "Patrocinios",                "Con IVA (€)": fmt(data?.revenue.sponsorships ?? 0),  "Sin IVA (€)": fmt((data?.revenue.sponsorships ?? 0)  / (1 + VAT)), "IVA (€)": fmt((data?.revenue.sponsorships ?? 0)  - (data?.revenue.sponsorships ?? 0)  / (1 + VAT)) },
+                { Concepto: "Merchandising / Otros",      "Con IVA (€)": fmt(data?.revenue.merchandise ?? 0),   "Sin IVA (€)": fmt((data?.revenue.merchandise ?? 0)   / (1 + VAT)), "IVA (€)": fmt((data?.revenue.merchandise ?? 0)   - (data?.revenue.merchandise ?? 0)   / (1 + VAT)) },
+                { Concepto: "TOTAL INGRESOS",             "Con IVA (€)": fmt(totalWithVat),   "Sin IVA (€)": fmt(totalWithoutVat),           "IVA (€)": fmt(vatAmount)    },
+                { Concepto: "Gastos operativos",          "Con IVA (€)": fmt(-costsWithVat),  "Sin IVA (€)": fmt(-costsWithVat / (1 + VAT)), "IVA (€)": fmt(-(costsWithVat - costsWithVat / (1 + VAT))) },
+                { Concepto: "BENEFICIO NETO",             "Con IVA (€)": fmt(grossProfit),    "Sin IVA (€)": fmt(netProfit),                 "IVA (€)": fmt(vatAmount)    },
+              ];
+              downloadCsv(`finanzas-${period}`, rows);
+            }}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] disabled:opacity-40 transition-colors"
+          >
+            <Download size={13} /> Exportar P&L
+          </button>
         </div>
 
         {/* KPI cards */}
@@ -273,6 +293,7 @@ export default function FinanzasPage() {
               Balance de beneficios <span className="text-muted-foreground font-normal">({period === "month" ? "Mensual" : "Anual"})</span>
             </h3>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-secondary/50">
@@ -322,6 +343,7 @@ export default function FinanzasPage() {
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
 
       </div>

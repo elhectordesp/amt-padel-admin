@@ -1,3 +1,8 @@
+// TODO (MONOREPO) — CATEGORY_LABEL, LEVEL_COLOR, formatDate y tipos de dominio están duplicados
+// entre amt-padel-admin y amt-padel-app. Cuando haya un tercer cliente o el equipo crezca,
+// migrar a Turborepo con packages/shared-types y packages/design-tokens.
+// Bloqueante conocido: Metro bundler de React Native tiene soporte experimental de monorepos
+// — configurar watchFolders + extraNodeModules en metro.config.js antes de migrar.
 import type { CategoryLevel, Gender, TournamentStatus, TournamentTier } from "@/types";
 
 export const CATEGORY_LABEL: Record<CategoryLevel, string> = {
@@ -31,6 +36,7 @@ export const LEVELS: CategoryLevel[] = [
 
 // Tournament status — keys match TournamentStatus (uppercase, from DB)
 export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
+  DRAFT:     "Borrador",
   OPEN:      "Abierto",
   ONGOING:   "En curso",
   FINISHED:  "Finalizado",
@@ -38,6 +44,7 @@ export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
 };
 
 export const TOURNAMENT_STATUS_COLOR: Record<TournamentStatus, string> = {
+  DRAFT:     "text-blue-400 bg-blue-400/10 border-blue-400/30",
   OPEN:      "text-green-400 bg-green-400/10 border-green-400/30",
   ONGOING:   "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
   FINISHED:  "text-muted-foreground bg-secondary border-border",

@@ -9,8 +9,9 @@ import {
 } from "@tanstack/react-table";
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
-  ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus,
+  ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download,
 } from "lucide-react";
+import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
@@ -238,9 +239,34 @@ export default function JugadoresPage() {
             />
           </div>
 
-          <span className="text-xs text-muted-foreground ml-auto">
-            {table.getFilteredRowModel().rows.length} jugadores
-          </span>
+          <div className="flex items-center gap-3 ml-auto">
+            <span className="text-xs text-muted-foreground">
+              {table.getFilteredRowModel().rows.length} jugadores
+            </span>
+            <button
+              onClick={() => downloadCsv(
+                `jugadores-${genderFilter === "all" ? "todos" : genderFilter}`,
+                table.getFilteredRowModel().rows.map((row, i) => ({
+                  "#":          i + 1,
+                  Jugador:      row.original.name,
+                  Compañero:    row.original.partner ?? "",
+                  Género:       row.original.gender === "M" ? "Masculino" : "Femenino",
+                  Categoría:    CATEGORY_LABEL[row.original.level] ?? row.original.level,
+                  Puntos:       row.original.points,
+                  "SPA Pts":    row.original.spa?.spaPoints?.toFixed(0) ?? "",
+                  "SPA Nivel":  row.original.spa ? CATEGORY_LABEL[row.original.spa.spaLevel] : "",
+                  PJ:           row.original.played,
+                  Victorias:    row.original.wins,
+                  "% Victorias": row.original.played > 0
+                    ? Math.round((row.original.wins / row.original.played) * 100) + "%"
+                    : "0%",
+                }))
+              )}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors"
+            >
+              <Download size={13} /> Exportar CSV
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -257,6 +283,7 @@ export default function JugadoresPage() {
             </div>
           ) : (
             <>
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   {table.getHeaderGroups().map((hg) => (
@@ -287,6 +314,7 @@ export default function JugadoresPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
 
               {table.getPageCount() > 1 && (
                 <div className="flex items-center justify-between px-5 py-3 border-t border-border">

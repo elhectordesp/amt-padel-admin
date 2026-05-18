@@ -1,3 +1,8 @@
+// TODO: Módulo de soporte — pendiente de implementar.
+// Ideas: sistema de tickets, chat con jugadores, FAQ editable desde admin,
+// historial de incidencias por torneo.
+// Cuando esté listo, añadir el item al array NAV de components/admin/sidebar.tsx.
+
 import { Header } from "@/components/admin/header";
 
 export default function Page() {

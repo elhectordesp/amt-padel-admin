@@ -174,6 +174,7 @@ export default function RankingsPage() {
             </div>
           ) : (
             <>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
@@ -274,6 +275,7 @@ export default function RankingsPage() {
                 })}
               </tbody>
             </table>
+            </div>
             {players.length > PAGE_SIZE && (
               <div className="flex items-center justify-between px-5 py-3 border-t border-border">
                 <span className="text-xs text-muted-foreground">

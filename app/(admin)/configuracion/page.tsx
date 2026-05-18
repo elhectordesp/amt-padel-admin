@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Save, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
@@ -63,8 +64,11 @@ function NumInput({
 
 // ── Page ─────────────────────────────────────────────────────────────────
 export default function ConfiguracionPage() {
+  const router = useRouter();
   const qc = useQueryClient();
-  const [showRecalcModal, setShowRecalcModal] = useState(false);
+  const [showRecalcModal,  setShowRecalcModal]  = useState(false);
+  const [showLeaveModal,   setShowLeaveModal]   = useState(false);
+  const [pendingHref,      setPendingHref]      = useState<string | null>(null);
   const [local, setLocal] = useState<SpaConfig | null>(null);
 
   const { data: config, isLoading } = useQuery({
@@ -100,6 +104,35 @@ export default function ConfiguracionPage() {
     setLocal((p) => p ? { ...p, [key]: { ...(p[key] as Record<string, number>), [subKey]: val } } : p);
 
   const isDirty = local && config && JSON.stringify(local) !== JSON.stringify(config);
+
+  // Aviso en recarga / cierre de pestaña
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // Interceptar clics en <a> del sidebar cuando hay cambios sin guardar
+  const handleLinkClick = useCallback((e: MouseEvent) => {
+    const anchor = (e.target as HTMLElement).closest("a");
+    if (!anchor || !isDirty) return;
+    const href = anchor.getAttribute("href");
+    if (!href || href === "/configuracion") return;
+    e.preventDefault();
+    setPendingHref(href);
+    setShowLeaveModal(true);
+  }, [isDirty]);
+
+  useEffect(() => {
+    document.addEventListener("click", handleLinkClick, true);
+    return () => document.removeEventListener("click", handleLinkClick, true);
+  }, [handleLinkClick]);
+
+  const confirmLeave = () => {
+    setShowLeaveModal(false);
+    if (pendingHref) router.push(pendingHref);
+  };
 
   if (isLoading || !cfg) {
     return (
@@ -149,6 +182,10 @@ export default function ConfiguracionPage() {
           title="K-factors — Volatilidad"
           description="Cuántos puntos SPA se mueven por partido según el historial del jugador"
         >
+          <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
+            K mayor = cambios más bruscos. Recomendado: Calibrando 32, Asentando 16, Estable 8.
+            Reducir K estabiliza el ranking; aumentarlo lo hace más reactivo a resultados recientes.
+          </p>
           <NumInput
             label="Calibrando (< partidos de calibración)"
             value={cfg.k_factors.calibrating}
@@ -174,6 +211,10 @@ export default function ConfiguracionPage() {
           title="Multiplicadores por tier de torneo"
           description="Los puntos SPA y de circuito se multiplican según el tier del torneo"
         >
+          <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
+            Un Open con base 100 pts y multiplicador 1.0 otorga 100 pts. Un Gold con 2.0 otorga 200 pts.
+            Ajusta la distancia entre tiers para reflejar la dificultad relativa.
+          </p>
           <NumInput label="⚪ Open"   value={cfg.tier_multipliers.open}   onChange={(v) => setNested("tier_multipliers", "open",   v)} step={0.1} min={0.1} />
           <NumInput label="🥈 Silver" value={cfg.tier_multipliers.silver} onChange={(v) => setNested("tier_multipliers", "silver", v)} step={0.1} min={0.1} />
           <NumInput label="🥇 Gold"   value={cfg.tier_multipliers.gold}   onChange={(v) => setNested("tier_multipliers", "gold",   v)} step={0.1} min={0.1} />
@@ -184,6 +225,10 @@ export default function ConfiguracionPage() {
           title="Multiplicadores por ronda"
           description="Los puntos base se multiplican según la importancia del partido dentro del torneo"
         >
+          <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
+            Ganar en Final vale más que en grupos. Multiplica los puntos SPA base por este factor.
+            Valores sugeridos: Grupos 0.85, Final 1.5. No bajar de 0.5 ni subir de 3.0.
+          </p>
           <NumInput label="Fase de grupos"  value={cfg.round_multipliers.groups}       onChange={(v) => setNested("round_multipliers", "groups",       v)} step={0.05} min={0.1} />
           <NumInput label="R16 / Previas"   value={cfg.round_multipliers.r16}          onChange={(v) => setNested("round_multipliers", "r16",          v)} step={0.05} min={0.1} />
           <NumInput label="Cuartos de final" value={cfg.round_multipliers.quarterfinal} onChange={(v) => setNested("round_multipliers", "quarterfinal", v)} step={0.05} min={0.1} />
@@ -207,6 +252,7 @@ export default function ConfiguracionPage() {
           {/* Preview table */}
           <div className="mt-4 pt-4 border-t border-border">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Vista previa puntos por tier</p>
+            <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
@@ -230,6 +276,7 @@ export default function ConfiguracionPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         </Section>
 
@@ -239,6 +286,10 @@ export default function ConfiguracionPage() {
           description="SPA inicial de nuevos jugadores y umbral de calibración"
           collapsible
         >
+          <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
+            El SPA inicial determina el nivel de partida de cada jugador nuevo. La calibración es el número
+            de partidos necesarios para que el sistema considere el rating fiable y reduzca la volatilidad.
+          </p>
           <NumInput
             label="SPA inicial (nuevos jugadores)"
             value={cfg.starting_spa}
@@ -260,6 +311,10 @@ export default function ConfiguracionPage() {
           description="Rango de puntos SPA que define cada nivel. Cambiar estos valores requiere recalcular."
           collapsible
         >
+          <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
+            Define el rango [mín, máx] de puntos SPA para cada categoría. Los rangos deben ser
+            continuos y no solaparse. Tras modificarlos, pulsa "Recalcular SPA" para reasignar categorías.
+          </p>
           <div className="space-y-0">
             {(Object.entries(cfg.thresholds) as [string, [number, number]][]).map(([level, [min, max]]) => {
               const label = level === "iniciacion" ? "Iniciación" : level.replace("a", "ª");
@@ -309,12 +364,22 @@ export default function ConfiguracionPage() {
       <ConfirmModal
         open={showRecalcModal}
         title="¿Recalcular todo el SPA?"
-        description="Se recalcularán los puntos SPA de todos los jugadores desde el inicio usando la configuración actual. Esta acción no se puede deshacer."
+        description="Se recalcularán los puntos SPA de TODOS los jugadores desde el inicio del historial usando la configuración actual. Los valores de SPA y las categorías asignadas actualmente serán sobreescritos. Esta operación corre en background y puede tardar varios minutos. No se puede deshacer."
         confirmLabel="Sí, recalcular"
         danger
         loading={recalculate.isPending}
         onClose={() => setShowRecalcModal(false)}
         onConfirm={() => recalculate.mutate()}
+      />
+
+      <ConfirmModal
+        open={showLeaveModal}
+        title="¿Salir sin guardar?"
+        description="Tienes cambios en la configuración SPA que no se han guardado. Si sales ahora, se perderán."
+        confirmLabel="Salir sin guardar"
+        danger
+        onClose={() => setShowLeaveModal(false)}
+        onConfirm={confirmLeave}
       />
     </div>
   );

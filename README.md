@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AMT Padel — Panel Admin
 
-## Getting Started
+Panel de administracion del circuito AMT Padel. Next.js 16 + App Router + Tailwind CSS v4.
 
-First, run the development server:
+## Requisitos
+
+- Node.js 20+
+- npm 10+
+
+## Arranque en local
 
 ```bash
+# 1. Instalar dependencias
+npm install
+
+# 2. Configurar variables de entorno
+cp .env.example .env.local
+# Editar NEXT_PUBLIC_API_URL con la URL del backend
+
+# 3. Arrancar en modo desarrollo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Panel disponible en `http://localhost:3001`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables de entorno
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Descripcion |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | URL del backend (ej: `http://localhost:3000/api`) |
+| `SENTRY_DSN` | DSN de Sentry (opcional, solo produccion) |
+| `SENTRY_AUTH_TOKEN` | Token para subir source maps a Sentry en CI |
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev      # Desarrollo con hot reload
+npm run build    # Build de produccion
+npm run start    # Servidor de produccion (requiere build previo)
+npm run lint     # ESLint
+npx tsc --noEmit # Verificar tipos TypeScript
+npm run test     # Tests (Vitest)
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Estructura del proyecto
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+app/
+  (admin)/       Rutas protegidas del panel admin
+    dashboard/   Dashboard con estadisticas y alertas
+    torneos/     Gestion de torneos (lista, detalle, wizard de creacion)
+    inscripciones/ Gestion de inscripciones por torneo
+    resultados/  Introduccion de resultados de partidos
+    jugadores/   Gestion de jugadores (nivel, historial)
+    rankings/    Rankings SPA y de circuito
+    finanzas/    Estadisticas financieras
+    configuracion/ Configuracion del sistema SPA
+  player/[id]/   Perfil publico de jugador (sin auth)
+  torneo/[id]/   Modo espectador del cuadro (sin auth)
+  login/         Pagina de login
+components/
+  admin/         Componentes del panel (Header, Sidebar, ConfirmModal, etc.)
+lib/
+  api.ts         Cliente axios con interceptores (refresh token, unwrap response)
+  auth.ts        Login, logout, verificacion de rol en servidor
+  constants.ts   Labels y colores de categorias, tiers, estados
+  services/
+    admin.ts     Todos los metodos de la API del admin
+  utils/
+    csv.ts       Utilidad downloadCsv reutilizable
+middleware.ts    Proteccion de rutas: redirige a /login si no hay token
+types/
+  index.ts       Tipos TypeScript compartidos
+```
 
-## Deploy on Vercel
+## Acceso
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Solo usuarios con `role: ADMIN` en el backend pueden acceder.
+El login verifica el rol contra `GET /users/me` en el servidor — no confiar en el JWT del cliente.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Paginas publicas
+
+- `/player/:id` — Perfil publico de jugador (SSR, revalidacion 5min)
+- `/torneo/:id` — Modo espectador del cuadro con grupos y resultados (SSR, revalidacion 30s)

@@ -7,13 +7,14 @@ import {
   Trophy, Calendar, ChevronLeft, MapPin,
   Check, X, Clock, Download, Search, Loader2,
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
-  Square, CheckSquare,
+  Square, CheckSquare, Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService } from "@/lib/services/admin";
@@ -29,9 +30,10 @@ import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStat
 const PAGE_SIZE = 25;
 
 const STATUS_CONFIG: Record<RegistrationStatus, { label: string; color: string; icon: React.ElementType }> = {
-  confirmed: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",    icon: Check },
-  pending:   { label: "Pendiente",  color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30", icon: Clock },
-  waitlist:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",       icon: Clock },
+  CONFIRMED: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",    icon: Check },
+  PENDING:   { label: "Pendiente",  color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30", icon: Clock },
+  WAITLIST:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",       icon: Clock },
+  CANCELLED: { label: "Cancelado",  color: "text-red-400 bg-red-400/10 border-red-400/30",          icon: Clock },
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -179,6 +181,8 @@ export default function TorneoDetailPage() {
   const [updatingId,      setUpdatingId]    = useState<string | null>(null);
   const [bracketCatId,    setBracketCatId]  = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [bracketPreview,  setBracketPreview] = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
+  const [loadingPreview,  setLoadingPreview] = useState(false);
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -191,9 +195,10 @@ export default function TorneoDetailPage() {
   const {
     data: registrations = [], isLoading: loadingRegs, isError: isErrorRegs, refetch: refetchRegs,
   } = useQuery({
-    queryKey: ["registrations", id],
-    queryFn:  () => adminService.registrations.list(id),
-    enabled:  tab === "inscripciones",
+    queryKey:  ["registrations", id],
+    queryFn:   () => adminService.registrations.list(id),
+    enabled:   tab === "inscripciones",
+    staleTime: 60_000,
   });
 
   const {
@@ -219,10 +224,15 @@ export default function TorneoDetailPage() {
   const bulkStatus = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
-    onSuccess: () => {
+    onSuccess: (res: any, { ids }) => {
       qc.invalidateQueries({ queryKey: ["registrations", id] });
       setSelectedIds(new Set());
-      toast.success("Estado actualizado en lote");
+      const updated = res?.count ?? res?.updated ?? ids.length;
+      if (updated < ids.length) {
+        toast.warning(`Solo se actualizaron ${updated} de ${ids.length} inscripciones`);
+      } else {
+        toast.success(`${updated} inscripción(es) actualizadas`);
+      }
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -248,13 +258,27 @@ export default function TorneoDetailPage() {
   });
 
   const generateBracket = useMutation({
-    mutationFn: () => adminService.tournaments.generateBracket(id, bracketCatId),
+    mutationFn: (customGroups?: string[][]) => adminService.tournaments.generateBracket(id, bracketCatId, customGroups),
     onSuccess:  () => {
       toast.success("Cuadro generado correctamente");
+      setBracketPreview(null);
       qc.invalidateQueries({ queryKey: ["tournament", id] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => { toast.error(err.message); setBracketPreview(null); },
   });
+
+  const handlePreviewBracket = async () => {
+    if (!bracketCatId) return;
+    setLoadingPreview(true);
+    try {
+      const preview = await adminService.tournaments.previewBracket(id, bracketCatId) as any;
+      setBracketPreview({ groups: preview.groups, totalMatches: preview.totalMatches, isGroups: preview.isGroups });
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al generar la previsualización");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
 
   const autoSchedule = useMutation({
     mutationFn: () => adminService.tournaments.autoSchedule(id),
@@ -277,8 +301,8 @@ export default function TorneoDetailPage() {
       .filter((r) => {
         if (!regSearch.trim()) return true;
         const q = regSearch.toLowerCase();
-        return r.player1Name.toLowerCase().includes(q) ||
-               (r.player2Name ?? "").toLowerCase().includes(q);
+        return r.user.name.toLowerCase().includes(q) ||
+               (r.partner?.name ?? "").toLowerCase().includes(q);
       }),
   [registrations, regFilter, regSearch]);
 
@@ -287,9 +311,9 @@ export default function TorneoDetailPage() {
 
   const regCounts = useMemo(() => ({
     all:       registrations.length,
-    confirmed: registrations.filter((r) => r.status === "confirmed").length,
-    pending:   registrations.filter((r) => r.status === "pending").length,
-    waitlist:  registrations.filter((r) => r.status === "waitlist").length,
+    confirmed: registrations.filter((r) => r.status === "CONFIRMED").length,
+    pending:   registrations.filter((r) => r.status === "PENDING").length,
+    waitlist:  registrations.filter((r) => r.status === "WAITLIST").length,
   }), [registrations]);
 
   const allPageSelected = pagedRegs.length > 0 && pagedRegs.every((r) => selectedIds.has(r.id));
@@ -402,6 +426,22 @@ export default function TorneoDetailPage() {
                     {tierDisplay.label.toUpperCase()}
                   </span>
                 )}
+                {tournament.registrationDeadline && (() => {
+                  const closed = new Date() > new Date(tournament.registrationDeadline);
+                  const label  = new Date(tournament.registrationDeadline).toLocaleString("es-ES", {
+                    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                  });
+                  return (
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                      closed
+                        ? "text-destructive bg-destructive/10 border-destructive/30"
+                        : "text-yellow-400 bg-yellow-400/10 border-yellow-400/30"
+                    }`}>
+                      <Lock size={9} />
+                      {closed ? `Insc. cerradas · ${label}` : `Cierre · ${label}`}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5">
@@ -426,6 +466,7 @@ export default function TorneoDetailPage() {
                 onClick={() => duplicate.mutate()}
                 disabled={duplicate.isPending}
                 title="Duplicar torneo"
+                aria-label="Duplicar torneo"
                 className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
               >
                 {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
@@ -433,6 +474,7 @@ export default function TorneoDetailPage() {
               <button
                 onClick={() => setShowDeleteModal(true)}
                 title="Eliminar torneo"
+                aria-label="Eliminar torneo"
                 className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
               >
                 <Trash2 size={15} />
@@ -499,6 +541,7 @@ export default function TorneoDetailPage() {
               <div className="px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">Categorías</h3>
               </div>
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-secondary/50">
@@ -533,6 +576,7 @@ export default function TorneoDetailPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
 
             <div className="bg-card border border-border rounded-lg p-5">
@@ -561,10 +605,10 @@ export default function TorneoDetailPage() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-1.5 bg-secondary rounded-lg p-1">
                 {([
-                  { key: "all",       label: `Todos (${regCounts.all})`            },
-                  { key: "confirmed", label: `Confirmados (${regCounts.confirmed})` },
-                  { key: "pending",   label: `Pendientes (${regCounts.pending})`    },
-                  { key: "waitlist",  label: `En espera (${regCounts.waitlist})`    },
+                  { key: "all",        label: `Todos (${regCounts.all})`            },
+                  { key: "CONFIRMED",  label: `Confirmados (${regCounts.confirmed})` },
+                  { key: "PENDING",    label: `Pendientes (${regCounts.pending})`    },
+                  { key: "WAITLIST",   label: `En espera (${regCounts.waitlist})`    },
                 ] as { key: "all" | RegistrationStatus; label: string }[]).map((f) => (
                   <button
                     key={f.key}
@@ -593,9 +637,13 @@ export default function TorneoDetailPage() {
                 <button
                   onClick={() => {
                     const rows = filteredRegs.map((r) => ({
-                      Jugador1:  r.player1Name,
-                      Jugador2:  r.player2Name ?? "",
-                      Categoría: r.categoryDisplay,
+                      Jugador1:      r.user.name,
+                      "Nivel J1":    r.user.categoryLevel ?? "",
+                      "SPA J1":      r.user.spaPoints ?? "",
+                      Jugador2:      r.partner?.name ?? "",
+                      "Nivel J2":    r.partner?.categoryLevel ?? "",
+                      "SPA J2":      r.partner?.spaPoints ?? "",
+                      Categoría:     `${r.category.gender} ${r.category.level}`,
                       Estado:    r.status,
                       Pago:      r.paid ? "Sí" : "No",
                       Fecha:     r.createdAt,
@@ -617,7 +665,7 @@ export default function TorneoDetailPage() {
                 <span className="text-xs font-medium text-[#D4AF37]">{selectedIds.size} seleccionados</span>
                 <div className="flex items-center gap-2 ml-auto">
                   <button
-                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "confirmed" })}
+                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "CONFIRMED" })}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-400/10 border border-green-400/30 text-xs text-green-400 font-medium hover:bg-green-400/20 transition-colors disabled:opacity-50"
                   >
@@ -625,14 +673,14 @@ export default function TorneoDetailPage() {
                     Confirmar
                   </button>
                   <button
-                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "waitlist" })}
+                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "WAITLIST" })}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-400/10 border border-blue-400/30 text-xs text-blue-400 font-medium hover:bg-blue-400/20 transition-colors disabled:opacity-50"
                   >
                     <Clock size={11} /> En espera
                   </button>
                   <button
-                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "cancelled" })}
+                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "CANCELLED" })}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive font-medium hover:bg-destructive/20 transition-colors disabled:opacity-50"
                   >
@@ -663,6 +711,7 @@ export default function TorneoDetailPage() {
               ) : isErrorRegs ? (
                 <ErrorState message="No se pudieron cargar las inscripciones." onRetry={refetchRegs} />
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
@@ -674,7 +723,7 @@ export default function TorneoDetailPage() {
                           }
                         </button>
                       </th>
-                      {["Pareja / Jugador", "Categoría", "Estado", "Pago", "Acciones"].map((h) => (
+                      {["Pareja / Jugador", "Nivel SPA", "Categoría", "Estado", "Pago", "Acciones"].map((h) => (
                         <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                       ))}
                     </tr>
@@ -702,11 +751,29 @@ export default function TorneoDetailPage() {
                             </button>
                           </td>
                           <td className="px-5 py-3.5">
-                            <p className="text-sm font-medium text-foreground">{reg.player1Name}</p>
-                            {reg.player2Name && <p className="text-xs text-muted-foreground">{reg.player2Name}</p>}
+                            <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
+                            {reg.partner?.name && <p className="text-xs text-muted-foreground">{reg.partner.name}</p>}
                           </td>
                           <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">{reg.categoryDisplay}</span>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-semibold text-foreground">{reg.user.categoryLevel ?? "—"}</span>
+                                {reg.user.spaPoints != null && (
+                                  <span className="text-[10px] text-muted-foreground">({Math.round(Number(reg.user.spaPoints))} SPA)</span>
+                                )}
+                              </div>
+                              {reg.partner && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-muted-foreground">{reg.partner.categoryLevel ?? "—"}</span>
+                                  {reg.partner.spaPoints != null && (
+                                    <span className="text-[10px] text-muted-foreground">({Math.round(Number(reg.partner.spaPoints))} SPA)</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs text-muted-foreground">{`${reg.category.gender === "M" ? "Masc." : "Fem."} ${reg.category.level}`}</span>
                           </td>
                           <td className="px-5 py-3.5">
                             <StatusBadge status={reg.status} />
@@ -718,7 +785,7 @@ export default function TorneoDetailPage() {
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-1">
-                              {reg.status !== "confirmed" && (
+                              {reg.status !== "CONFIRMED" && (
                                 <button
                                   onClick={() => handleStatus(reg.id, "confirmed")}
                                   disabled={updatingId === reg.id}
@@ -728,7 +795,7 @@ export default function TorneoDetailPage() {
                                   <Check size={14} />
                                 </button>
                               )}
-                              {reg.status !== "waitlist" && (
+                              {reg.status !== "WAITLIST" && (
                                 <button
                                   onClick={() => handleStatus(reg.id, "waitlist")}
                                   disabled={updatingId === reg.id}
@@ -753,6 +820,7 @@ export default function TorneoDetailPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
 
@@ -795,33 +863,62 @@ export default function TorneoDetailPage() {
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {tournament.status !== "FINISHED" && (
-              <div className="bg-card border border-border rounded-lg p-5">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">Generar cuadro automático</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Genera el cuadro de eliminatorias en base a los resultados de la fase de grupos
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-56">
-                      <CustomSelect
-                        options={catOptions}
-                        value={bracketCatId}
-                        onChange={setBracketCatId}
-                      />
+            {tournament.status === "OPEN" && (() => {
+              const deadlinePassed = tournament.registrationDeadline
+                ? new Date() > new Date(tournament.registrationDeadline)
+                : false;
+              const deadlineLabel = tournament.registrationDeadline
+                ? new Date(tournament.registrationDeadline).toLocaleString("es-ES", {
+                    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                  })
+                : null;
+
+              // Motivo por el que el botón está bloqueado (si lo está)
+              const blockedReason = !deadlinePassed
+                ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Genera el cuadro después del cierre.`
+                : null;
+
+              return (
+                <div className="bg-card border border-border rounded-lg p-5">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Generar cuadro automático</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {blockedReason
+                          ? <span className="text-yellow-400">{blockedReason}</span>
+                          : "Inscripciones cerradas. Selecciona una categoría y genera el cuadro."
+                        }
+                      </p>
                     </div>
-                    <button
-                      onClick={() => generateBracket.mutate()}
-                      disabled={!bracketCatId || generateBracket.isPending}
-                      className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
-                    >
-                      {generateBracket.isPending ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
-                      Generar cuadro
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <div className="w-56">
+                        <CustomSelect
+                          options={catOptions}
+                          value={bracketCatId}
+                          onChange={setBracketCatId}
+                        />
+                      </div>
+                      <button
+                        onClick={handlePreviewBracket}
+                        disabled={!bracketCatId || loadingPreview || generateBracket.isPending || !!blockedReason}
+                        title={blockedReason ?? undefined}
+                        className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {loadingPreview ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
+                        Vista previa
+                      </button>
+                    </div>
                   </div>
                 </div>
+              );
+            })()}
+
+            {tournament.status === "ONGOING" && (
+              <div className="bg-card border border-border rounded-lg p-5 flex items-center gap-3">
+                <GitBranch size={16} className="text-muted-foreground shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  El torneo está en curso. El cuadro ya no puede regenerarse.
+                </p>
               </div>
             )}
 
@@ -860,6 +957,17 @@ export default function TorneoDetailPage() {
 
       </div>
     </div>
+
+    {bracketPreview && (
+      <BracketEditor
+        groups={bracketPreview.groups}
+        totalMatches={bracketPreview.totalMatches}
+        isGroups={bracketPreview.isGroups}
+        saving={generateBracket.isPending}
+        onConfirm={(customGroups) => generateBracket.mutate(customGroups)}
+        onCancel={() => setBracketPreview(null)}
+      />
+    )}
 
     <ConfirmModal
       open={showDeleteModal}

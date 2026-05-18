@@ -296,6 +296,7 @@ export default function JugadorDetailPage() {
             {catHistory.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">Sin cambios de categoría registrados</p>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-secondary/50">
@@ -328,6 +329,7 @@ export default function JugadorDetailPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
 

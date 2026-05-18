@@ -1,8 +1,8 @@
 export type Gender             = "M" | "F";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
-export type TournamentStatus   = "OPEN" | "ONGOING" | "FINISHED" | "CANCELLED";
+export type TournamentStatus   = "DRAFT" | "OPEN" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
-export type RegistrationStatus = "pending" | "confirmed" | "waitlist";
+export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
 export type RankingType        = "spa" | "circuit";
 
 export interface AdminStats {
@@ -48,6 +48,7 @@ export interface Tournament {
   categories:  TournamentCategory[];
   schedule?:   TournamentScheduleDay[];
   hasShirts?:  boolean;
+  useSeeding?: boolean;
   imageUrl?:   string;
   format?:     string;
   scoringSystem?: string;
@@ -103,15 +104,23 @@ export interface SpaConfig {
   thresholds: Record<CategoryLevel, [number, number]>;
 }
 
+export interface AdminRegistrationUser {
+  name:          string;
+  email:         string;
+  phone?:        string | null;
+  categoryLevel?: string | null;
+  spaPoints?:    number | null;
+}
+
 export interface AdminRegistration {
   id:           string;
   tournamentId: string;
   categoryId:   string;
-  categoryDisplay: string;
-  player1Id:    string;
-  player1Name:  string;
-  player2Id?:   string;
-  player2Name?: string;
+  userId:       string;
+  partnerId?:   string | null;
+  user:         AdminRegistrationUser;
+  partner?:     AdminRegistrationUser | null;
+  category:     { gender: string; level: string; price: number };
   status:       RegistrationStatus;
   paid:         boolean;
   createdAt:    string;
@@ -143,20 +152,21 @@ export interface Player {
 }
 
 export interface MatchResult {
-  id:          string;
-  tournament:  string;
+  id:            string;
+  tournament:    string;
   tournamentId?: string;
-  categoryId?: string;
-  phase:       string;
-  date:        string;
-  court:       string;
-  team1:       string[];
-  team2:       string[];
-  isResult:    boolean;
-  sets1?:      number[];
-  sets2?:      number[];
-  winner?:     "team1" | "team2";
-  referee?:    string;
+  categoryId?:   string;
+  phase:         string;
+  date:          string;
+  court:         string;
+  team1:         string[];
+  team2:         string[];
+  isResult:      boolean;
+  sets1?:        number[];
+  sets2?:        number[];
+  winner?:       "team1" | "team2";
+  referee?:      string;
+  scoringFormat?: "BEST_OF_3" | "BEST_OF_2_SUPERTB";
   status:      "pending" | "finished";
 }
 
@@ -217,6 +227,7 @@ export interface CreateTournamentPayload {
   scoringSystem?: string;
   registrationDeadline?: string;
   hasShirts?:  boolean;
+  useSeeding?: boolean;
   matchDuration?: number;
   courts?:     string[];
   categories:  {

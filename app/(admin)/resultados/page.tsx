@@ -2,10 +2,12 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trophy, Search, CheckCircle, Clock, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Trophy, Search, CheckCircle, Clock, X, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { downloadCsv } from "@/lib/utils/csv";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ErrorState } from "@/components/admin/error-state";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import type { MatchResult, Tournament } from "@/types";
 
@@ -29,10 +31,34 @@ function ResultModal({
     { a: "", b: "" },
   ]);
 
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   const validSets = sets.filter((s) => s.a !== "" && s.b !== "");
   const canSave   = validSets.length >= 2;
 
+  function isValidNormalSet(a: number, b: number) {
+    const max = Math.max(a, b), min = Math.min(a, b);
+    return (max === 6 && min <= 4) || (max === 7 && min === 5) || (max === 7 && min === 6);
+  }
+  function isValidSuperTiebreak(a: number, b: number) {
+    const max = Math.max(a, b), min = Math.min(a, b);
+    return max >= 10 && max - min >= 2;
+  }
+
   const handleSave = () => {
+    setValidationError(null);
+    for (let i = 0; i < validSets.length; i++) {
+      const a = Number(validSets[i].a), b = Number(validSets[i].b);
+      const setNum = i + 1;
+      if (a === b) { setValidationError(`Set ${setNum}: no puede haber empate`); return; }
+      const isSuperTb = match.scoringFormat === "BEST_OF_2_SUPERTB" && setNum === 3;
+      const valid = isSuperTb ? isValidSuperTiebreak(a, b) : isValidNormalSet(a, b);
+      if (!valid) {
+        const hint = isSuperTb ? "supertiebreak: primero a 10 con dif. de 2 (ej: 10-8)" : "set normal: 6-x, 7-5 o 7-6";
+        setValidationError(`Set ${setNum}: resultado inválido (${a}-${b}). Formato: ${hint}`);
+        return;
+      }
+    }
     const s1 = validSets.map((s) => Number(s.a));
     const s2 = validSets.map((s) => Number(s.b));
     onSave(s1, s2);
@@ -68,31 +94,37 @@ function ResultModal({
         {/* Sets input */}
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sets</p>
-          {sets.map((set, i) => (
+          {sets.map((set, i) => {
+            const isSuperTb = match.scoringFormat === "BEST_OF_2_SUPERTB" && i === 2;
+            return (
             <div key={i} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-12">Set {i + 1}</span>
               <input
                 type="number"
-                min={0} max={7}
+                min={0} max={isSuperTb ? 99 : 7}
                 value={set.a}
-                onChange={(e) => setSets((prev) => prev.map((s, idx) => idx === i ? { ...s, a: e.target.value } : s))}
+                onChange={(e) => { setValidationError(null); setSets((prev) => prev.map((s, idx) => idx === i ? { ...s, a: e.target.value } : s)); }}
                 placeholder="0"
                 className="w-16 h-9 text-center rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
               <span className="text-muted-foreground">–</span>
               <input
                 type="number"
-                min={0} max={7}
+                min={0} max={isSuperTb ? 99 : 7}
                 value={set.b}
-                onChange={(e) => setSets((prev) => prev.map((s, idx) => idx === i ? { ...s, b: e.target.value } : s))}
+                onChange={(e) => { setValidationError(null); setSets((prev) => prev.map((s, idx) => idx === i ? { ...s, b: e.target.value } : s)); }}
                 placeholder="0"
                 className="w-16 h-9 text-center rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
-              {i > 1 && (
-                <span className="text-xs text-muted-foreground">(opcional)</span>
+              {i === 2 && (
+                <span className="text-xs text-muted-foreground">{isSuperTb ? "supertb" : "(opcional)"}</span>
               )}
             </div>
-          ))}
+            );
+          })}
+          {validationError && (
+            <p className="text-xs text-red-500 pt-1">{validationError}</p>
+          )}
         </div>
 
         <div className="flex gap-3 pt-1">
@@ -119,8 +151,9 @@ export default function ResultadosPage() {
   const [search,        setSearch]        = useState("");
   const [page,          setPage]          = useState(0);
   const [tournamentId,  setTournamentId]  = useState<string>("");
-  const [selectedMatch, setSelectedMatch] = useState<MatchResult | null>(null);
-  const [savingId,      setSavingId]      = useState<string | null>(null);
+  const [selectedMatch,  setSelectedMatch]  = useState<MatchResult | null>(null);
+  const [savingId,       setSavingId]       = useState<string | null>(null);
+  const [confirmEdit,    setConfirmEdit]    = useState<MatchResult | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -183,6 +216,9 @@ export default function ResultadosPage() {
               className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] min-w-[260px]"
             >
               <option value="">Selecciona un torneo...</option>
+              {ongoingTournaments.length === 0 && (
+                <option disabled>— No hay torneos en curso o abiertos —</option>
+              )}
               {ongoingTournaments.map((t: Tournament) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
@@ -210,6 +246,25 @@ export default function ResultadosPage() {
                   <CheckCircle size={12} className="text-green-400" />
                   {finishedMatches.length} completados
                 </span>
+                <button
+                  onClick={() => downloadCsv(
+                    `resultados-${tournamentId}`,
+                    filtered.map((m: MatchResult) => ({
+                      Fase:       m.phase,
+                      Pista:      m.court,
+                      "Pareja 1": m.team1.join(" / "),
+                      "Pareja 2": m.team2.join(" / "),
+                      Estado:     m.isResult ? "Completado" : "Pendiente",
+                      Resultado:  m.isResult && m.sets1
+                        ? m.sets1.map((s, i) => `${s}-${m.sets2?.[i] ?? 0}`).join(", ")
+                        : "",
+                    }))
+                  )}
+                  disabled={filtered.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border hover:border-[#D4AF37] hover:text-foreground disabled:opacity-40 transition-colors"
+                >
+                  <Download size={12} /> Exportar CSV
+                </button>
               </div>
             )}
           </div>
@@ -243,6 +298,7 @@ export default function ResultadosPage() {
                     No hay partidos registrados
                   </div>
                 ) : (
+                  <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-secondary/50">
@@ -286,7 +342,7 @@ export default function ResultadosPage() {
                           </td>
                           <td className="px-5 py-3.5">
                             <button
-                              onClick={() => setSelectedMatch(match)}
+                              onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
                               className={`text-xs font-medium transition-colors hover:underline ${
                                 match.isResult ? "text-muted-foreground" : "text-[#D4AF37]"
                               }`}
@@ -298,6 +354,7 @@ export default function ResultadosPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
 
@@ -327,6 +384,17 @@ export default function ResultadosPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm overwrite existing result */}
+      <ConfirmModal
+        open={!!confirmEdit}
+        title="Editar resultado"
+        description={`Este partido ya tiene resultado registrado. ¿Seguro que quieres sobreescribirlo?`}
+        confirmLabel="Sí, editar"
+        danger
+        onConfirm={() => { if (confirmEdit) setSelectedMatch(confirmEdit); setConfirmEdit(null); }}
+        onClose={() => setConfirmEdit(null)}
+      />
 
       {/* Result modal */}
       {selectedMatch && (
