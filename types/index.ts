@@ -23,6 +23,11 @@ export interface TournamentCategory {
   price?:           number;
   minPairs?:        number;
   maxPairs?:        number;
+  scoringFormat?:   string;
+  prizeChampion?:   string;
+  prizeRunnerUp?:   string;
+  prizeConsolation?:string;
+  hasConsolation?:  boolean;
 }
 
 export interface TournamentScheduleDay {
@@ -231,10 +236,14 @@ export interface CreateTournamentPayload {
   matchDuration?: number;
   courts?:     string[];
   categories:  {
-    gender:     Gender;
-    level:      CategoryLevel;
-    totalSpots: number;
-    price:      number;
+    gender:          Gender;
+    level:           CategoryLevel;
+    totalSpots:      number;
+    price:           number;
+    prizeChampion?:   string;
+    prizeRunnerUp?:   string;
+    prizeConsolation?:string;
+    hasConsolation?:  boolean;
   }[];
   schedule?: {
     date:   string;

@@ -30,10 +30,14 @@ const infoSchema = z.object({
 
 const catSchema = z.object({
   categories: z.array(z.object({
-    gender:     z.enum(["M", "F"]),
-    level:      z.string().min(1),
-    totalSpots: z.number().min(4).max(128),
-    price:      z.number().min(0),
+    gender:            z.enum(["M", "F"]),
+    level:             z.string().min(1),
+    totalSpots:        z.number().min(4).max(128),
+    price:             z.number().min(0),
+    prizeChampion:     z.string().optional(),
+    prizeRunnerUp:     z.string().optional(),
+    prizeConsolation:  z.string().optional(),
+    hasConsolation:    z.boolean().optional(),
   })).min(1, "Añade al menos una categoría"),
 });
 
@@ -42,7 +46,7 @@ const configSchema = z.object({
   format:              z.string().min(1),
   scoringSystem:       z.string().min(1),
   matchDuration:       z.number().int().min(10).max(180),
-  registrationDeadline:z.string().optional(),
+  registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
   courts:              z.string(), // comma-separated list, split on save
@@ -99,6 +103,7 @@ export default function NuevoTorneoPage() {
   const qc     = useQueryClient();
   const [step, setStep] = useState(1);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   // Accumulated form data
   const [infoData,     setInfoData]     = useState<InfoData     | null>(null);
@@ -130,7 +135,7 @@ export default function NuevoTorneoPage() {
   // ── Step 2: Categories ────────────────────────────────────────────────
   const catForm = useForm<CatData>({
     resolver:      zodResolver(catSchema),
-    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25 }] },
+    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
   });
   const { fields, append, remove } = useFieldArray({ control: catForm.control, name: "categories" });
 
@@ -179,10 +184,14 @@ export default function NuevoTorneoPage() {
         ? configData!.courts.split(",").map((c) => c.trim()).filter(Boolean)
         : [],
       categories: catData!.categories.map((c) => ({
-        gender:     c.gender as Gender,
-        level:      c.level  as CategoryLevel,
-        totalSpots: c.totalSpots,
-        price:      c.price,
+        gender:          c.gender as Gender,
+        level:           c.level  as CategoryLevel,
+        totalSpots:      c.totalSpots,
+        price:           c.price,
+        prizeChampion:   c.prizeChampion   || undefined,
+        prizeRunnerUp:   c.prizeRunnerUp   || undefined,
+        prizeConsolation:c.hasConsolation ? (c.prizeConsolation || undefined) : undefined,
+        hasConsolation:  c.hasConsolation  ?? false,
       })),
       schedule: scheduleData?.days.map(d => ({
         date: d.date,
@@ -211,7 +220,19 @@ export default function NuevoTorneoPage() {
     } else if (step === 3) {
       const ok = await configForm.trigger();
       if (!ok) return;
-      setConfigData(configForm.getValues());
+      const cfg = configForm.getValues();
+      // Validación cruzada: deadline no puede ser posterior a la fecha fin del torneo
+      if (cfg.registrationDeadline && infoData?.endDate) {
+        const deadline = new Date(cfg.registrationDeadline);
+        const endDate  = new Date(infoData.endDate);
+        if (deadline > endDate) {
+          configForm.setError("registrationDeadline", {
+            message: "El cierre de inscripciones no puede ser posterior a la fecha fin del torneo",
+          });
+          return;
+        }
+      }
+      setConfigData(cfg);
       setStep(4);
     } else if (step === 4) {
       const ok = await scheduleForm.trigger();
@@ -219,6 +240,8 @@ export default function NuevoTorneoPage() {
       setScheduleData(scheduleForm.getValues());
       setStep(5);
     } else if (step === 5) {
+      if (submitted) return;
+      setSubmitted(true);
       create.mutate();
     }
   };
@@ -325,7 +348,7 @@ export default function NuevoTorneoPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => append({ gender: "M", level: "4a", totalSpots: 16, price: 25 })}
+                  onClick={() => append({ gender: "M", level: "4a", totalSpots: 16, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false })}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
                 >
                   <Plus size={13} /> Añadir categoría
@@ -345,43 +368,88 @@ export default function NuevoTorneoPage() {
                 </div>
 
                 {fields.map((field, index) => {
-                  const genderVal = catForm.watch(`categories.${index}.gender`);
-                  const levelVal  = catForm.watch(`categories.${index}.level`);
+                  const genderVal       = catForm.watch(`categories.${index}.gender`);
+                  const levelVal        = catForm.watch(`categories.${index}.level`);
+                  const hasConsolation  = catForm.watch(`categories.${index}.hasConsolation`);
                   return (
-                    <div key={field.id} className="grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center p-3 bg-secondary/50 rounded-md border border-border">
-                      <CustomSelect
-                        compact
-                        options={[
-                          { value: "M", label: "Masculino" },
-                          { value: "F", label: "Femenino" },
-                        ]}
-                        value={genderVal}
-                        onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")}
-                      />
-                      <CustomSelect
-                        compact
-                        options={LEVELS.map((l) => ({ value: l.value, label: l.label }))}
-                        value={levelVal}
-                        onChange={(v) => catForm.setValue(`categories.${index}.level`, v)}
-                      />
-                      <Input
-                        type="number"
-                        {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })}
-                        min={4} max={128}
-                      />
-                      <Input
-                        type="number"
-                        {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })}
-                        min={0} step={0.5}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => remove(index)}
-                        disabled={fields.length === 1}
-                        className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    <div key={field.id} className="p-3 bg-secondary/50 rounded-md border border-border space-y-3">
+                      {/* Fila principal */}
+                      <div className="grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center">
+                        <CustomSelect
+                          compact
+                          options={[
+                            { value: "M", label: "Masculino" },
+                            { value: "F", label: "Femenino" },
+                          ]}
+                          value={genderVal}
+                          onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")}
+                        />
+                        <CustomSelect
+                          compact
+                          options={LEVELS.map((l) => ({ value: l.value, label: l.label }))}
+                          value={levelVal}
+                          onChange={(v) => catForm.setValue(`categories.${index}.level`, v)}
+                        />
+                        <Input
+                          type="number"
+                          {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })}
+                          min={4} max={128}
+                        />
+                        <Input
+                          type="number"
+                          {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })}
+                          min={0} step={0.5}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => remove(index)}
+                          disabled={fields.length === 1}
+                          className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+
+                      {/* Premios por categoría */}
+                      <div className="border-t border-border/50 pt-2.5 space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Premios</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-[#D4AF37] font-semibold w-24 shrink-0">🥇 Campeón</span>
+                            <Input
+                              {...catForm.register(`categories.${index}.prizeChampion`)}
+                              placeholder="Ej: Pala Head + 300€"
+                              className="text-xs h-8"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground font-semibold w-24 shrink-0">🥈 Subcampeón</span>
+                            <Input
+                              {...catForm.register(`categories.${index}.prizeRunnerUp`)}
+                              placeholder="Ej: 150€"
+                              className="text-xs h-8"
+                            />
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer w-fit">
+                          <input
+                            type="checkbox"
+                            {...catForm.register(`categories.${index}.hasConsolation`)}
+                            className="w-3.5 h-3.5 accent-[#D4AF37]"
+                          />
+                          <span className="text-[11px] text-muted-foreground">Hay premio de consolación</span>
+                        </label>
+                        {hasConsolation && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground font-semibold w-24 shrink-0">🏅 Consolación</span>
+                            <Input
+                              {...catForm.register(`categories.${index}.prizeConsolation`)}
+                              placeholder="Ej: Material deportivo"
+                              className="text-xs h-8"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -524,25 +592,27 @@ export default function NuevoTorneoPage() {
                         <div key={bIdx} className="flex items-center gap-3">
                           <div className="flex-1 grid grid-cols-2 gap-2">
                             <Field label="Inicio">
-                              <Input
+                              <input
                                 type="time"
-                                value={block.start}
-                                onChange={(e) => {
+                                defaultValue={block.start}
+                                onBlur={(e) => {
                                   const b = [...scheduleForm.getValues().days[dIdx].blocks];
-                                  b[bIdx].start = e.target.value;
-                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b);
+                                  b[bIdx] = { ...b[bIdx], start: e.target.value };
+                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
                                 }}
+                                className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
                               />
                             </Field>
                             <Field label="Fin">
-                              <Input
+                              <input
                                 type="time"
-                                value={block.end}
-                                onChange={(e) => {
+                                defaultValue={block.end}
+                                onBlur={(e) => {
                                   const b = [...scheduleForm.getValues().days[dIdx].blocks];
-                                  b[bIdx].end = e.target.value;
-                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b);
+                                  b[bIdx] = { ...b[bIdx], end: e.target.value };
+                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
                                 }}
+                                className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
                               />
                             </Field>
                           </div>
@@ -598,13 +668,22 @@ export default function NuevoTorneoPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
                     Categorías ({catData.categories.length})
                   </p>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2.5">
                     {catData.categories.map((c, i) => (
-                      <div key={i} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          {c.gender === "M" ? "Masc." : "Fem."} {LEVELS.find((l) => l.value === c.level)?.label}
-                        </span>
-                        <span className="text-foreground">{c.totalSpots} plazas · {c.price} €/pareja</span>
+                      <div key={i} className="space-y-0.5">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground font-medium">
+                            {c.gender === "M" ? "Masc." : "Fem."} {LEVELS.find((l) => l.value === c.level)?.label}
+                          </span>
+                          <span className="text-foreground">{c.totalSpots} plazas · {c.price} €/pareja</span>
+                        </div>
+                        {(c.prizeChampion || c.prizeRunnerUp) && (
+                          <div className="text-xs text-muted-foreground pl-2 space-y-0.5">
+                            {c.prizeChampion  && <p>🥇 Campeón: <span className="text-foreground">{c.prizeChampion}</span></p>}
+                            {c.prizeRunnerUp  && <p>🥈 Subcampeón: <span className="text-foreground">{c.prizeRunnerUp}</span></p>}
+                            {c.hasConsolation && c.prizeConsolation && <p>🏅 Consolación: <span className="text-foreground">{c.prizeConsolation}</span></p>}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -618,7 +697,9 @@ export default function NuevoTorneoPage() {
                     ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Duración part.", `${configData.matchDuration} mins`],
-                    ["Cierre insc.", configData.registrationDeadline ?? "—"],
+                    ["Cierre insc.", configData.registrationDeadline
+                      ? new Date(configData.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                      : "—"],
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
                     ["Pistas",       configData.courts || "—"],
@@ -663,7 +744,7 @@ export default function NuevoTorneoPage() {
           <button
             type="button"
             onClick={goNext}
-            disabled={create.isPending}
+            disabled={create.isPending || submitted}
             className="flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
           >
             {create.isPending && <Loader2 size={14} className="animate-spin" />}

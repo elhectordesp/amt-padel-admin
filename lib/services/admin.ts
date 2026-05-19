@@ -22,8 +22,14 @@ export const adminService = {
     api.get<ActivityItem[]>("/admin/activity").then((r) => r.data).catch((e) => { console.error("[admin] activity:", e); return [] as ActivityItem[]; }),
 
   tournaments: {
-    list:            ()                             => api.get<Tournament[]>("/tournaments").then((r) => r.data ?? []),
-    detail:          (id: string)                  => api.get<Tournament>(`/tournaments/${id}`).then((r) => r.data),
+    list: () =>
+      api.get<Tournament[]>("/admin/tournaments").then((r) =>
+        (r.data ?? []).map((t) => ({ ...t, status: t.status?.toUpperCase() as Tournament["status"] }))
+      ),
+    detail: (id: string) =>
+      api.get<Tournament>(`/tournaments/${id}`).then((r) =>
+        r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
+      ),
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),

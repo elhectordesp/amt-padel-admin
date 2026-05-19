@@ -7,28 +7,29 @@ export interface AdminUser {
   role:  string;
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  try {
+    return JSON.parse(atob(token.split(".")[1]));
+  } catch {
+    return {};
+  }
+}
+
 export async function login(email: string, password: string): Promise<AdminUser> {
   const res = await api.post("/auth/login", { email, password });
-  const { token, refreshToken } = res.data as unknown as {
-    token: string;
-    refreshToken: string;
-    user: AdminUser;
-  };
+  const data = res.data as unknown as { token: string; refreshToken: string; user: AdminUser };
 
-  // Guardar el token antes de verificar el rol para que el interceptor lo adjunte
-  setToken(token);
-  if (refreshToken) setRefreshToken(refreshToken);
+  setToken(data.token);
+  if (data.refreshToken) setRefreshToken(data.refreshToken);
 
-  // Verificar el rol en el servidor, no decodificando el JWT en el cliente
-  // (un JWT local puede estar manipulado o desactualizado)
-  // El interceptor de axios ya desenvuelve res.data.data → recibimos AdminUser directamente
-  const me = await api.get("/users/me") as unknown as AdminUser;
-  if (me?.role !== "admin" && me?.role !== "ADMIN") {
+  // El role en el JWT es 'admin' (minúscula) para ADMIN, 'user' para PLAYER
+  const payload = decodeJwtPayload(data.token);
+  if (payload.role !== "admin") {
     removeTokens();
     throw new Error("No tienes permisos de administrador.");
   }
 
-  return me;
+  return { ...data.user, role: payload.role as string };
 }
 
 export async function logout() {

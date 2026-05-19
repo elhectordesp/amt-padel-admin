@@ -88,7 +88,7 @@ export function resolveTier(spaTier?: string, tier?: TournamentTier): { label: s
     const color = SPA_TIER_COLOR[spaTier];
     if (label && color) return { label, color };
   }
-  if (tier && tier !== "BRONZE") {
+  if (tier) {
     return { label: TIER_LABEL[tier], color: TIER_COLOR[tier] };
   }
   return null;
