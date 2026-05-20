@@ -95,8 +95,8 @@ export default function TorneosPage() {
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inscritos</span>
       ),
       cell: ({ row }) => {
-        const total = row.original.categories.reduce((s, c) => s + c.totalSpots, 0);
-        const reg   = row.original.categories.reduce((s, c) => s + c.registeredCount, 0);
+        const total = row.original.categories.reduce((s, c) => s + Math.floor(c.totalSpots / 2), 0);
+        const reg   = row.original.categories.reduce((s, c) => s + Math.floor(c.registeredCount / 2), 0);
         const pct   = total > 0 ? Math.round((reg / total) * 100) : 0;
         return (
           <div className="space-y-1 w-24">

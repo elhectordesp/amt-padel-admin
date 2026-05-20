@@ -34,16 +34,53 @@ type StatusFilter = "all" | RegistrationStatus;
 
 const PAGE_SIZE = 20;
 
+// Agrupa inscripciones por pareja+categoría — muestra 1 fila por pareja
+interface PairRegistration {
+  ids:        string[];          // IDs de ambas inscripciones (1 si sin pareja)
+  primary:    AdminRegistration; // inscripción del jugador principal (para mostrar datos)
+  status:     RegistrationStatus;
+  categoryId: string;
+  pairKey:    string;
+}
+
+function groupByPair(regs: AdminRegistration[]): PairRegistration[] {
+  const seen  = new Set<string>();
+  const pairs: PairRegistration[] = [];
+
+  for (const reg of regs) {
+    // Clave canónica: ordenar userId y partnerId para que A+B === B+A
+    const sorted  = [reg.userId, reg.partnerId ?? ""].sort().join(":");
+    const key     = `${sorted}::${reg.categoryId}`;
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    // Buscar la inscripción del otro miembro de la pareja
+    const partner = reg.partnerId
+      ? regs.find((r) => r.userId === reg.partnerId && r.categoryId === reg.categoryId)
+      : null;
+
+    pairs.push({
+      ids:        partner ? [reg.id, partner.id] : [reg.id],
+      primary:    reg,
+      status:     reg.status,
+      categoryId: reg.categoryId,
+      pairKey:    key,
+    });
+  }
+  return pairs;
+}
+
 export default function InscripcionesPage() {
   const qc = useQueryClient();
 
   const [tournamentId, setTournamentId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search,       setSearch]       = useState("");
-  const [updatingId,   setUpdatingId]   = useState<string | null>(null);
-  const [selected,     setSelected]     = useState<Set<string>>(new Set());
-  const [page,         setPage]         = useState(0);
-  const [confirmCancel, setConfirmCancel] = useState<{ regId: string; name: string } | null>(null);
+  const [updatingIds,   setUpdatingIds]  = useState<Set<string>>(new Set());
+  const [selected,      setSelected]    = useState<Set<string>>(new Set());
+  const [page,          setPage]        = useState(0);
+  const [confirmCancel, setConfirmCancel] = useState<{ ids: string[]; name: string } | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -57,52 +94,46 @@ export default function InscripcionesPage() {
     staleTime: 60_000, // 1 min — se invalida explícitamente tras cualquier mutación
   });
 
-  const updateStatus = useMutation({
-    mutationFn: ({ regId, status }: { regId: string; status: string }) =>
-      adminService.registrations.updateStatus(regId, status),
-    onSuccess: () => {
+  const bulkStatus = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
+      adminService.registrations.bulkStatus(ids, status),
+    onSuccess: (res: any, vars) => {
       qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
-      toast.success("Estado actualizado");
+      const updated = res?.count ?? res?.updated ?? vars.ids.length;
+      toast.success(`${updated} inscripción(es) actualizadas`);
+      setSelected(new Set());
+      setUpdatingIds(new Set());
     },
-    onError:   (err: Error) => toast.error(err.message),
-    onSettled: () => setUpdatingId(null),
+    onError: (err: Error) => { toast.error(err.message); setUpdatingIds(new Set()); },
   });
 
-  const handleStatus = (regId: string, status: string, playerName?: string) => {
+  const handlePairStatus = (pair: PairRegistration, status: string) => {
     if (status === "CANCELLED") {
-      setConfirmCancel({ regId, name: playerName ?? "esta inscripción" });
+      setConfirmCancel({ ids: pair.ids, name: pair.primary.user.name });
       return;
     }
-    setUpdatingId(regId);
-    updateStatus.mutate({ regId, status });
+    setUpdatingIds(new Set(pair.ids));
+    bulkStatus.mutate({ ids: pair.ids, status });
   };
 
-  const bulkStatus = useMutation({
-    mutationFn: (status: string) =>
-      adminService.registrations.bulkStatus(Array.from(selected), status),
-    onSuccess: (res: any) => {
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
-      const updated = res?.count ?? res?.updated ?? selected.size;
-      if (updated < selected.size) {
-        toast.warning(`Solo se actualizaron ${updated} de ${selected.size} inscripciones`);
-      } else {
-        toast.success(`${updated} inscripción(es) actualizadas`);
-      }
-      setSelected(new Set());
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  const handleBulkAction = (status: string) => {
+    // selected contiene pairKeys — resolver a IDs reales
+    const allIds = pairs
+      .filter((p) => selected.has(p.pairKey))
+      .flatMap((p) => p.ids);
+    bulkStatus.mutate({ ids: allIds, status });
+  };
 
-  const toggleSelect = (id: string) =>
+  const toggleSelect = (key: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
 
-  const toggleAll = (ids: string[]) =>
+  const toggleAll = (keys: string[]) =>
     setSelected((prev) =>
-      ids.every((id) => prev.has(id)) ? new Set() : new Set(ids),
+      keys.every((k) => prev.has(k)) ? new Set() : new Set(keys),
     );
 
   const handleTournamentChange = (id: string) => {
@@ -113,24 +144,27 @@ export default function InscripcionesPage() {
     setPage(0);
   };
 
+  const pairs = useMemo(() => groupByPair(registrations), [registrations]);
+
   const filtered = useMemo(() =>
-    registrations
-      .filter((r: AdminRegistration) => statusFilter === "all" || r.status === statusFilter)
-      .filter((r: AdminRegistration) => {
+    pairs
+      .filter((p) => statusFilter === "all" || p.status === statusFilter)
+      .filter((p) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
-        return r.user.name.toLowerCase().includes(q) ||
-               (r.partner?.name ?? "").toLowerCase().includes(q) ||
-               `${r.category.gender} ${r.category.level}`.toLowerCase().includes(q);
+        const reg = p.primary;
+        return reg.user.name.toLowerCase().includes(q) ||
+               (reg.partner?.name ?? "").toLowerCase().includes(q) ||
+               `${reg.category.gender} ${reg.category.level}`.toLowerCase().includes(q);
       }),
-    [registrations, statusFilter, search],
+    [pairs, statusFilter, search],
   );
 
   const counts = {
-    all:       registrations.length,
-    confirmed: registrations.filter((r: AdminRegistration) => r.status === "CONFIRMED").length,
-    pending:   registrations.filter((r: AdminRegistration) => r.status === "PENDING").length,
-    waitlist:  registrations.filter((r: AdminRegistration) => r.status === "WAITLIST").length,
+    all:       pairs.length,
+    confirmed: pairs.filter((p) => p.status === "CONFIRMED").length,
+    pending:   pairs.filter((p) => p.status === "PENDING").length,
+    waitlist:  pairs.filter((p) => p.status === "WAITLIST").length,
   };
 
   const selectedTournament = tournaments.find((t: Tournament) => t.id === tournamentId);
@@ -145,8 +179,8 @@ export default function InscripcionesPage() {
         danger
         onConfirm={() => {
           if (confirmCancel) {
-            setUpdatingId(confirmCancel.regId);
-            updateStatus.mutate({ regId: confirmCancel.regId, status: "CANCELLED" });
+            setUpdatingIds(new Set(confirmCancel.ids));
+            bulkStatus.mutate({ ids: confirmCancel.ids, status: "CANCELLED" });
           }
           setConfirmCancel(null);
         }}
@@ -225,17 +259,19 @@ export default function InscripcionesPage() {
                 />
               </div>
               <button
-                onClick={() => downloadCsv(`inscripciones-${tournamentId}`, filtered.map((r: AdminRegistration) => ({
-                  "Jugador 1":      r.user.name,
-                  "Nivel SPA J1":   r.user.categoryLevel ?? "",
-                  "SPA J1":         r.user.spaPoints ?? "",
-                  "Jugador 2":      r.partner?.name ?? "",
-                  "Nivel SPA J2":   r.partner?.categoryLevel ?? "",
-                  "SPA J2":         r.partner?.spaPoints ?? "",
-                  "Categoría":      `${r.category.gender} ${r.category.level}`,
-                  "Estado":         r.status,
-                  "Pago":           r.paid ? "Sí" : "No",
-                  "Fecha":          new Date(r.createdAt).toLocaleDateString("es-ES"),
+                onClick={() => downloadCsv(`inscripciones-${tournamentId}`, filtered.map((p) => ({
+                  "Jugador 1":      p.primary.user.name,
+                  "Email J1":       p.primary.user.email ?? "",
+                  "Nivel SPA J1":   p.primary.user.categoryLevel ?? "",
+                  "SPA J1":         p.primary.user.spaPoints ?? "",
+                  "Jugador 2":      p.primary.partner?.name ?? "",
+                  "Email J2":       p.primary.partner?.email ?? "",
+                  "Nivel SPA J2":   p.primary.partner?.categoryLevel ?? "",
+                  "SPA J2":         p.primary.partner?.spaPoints ?? "",
+                  "Categoría":      `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
+                  "Estado":         p.status,
+                  "Pago":           p.primary.paid ? "Sí" : "No",
+                  "Fecha":          new Date(p.primary.createdAt).toLocaleDateString("es-ES"),
                 })))}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors ml-auto"
               >
@@ -248,24 +284,24 @@ export default function InscripcionesPage() {
             {selected.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
                 <Users size={14} className="text-[#D4AF37]" />
-                <span className="text-sm font-medium text-[#D4AF37]">{selected.size} seleccionadas</span>
+                <span className="text-sm font-medium text-[#D4AF37]">{selected.size} pareja(s) seleccionada(s)</span>
                 <div className="flex items-center gap-2 ml-auto">
                   <button
-                    onClick={() => bulkStatus.mutate("CONFIRMED")}
+                    onClick={() => handleBulkAction("CONFIRMED")}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-500/10 border border-green-500/30 text-xs font-medium text-green-400 hover:bg-green-500/20 disabled:opacity-50 transition-colors"
                   >
                     <Check size={12} /> Confirmar
                   </button>
                   <button
-                    onClick={() => bulkStatus.mutate("WAITLIST")}
+                    onClick={() => handleBulkAction("WAITLIST")}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/30 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-50 transition-colors"
                   >
                     <Clock size={12} /> En espera
                   </button>
                   <button
-                    onClick={() => bulkStatus.mutate("CANCELLED")}
+                    onClick={() => handleBulkAction("CANCELLED")}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-xs font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50 transition-colors"
                   >
@@ -284,8 +320,8 @@ export default function InscripcionesPage() {
             {/* Table */}
             {(() => {
               const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-              const pageIds   = pageItems.map((r: AdminRegistration) => r.id);
-              const allPageSelected = pageIds.length > 0 && pageIds.every((id: string) => selected.has(id));
+              const pageKeys  = pageItems.map((p) => p.pairKey);
+              const allPageSelected = pageKeys.length > 0 && pageKeys.every((k) => selected.has(k));
 
               return (
                 <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -313,7 +349,7 @@ export default function InscripcionesPage() {
                               <input
                                 type="checkbox"
                                 checked={allPageSelected}
-                                onChange={() => toggleAll(pageIds)}
+                                onChange={() => toggleAll(pageKeys)}
                                 className="rounded border-border accent-[#D4AF37] cursor-pointer"
                               />
                             </th>
@@ -325,19 +361,21 @@ export default function InscripcionesPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {pageItems.map((reg: AdminRegistration) => {
-                            const scfg     = STATUS_CFG[reg.status];
-                            const isSelected = selected.has(reg.id);
+                          {pageItems.map((pair) => {
+                            const reg        = pair.primary;
+                            const scfg       = STATUS_CFG[pair.status];
+                            const isSelected = selected.has(pair.pairKey);
+                            const isUpdating = pair.ids.some((id) => updatingIds.has(id));
                             return (
                               <tr
-                                key={reg.id}
+                                key={pair.pairKey}
                                 className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : ""}`}
                               >
                                 <td className="px-4 py-3.5">
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
-                                    onChange={() => toggleSelect(reg.id)}
+                                    onChange={() => toggleSelect(pair.pairKey)}
                                     className="rounded border-border accent-[#D4AF37] cursor-pointer"
                                   />
                                 </td>
@@ -390,20 +428,20 @@ export default function InscripcionesPage() {
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1">
-                                    {reg.status !== "CONFIRMED" && (
+                                    {pair.status !== "CONFIRMED" && (
                                       <button
-                                        onClick={() => handleStatus(reg.id, "CONFIRMED")}
-                                        disabled={updatingId === reg.id}
-                                        title={confirmTitle(reg.status)}
+                                        onClick={() => handlePairStatus(pair, "CONFIRMED")}
+                                        disabled={isUpdating}
+                                        title={confirmTitle(pair.status)}
                                         className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 disabled:opacity-40 transition-colors"
                                       >
                                         <Check size={14} />
                                       </button>
                                     )}
-                                    {reg.status !== "WAITLIST" && (
+                                    {pair.status !== "WAITLIST" && (
                                       <button
-                                        onClick={() => handleStatus(reg.id, "WAITLIST")}
-                                        disabled={updatingId === reg.id}
+                                        onClick={() => handlePairStatus(pair, "WAITLIST")}
+                                        disabled={isUpdating}
                                         title="Mover a espera"
                                         className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 disabled:opacity-40 transition-colors"
                                       >
@@ -411,9 +449,9 @@ export default function InscripcionesPage() {
                                       </button>
                                     )}
                                     <button
-                                      onClick={() => handleStatus(reg.id, "CANCELLED", reg.user.name)}
-                                      disabled={updatingId === reg.id}
-                                      title="Cancelar"
+                                      onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                      disabled={isUpdating}
+                                      title="Cancelar pareja"
                                       className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
                                     >
                                       <X size={14} />

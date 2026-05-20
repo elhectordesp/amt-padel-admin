@@ -48,6 +48,30 @@ function StatusBadge({ status }: { status: RegistrationStatus }) {
   );
 }
 
+// ── Pair grouping (1 fila por pareja+categoría) ───────────────────────────
+interface PairReg {
+  pairKey: string;
+  ids:     string[];
+  primary: AdminRegistration;
+  status:  RegistrationStatus;
+}
+
+function groupByPair(regs: AdminRegistration[]): PairReg[] {
+  const seen: Set<string> = new Set();
+  const result: PairReg[] = [];
+  for (const reg of regs) {
+    const sorted = [reg.userId, reg.partnerId ?? ""].sort().join(":");
+    const key    = `${sorted}::${reg.categoryId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const partnerReg = reg.partnerId
+      ? regs.find((r) => r.userId === reg.partnerId && r.categoryId === reg.categoryId)
+      : null;
+    result.push({ pairKey: key, ids: partnerReg ? [reg.id, partnerReg.id] : [reg.id], primary: reg, status: reg.status });
+  }
+  return result;
+}
+
 function CalendarTab({
   matches, loading, isError, refetch, autoSchedule,
 }: {
@@ -177,8 +201,8 @@ export default function TorneoDetailPage() {
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
   const [regSearch,       setRegSearch]     = useState("");
   const [regPage,         setRegPage]       = useState(0);
-  const [selectedIds,     setSelectedIds]   = useState<Set<string>>(new Set());
-  const [updatingId,      setUpdatingId]    = useState<string | null>(null);
+  const [selectedKeys,    setSelectedKeys]  = useState<Set<string>>(new Set());
+  const [updatingIds,     setUpdatingIds]   = useState<Set<string>>(new Set());
   const [bracketCatId,    setBracketCatId]  = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [bracketPreview,  setBracketPreview] = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
@@ -210,31 +234,17 @@ export default function TorneoDetailPage() {
   });
 
   // ── Mutations ─────────────────────────────────────────────────────────────
-  const updateStatus = useMutation({
-    mutationFn: ({ regId, status }: { regId: string; status: string }) =>
-      adminService.registrations.updateStatus(regId, status),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["registrations", id] });
-      toast.success("Estado actualizado");
-    },
-    onError:   (err: Error) => toast.error(err.message),
-    onSettled: () => setUpdatingId(null),
-  });
-
   const bulkStatus = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
     onSuccess: (res: any, { ids }) => {
       qc.invalidateQueries({ queryKey: ["registrations", id] });
-      setSelectedIds(new Set());
+      setSelectedKeys(new Set());
+      setUpdatingIds(new Set());
       const updated = res?.count ?? res?.updated ?? ids.length;
-      if (updated < ids.length) {
-        toast.warning(`Solo se actualizaron ${updated} de ${ids.length} inscripciones`);
-      } else {
-        toast.success(`${updated} inscripción(es) actualizadas`);
-      }
+      toast.success(`${updated} inscripción(es) actualizadas`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => { toast.error(err.message); setUpdatingIds(new Set()); },
   });
 
   const duplicate = useMutation({
@@ -289,57 +299,64 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const handleStatus = (regId: string, status: string) => {
-    setUpdatingId(regId);
-    updateStatus.mutate({ regId, status });
+  const handlePairStatus = (pair: PairReg, status: string) => {
+    setUpdatingIds(new Set(pair.ids));
+    bulkStatus.mutate({ ids: pair.ids, status });
   };
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const filteredRegs = useMemo(() =>
-    registrations
-      .filter((r) => regFilter === "all" || r.status === regFilter)
-      .filter((r) => {
+  const pairs = useMemo(() => groupByPair(registrations), [registrations]);
+
+  const filteredPairs = useMemo(() =>
+    pairs
+      .filter((p) => regFilter === "all" || p.status === regFilter)
+      .filter((p) => {
         if (!regSearch.trim()) return true;
         const q = regSearch.toLowerCase();
-        return r.user.name.toLowerCase().includes(q) ||
-               (r.partner?.name ?? "").toLowerCase().includes(q);
+        return p.primary.user.name.toLowerCase().includes(q) ||
+               (p.primary.partner?.name ?? "").toLowerCase().includes(q);
       }),
-  [registrations, regFilter, regSearch]);
+  [pairs, regFilter, regSearch]);
 
-  const totalPages  = Math.ceil(filteredRegs.length / PAGE_SIZE);
-  const pagedRegs   = filteredRegs.slice(regPage * PAGE_SIZE, (regPage + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(filteredPairs.length / PAGE_SIZE);
+  const pagedPairs = filteredPairs.slice(regPage * PAGE_SIZE, (regPage + 1) * PAGE_SIZE);
 
   const regCounts = useMemo(() => ({
-    all:       registrations.length,
-    confirmed: registrations.filter((r) => r.status === "CONFIRMED").length,
-    pending:   registrations.filter((r) => r.status === "PENDING").length,
-    waitlist:  registrations.filter((r) => r.status === "WAITLIST").length,
-  }), [registrations]);
+    all:       pairs.length,
+    confirmed: pairs.filter((p) => p.status === "CONFIRMED").length,
+    pending:   pairs.filter((p) => p.status === "PENDING").length,
+    waitlist:  pairs.filter((p) => p.status === "WAITLIST").length,
+  }), [pairs]);
 
-  const allPageSelected = pagedRegs.length > 0 && pagedRegs.every((r) => selectedIds.has(r.id));
+  const allPageSelected = pagedPairs.length > 0 && pagedPairs.every((p) => selectedKeys.has(p.pairKey));
 
   const toggleSelectAll = () => {
     if (allPageSelected) {
-      setSelectedIds((prev) => {
+      setSelectedKeys((prev) => {
         const next = new Set(prev);
-        pagedRegs.forEach((r) => next.delete(r.id));
+        pagedPairs.forEach((p) => next.delete(p.pairKey));
         return next;
       });
     } else {
-      setSelectedIds((prev) => {
+      setSelectedKeys((prev) => {
         const next = new Set(prev);
-        pagedRegs.forEach((r) => next.add(r.id));
+        pagedPairs.forEach((p) => next.add(p.pairKey));
         return next;
       });
     }
   };
 
-  const toggleSelect = (regId: string) => {
-    setSelectedIds((prev) => {
+  const toggleSelect = (key: string) => {
+    setSelectedKeys((prev) => {
       const next = new Set(prev);
-      next.has(regId) ? next.delete(regId) : next.add(regId);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  };
+
+  const handleBulkAction = (status: string) => {
+    const allIds = pairs.filter((p) => selectedKeys.has(p.pairKey)).flatMap((p) => p.ids);
+    bulkStatus.mutate({ ids: allIds, status });
   };
 
   // Reset page when filter/search changes
@@ -380,8 +397,9 @@ export default function TorneoDetailPage() {
     );
   }
 
-  const totalSpots      = tournament.categories.reduce((s, c) => s + c.totalSpots, 0);
-  const totalRegistered = tournament.categories.reduce((s, c) => s + c.registeredCount, 0);
+  // totalSpots en plazas de pareja (BD guarda jugadores individuales, dividimos entre 2)
+  const totalSpots      = tournament.categories.reduce((s, c) => s + Math.floor(c.totalSpots / 2), 0);
+  const totalRegistered = tournament.categories.reduce((s, c) => s + Math.floor(c.registeredCount / 2), 0);
   const fillPct         = totalSpots > 0 ? Math.round((totalRegistered / totalSpots) * 100) : 0;
   const tierDisplay     = resolveTier(tournament.spaTier, tournament.tier);
 
@@ -492,7 +510,7 @@ export default function TorneoDetailPage() {
           <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="text-center">
               <p className="text-2xl font-heading text-[#D4AF37]">{totalRegistered}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Inscritos</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Parejas inscritas</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-heading text-foreground">{totalSpots}</p>
@@ -516,7 +534,7 @@ export default function TorneoDetailPage() {
         <div className="flex items-center gap-0 border-b border-border">
           {([
             { key: "resumen",       label: "Resumen"        },
-            { key: "inscripciones", label: `Inscripciones (${registrations.length || "…"})` },
+            { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length / 2 || "…"})` },
             { key: "calendario",    label: "Calendario"     },
             { key: "cuadro",        label: "Cuadro"         },
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
@@ -545,21 +563,23 @@ export default function TorneoDetailPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-secondary/50">
-                    {["Categoría", "Plazas", "Inscritos", "Ocupación"].map((h) => (
+                    {["Categoría", "Plazas (parejas)", "Parejas inscritas", "Ocupación"].map((h) => (
                       <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {tournament.categories.map((cat) => {
-                    const pct = cat.totalSpots > 0 ? Math.round((cat.registeredCount / cat.totalSpots) * 100) : 0;
+                    const pairSpots = Math.floor(cat.totalSpots / 2);
+                    const pairCount = Math.floor(cat.registeredCount / 2);
+                    const pct = pairSpots > 0 ? Math.round((pairCount / pairSpots) * 100) : 0;
                     return (
                       <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-foreground">
                           {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">{cat.totalSpots}</td>
-                        <td className="px-4 py-3 text-sm text-foreground">{cat.registeredCount}</td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{pairSpots}</td>
+                        <td className="px-4 py-3 text-sm text-foreground">{pairCount}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -636,21 +656,23 @@ export default function TorneoDetailPage() {
                 </div>
                 <button
                   onClick={() => {
-                    const rows = filteredRegs.map((r) => ({
-                      Jugador1:      r.user.name,
-                      "Nivel J1":    r.user.categoryLevel ?? "",
-                      "SPA J1":      r.user.spaPoints ?? "",
-                      Jugador2:      r.partner?.name ?? "",
-                      "Nivel J2":    r.partner?.categoryLevel ?? "",
-                      "SPA J2":      r.partner?.spaPoints ?? "",
-                      Categoría:     `${r.category.gender} ${r.category.level}`,
-                      Estado:    r.status,
-                      Pago:      r.paid ? "Sí" : "No",
-                      Fecha:     r.createdAt,
+                    const rows = filteredPairs.map((p) => ({
+                      Jugador1:   p.primary.user.name,
+                      "Email J1": p.primary.user.email ?? "",
+                      "Nivel J1": p.primary.user.categoryLevel ?? "",
+                      "SPA J1":   p.primary.user.spaPoints ?? "",
+                      Jugador2:   p.primary.partner?.name ?? "",
+                      "Email J2": p.primary.partner?.email ?? "",
+                      "Nivel J2": p.primary.partner?.categoryLevel ?? "",
+                      "SPA J2":   p.primary.partner?.spaPoints ?? "",
+                      Categoría:  `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
+                      Estado:     p.status,
+                      Pago:       p.primary.paid ? "Sí" : "No",
+                      Fecha:      p.primary.createdAt,
                     }));
                     downloadCsv(`inscripciones-${id}`, rows);
                   }}
-                  disabled={filteredRegs.length === 0}
+                  disabled={filteredPairs.length === 0}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-40"
                 >
                   <Download size={13} />
@@ -660,12 +682,12 @@ export default function TorneoDetailPage() {
             </div>
 
             {/* Bulk action bar */}
-            {selectedIds.size > 0 && (
+            {selectedKeys.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)]">
-                <span className="text-xs font-medium text-[#D4AF37]">{selectedIds.size} seleccionados</span>
+                <span className="text-xs font-medium text-[#D4AF37]">{selectedKeys.size} pareja(s) seleccionada(s)</span>
                 <div className="flex items-center gap-2 ml-auto">
                   <button
-                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "CONFIRMED" })}
+                    onClick={() => handleBulkAction("CONFIRMED")}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-400/10 border border-green-400/30 text-xs text-green-400 font-medium hover:bg-green-400/20 transition-colors disabled:opacity-50"
                   >
@@ -673,21 +695,21 @@ export default function TorneoDetailPage() {
                     Confirmar
                   </button>
                   <button
-                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "WAITLIST" })}
+                    onClick={() => handleBulkAction("WAITLIST")}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-400/10 border border-blue-400/30 text-xs text-blue-400 font-medium hover:bg-blue-400/20 transition-colors disabled:opacity-50"
                   >
                     <Clock size={11} /> En espera
                   </button>
                   <button
-                    onClick={() => bulkStatus.mutate({ ids: [...selectedIds], status: "CANCELLED" })}
+                    onClick={() => handleBulkAction("CANCELLED")}
                     disabled={bulkStatus.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive font-medium hover:bg-destructive/20 transition-colors disabled:opacity-50"
                   >
                     <X size={11} /> Rechazar
                   </button>
                   <button
-                    onClick={() => setSelectedIds(new Set())}
+                    onClick={() => setSelectedKeys(new Set())}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Cancelar
@@ -729,21 +751,23 @@ export default function TorneoDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pagedRegs.length === 0 ? (
+                    {pagedPairs.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center py-10 text-sm text-muted-foreground">
                           No hay inscripciones
                         </td>
                       </tr>
-                    ) : pagedRegs.map((reg: AdminRegistration) => {
-                      const isSelected = selectedIds.has(reg.id);
+                    ) : pagedPairs.map((pair) => {
+                      const reg        = pair.primary;
+                      const isSelected = selectedKeys.has(pair.pairKey);
+                      const isUpdating = pair.ids.some((id) => updatingIds.has(id));
                       return (
                         <tr
-                          key={reg.id}
+                          key={pair.pairKey}
                           className={`border-b border-border last:border-0 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : "hover:bg-secondary/30"}`}
                         >
                           <td className="px-4 py-3.5">
-                            <button onClick={() => toggleSelect(reg.id)} className="text-muted-foreground hover:text-foreground transition-colors">
+                            <button onClick={() => toggleSelect(pair.pairKey)} className="text-muted-foreground hover:text-foreground transition-colors">
                               {isSelected
                                 ? <CheckSquare size={15} className="text-[#D4AF37]" />
                                 : <Square size={15} />
@@ -752,7 +776,10 @@ export default function TorneoDetailPage() {
                           </td>
                           <td className="px-5 py-3.5">
                             <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
-                            {reg.partner?.name && <p className="text-xs text-muted-foreground">{reg.partner.name}</p>}
+                            {reg.partner?.name
+                              ? <p className="text-xs text-muted-foreground">{reg.partner.name}</p>
+                              : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
+                            }
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="space-y-0.5">
@@ -776,7 +803,7 @@ export default function TorneoDetailPage() {
                             <span className="text-xs text-muted-foreground">{`${reg.category.gender === "M" ? "Masc." : "Fem."} ${reg.category.level}`}</span>
                           </td>
                           <td className="px-5 py-3.5">
-                            <StatusBadge status={reg.status} />
+                            <StatusBadge status={pair.status} />
                           </td>
                           <td className="px-5 py-3.5">
                             <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
@@ -785,20 +812,20 @@ export default function TorneoDetailPage() {
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-1">
-                              {reg.status !== "CONFIRMED" && (
+                              {pair.status !== "CONFIRMED" && (
                                 <button
-                                  onClick={() => handleStatus(reg.id, "confirmed")}
-                                  disabled={updatingId === reg.id}
+                                  onClick={() => handlePairStatus(pair, "CONFIRMED")}
+                                  disabled={isUpdating}
                                   className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
-                                  title="Confirmar"
+                                  title="Confirmar pareja"
                                 >
                                   <Check size={14} />
                                 </button>
                               )}
-                              {reg.status !== "WAITLIST" && (
+                              {pair.status !== "WAITLIST" && (
                                 <button
-                                  onClick={() => handleStatus(reg.id, "waitlist")}
-                                  disabled={updatingId === reg.id}
+                                  onClick={() => handlePairStatus(pair, "WAITLIST")}
+                                  disabled={isUpdating}
                                   className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
                                   title="Mover a espera"
                                 >
@@ -806,10 +833,10 @@ export default function TorneoDetailPage() {
                                 </button>
                               )}
                               <button
-                                onClick={() => handleStatus(reg.id, "cancelled")}
-                                disabled={updatingId === reg.id}
+                                onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                disabled={isUpdating}
                                 className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                                title="Rechazar"
+                                title="Cancelar pareja"
                               >
                                 <X size={14} />
                               </button>
@@ -827,7 +854,7 @@ export default function TorneoDetailPage() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{filteredRegs.length} inscripciones · página {regPage + 1} de {totalPages}</span>
+                <span>{filteredPairs.length} parejas · página {regPage + 1} de {totalPages}</span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setRegPage((p) => p - 1)}
