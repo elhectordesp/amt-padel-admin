@@ -85,7 +85,10 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
-  const activeTournaments = tournaments.filter((t) => t.status !== "finished" && t.status !== "FINISHED" && t.status !== "cancelled" && t.status !== "CANCELLED");
+  const activeTournaments = tournaments.filter((t) => {
+    const st = t.status?.toUpperCase();
+    return st !== "FINISHED" && st !== "CANCELLED";
+  });
 
   return (
     <div className="flex flex-col min-h-full">
@@ -203,8 +206,8 @@ export default function DashboardPage() {
                       const totalSpots      = t.categories.reduce((s, c) => s + c.totalSpots, 0);
                       const totalRegistered = t.categories.reduce((s, c) => s + c.registeredCount, 0);
                       const st = t.status?.toLowerCase();
-                      const statusColor = st === "open" ? "text-green-400" : st === "ongoing" ? "text-yellow-400" : "text-muted-foreground";
-                      const statusLabel = st === "open" ? "Abierto" : st === "ongoing" ? "En curso" : st === "cancelled" ? "Cancelado" : "Finalizado";
+                      const statusColor = st === "open" ? "text-green-400" : st === "ongoing" ? "text-yellow-400" : st === "draft" ? "text-blue-400" : "text-muted-foreground";
+                      const statusLabel = st === "open" ? "Abierto" : st === "ongoing" ? "En curso" : st === "draft" ? "Borrador" : st === "cancelled" ? "Cancelado" : "Finalizado";
                       return (
                         <Link
                           key={t.id}

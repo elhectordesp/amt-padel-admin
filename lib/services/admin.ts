@@ -30,6 +30,10 @@ export const adminService = {
       api.get<Tournament>(`/tournaments/${id}`).then((r) =>
         r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
       ),
+    adminDetail: (id: string) =>
+      api.get<Tournament>(`/admin/tournaments/${id}`).then((r) =>
+        r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
+      ),
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),

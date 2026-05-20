@@ -221,11 +221,25 @@ export default function NuevoTorneoPage() {
       const ok = await configForm.trigger();
       if (!ok) return;
       const cfg = configForm.getValues();
-      // Validación cruzada: deadline no puede ser posterior a la fecha fin del torneo
-      if (cfg.registrationDeadline && infoData?.endDate) {
+      if (cfg.registrationDeadline) {
         const deadline = new Date(cfg.registrationDeadline);
-        const endDate  = new Date(infoData.endDate);
-        if (deadline > endDate) {
+        const now      = new Date();
+        const startDate = infoData?.startDate ? new Date(infoData.startDate) : null;
+        const endDate   = infoData?.endDate   ? new Date(infoData.endDate)   : null;
+
+        if (deadline <= now) {
+          configForm.setError("registrationDeadline", {
+            message: "El cierre de inscripciones debe ser una fecha futura",
+          });
+          return;
+        }
+        if (startDate && deadline >= startDate) {
+          configForm.setError("registrationDeadline", {
+            message: "El cierre de inscripciones debe ser anterior al inicio del torneo",
+          });
+          return;
+        }
+        if (endDate && deadline > endDate) {
           configForm.setError("registrationDeadline", {
             message: "El cierre de inscripciones no puede ser posterior a la fecha fin del torneo",
           });

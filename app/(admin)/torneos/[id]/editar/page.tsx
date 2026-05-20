@@ -27,7 +27,7 @@ const schema = z.object({
   scoringSystem:        z.string().optional(),
   matchDuration:        z.number().optional(),
   registrationDeadline: z.string().optional(),
-  status:               z.enum(["OPEN", "ONGOING", "FINISHED", "CANCELLED"]),
+  status:               z.enum(["DRAFT", "OPEN", "ONGOING", "FINISHED", "CANCELLED"]),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -40,8 +40,8 @@ export default function EditarTorneoPage() {
   const [pendingData, setPendingData] = useState<FormData | null>(null);
 
   const { data: tournament, isLoading } = useQuery({
-    queryKey: ["tournament", id],
-    queryFn:  () => adminService.tournaments.detail(id),
+    queryKey: ["admin-tournament", id],
+    queryFn:  () => adminService.tournaments.adminDetail(id),
   });
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
@@ -96,6 +96,7 @@ export default function EditarTorneoPage() {
   const save = useMutation({
     mutationFn: (data: FormData) => adminService.tournaments.update(id, data),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       toast.success("Torneo actualizado correctamente");
@@ -150,7 +151,8 @@ export default function EditarTorneoPage() {
         <form
           onSubmit={handleSubmit((data) => {
             const DESTRUCTIVE = ["ONGOING", "FINISHED", "CANCELLED"];
-            if (tournament && data.status !== tournament.status && DESTRUCTIVE.includes(data.status)) {
+            const statusChanged = tournament && data.status !== tournament.status?.toUpperCase();
+            if (statusChanged && DESTRUCTIVE.includes(data.status)) {
               setPendingData(data);
             } else {
               save.mutate(data);
@@ -204,9 +206,10 @@ export default function EditarTorneoPage() {
               <Field label="Estado">
                 <CustomSelect
                   options={[
-                    { value: "OPEN", label: "🟢 Abierto (Inscripciones)" },
-                    { value: "ONGOING", label: "🔵 En curso" },
-                    { value: "FINISHED", label: "⚫ Finalizado" },
+                    { value: "DRAFT",     label: "🔵 Borrador" },
+                    { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
+                    { value: "ONGOING",   label: "🟡 En curso" },
+                    { value: "FINISHED",  label: "⚫ Finalizado" },
                     { value: "CANCELLED", label: "🔴 Cancelado" },
                   ]}
                   value={watch("status") ?? "OPEN"}
