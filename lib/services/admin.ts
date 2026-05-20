@@ -51,7 +51,21 @@ export const adminService = {
   },
 
   matches: {
-    list:      (tournamentId: string)                     => api.get<MatchResult[]>(`/admin/tournaments/${tournamentId}/matches`).then((r) => r.data ?? []),
+    list: (tournamentId: string) =>
+      api.get<any[]>(`/admin/tournaments/${tournamentId}/matches`).then((r) =>
+        (r.data ?? []).map((m: any): MatchResult => ({
+          ...m,
+          team1:    m.team1  ?? m.players?.filter((p: any) => p.team === 1).map((p: any) => p.user?.name ?? p.userId) ?? [],
+          team2:    m.team2  ?? m.players?.filter((p: any) => p.team === 2).map((p: any) => p.user?.name ?? p.userId) ?? [],
+          sets1:    m.sets1  ?? m.sets?.map((s: any) => s.score1) ?? [],
+          sets2:    m.sets2  ?? m.sets?.map((s: any) => s.score2) ?? [],
+          isResult: m.isResult ?? m.status === "FINISHED" ?? (m.sets?.length > 0),
+          winner:   m.winner ?? (m.players?.find((p: any) => p.isWinner && p.team === 1) ? "team1" : m.players?.find((p: any) => p.isWinner && p.team === 2) ? "team2" : undefined),
+          phase:    m.phase,
+          status:   m.status,
+          scoringFormat: m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
+        }))
+      ),
     setResult: (matchId: string, sets1: number[], sets2: number[]) => api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2 }).then((r) => r.data),
   },
 

@@ -9,6 +9,7 @@ import { Header } from "@/components/admin/header";
 import { ErrorState } from "@/components/admin/error-state";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
+import { phaseLabel } from "@/lib/constants";
 import type { MatchResult, Tournament } from "@/types";
 
 const PAGE_SIZE = 30;
@@ -71,7 +72,7 @@ function ResultModal({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-heading text-lg text-foreground">Introducir resultado</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{match.phase} · {match.court}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{phaseLabel(match.phase)} · {match.court}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
             <X size={16} />
@@ -250,7 +251,7 @@ export default function ResultadosPage() {
                   onClick={() => downloadCsv(
                     `resultados-${tournamentId}`,
                     filtered.map((m: MatchResult) => ({
-                      Fase:       m.phase,
+                      Fase:       phaseLabel(m.phase),
                       Pista:      m.court,
                       "Pareja 1": m.team1.join(" / "),
                       "Pareja 2": m.team2.join(" / "),
@@ -313,7 +314,7 @@ export default function ResultadosPage() {
                       {paged.map((match: MatchResult) => (
                         <tr key={match.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                           <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">{match.phase}</span>
+                            <span className="text-xs text-muted-foreground">{phaseLabel(match.phase)}</span>
                           </td>
                           <td className="px-5 py-3.5">
                             <span className="text-sm font-medium text-foreground">{match.team1.join(" / ")}</span>

@@ -82,6 +82,18 @@ export const SPA_TIER_COLOR: Record<string, string> = {
 };
 
 // Resolves whichever tier field is present and returns { label, color } for display
+export const MATCH_PHASE_LABEL: Record<string, string> = {
+  GROUPS: "Grupos",
+  R16:    "Octavos",
+  QF:     "Cuartos",
+  SF:     "Semifinal",
+  FINAL:  "Final",
+};
+
+export function phaseLabel(phase: string): string {
+  return MATCH_PHASE_LABEL[phase?.toUpperCase()] ?? phase ?? "—";
+}
+
 export function resolveTier(spaTier?: string, tier?: TournamentTier): { label: string; color: string } | null {
   if (spaTier) {
     const label = SPA_TIER_LABEL[spaTier];

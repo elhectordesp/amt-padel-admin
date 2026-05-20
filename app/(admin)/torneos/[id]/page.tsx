@@ -22,7 +22,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
-  resolveTier,
+  resolveTier, phaseLabel,
 } from "@/lib/constants";
 import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus } from "@/types";
 
@@ -158,7 +158,7 @@ function CalendarTab({
                       <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
                       <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
-                        {m.phase}
+                        {phaseLabel(m.phase)}
                       </span>
                       <div className="flex-1 flex items-center gap-2 min-w-0">
                         <span className="text-sm font-medium text-foreground truncate">{m.team1.join(" / ")}</span>
