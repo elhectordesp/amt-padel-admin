@@ -49,17 +49,24 @@ const configSchema = z.object({
   registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
-  courts:              z.string(), // comma-separated list, split on save
+  courts:              z.string().min(1, "Añade al menos una pista (necesario para programar partidos automáticamente)"),
 });
+
+const DAY_TYPE_OPTIONS = [
+  { value: "AMBOS",         label: "Grupos + Eliminatorias" },
+  { value: "GRUPOS",        label: "Solo grupos" },
+  { value: "ELIMINATORIAS", label: "Solo eliminatorias" },
+] as const;
 
 const scheduleSchema = z.object({
   days: z.array(z.object({
-    date: z.string(),
+    date: z.string().min(1, "La fecha de la jornada es obligatoria"),
+    type: z.enum(["GRUPOS", "ELIMINATORIAS", "AMBOS"]).default("AMBOS"),
     blocks: z.array(z.object({
       start: z.string(),
-      end: z.string(),
-    })).min(1),
-  })),
+      end:   z.string(),
+    })).min(1, "Añade al menos un bloque horario"),
+  })).min(1, "Añade al menos una jornada"),
 });
 
 type InfoData     = z.infer<typeof infoSchema>;
@@ -160,7 +167,8 @@ export default function NuevoTorneoPage() {
       let curr = new Date(start);
       while (curr <= end) {
         days.push({
-          date: curr.toISOString().split("T")[0],
+          date:   curr.toISOString().split("T")[0],
+          type:   "AMBOS" as const,
           blocks: [{ start: "16:00", end: "21:00" }],
         });
         curr.setDate(curr.getDate() + 1);
@@ -599,6 +607,27 @@ export default function NuevoTorneoPage() {
                       >
                         + Añadir tramo
                       </button>
+                    </div>
+
+                    {/* Tipo de jornada */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground shrink-0">Tipo de jornada:</span>
+                      <div className="flex gap-1">
+                        {DAY_TYPE_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => scheduleForm.setValue(`days.${dIdx}.type`, opt.value)}
+                            className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                              scheduleForm.watch(`days.${dIdx}.type`) === opt.value
+                                ? "bg-[#D4AF37]/20 border-[#D4AF37]/60 text-[#D4AF37]"
+                                : "border-border text-muted-foreground hover:border-border/80"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="space-y-2">

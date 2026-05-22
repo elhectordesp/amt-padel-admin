@@ -2,12 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users } from "lucide-react";
+import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { adminService } from "@/lib/services/admin";
 import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
 
@@ -76,11 +77,13 @@ export default function InscripcionesPage() {
 
   const [tournamentId, setTournamentId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [catFilter,    setCatFilter]    = useState("all");
   const [search,       setSearch]       = useState("");
   const [updatingIds,   setUpdatingIds]  = useState<Set<string>>(new Set());
   const [selected,      setSelected]    = useState<Set<string>>(new Set());
   const [page,          setPage]        = useState(0);
   const [confirmCancel, setConfirmCancel] = useState<{ ids: string[]; name: string } | null>(null);
+  const [availRegId,    setAvailRegId]    = useState<string | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -139,6 +142,7 @@ export default function InscripcionesPage() {
   const handleTournamentChange = (id: string) => {
     setTournamentId(id);
     setStatusFilter("all");
+    setCatFilter("all");
     setSearch("");
     setSelected(new Set());
     setPage(0);
@@ -146,9 +150,18 @@ export default function InscripcionesPage() {
 
   const pairs = useMemo(() => groupByPair(registrations), [registrations]);
 
+  const availableCategories = useMemo(() => {
+    const seen = new Map<string, { id: string; gender: string; level: string }>();
+    for (const r of registrations) {
+      if (!seen.has(r.categoryId)) seen.set(r.categoryId, { id: r.categoryId, gender: r.category.gender, level: r.category.level });
+    }
+    return [...seen.values()];
+  }, [registrations]);
+
   const filtered = useMemo(() =>
     pairs
       .filter((p) => statusFilter === "all" || p.status === statusFilter)
+      .filter((p) => catFilter === "all" || p.categoryId === catFilter)
       .filter((p) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
@@ -157,7 +170,7 @@ export default function InscripcionesPage() {
                (reg.partner?.name ?? "").toLowerCase().includes(q) ||
                `${reg.category.gender} ${reg.category.level}`.toLowerCase().includes(q);
       }),
-    [pairs, statusFilter, search],
+    [pairs, statusFilter, catFilter, search],
   );
 
   const counts = {
@@ -171,6 +184,10 @@ export default function InscripcionesPage() {
 
   return (
     <div className="flex flex-col min-h-full">
+      {availRegId && (
+        <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+      )}
+
       <ConfirmModal
         open={!!confirmCancel}
         title="Cancelar inscripción"
@@ -249,6 +266,20 @@ export default function InscripcionesPage() {
 
             {/* Controls */}
             <div className="flex items-center gap-3 flex-wrap">
+              {availableCategories.length > 1 && (
+                <select
+                  value={catFilter}
+                  onChange={(e) => { setCatFilter(e.target.value); setPage(0); }}
+                  className="h-9 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                >
+                  <option value="all">Todas las categorías</option>
+                  {availableCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.gender === "M" ? "Masc." : "Fem."} {c.level}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border flex-1 max-w-xs">
                 <Search size={14} className="text-muted-foreground shrink-0" />
                 <input
@@ -428,6 +459,13 @@ export default function InscripcionesPage() {
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => setAvailRegId(reg.id)}
+                                      title="Ver disponibilidad"
+                                      className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                    >
+                                      <CalendarDays size={14} />
+                                    </button>
                                     {pair.status !== "CONFIRMED" && (
                                       <button
                                         onClick={() => handlePairStatus(pair, "CONFIRMED")}

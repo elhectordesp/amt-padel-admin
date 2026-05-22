@@ -27,7 +27,7 @@ const schema = z.object({
   scoringSystem:        z.string().optional(),
   matchDuration:        z.number().optional(),
   registrationDeadline: z.string().optional(),
-  status:               z.enum(["DRAFT", "OPEN", "ONGOING", "FINISHED", "CANCELLED"]),
+  status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -150,7 +150,7 @@ export default function EditarTorneoPage() {
 
         <form
           onSubmit={handleSubmit((data) => {
-            const DESTRUCTIVE = ["ONGOING", "FINISHED", "CANCELLED"];
+            const DESTRUCTIVE = ["DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"];
             const statusChanged = tournament && data.status !== tournament.status?.toUpperCase();
             if (statusChanged && DESTRUCTIVE.includes(data.status)) {
               setPendingData(data);
@@ -208,6 +208,8 @@ export default function EditarTorneoPage() {
                   options={[
                     { value: "DRAFT",     label: "🔵 Borrador" },
                     { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
+                    { value: "DRAW",      label: "🟣 Sorteo (Generando cuadro)" },
+                    { value: "SCHEDULED", label: "🩵 Programado (Cuadro listo)" },
                     { value: "ONGOING",   label: "🟡 En curso" },
                     { value: "FINISHED",  label: "⚫ Finalizado" },
                     { value: "CANCELLED", label: "🔴 Cancelado" },

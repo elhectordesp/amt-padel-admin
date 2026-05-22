@@ -14,6 +14,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { CustomSelect } from "@/components/admin/form";
 import type { CategoryLevel, CategoryChange } from "@/types";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -67,6 +68,7 @@ export default function JugadorDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["player", id] });
       qc.invalidateQueries({ queryKey: ["players"] });
+      qc.invalidateQueries({ queryKey: ["player-cat-history", id] });
       toast.success("Categoría actualizada");
       setShowCatModal(false);
       catForm.reset();
@@ -87,10 +89,10 @@ export default function JugadorDetailPage() {
     );
   }
 
-  if (!player) return null;
+  if (!player || !player.name) return null;
 
   const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
-  const initials = player.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  const initials = player.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
   const TrendIcon = player.trend === "up"   ? TrendingUp :
                     player.trend === "down" ? TrendingDown : Minus;
   const trendColor = player.trend === "up" ? "text-green-400" :
@@ -170,11 +172,12 @@ export default function JugadorDetailPage() {
             </div>
 
             {/* Stats strip */}
-            <div className="mt-5 pt-5 border-t border-border grid grid-cols-4">
+            <div className="mt-5 pt-5 border-t border-border grid grid-cols-3 sm:grid-cols-6">
               <StatBox label="Puntos AMT"    value={player.points.toLocaleString()} />
               <StatBox label="Partidos"      value={player.played} />
               <StatBox label="% Victorias"   value={`${winRate}%`} sub={`${player.wins} ganados`} />
-              <StatBox label="Ranking"       value={`—`} sub={`${player.gender === "M" ? "Masc." : "Fem."} ${CATEGORY_LABEL[player.level]}`} />
+              <StatBox label="Ranking global"   value={player.globalRank   ? `#${player.globalRank}`   : "—"} sub={player.gender === "M" ? "Masc." : "Fem."} />
+              <StatBox label="Ranking categoría" value={player.categoryRank ? `#${player.categoryRank}` : "—"} sub={CATEGORY_LABEL[player.level]} />
             </div>
           </div>
 
@@ -287,6 +290,61 @@ export default function JugadorDetailPage() {
             </div>
           )}
 
+          {/* Match history */}
+          {player.matches && player.matches.length > 0 && (
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+                <BarChart3 size={15} className="text-[#D4AF37]" />
+                <h3 className="text-sm font-semibold text-foreground">Historial de partidos</h3>
+                <span className="ml-auto text-xs text-muted-foreground">{player.matches.length} partidos</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/50">
+                      {["Fecha", "Torneo", "Categoría", "Resultado", ""].map((h) => (
+                        <th key={h} className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {player.matches.map((m) => (
+                      <tr key={m.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                        <td className="px-5 py-3 text-xs text-muted-foreground">
+                          {m.date ? new Date(m.date).toLocaleDateString("es-ES") : "—"}
+                        </td>
+                        <td className="px-5 py-3 text-xs text-foreground max-w-[160px] truncate">{m.tournament}</td>
+                        <td className="px-5 py-3 text-xs text-muted-foreground">{m.category}</td>
+                        <td className="px-5 py-3">
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{m.team1.join(" / ")}</span>
+                            {m.sets1.length > 0 && (
+                              <span className="ml-2 text-[10px]">
+                                {m.sets1.map((s, i) => `${s}-${m.sets2[i]}`).join("  ")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            <span>{m.team2.join(" / ")}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                            m.isWinner
+                              ? "text-green-400 bg-green-400/10 border-green-400/30"
+                              : "text-red-400 bg-red-400/10 border-red-400/30"
+                          }`}>
+                            {m.isWinner ? "Victoria" : "Derrota"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Category change history */}
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
@@ -363,15 +421,14 @@ export default function JugadorDetailPage() {
               {/* New level */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nueva categoría</label>
-                <select
-                  {...catForm.register("level")}
-                  className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                >
-                  <option value="">Seleccionar...</option>
-                  {LEVELS.filter((l) => l !== player.level).map((l) => (
-                    <option key={l} value={l}>{CATEGORY_LABEL[l]}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={catForm.watch("level") ?? ""}
+                  onChange={(v) => catForm.setValue("level", v, { shouldValidate: true })}
+                  options={[
+                    { value: "", label: "Seleccionar categoría..." },
+                    ...LEVELS.filter((l) => l !== player.level).map((l) => ({ value: l, label: CATEGORY_LABEL[l] })),
+                  ]}
+                />
                 {catForm.formState.errors.level && (
                   <p className="text-xs text-destructive">{catForm.formState.errors.level.message}</p>
                 )}

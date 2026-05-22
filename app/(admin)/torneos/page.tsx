@@ -155,7 +155,10 @@ export default function TorneosPage() {
 
   const FILTERS: { key: FilterStatus; label: string }[] = [
     { key: "all",       label: `Todos (${all.length})` },
+    { key: "DRAFT",     label: `Borrador (${all.filter((t) => t.status === "DRAFT").length})` },
     { key: "OPEN",      label: `Abiertos (${all.filter((t) => t.status === "OPEN").length})` },
+    { key: "DRAW",      label: `Sorteo (${all.filter((t) => t.status === "DRAW").length})` },
+    { key: "SCHEDULED", label: `Programado (${all.filter((t) => t.status === "SCHEDULED").length})` },
     { key: "ONGOING",   label: `En curso (${all.filter((t) => t.status === "ONGOING").length})` },
     { key: "FINISHED",  label: `Finalizados (${all.filter((t) => t.status === "FINISHED").length})` },
     { key: "CANCELLED", label: `Cancelados (${all.filter((t) => t.status === "CANCELLED").length})` },

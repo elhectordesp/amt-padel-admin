@@ -206,8 +206,8 @@ export default function DashboardPage() {
                       const totalSpots      = t.categories.reduce((s, c) => s + Math.floor(c.totalSpots / 2), 0);
                       const totalRegistered = t.categories.reduce((s, c) => s + Math.floor(c.registeredCount / 2), 0);
                       const st = t.status?.toLowerCase();
-                      const statusColor = st === "open" ? "text-green-400" : st === "ongoing" ? "text-yellow-400" : st === "draft" ? "text-blue-400" : "text-muted-foreground";
-                      const statusLabel = st === "open" ? "Abierto" : st === "ongoing" ? "En curso" : st === "draft" ? "Borrador" : st === "cancelled" ? "Cancelado" : "Finalizado";
+                      const statusColor = st === "open" ? "text-green-400" : st === "draw" ? "text-purple-400" : st === "scheduled" ? "text-cyan-400" : st === "ongoing" ? "text-yellow-400" : st === "draft" ? "text-blue-400" : "text-muted-foreground";
+                      const statusLabel = st === "open" ? "Abierto" : st === "draw" ? "Sorteo" : st === "scheduled" ? "Programado" : st === "ongoing" ? "En curso" : st === "draft" ? "Borrador" : st === "cancelled" ? "Cancelado" : "Finalizado";
                       return (
                         <Link
                           key={t.id}

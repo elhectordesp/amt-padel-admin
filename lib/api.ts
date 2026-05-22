@@ -70,6 +70,10 @@ api.interceptors.response.use(
   async (err) => {
     const original = err.config as AxiosRequestConfig & { _retry?: boolean };
 
+    // No interceptar 401 en rutas de autenticación — dejar pasar el error original
+    const isAuthRoute = original.url?.includes('/auth/login') || original.url?.includes('/auth/refresh');
+    if (isAuthRoute) return Promise.reject(err);
+
     if (err.response?.status === 401 && !original._retry) {
       const refreshToken = getRefreshToken();
 

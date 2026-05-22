@@ -8,6 +8,16 @@ import type {
 
 export interface AdminUser { name: string; email: string }
 
+function spaPointsToLevel(pts: number): string {
+  if (pts >= 858) return "1a";
+  if (pts >= 715) return "2a";
+  if (pts >= 572) return "3a";
+  if (pts >= 429) return "4a";
+  if (pts >= 286) return "5a";
+  if (pts >= 143) return "6a";
+  return "iniciacion";
+}
+
 export const adminService = {
   me: () =>
     api.get<AdminUser>("/users/me").then((r) => r.data),
@@ -40,8 +50,12 @@ export const adminService = {
     duplicate:       (id: string)                  => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
     previewBracket:  (id: string, categoryId: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId } }).then((r) => r.data),
-    generateBracket: (id: string, categoryId: string, customGroups?: string[][]) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups }).then((r) => r.data),
-    autoSchedule:    (id: string)                  => api.post<{ count: number }>(`/admin/tournaments/${id}/auto-schedule`).then((r) => r.data),
+    generateBracket:   (id: string, categoryId: string, customGroups?: string[][]) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups }).then((r) => r.data),
+    registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
+    regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
+    regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
+    groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
+    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
   },
 
   registrations: {
@@ -55,6 +69,8 @@ export const adminService = {
       api.get<any[]>(`/admin/tournaments/${tournamentId}/matches`).then((r) =>
         (r.data ?? []).map((m: any): MatchResult => ({
           ...m,
+          categoryId: m.categoryId ?? m.category?.id,
+          group:    m.group?.name ?? m.groupName ?? null,
           team1:    m.team1  ?? m.players?.filter((p: any) => p.team === 1).map((p: any) => p.user?.name ?? p.userId) ?? [],
           team2:    m.team2  ?? m.players?.filter((p: any) => p.team === 2).map((p: any) => p.user?.name ?? p.userId) ?? [],
           sets1:    m.sets1  ?? m.sets?.map((s: any) => s.score1) ?? [],
@@ -70,9 +86,40 @@ export const adminService = {
   },
 
   players: {
-    list:            (params?: { gender?: string; level?: string }) => api.get<Player[]>("/ranking", { params: { gender: "M", ...params } }).then((r) => r.data ?? []),
+    list: (params?: { gender?: string; level?: string }) =>
+      api.get<any[]>("/ranking", { params: { limit: 200, ...params } }).then((r) =>
+        (r.data ?? []).map((u: any): Player => ({
+          ...u,
+          level: u.level ?? u.categoryLevel ?? "4a",
+          spa: u.spaPoints != null ? {
+            spaPoints:      Math.round(Number(u.spaPoints)),
+            spaLevel:       spaPointsToLevel(Number(u.spaPoints)),
+            spaProgression: Number(u.spaProgression ?? 0),
+            spaReliability: Number(u.spaReliability ?? 0),
+            spaMatches:     u.spaMatches ?? 0,
+            isCalibrating:  (u.spaMatches ?? 0) < 20,
+          } : undefined,
+        }))
+      ),
     search:          (q: string)                   => api.get<Player[]>("/players/search", { params: { q } }).then((r) => r.data ?? []),
-    detail:          (id: string)                  => api.get<Player>(`/players/${id}`).then((r) => r.data),
+    detail: (id: string) =>
+      api.get<any>(`/admin/players/${id}`).then((r) => {
+        const d = r.data;
+        if (!d) return d;
+        return {
+          ...d,
+          name:  d.name ?? `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim(),
+          level: d.level ?? d.categoryLevel ?? d.spaLevel ?? "4a",
+          spa:   d.spa ?? (d.spaPoints != null ? {
+            spaPoints:      Math.round(Number(d.spaPoints)),
+            spaLevel:       spaPointsToLevel(Number(d.spaPoints)),
+            spaProgression: Number(d.spaProgression ?? 0),
+            spaReliability: Number(d.spaReliability ?? 0),
+            spaMatches:     d.spaMatches ?? 0,
+            isCalibrating:  (d.spaMatches ?? 0) < 20,
+          } : undefined),
+        } as Player;
+      }),
     changeLevel:     (id: string, level: string, reason: string) => api.patch(`/admin/players/${id}/category`, { level, reason }).then((r) => r.data),
     categoryHistory: (id: string)                  => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
   },
@@ -88,8 +135,33 @@ export const adminService = {
   },
 
   rankings: {
-    list:        (gender: string, type: RankingType = "circuit", season?: number) =>
-      api.get<Player[]>("/ranking", { params: { gender, type, ...(season ? { season } : {}) } }).then((r) => r.data ?? []),
+    list: (gender: string, type: RankingType = "circuit", season?: number, level?: string) =>
+      api.get<any[]>("/ranking", {
+        params: {
+          gender, type, limit: 500,
+          ...(season ? { season } : {}),
+          ...(level  ? { level  } : {}),
+        },
+      }).then((r) =>
+        (r.data ?? []).map((u: any): Player => ({
+          ...u,
+          level:        u.level ?? u.categoryLevel ?? "4a",
+          points:       u.points ?? u.circuitPoints ?? u.spaPoints ?? 0,
+          wins:         u.wins   ?? 0,
+          played:       u.played ?? 0,
+          trend:        u.trend  ?? "stable",
+          globalRank:   u.globalRank,
+          categoryRank: u.categoryRank,
+          spa: u.spaPoints != null ? {
+            spaPoints:      Math.round(Number(u.spaPoints)),
+            spaLevel:       spaPointsToLevel(Number(u.spaPoints)),
+            spaProgression: Number(u.spaProgression ?? 0),
+            spaReliability: Number(u.spaReliability ?? 0),
+            spaMatches:     u.spaMatches ?? 0,
+            isCalibrating:  (u.spaMatches ?? 0) < 20,
+          } : undefined,
+        }))
+      ),
     recalculate: () => api.post("/admin/rankings/recalculate").then((r) => r.data),
   },
 };

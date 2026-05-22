@@ -38,6 +38,8 @@ export const LEVELS: CategoryLevel[] = [
 export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   DRAFT:     "Borrador",
   OPEN:      "Abierto",
+  DRAW:      "Sorteo",
+  SCHEDULED: "Programado",
   ONGOING:   "En curso",
   FINISHED:  "Finalizado",
   CANCELLED: "Cancelado",
@@ -46,6 +48,8 @@ export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
 export const TOURNAMENT_STATUS_COLOR: Record<TournamentStatus, string> = {
   DRAFT:     "text-blue-400 bg-blue-400/10 border-blue-400/30",
   OPEN:      "text-green-400 bg-green-400/10 border-green-400/30",
+  DRAW:      "text-purple-400 bg-purple-400/10 border-purple-400/30",
+  SCHEDULED: "text-cyan-400 bg-cyan-400/10 border-cyan-400/30",
   ONGOING:   "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
   FINISHED:  "text-muted-foreground bg-secondary border-border",
   CANCELLED: "text-red-400 bg-red-400/10 border-red-400/30",

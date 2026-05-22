@@ -1,6 +1,6 @@
 export type Gender             = "M" | "F";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
-export type TournamentStatus   = "DRAFT" | "OPEN" | "ONGOING" | "FINISHED" | "CANCELLED";
+export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
 export type RankingType        = "spa" | "circuit";
@@ -151,9 +151,24 @@ export interface Player {
   wins:        number;
   points:      number;
   trend:       "up" | "down" | "stable";
-  isMe?:       boolean;
-  status?:     "active" | "inactive" | "suspended";
-  createdAt?:  string;
+  isMe?:        boolean;
+  status?:      "active" | "inactive" | "suspended";
+  createdAt?:   string;
+  globalRank?:  number;
+  categoryRank?:number;
+  matches?:     PlayerMatch[];
+}
+
+export interface PlayerMatch {
+  id:         string;
+  date:       string | null;
+  tournament: string;
+  category:   string;
+  isWinner:   boolean;
+  team1:      string[];
+  team2:      string[];
+  sets1:      number[];
+  sets2:      number[];
 }
 
 export interface MatchResult {

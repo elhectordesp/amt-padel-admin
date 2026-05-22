@@ -66,9 +66,14 @@ function SortablePair({ pair }: { pair: PreviewPair }) {
   );
 }
 
-export function BracketEditor({ groups: initialGroups, totalMatches, isGroups, saving, onConfirm, onCancel }: Props) {
+export function BracketEditor({ groups: initialGroups, isGroups, saving, onConfirm, onCancel }: Props) {
   const [groups,      setGroups]      = useState<PreviewGroup[]>(initialGroups);
   const [activePair,  setActivePair]  = useState<PreviewPair | null>(null);
+
+  // Recalcular partidos en tiempo real según distribución actual
+  const currentMatches = isGroups
+    ? groups.reduce((sum, g) => sum + (g.pairs.length * (g.pairs.length - 1)) / 2, 0)
+    : Math.ceil(groups.reduce((s, g) => s + g.pairs.length, 0) / 2);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -141,7 +146,7 @@ export function BracketEditor({ groups: initialGroups, totalMatches, isGroups, s
             <h2 className="font-heading text-lg text-foreground">Revisar distribución de grupos</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               Arrastra las parejas entre grupos para ajustar la distribución antes de confirmar.
-              {isGroups && ` Se generarán ${totalMatches} partidos de grupos.`}
+              {isGroups && ` Se generarán ${currentMatches} partidos de grupos.`}
             </p>
           </div>
           <button onClick={onCancel} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
@@ -221,7 +226,7 @@ export function BracketEditor({ groups: initialGroups, totalMatches, isGroups, s
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 p-4 border-t border-border shrink-0">
           <div className="text-xs text-muted-foreground">
-            {groups.reduce((s, g) => s + g.pairs.length, 0)} parejas · {groups.length} grupos · {totalMatches} partidos
+            {groups.reduce((s, g) => s + g.pairs.length, 0)} parejas · {groups.length} grupos · {currentMatches} partidos
           </div>
           <div className="flex gap-3">
             <button

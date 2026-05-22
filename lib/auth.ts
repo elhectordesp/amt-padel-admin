@@ -16,7 +16,16 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 export async function login(email: string, password: string): Promise<AdminUser> {
-  const res = await api.post("/auth/login", { email, password });
+  let res;
+  try {
+    res = await api.post("/auth/login", { email, password });
+  } catch (err: any) {
+    const status = err?.response?.status;
+    const serverMsg = err?.response?.data?.message;
+    if (status === 401) throw new Error("Email o contraseña incorrectos.");
+    if (status === 403) throw new Error("No tienes permisos para acceder.");
+    throw new Error(serverMsg ?? "Error al conectar con el servidor. Inténtalo de nuevo.");
+  }
   const data = res.data as unknown as { token: string; refreshToken: string; user: AdminUser };
 
   setToken(data.token);

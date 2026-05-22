@@ -346,6 +346,37 @@ export default function FinanzasPage() {
           </div>
         </div>
 
+        {/* Desglose por torneo */}
+        {data?.byTournament && data.byTournament.length > 0 && (
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="px-5 py-3 border-b border-border">
+              <h3 className="text-sm font-semibold text-foreground">Desglose por torneo</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-secondary/50">
+                    {["TORNEO", "INSCRIPCIONES", "RECAUDADO"].map((h) => (
+                      <th key={h} className={`px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${h === "TORNEO" ? "text-left" : "text-right"}`}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.byTournament.map((t: any) => (
+                    <tr key={t.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                      <td className="px-5 py-3 text-sm text-foreground">{t.name}</td>
+                      <td className="px-5 py-3 text-sm text-right text-muted-foreground">{t.registrations}</td>
+                      <td className="px-5 py-3 text-sm text-right text-[#D4AF37] font-medium">{fmt(t.revenue)} €</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
