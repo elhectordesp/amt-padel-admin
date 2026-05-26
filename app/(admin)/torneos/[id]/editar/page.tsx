@@ -6,7 +6,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Loader2, Save } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -22,12 +22,23 @@ const schema = z.object({
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
+  prizeAmount:          z.number().min(0).optional(),
   tier:                 z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:               z.string().optional(),
   scoringSystem:        z.string().optional(),
   matchDuration:        z.number().optional(),
   registrationDeadline: z.string().optional(),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
+}).superRefine((data, ctx) => {
+  if (data.startDate && data.endDate && data.endDate < data.startDate) {
+    ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
+  }
+  if (data.startDate && data.registrationDeadline) {
+    const deadlineDate = data.registrationDeadline.split("T")[0];
+    if (deadlineDate > data.startDate) {
+      ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: "El cierre de inscripciones debe ser antes del inicio del torneo" });
+    }
+  }
 });
 
 type FormData = z.infer<typeof schema>;
@@ -42,6 +53,12 @@ export default function EditarTorneoPage() {
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
+  });
+
+  const { data: activeRegistrations = 0 } = useQuery({
+    queryKey: ["admin-tournament-reg-count", id],
+    queryFn:  () => adminService.registrations.count(id),
+    enabled:  !!id,
   });
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
@@ -84,6 +101,7 @@ export default function EditarTorneoPage() {
       startDate:            startStr,
       endDate:              endStr,
       prize:                tournament.prize ?? "",
+      prizeAmount:          tournament.prizeAmount != null ? Number(tournament.prizeAmount) : undefined,
       format:               tournament.format ?? "",
       scoringSystem:        tournament.scoringSystem ?? "",
       matchDuration:        tournament.matchDuration ?? 60,
@@ -138,6 +156,15 @@ export default function EditarTorneoPage() {
           <span className="text-foreground">Editar</span>
         </div>
 
+        {activeRegistrations > 0 && (
+          <div className="flex items-center gap-3 rounded-lg border border-amber-800/40 bg-amber-950/20 px-4 py-3 text-sm text-amber-400">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>
+              Este torneo tiene <strong>{activeRegistrations} inscripciones activas</strong>. Los cambios en fechas o formato pueden afectarles.
+            </span>
+          </div>
+        )}
+
         <ConfirmModal
           open={!!pendingData}
           title="Cambio de estado"
@@ -176,8 +203,17 @@ export default function EditarTorneoPage() {
               <Field label="Ciudad" error={errors.city?.message}>
                 <Input {...register("city")} placeholder="Madrid" />
               </Field>
-              <Field label="Premio total" error={errors.prize?.message}>
-                <Input {...register("prize")} placeholder="5.000 €" />
+              <Field label="Premio (descripción)" error={errors.prize?.message}>
+                <Input {...register("prize")} placeholder="5.000 € + trofeo" />
+              </Field>
+              <Field label="Premio (importe €)" error={errors.prizeAmount?.message}>
+                <Input
+                  {...register("prizeAmount", { valueAsNumber: true })}
+                  type="number"
+                  min={0}
+                  step={100}
+                  placeholder="5000"
+                />
               </Field>
               <Field label="Fecha de inicio" error={errors.startDate?.message}>
                 <Input {...register("startDate")} type="date" />
@@ -222,10 +258,11 @@ export default function EditarTorneoPage() {
                 <CustomSelect
                   options={[
                     { value: "", label: "— Sin especificar —" },
-                    { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
-                    { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
-                    { value: "round-robin",         label: "Round Robin" },
-                    { value: "cuadro",              label: "Cuadro" },
+                    { value: "eliminatoria",                    label: "Eliminatoria directa" },
+                    { value: "eliminatoria+consolacion",        label: "Eliminatoria + Consolación" },
+                    { value: "grupos+eliminatoria",             label: "Grupos + Eliminatoria" },
+                    { value: "grupos+eliminatoria+consolacion", label: "Grupos + Elim. + Consolación" },
+                    { value: "round-robin",                     label: "Round Robin" },
                   ]}
                   value={watch("format") ?? ""}
                   onChange={(v) => setValue("format", v, { shouldValidate: true, shouldDirty: true })}

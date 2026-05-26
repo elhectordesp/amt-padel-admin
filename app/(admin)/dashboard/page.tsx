@@ -32,6 +32,15 @@ function StatCard({
   );
 }
 
+function ErrorCard({ message = "Error al cargar los datos" }: { message?: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-red-800/40 bg-red-950/20 px-4 py-3 text-xs text-red-400">
+      <AlertTriangle size={14} className="shrink-0" />
+      {message}
+    </div>
+  );
+}
+
 const ALERT_ICON: Record<string, React.ElementType> = {
   match:        Calendar,
   player:       Users,
@@ -62,24 +71,24 @@ function useAdminUser() {
 export default function DashboardPage() {
   const { data: adminUser } = useAdminUser();
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError: statsError } = useQuery({
     queryKey: ["admin-stats"],
     queryFn:  adminService.stats,
     refetchInterval: 60_000,
   });
 
-  const { data: tournaments = [], isLoading: loadingTournaments } = useQuery({
+  const { data: tournaments = [], isLoading: loadingTournaments, isError: tournamentsError } = useQuery({
     queryKey: ["tournaments"],
     queryFn:  adminService.tournaments.list,
   });
 
-  const { data: alerts = [] } = useQuery({
+  const { data: alerts = [], isError: alertsError } = useQuery({
     queryKey:       ["admin-alerts"],
     queryFn:        adminService.alerts,
     refetchInterval: 60_000,
   });
 
-  const { data: activity = [] } = useQuery({
+  const { data: activity = [], isError: activityError } = useQuery({
     queryKey:       ["admin-activity"],
     queryFn:        adminService.activity,
     refetchInterval: 60_000,
@@ -103,27 +112,31 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-          <StatCard
-            label="Torneos activos"
-            value={stats?.activeTournaments ?? "—"}
-            icon={Trophy}
-            loading={isLoading}
-          />
-          <StatCard
-            label="Jugadores inscritos"
-            value={stats?.registeredPlayers ?? "—"}
-            icon={Users}
-            loading={isLoading}
-          />
-          <StatCard
-            label="Partidos programados"
-            value={stats?.scheduledMatches ?? "—"}
-            sub="Hoy"
-            icon={Calendar}
-            loading={isLoading}
-          />
-        </div>
+        {statsError ? (
+          <ErrorCard message="No se pudieron cargar las estadísticas" />
+        ) : (
+          <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+            <StatCard
+              label="Torneos activos"
+              value={stats?.activeTournaments ?? "—"}
+              icon={Trophy}
+              loading={isLoading}
+            />
+            <StatCard
+              label="Jugadores inscritos"
+              value={stats?.registeredPlayers ?? "—"}
+              icon={Users}
+              loading={isLoading}
+            />
+            <StatCard
+              label="Partidos programados"
+              value={stats?.scheduledMatches ?? "—"}
+              sub="Hoy"
+              icon={Calendar}
+              loading={isLoading}
+            />
+          </div>
+        )}
 
         {/* Middle row */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
@@ -142,7 +155,9 @@ export default function DashboardPage() {
                   )}
                 </h3>
               </div>
-              {alerts.length === 0 ? (
+              {alertsError ? (
+                <ErrorCard message="No se pudieron cargar las alertas" />
+              ) : alerts.length === 0 ? (
                 <div className="py-6 text-center">
                   <TrendingUp size={24} className="text-green-400 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">Todo en orden</p>
@@ -163,7 +178,9 @@ export default function DashboardPage() {
                 <Activity size={15} className="text-[#D4AF37]" />
                 <h3 className="font-semibold text-foreground text-sm">Actividad reciente</h3>
               </div>
-              {activity.length === 0 ? (
+              {activityError ? (
+                <ErrorCard message="No se pudo cargar la actividad reciente" />
+              ) : activity.length === 0 ? (
                 <div className="py-6 text-center">
                   <Clock size={24} className="text-muted-foreground mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">Sin actividad reciente</p>
@@ -195,7 +212,9 @@ export default function DashboardPage() {
               <h3 className="font-semibold text-foreground text-sm">Torneos activos y próximos</h3>
               <a href="/torneos" className="text-xs text-[#D4AF37] hover:underline">Ver todos</a>
             </div>
-            {loadingTournaments
+            {tournamentsError ? (
+              <ErrorCard message="No se pudieron cargar los torneos" />
+            ) : loadingTournaments
               ? <div className="space-y-3">{[...Array(4)].map((_, i) => (
                   <div key={i} className="h-10 rounded bg-secondary animate-pulse" />
                 ))}</div>
@@ -236,3 +255,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

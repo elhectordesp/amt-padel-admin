@@ -23,6 +23,7 @@ const infoSchema = z.object({
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:     z.string().optional(),
+  imageUrl:  z.string().url("Debe ser una URL válida").optional().or(z.literal("")),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
@@ -349,6 +350,14 @@ export default function NuevoTorneoPage() {
                     {...infoForm.register("startDate")}
                     type="date"
                   />
+                  {(() => {
+                    const v = infoForm.watch("startDate");
+                    return v && v < new Date().toISOString().slice(0, 10) ? (
+                      <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+                        ⚠️ La fecha de inicio es anterior a hoy.
+                      </p>
+                    ) : null;
+                  })()}
                 </Field>
                 <Field label="Fecha de fin" error={infoForm.formState.errors.endDate?.message}>
                   <Input
@@ -357,6 +366,23 @@ export default function NuevoTorneoPage() {
                   />
                 </Field>
               </div>
+              <Field label="URL de imagen del banner (opcional)" error={infoForm.formState.errors.imageUrl?.message}>
+                <div className="flex flex-col gap-3">
+                  <Input
+                    {...infoForm.register("imageUrl")}
+                    placeholder="https://example.com/banner.jpg"
+                  />
+                  {infoForm.watch("imageUrl") && (
+                    <img
+                      src={infoForm.watch("imageUrl")}
+                      alt="Preview banner"
+                      className="w-full h-32 object-cover rounded-md border border-border"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      onLoad={(e) => { (e.target as HTMLImageElement).style.display = "block"; }}
+                    />
+                  )}
+                </div>
+              </Field>
             </div>
           )}
 

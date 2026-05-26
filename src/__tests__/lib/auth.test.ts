@@ -27,13 +27,17 @@ import { api, setToken, setRefreshToken, removeTokens, getRefreshToken } from '.
 describe('auth helpers', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  // Fake JWTs: header.base64(payload).sig — only payload matters for decodeJwtPayload
+  // btoa('{"role":"user"}')  → eyJyb2xlIjoidXNlciJ9
+  // btoa('{"role":"admin"}') → eyJyb2xlIjoiYWRtaW4ifQ==
+  const USER_JWT  = 'x.eyJyb2xlIjoidXNlciJ9.x';
+  const ADMIN_JWT = 'x.eyJyb2xlIjoiYWRtaW4ifQ==.x';
+
   describe('login', () => {
     it('lanza error si el rol no es admin', async () => {
       (api.post as any).mockResolvedValueOnce({
-        data: { token: 'tok', refreshToken: 'ref', user: { id: '1', name: 'X', email: 'x@x.com', role: 'user' } },
+        data: { token: USER_JWT, refreshToken: 'ref', user: { id: '1', name: 'X', email: 'x@x.com', role: 'user' } },
       });
-      // GET /users/me devuelve rol de jugador
-      (api.get as any).mockResolvedValueOnce({ data: { role: 'user' } });
 
       await expect(login('x@x.com', 'pass')).rejects.toThrow('No tienes permisos de administrador.');
       expect(removeTokens).toHaveBeenCalledTimes(1);
@@ -41,12 +45,11 @@ describe('auth helpers', () => {
 
     it('almacena tokens y devuelve el usuario si el rol es admin', async () => {
       (api.post as any).mockResolvedValueOnce({
-        data: { token: 'admin-tok', refreshToken: 'admin-ref', user: { id: '1', name: 'Admin', email: 'admin@test.com', role: 'admin' } },
+        data: { token: ADMIN_JWT, refreshToken: 'admin-ref', user: { id: '1', name: 'Admin', email: 'admin@test.com', role: 'admin' } },
       });
-      (api.get as any).mockResolvedValueOnce({ data: { id: '1', name: 'Admin', email: 'admin@test.com', role: 'admin' } });
 
       const user = await login('admin@test.com', 'pass');
-      expect(setToken).toHaveBeenCalledWith('admin-tok');
+      expect(setToken).toHaveBeenCalledWith(ADMIN_JWT);
       expect(setRefreshToken).toHaveBeenCalledWith('admin-ref');
       expect(user).toHaveProperty('role', 'admin');
     });

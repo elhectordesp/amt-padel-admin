@@ -41,7 +41,7 @@ export async function login(email: string, password: string): Promise<AdminUser>
   return { ...data.user, role: payload.role as string };
 }
 
-export async function logout() {
+export async function logout(onBeforeRedirect?: () => void) {
   const refreshToken = getRefreshToken();
   // Intentar revocar el refresh token en el servidor (best-effort)
   if (refreshToken) {
@@ -50,5 +50,6 @@ export async function logout() {
     });
   }
   removeTokens();
+  onBeforeRedirect?.();
   window.location.href = "/login";
 }

@@ -2,10 +2,12 @@
 
 import { LogOut, X } from "lucide-react";
 import { logout } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Props { open: boolean; onClose: () => void }
 
 export function LogoutModal({ open, onClose }: Props) {
+  const qc = useQueryClient();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -33,7 +35,7 @@ export function LogoutModal({ open, onClose }: Props) {
             Cancelar
           </button>
           <button
-            onClick={() => logout()}
+            onClick={() => logout(() => qc.clear())}
             className="flex-1 py-2 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive/80 transition-colors"
           >
             Cerrar sesión

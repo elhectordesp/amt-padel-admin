@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Trophy, Users, BarChart3,
   Building2, Calendar, DollarSign, Settings, LogOut,
-  ChevronLeft, ChevronRight, Menu, X,
+  ChevronLeft, ChevronRight, Menu, X, Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -34,8 +34,9 @@ const NAV = [
   { href: "/rankings",      icon: BarChart3,        label: "Rankings"      },  // ❌ ocultar para CLUB
   { href: "/inscripciones", icon: Building2,        label: "Inscripciones" },
   { href: "/resultados",    icon: Calendar,         label: "Resultados"    },
-  { href: "/finanzas",      icon: DollarSign,       label: "Finanzas"      },  // ❌ ocultar para CLUB
-  { href: "/configuracion", icon: Settings,         label: "Configuración" },  // ❌ ocultar para CLUB
+  { href: "/finanzas",        icon: DollarSign,       label: "Finanzas"       },  // ❌ ocultar para CLUB
+  { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },  // ❌ ocultar para CLUB
+  { href: "/configuracion",   icon: Settings,         label: "Configuración"  },  // ❌ ocultar para CLUB
 ];
 
 export function Sidebar() {

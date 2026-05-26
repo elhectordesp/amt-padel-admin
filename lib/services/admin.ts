@@ -3,27 +3,20 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType,
+  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
 
-function spaPointsToLevel(pts: number): string {
-  if (pts >= 858) return "1a";
-  if (pts >= 715) return "2a";
-  if (pts >= 572) return "3a";
-  if (pts >= 429) return "4a";
-  if (pts >= 286) return "5a";
-  if (pts >= 143) return "6a";
-  return "iniciacion";
-}
-
 export const adminService = {
   me: () =>
-    api.get<AdminUser>("/users/me").then((r) => r.data),
+    api.get<AdminUser>("/auth/me").then((r) => r.data),
 
   stats: () =>
     api.get<AdminStats>("/admin/stats").then((r) => r.data),
+
+  growthStats: (season?: number) =>
+    api.get<GrowthStats>("/admin/stats/growth", { params: season ? { season } : {} }).then((r) => r.data),
 
   alerts: () =>
     api.get<AdminAlert[]>("/admin/alerts").then((r) => r.data).catch((e) => { console.error("[admin] alerts:", e); return [] as AdminAlert[]; }),
@@ -60,6 +53,7 @@ export const adminService = {
 
   registrations: {
     list:         (tournamentId: string)               => api.get<AdminRegistration[]>(`/admin/tournaments/${tournamentId}/registrations`).then((r) => r.data ?? []),
+    count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
   },
@@ -82,25 +76,28 @@ export const adminService = {
           scoringFormat: m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
         }))
       ),
-    setResult: (matchId: string, sets1: number[], sets2: number[]) => api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2 }).then((r) => r.data),
+    setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2) =>
+      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}) }).then((r) => r.data),
   },
 
   players: {
-    list: (params?: { gender?: string; level?: string }) =>
-      api.get<any[]>("/ranking", { params: { limit: 200, ...params } }).then((r) =>
-        (r.data ?? []).map((u: any): Player => ({
-          ...u,
-          level: u.level ?? u.categoryLevel ?? "4a",
-          spa: u.spaPoints != null ? {
-            spaPoints:      Math.round(Number(u.spaPoints)),
-            spaLevel:       spaPointsToLevel(Number(u.spaPoints)),
-            spaProgression: Number(u.spaProgression ?? 0),
-            spaReliability: Number(u.spaReliability ?? 0),
-            spaMatches:     u.spaMatches ?? 0,
-            isCalibrating:  (u.spaMatches ?? 0) < 20,
-          } : undefined,
-        }))
-      ),
+    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string }) =>
+      api.get<{ data: any[]; total: number; page: number; pageSize: number }>(
+        "/admin/players",
+        { params: { pageSize: 50, ...params } },
+      ).then((r) => {
+        const raw = r.data ?? { data: [], total: 0, page: 1, pageSize: 50 };
+        return {
+          data: (raw.data ?? []).map((u: any): Player => ({
+            ...u,
+            level: u.level ?? "4a",
+            spa: u.spa ?? undefined,
+          })),
+          total:    raw.total,
+          page:     raw.page,
+          pageSize: raw.pageSize,
+        };
+      }),
     search:          (q: string)                   => api.get<Player[]>("/players/search", { params: { q } }).then((r) => r.data ?? []),
     detail: (id: string) =>
       api.get<any>(`/admin/players/${id}`).then((r) => {
@@ -109,10 +106,10 @@ export const adminService = {
         return {
           ...d,
           name:  d.name ?? `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim(),
-          level: d.level ?? d.categoryLevel ?? d.spaLevel ?? "4a",
+          level: d.level ?? d.spaLevel ?? "4a",
           spa:   d.spa ?? (d.spaPoints != null ? {
             spaPoints:      Math.round(Number(d.spaPoints)),
-            spaLevel:       spaPointsToLevel(Number(d.spaPoints)),
+            spaLevel:       d.spaLevel ?? "iniciacion",
             spaProgression: Number(d.spaProgression ?? 0),
             spaReliability: Number(d.spaReliability ?? 0),
             spaMatches:     d.spaMatches ?? 0,
@@ -132,6 +129,17 @@ export const adminService = {
     config:      ()                        => api.get<SpaConfig>("/admin/spa/config").then((r) => r.data),
     updateConfig:(data: Partial<SpaConfig>)=> api.put<SpaConfig>("/admin/spa/config", data).then((r) => r.data),
     recalculate: ()                        => api.post("/admin/spa/recalculate").then((r) => r.data),
+  },
+
+  sponsors: {
+    list:   (scope?: SponsorScope, tournamentId?: string) =>
+      api.get<Sponsor[]>("/admin/sponsors", { params: { ...(scope ? { scope } : {}), ...(tournamentId ? { tournamentId } : {}) } }).then((r) => r.data ?? []),
+    create: (data: Omit<Sponsor, "id" | "createdAt" | "tournament">) =>
+      api.post<Sponsor>("/admin/sponsors", data).then((r) => r.data),
+    update: (id: string, data: Partial<Omit<Sponsor, "id" | "createdAt" | "tournament">>) =>
+      api.patch<Sponsor>(`/admin/sponsors/${id}`, data).then((r) => r.data),
+    delete: (id: string) =>
+      api.delete(`/admin/sponsors/${id}`).then((r) => r.data),
   },
 
   rankings: {
@@ -154,8 +162,8 @@ export const adminService = {
           categoryRank: u.categoryRank,
           spa: u.spaPoints != null ? {
             spaPoints:      Math.round(Number(u.spaPoints)),
-            spaLevel:       spaPointsToLevel(Number(u.spaPoints)),
-            spaProgression: Number(u.spaProgression ?? 0),
+            spaLevel:       u.spa?.spaLevel ?? u.spaLevel ?? "iniciacion",
+            spaProgression: Number(u.spaProgression ?? u.spa?.spaProgression ?? 0),
             spaReliability: Number(u.spaReliability ?? 0),
             spaMatches:     u.spaMatches ?? 0,
             isCalibrating:  (u.spaMatches ?? 0) < 20,

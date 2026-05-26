@@ -7,7 +7,7 @@ import {
   Trophy, Calendar, ChevronLeft, MapPin,
   Check, X, Clock, Download, Search, Loader2,
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
-  Square, CheckSquare, Lock, RefreshCw, CalendarDays,
+  Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,7 @@ import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
+import { printRegistrations } from "@/lib/utils/print";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
@@ -609,6 +610,16 @@ export default function TorneoDetailPage() {
                 <Trash2 size={15} />
               </button>
               <Link
+                href={`/torneo/${id}/live`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Abrir widget de resultados en vivo (para TV o pantalla grande)"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
+              >
+                <Tv2 size={14} />
+                Widget TV
+              </Link>
+              <Link
                 href={`/torneos/${id}/editar`}
                 className="px-4 py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors"
               >
@@ -801,7 +812,16 @@ export default function TorneoDetailPage() {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-40"
                 >
                   <Download size={13} />
-                  Exportar
+                  CSV
+                </button>
+                <button
+                  onClick={() => tournament && printRegistrations(tournament, pairs)}
+                  disabled={pairs.length === 0}
+                  title="Abrir lista de impresión en nueva pestaña"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-40"
+                >
+                  <Printer size={13} />
+                  Imprimir
                 </button>
               </div>
             </div>

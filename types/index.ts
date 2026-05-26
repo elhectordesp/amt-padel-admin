@@ -1,4 +1,5 @@
 export type Gender             = "M" | "F";
+export type SponsorScope       = "CIRCUIT" | "TOURNAMENT" | "REGIONAL";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
 export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
@@ -226,12 +227,51 @@ export interface CategoryChange {
   adminName: string;
 }
 
+export interface GrowthStats {
+  season:               number;
+  weeklyRegistrations:  { week: string; count: number }[];
+  conversion: {
+    confirmed: number;
+    total:     number;
+    rate:      number;
+  };
+  cancellationRate: number;
+  players: {
+    total:         number;
+    newThisSeason: number;
+    newPct:        number;
+  };
+  highDemandCategories: {
+    tournamentName: string;
+    gender:         string;
+    level:          string;
+    totalSpots:     number;
+    registered:     number;
+    overflow:       number;
+  }[];
+}
+
 export interface ActivityItem {
   id:      string;
   type:    "registration" | "result" | "player" | "tournament" | "payment";
   message: string;
   href?:   string;
   time:    string;
+}
+
+export interface Sponsor {
+  id:           string;
+  name:         string;
+  logoUrl?:     string | null;
+  websiteUrl?:  string | null;
+  tagline?:     string | null;
+  scope:        SponsorScope;
+  tournamentId?:string | null;
+  city?:        string | null;
+  displayOrder: number;
+  active:       boolean;
+  createdAt:    string;
+  tournament?:  { id: string; name: string } | null;
 }
 
 // Form types for creating a tournament

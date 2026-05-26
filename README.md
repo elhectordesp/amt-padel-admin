@@ -76,7 +76,7 @@ types/
 ## Acceso
 
 Solo usuarios con `role: ADMIN` en el backend pueden acceder.
-El login verifica el rol contra `GET /users/me` en el servidor — no confiar en el JWT del cliente.
+El login verifica el rol directamente desde el payload del JWT (`role === 'admin'`) — no hace una llamada extra al servidor para ello.
 
 ## Paginas publicas
 

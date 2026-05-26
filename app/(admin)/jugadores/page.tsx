@@ -1,21 +1,23 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
-  getFilteredRowModel, getPaginationRowModel, flexRender,
+  flexRender,
   type ColumnDef, type SortingState,
 } from "@tanstack/react-table";
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
-  ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download,
+  ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download, Loader2,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import type { Player, Gender, CategoryLevel } from "@/types";
+
+const PAGE_SIZE = 50;
 
 const CATEGORY_LABEL: Record<string, string> = {
   "1a": "1ª", "2a": "2ª", "3a": "3ª",
@@ -52,35 +54,47 @@ function SortBtn({ column, label }: {
 }
 
 export default function JugadoresPage() {
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [page,         setPage]         = useState(1);
+  const [searchInput,  setSearchInput]  = useState("");
+  const [search,       setSearch]       = useState("");
   const [genderFilter, setGenderFilter] = useState<"all" | Gender>("all");
   const [levelFilter,  setLevelFilter]  = useState<"all" | CategoryLevel>("all");
   const [sorting,      setSorting]      = useState<SortingState>([{ id: "points", desc: true }]);
 
-  const { data: mPlayers = [], isLoading: loadingM } = useQuery({
-    queryKey: ["players", "M"],
-    queryFn:  () => adminService.players.list({ gender: "M" }),
+  // Debounce text search 300 ms
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [genderFilter, levelFilter]);
+
+  const { data: result, isLoading, isFetching } = useQuery({
+    queryKey:        ["admin-players", page, genderFilter, levelFilter, search],
+    queryFn:         () => adminService.players.list({
+      page,
+      pageSize: PAGE_SIZE,
+      gender:   genderFilter !== "all" ? genderFilter : undefined,
+      level:    levelFilter  !== "all" ? levelFilter  : undefined,
+      q:        search || undefined,
+    }),
+    placeholderData: (prev) => prev,
   });
-  const { data: fPlayers = [], isLoading: loadingF } = useQuery({
-    queryKey: ["players", "F"],
-    queryFn:  () => adminService.players.list({ gender: "F" }),
-  });
 
-  const allPlayers = useMemo(() => [...mPlayers, ...fPlayers], [mPlayers, fPlayers]);
-  const isLoading  = loadingM || loadingF;
+  const players    = result?.data     ?? [];
+  const total      = result?.total    ?? 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  const data = useMemo(() =>
-    allPlayers
-      .filter((p) => genderFilter === "all" || p.gender === genderFilter)
-      .filter((p) => levelFilter  === "all" || p.level  === levelFilter),
-    [allPlayers, genderFilter, levelFilter],
-  );
-
-  const columns: ColumnDef<Player>[] = [
+  const columns: ColumnDef<Player>[] = useMemo(() => [
     {
       id:     "rank",
       header: () => <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">#</span>,
-      cell:   ({ row }) => <span className="text-sm text-muted-foreground">{row.index + 1}</span>,
+      cell:   ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {(page - 1) * PAGE_SIZE + row.index + 1}
+        </span>
+      ),
     },
     {
       accessorKey: "name",
@@ -174,20 +188,16 @@ export default function JugadoresPage() {
         </Link>
       ),
     },
-  ];
+  ], [page]);
 
   const table = useReactTable({
-    data,
+    data:             players,
     columns,
-    state:                { sorting, globalFilter },
-    onSortingChange:      setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel:      getCoreRowModel(),
-    getSortedRowModel:    getSortedRowModel(),
-    getFilteredRowModel:  getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    globalFilterFn:       "includesString",
-    initialState:         { pagination: { pageSize: 20 } },
+    state:            { sorting },
+    onSortingChange:  setSorting,
+    getCoreRowModel:  getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    manualPagination: true,
   });
 
   const levels: CategoryLevel[] = ["1a","2a","3a","4a","5a","6a","iniciacion"];
@@ -232,22 +242,23 @@ export default function JugadoresPage() {
           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border flex-1 max-w-xs">
             <Search size={14} className="text-muted-foreground shrink-0" />
             <input
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder="Buscar jugador..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Buscar por nombre, email o teléfono..."
               className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
             />
+            {isFetching && <Loader2 size={12} className="animate-spin text-muted-foreground shrink-0" />}
           </div>
 
           <div className="flex items-center gap-3 ml-auto">
             <span className="text-xs text-muted-foreground">
-              {table.getFilteredRowModel().rows.length} jugadores
+              {total} jugadores
             </span>
             <button
               onClick={() => downloadCsv(
-                `jugadores-${genderFilter === "all" ? "todos" : genderFilter}`,
-                table.getFilteredRowModel().rows.map((row, i) => ({
-                  "#":          i + 1,
+                `jugadores-p${page}`,
+                table.getRowModel().rows.map((row, i) => ({
+                  "#":          (page - 1) * PAGE_SIZE + i + 1,
                   Jugador:      row.original.name,
                   Compañero:    row.original.partner ?? "",
                   Género:       row.original.gender === "M" ? "Masculino" : "Femenino",
@@ -284,54 +295,54 @@ export default function JugadoresPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  {table.getHeaderGroups().map((hg) => (
-                    <tr key={hg.id} className="border-b border-border bg-secondary/50">
-                      {hg.headers.map((h) => (
-                        <th key={h.id} className="px-5 py-3 text-left">
-                          {flexRender(h.column.columnDef.header, h.getContext())}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {table.getRowModel().rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={columns.length} className="py-12 text-center text-sm text-muted-foreground">
-                        No se encontraron jugadores
-                      </td>
-                    </tr>
-                  ) : table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-5 py-3.5">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                <table className="w-full">
+                  <thead>
+                    {table.getHeaderGroups().map((hg) => (
+                      <tr key={hg.id} className="border-b border-border bg-secondary/50">
+                        {hg.headers.map((h) => (
+                          <th key={h.id} className="px-5 py-3 text-left">
+                            {flexRender(h.column.columnDef.header, h.getContext())}
+                          </th>
+                        ))}
+                      </tr>
+                    ))}
+                  </thead>
+                  <tbody>
+                    {table.getRowModel().rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={columns.length} className="py-12 text-center text-sm text-muted-foreground">
+                          No se encontraron jugadores
                         </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </tr>
+                    ) : table.getRowModel().rows.map((row) => (
+                      <tr key={row.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="px-5 py-3.5">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
-              {table.getPageCount() > 1 && (
+              {totalPages > 1 && (
                 <div className="flex items-center justify-between px-5 py-3 border-t border-border">
                   <span className="text-xs text-muted-foreground">
-                    Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                    Página {page} de {totalPages} · {total} jugadores
                   </span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => table.previousPage()}
-                      disabled={!table.getCanPreviousPage()}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1 || isFetching}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
                     >
                       <ChevronLeft size={15} />
                     </button>
                     <button
-                      onClick={() => table.nextPage()}
-                      disabled={!table.getCanNextPage()}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages || isFetching}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
                     >
                       <ChevronRight size={15} />

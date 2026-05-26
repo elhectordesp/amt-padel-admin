@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 function useAdminUser() {
   return useQuery({
     queryKey: ["admin-me"],
-    queryFn:  () => api.get<{ name: string; email: string }>("/users/me").then((r) => r.data),
+    queryFn:  () => api.get<{ name: string; email: string }>("/auth/me").then((r) => r.data),
     staleTime: Infinity,
   });
 }

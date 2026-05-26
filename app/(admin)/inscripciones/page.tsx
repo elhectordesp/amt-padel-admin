@@ -82,7 +82,8 @@ export default function InscripcionesPage() {
   const [updatingIds,   setUpdatingIds]  = useState<Set<string>>(new Set());
   const [selected,      setSelected]    = useState<Set<string>>(new Set());
   const [page,          setPage]        = useState(0);
-  const [confirmCancel, setConfirmCancel] = useState<{ ids: string[]; name: string } | null>(null);
+  const [confirmCancel,    setConfirmCancel]    = useState<{ ids: string[]; name: string } | null>(null);
+  const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [availRegId,    setAvailRegId]    = useState<string | null>(null);
 
   const { data: tournaments = [] } = useQuery({
@@ -94,7 +95,8 @@ export default function InscripcionesPage() {
     queryKey:  ["registrations", tournamentId],
     queryFn:   () => adminService.registrations.list(tournamentId),
     enabled:   !!tournamentId,
-    staleTime: 60_000, // 1 min — se invalida explícitamente tras cualquier mutación
+    staleTime:       60_000,
+    refetchInterval: 30_000,
   });
 
   const bulkStatus = useMutation({
@@ -120,11 +122,11 @@ export default function InscripcionesPage() {
   };
 
   const handleBulkAction = (status: string) => {
-    // selected contiene pairKeys — resolver a IDs reales
     const allIds = pairs
       .filter((p) => selected.has(p.pairKey))
       .flatMap((p) => p.ids);
-    bulkStatus.mutate({ ids: allIds, status });
+    if (allIds.length === 0) return;
+    setConfirmBulk({ ids: allIds, status, count: selected.size });
   };
 
   const toggleSelect = (key: string) =>
@@ -202,6 +204,21 @@ export default function InscripcionesPage() {
           setConfirmCancel(null);
         }}
         onClose={() => setConfirmCancel(null)}
+      />
+
+      <ConfirmModal
+        open={!!confirmBulk}
+        title={`Cambiar estado en bloque (${confirmBulk?.count ?? 0} parejas)`}
+        description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a "${confirmBulk?.status ?? ""}"? Esta acción no se puede deshacer.`}
+        confirmLabel="Sí, confirmar"
+        danger={confirmBulk?.status === "CANCELLED" || confirmBulk?.status === "REJECTED"}
+        onConfirm={() => {
+          if (confirmBulk) {
+            bulkStatus.mutate({ ids: confirmBulk.ids, status: confirmBulk.status });
+          }
+          setConfirmBulk(null);
+        }}
+        onClose={() => setConfirmBulk(null)}
       />
 
       <Header title="Inscripciones" />
