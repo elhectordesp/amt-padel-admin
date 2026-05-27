@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -16,7 +16,20 @@ const playfair = Playfair_Display({
 
 export const metadata: Metadata = {
   title:       "AMT Admin",
-  description: "Panel de administración AMT Padel Tournaments",
+  description: "Panel de administración AMT Pádel Tournaments",
+  manifest:    "/manifest.json",
+  appleWebApp: {
+    capable:        true,
+    statusBarStyle: "black-translucent",
+    title:          "AMT Admin",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#F5C842",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
