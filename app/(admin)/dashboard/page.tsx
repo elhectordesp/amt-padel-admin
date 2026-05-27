@@ -103,7 +103,7 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-full">
       <Header title="Dashboard" />
 
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div>
           <h2 className="font-heading text-2xl text-foreground">
             ¡Bienvenido{adminUser?.name ? `, ${adminUser.name.split(" ")[0]}` : ""}! 👋
@@ -115,7 +115,7 @@ export default function DashboardPage() {
         {statsError ? (
           <ErrorCard message="No se pudieron cargar las estadísticas" />
         ) : (
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <StatCard
               label="Torneos activos"
               value={stats?.activeTournaments ?? "—"}
