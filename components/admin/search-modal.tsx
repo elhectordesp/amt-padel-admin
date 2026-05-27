@@ -108,7 +108,7 @@ export function SearchModal() {
           {!query.trim() ? (
             <div className="px-4 py-8 text-center text-xs text-muted-foreground">Escribe para buscar torneos y jugadores</div>
           ) : results.length === 0 ? (
-            <div className="px-4 py-8 text-center text-xs text-muted-foreground">Sin resultados para "{query}"</div>
+            <div className="px-4 py-8 text-center text-xs text-muted-foreground">Sin resultados para &quot;{query}&quot;</div>
           ) : (
             <div className="py-2">
               {results.map((r) => (

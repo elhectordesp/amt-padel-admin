@@ -313,7 +313,7 @@ export default function ConfiguracionPage() {
         >
           <p className="text-xs text-muted-foreground mb-3 pb-3 border-b border-border">
             Define el rango [mín, máx] de puntos SPA para cada categoría. Los rangos deben ser
-            continuos y no solaparse. Tras modificarlos, pulsa "Recalcular SPA" para reasignar categorías.
+            continuos y no solaparse. Tras modificarlos, pulsa &quot;Recalcular SPA&quot; para reasignar categorías.
           </p>
           <div className="space-y-0">
             {(Object.entries(cfg.thresholds) as [string, [number, number]][]).map(([level, [min, max]]) => {

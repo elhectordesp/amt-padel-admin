@@ -210,7 +210,7 @@ export default function DashboardPage() {
           <div className="xl:col-span-2 bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-foreground text-sm">Torneos activos y próximos</h3>
-              <a href="/torneos" className="text-xs text-[#D4AF37] hover:underline">Ver todos</a>
+              <Link href="/torneos" className="text-xs text-[#D4AF37] hover:underline">Ver todos</Link>
             </div>
             {tournamentsError ? (
               <ErrorCard message="No se pudieron cargar los torneos" />
