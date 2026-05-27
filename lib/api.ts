@@ -5,8 +5,7 @@ import Cookies from "js-cookie";
 const TOKEN_KEY         = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-if (!apiUrl) throw new Error('NEXT_PUBLIC_API_URL is not defined. Add it to your .env.local file.');
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export const api = axios.create({
   baseURL: apiUrl,
