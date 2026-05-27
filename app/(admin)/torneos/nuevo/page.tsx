@@ -165,7 +165,7 @@ export default function NuevoTorneoPage() {
       const start = new Date(infoData.startDate);
       const end   = new Date(infoData.endDate);
       const days: ScheduleData["days"] = [];
-      let curr = new Date(start);
+      const curr = new Date(start);
       while (curr <= end) {
         days.push({
           date:   curr.toISOString().split("T")[0],

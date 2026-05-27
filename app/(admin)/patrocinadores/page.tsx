@@ -535,7 +535,7 @@ export default function PatrocinadoresPage() {
           <div className="bg-card border border-border rounded-xl p-6 w-full max-w-sm shadow-2xl space-y-4">
             <h3 className="font-heading font-semibold text-foreground">Eliminar patrocinador</h3>
             <p className="text-sm text-muted-foreground">
-              ¿Eliminar <span className="text-foreground font-medium">"{deleting.name}"</span>? Esta acción no se puede deshacer.
+              ¿Eliminar <span className="text-foreground font-medium">&quot;{deleting.name}&quot;</span>? Esta acción no se puede deshacer.
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setDeleting(null)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
