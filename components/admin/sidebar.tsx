@@ -145,14 +145,16 @@ export function Sidebar() {
         {sidebarContent(false)}
       </div>
 
-      {/* ── Mobile: botón hamburguesa (fijo, esquina superior izquierda) ── */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        aria-label="Abrir menú"
-        className="lg:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-9 h-9 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <Menu size={18} />
-      </button>
+      {/* ── Mobile: botón hamburguesa — solo cuando drawer cerrado ── */}
+      {!mobileOpen && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menú"
+          className="lg:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-9 h-9 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Menu size={18} />
+        </button>
+      )}
 
       {/* ── Mobile: backdrop ──────────────────────────────────────── */}
       {mobileOpen && (

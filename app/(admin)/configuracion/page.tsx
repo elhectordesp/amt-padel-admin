@@ -134,7 +134,7 @@ export default function ConfiguracionPage() {
     if (pendingHref) router.push(pendingHref);
   };
 
-  if (isLoading || !cfg) {
+  if (isLoading || !cfg || !cfg.k_factors) {
     return (
       <div className="flex flex-col min-h-full">
         <Header title="Configuración" />

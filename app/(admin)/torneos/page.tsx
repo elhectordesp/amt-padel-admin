@@ -168,29 +168,31 @@ export default function TorneosPage() {
     <div className="flex flex-col min-h-full">
       <Header title="Torneos" />
 
-      <div className="flex-1 p-6 space-y-5">
+      <div className="flex-1 p-4 sm:p-6 space-y-4 sm:space-y-5">
         {/* Top bar */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          {/* Status filters */}
-          <div className="flex items-center gap-1.5 bg-secondary rounded-lg p-1">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setStatusFilter(f.key)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  statusFilter === f.key
-                    ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+        <div className="flex flex-col gap-3">
+          {/* Status filters — scrollable on mobile */}
+          <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div className="flex items-center gap-1.5 bg-secondary rounded-lg p-1 w-max">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setStatusFilter(f.key)}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    statusFilter === f.key
+                      ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Search */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border w-56">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border flex-1 sm:w-56 sm:flex-none">
               <Search size={14} className="text-muted-foreground shrink-0" />
               <input
                 value={globalFilter}
@@ -203,10 +205,11 @@ export default function TorneosPage() {
             {/* Create */}
             <Link
               href="/torneos/nuevo"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors shrink-0"
             >
               <Plus size={15} />
-              Crear torneo
+              <span className="hidden sm:inline">Crear torneo</span>
+              <span className="sm:hidden">Nuevo</span>
             </Link>
           </div>
         </div>

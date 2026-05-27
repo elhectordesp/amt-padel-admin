@@ -417,10 +417,10 @@ export default function PatrocinadoresPage() {
     <div className="flex flex-col min-h-full">
       <Header title="Patrocinadores" />
 
-      <div className="flex-1 p-6 space-y-4">
+      <div className="flex-1 p-4 sm:p-6 space-y-4">
         {/* Top bar */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 bg-secondary/60 rounded-lg p-1 border border-border">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-1 bg-secondary/60 rounded-lg p-1 border border-border overflow-x-auto no-scrollbar">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
@@ -451,7 +451,7 @@ export default function PatrocinadoresPage() {
         </div>
 
         {/* Scope info cards */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {(["CIRCUIT", "TOURNAMENT", "REGIONAL"] as SponsorScope[]).map((scope) => {
             const cfg  = SCOPE_CONFIG[scope];
             const Icon = cfg.icon;
