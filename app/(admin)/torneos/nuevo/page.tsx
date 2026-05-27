@@ -155,7 +155,7 @@ export default function NuevoTorneoPage() {
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
   const scheduleForm = useForm<ScheduleData>({
-    resolver:      zodResolver(scheduleSchema),
+    resolver:      zodResolver(scheduleSchema) as any,
     defaultValues: scheduleData ?? { days: [] },
   });
 

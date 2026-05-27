@@ -48,7 +48,7 @@ export const adminService = {
     regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
-    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
+    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
   },
 
   registrations: {
@@ -69,7 +69,7 @@ export const adminService = {
           team2:    m.team2  ?? m.players?.filter((p: any) => p.team === 2).map((p: any) => p.user?.name ?? p.userId) ?? [],
           sets1:    m.sets1  ?? m.sets?.map((s: any) => s.score1) ?? [],
           sets2:    m.sets2  ?? m.sets?.map((s: any) => s.score2) ?? [],
-          isResult: m.isResult ?? m.status === "FINISHED" ?? (m.sets?.length > 0),
+          isResult: m.isResult ?? m.status === "FINISHED",
           winner:   m.winner ?? (m.players?.find((p: any) => p.isWinner && p.team === 1) ? "team1" : m.players?.find((p: any) => p.isWinner && p.team === 2) ? "team2" : undefined),
           phase:    m.phase,
           status:   m.status,

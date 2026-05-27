@@ -39,13 +39,13 @@ export function SearchModal() {
     enabled:  open,
   });
 
-  const { data: mPlayers = [] } = useQuery({
+  const { data: mPlayers } = useQuery({
     queryKey: ["players", "M"],
     queryFn:  () => adminService.players.list({ gender: "M" }),
     enabled:  open && query.length >= 2,
   });
 
-  const { data: fPlayers = [] } = useQuery({
+  const { data: fPlayers } = useQuery({
     queryKey: ["players", "F"],
     queryFn:  () => adminService.players.list({ gender: "F" }),
     enabled:  open && query.length >= 2,
@@ -66,7 +66,7 @@ export function SearchModal() {
         href:  `/torneos/${t.id}`,
       }));
 
-    const pResults: SearchResult[] = [...mPlayers, ...fPlayers]
+    const pResults: SearchResult[] = [...(mPlayers?.data ?? []), ...(fPlayers?.data ?? [])]
       .filter((p: Player) => p.name.toLowerCase().includes(q))
       .slice(0, 4)
       .map((p: Player) => ({

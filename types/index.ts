@@ -47,8 +47,9 @@ export interface Tournament {
   endDate?:    string;
   venue:       string;
   city?:       string;
-  prize?:      string;
-  status:      TournamentStatus;
+  prize?:       string;
+  prizeAmount?: number;
+  status:       TournamentStatus;
   tier?:       TournamentTier;   // DB enum — usado por el admin
   spaTier?:    string;            // Clave SPA traducida — usado por la app móvil
   categories:  TournamentCategory[];

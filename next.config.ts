@@ -14,7 +14,7 @@ export default withSentryConfig(nextConfig, {
   // Subir source maps solo en CI/CD (SENTRY_AUTH_TOKEN como secret de GitHub)
   authToken: process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
-  hideSourceMaps: true,
+  sourcemaps: { disable: true },
   disableLogger: true,
   automaticVercelMonitors: false,
 });
