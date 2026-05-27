@@ -216,6 +216,7 @@ export interface FinanceStats {
     vatAmount: number;
   };
   chart: { month: string; revenue: number; profit: number }[];
+  byTournament?: { tournamentId: string; name: string; revenue: number; registrations: number }[];
 }
 
 export interface CategoryChange {
