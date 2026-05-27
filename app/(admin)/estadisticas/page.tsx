@@ -114,7 +114,7 @@ export default function EstadisticasPage() {
                       const d = new Date(v + "T12:00:00");
                       return `Semana del ${d.toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`;
                     }}
-                    formatter={(v: number | undefined) => [v ?? 0, "inscripciones"]}
+                    formatter={(v) => [v ?? 0, "inscripciones"]}
                   />
                   <Bar dataKey="count" radius={[3, 3, 0, 0]}>
                     {data.weeklyRegistrations.map((entry, i) => (
