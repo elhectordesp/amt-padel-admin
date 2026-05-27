@@ -99,9 +99,9 @@ export const adminService = {
         };
       }),
     search:          (q: string)                   => api.get<Player[]>("/players/search", { params: { q } }).then((r) => r.data ?? []),
-    detail: (id: string) =>
-      api.get<any>(`/admin/players/${id}`).then((r) => {
-        const d = r.data;
+    detail: (id: string): Promise<Player> =>
+      api.get<Player>(`/admin/players/${id}`).then((r) => {
+        const d = r.data as any;
         if (!d) return d;
         return {
           ...d,
