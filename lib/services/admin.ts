@@ -131,6 +131,16 @@ export const adminService = {
     recalculate: ()                        => api.post("/admin/spa/recalculate").then((r) => r.data),
   },
 
+  upload: {
+    tournamentImage: (file: File) => {
+      const form = new FormData();
+      form.append("image", file);
+      return api.post<{ imageUrl: string }>("/admin/upload/tournament", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }).then((r) => r.data);
+    },
+  },
+
   clubs: {
     list:       (includeInactive?: boolean) =>
       api.get<Club[]>("/admin/clubs", { params: includeInactive ? { includeInactive: true } : {} }).then((r) => r.data ?? []),
