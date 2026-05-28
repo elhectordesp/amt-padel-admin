@@ -509,9 +509,8 @@ export default function TorneoDetailPage() {
     );
   }
 
-  // totalSpots en plazas de pareja (BD guarda jugadores individuales, dividimos entre 2)
-  const totalSpots      = tournament.categories.reduce((s, c) => s + Math.floor(c.totalSpots / 2), 0);
-  const totalRegistered = tournament.categories.reduce((s, c) => s + Math.floor(c.registeredCount / 2), 0);
+  const totalSpots      = tournament.categories.reduce((s, c) => s + c.totalSpots, 0);
+  const totalRegistered = tournament.categories.reduce((s, c) => s + c.registeredCount, 0);
   const fillPct         = totalSpots > 0 ? Math.round((totalRegistered / totalSpots) * 100) : 0;
   const tierDisplay     = resolveTier(tournament.spaTier, tournament.tier);
 
@@ -692,8 +691,8 @@ export default function TorneoDetailPage() {
                 </thead>
                 <tbody>
                   {tournament.categories.map((cat) => {
-                    const pairSpots = Math.floor(cat.totalSpots / 2);
-                    const pairCount = Math.floor(cat.registeredCount / 2);
+                    const pairSpots = cat.totalSpots;
+                    const pairCount = cat.registeredCount;
                     const pct = pairSpots > 0 ? Math.round((pairCount / pairSpots) * 100) : 0;
                     return (
                       <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
