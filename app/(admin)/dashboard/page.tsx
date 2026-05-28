@@ -238,7 +238,7 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-foreground truncate">{t.name}</p>
-                            <p className="text-[11px] text-muted-foreground">{t.dates} · {t.venue}</p>
+                            <p className="text-[11px] text-muted-foreground">{t.dates} · {t.club?.name ?? ""}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-[11px] text-muted-foreground">{totalRegistered}/{totalSpots}</p>

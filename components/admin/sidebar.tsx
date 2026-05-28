@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Trophy, Users, BarChart3,
-  Building2, Calendar, DollarSign, Settings, LogOut,
+  Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ const NAV = [
   { href: "/inscripciones", icon: Building2,        label: "Inscripciones" },
   { href: "/resultados",    icon: Calendar,         label: "Resultados"    },
   { href: "/finanzas",        icon: DollarSign,       label: "Finanzas"       },  // ❌ ocultar para CLUB
+  { href: "/clubes",           icon: Landmark,         label: "Clubes"         },  // ❌ ocultar para CLUB
   { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },  // ❌ ocultar para CLUB
   { href: "/configuracion",   icon: Settings,         label: "Configuración"  },  // ❌ ocultar para CLUB
 ];

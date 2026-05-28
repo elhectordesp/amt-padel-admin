@@ -133,7 +133,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
   <div class="page-header">
     <div>
       <h1>${tournament.name}</h1>
-      <div class="meta">${tournament.dates} · ${tournament.venue}${tournament.city ? `, ${tournament.city}` : ""}</div>
+      <div class="meta">${tournament.dates} · ${(tournament as any).club?.name ?? ""}${(tournament as any).club?.city ? `, ${(tournament as any).club.city}` : ""}</div>
     </div>
     <div>
       <div class="logo">AMT PÁDEL</div>

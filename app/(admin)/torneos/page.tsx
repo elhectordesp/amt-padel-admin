@@ -66,7 +66,7 @@ export default function TorneosPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">{row.original.venue}</p>
+            <p className="text-xs text-muted-foreground">{row.original.club?.name ?? ""}</p>
           </div>
         );
       },

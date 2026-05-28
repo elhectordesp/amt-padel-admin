@@ -7,7 +7,7 @@ import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import type { CategoryLevel, Gender } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,8 +18,7 @@ import { z } from "zod";
 // ── Schemas ──────────────────────────────────────────────────────────────
 const infoSchema = z.object({
   name:      z.string().min(3, "Nombre requerido"),
-  venue:     z.string().min(2, "Sede requerida"),
-  city:      z.string().min(2, "Ciudad requerida"),
+  clubId:    z.string().min(1, "Club requerido"),
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:     z.string().optional(),
@@ -118,6 +117,12 @@ export default function NuevoTorneoPage() {
   const [catData,      setCatData]      = useState<CatData      | null>(null);
   const [configData,   setConfigData]   = useState<ConfigData   | null>(null);
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null);
+
+  // ── Clubs list for selector ───────────────────────────────────────────
+  const { data: clubs = [] } = useQuery({
+    queryKey: ["admin-clubs"],
+    queryFn:  () => adminService.clubs.list(),
+  });
 
   // ── Step 1: Info ───────────────────────────────────────────────────────
   const infoForm = useForm<InfoData>({
@@ -327,16 +332,14 @@ export default function NuevoTorneoPage() {
                     placeholder="AMT GOLD MADRID"
                   />
                 </Field>
-                <Field label="Club / Sede" error={infoForm.formState.errors.venue?.message}>
-                  <Input
-                    {...infoForm.register("venue")}
-                    placeholder="Club La Moraleja"
-                  />
-                </Field>
-                <Field label="Ciudad" error={infoForm.formState.errors.city?.message}>
-                  <Input
-                    {...infoForm.register("city")}
-                    placeholder="Madrid"
+                <Field label="Club" error={infoForm.formState.errors.clubId?.message}>
+                  <CustomSelect
+                    value={infoForm.watch("clubId") ?? ""}
+                    onChange={(v) => infoForm.setValue("clubId", v, { shouldValidate: true })}
+                    options={[
+                      { value: "", label: "Selecciona un club…" },
+                      ...clubs.map((c) => ({ value: c.id, label: `${c.name} — ${c.city}` })),
+                    ]}
                   />
                 </Field>
                 <Field label="Premio total" error={infoForm.formState.errors.prize?.message}>
@@ -720,8 +723,7 @@ export default function NuevoTorneoPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Información básica</p>
                   {[
                     ["Nombre",   infoData.name],
-                    ["Sede",     infoData.venue],
-                    ["Ciudad",   infoData.city],
+                    ["Club",     clubs.find(c => c.id === infoData.clubId)?.name ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
                     ["Premio",   infoData.prize ?? "—"],
                   ].map(([k, v]) => (
