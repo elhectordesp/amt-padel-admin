@@ -38,7 +38,7 @@ export const adminService = {
         r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
       ),
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
-    update:          (id: string, data: Partial<Tournament>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
+    update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
     duplicate:       (id: string)                  => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
