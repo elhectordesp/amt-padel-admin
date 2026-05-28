@@ -52,7 +52,7 @@ export const adminService = {
   },
 
   registrations: {
-    list:         (tournamentId: string)               => api.get<AdminRegistration[]>(`/admin/tournaments/${tournamentId}/registrations`).then((r) => r.data ?? []),
+    list:         (tournamentId: string)               => api.get<any>(`/admin/tournaments/${tournamentId}/registrations`).then((r) => (r.data?.data ?? r.data ?? []) as AdminRegistration[]),
     count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),

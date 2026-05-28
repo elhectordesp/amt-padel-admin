@@ -86,8 +86,10 @@ function CalendarTab({
   onMatchClick: (m: MatchResult) => void;
 }) {
   const byDate = useMemo(() =>
-    matches.reduce<Record<string, MatchResult[]>>((acc, m) => {
-      const date = m.date ? (m.date.includes("T") ? m.date.split("T")[0] : m.date) : "sin-fecha";
+    (Array.isArray(matches) ? matches : []).reduce<Record<string, MatchResult[]>>((acc, m) => {
+      const dateRaw = m.date;
+      const dateStr = typeof dateRaw === "string" ? dateRaw : dateRaw ? String(dateRaw) : null;
+      const date    = dateStr ? (dateStr.includes("T") ? dateStr.split("T")[0] : dateStr) : "sin-fecha";
       (acc[date] ??= []).push(m);
       return acc;
     }, {}),
@@ -182,9 +184,9 @@ function CalendarTab({
                         {phaseLabel(m.phase)}
                       </span>
                       <div className="flex-1 flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-foreground truncate">{m.team1.join(" / ")}</span>
+                        <span className="text-sm font-medium text-foreground truncate">{(m.team1 ?? []).join(" / ") || "Por definir"}</span>
                         <span className="text-xs text-muted-foreground shrink-0">vs</span>
-                        <span className="text-sm font-medium text-foreground truncate">{m.team2.join(" / ")}</span>
+                        <span className="text-sm font-medium text-foreground truncate">{(m.team2 ?? []).join(" / ") || "Por definir"}</span>
                       </div>
                       {m.isResult && m.sets1 && m.sets2 ? (
                         <div className="flex items-center gap-1.5 shrink-0">
