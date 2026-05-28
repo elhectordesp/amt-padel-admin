@@ -652,25 +652,27 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-0 border-b border-border">
-          {([
-            { key: "resumen",       label: "Resumen"        },
-            { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length / 2 || "…"})` },
-            { key: "calendario",    label: "Calendario"     },
-            { key: "cuadro",        label: "Cuadro"         },
-          ] as { key: Tab; label: string }[]).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                tab === key
-                  ? "border-[#D4AF37] text-[#D4AF37]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="overflow-x-auto no-scrollbar border-b border-border">
+          <div className="flex items-center gap-0 w-max min-w-full">
+            {([
+              { key: "resumen",       label: "Resumen"        },
+              { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
+              { key: "calendario",    label: "Calendario"     },
+              { key: "cuadro",        label: "Cuadro"         },
+            ] as { key: Tab; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`whitespace-nowrap px-5 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                  tab === key
+                    ? "border-[#D4AF37] text-[#D4AF37]"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── RESUMEN TAB ── */}
