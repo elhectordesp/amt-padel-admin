@@ -153,8 +153,8 @@ export default function EstadisticasPage() {
                           <td className="px-5 py-3 text-sm text-muted-foreground">
                             {GENDER_LABEL[cat.gender] ?? cat.gender} {LEVEL_SHORT[cat.level] ?? cat.level}
                           </td>
-                          <td className="px-5 py-3 text-sm text-foreground">{Math.floor(cat.totalSpots / 2)}</td>
-                          <td className="px-5 py-3 text-sm text-foreground">{Math.floor(cat.registered / 2)}</td>
+                          <td className="px-5 py-3 text-sm text-foreground">{cat.totalSpots}</td>
+                          <td className="px-5 py-3 text-sm text-foreground">{cat.registered}</td>
                           <td className="px-5 py-3">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-400/10 border border-red-400/30 text-red-400">
                               +{Math.floor(cat.overflow / 2)} espera
