@@ -723,8 +723,7 @@ export default function NuevoTorneoPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Información básica</p>
                   {[
                     ["Nombre",   infoData.name],
-                    ["Sede",     infoData.venue],
-                    ["Ciudad",   infoData.city],
+                    ["Club",     clubs.find(c => c.id === infoData.clubId)?.name ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
                     ["Premio",   infoData.prize ?? "—"],
                   ].map(([k, v]) => (

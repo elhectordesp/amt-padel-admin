@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Building2, Plus, Pencil, Power, PowerOff, Globe, Instagram,
+  Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -179,7 +179,7 @@ function ClubModal({
             </label>
             <label className="space-y-1.5">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Instagram size={11} /> Instagram
+                <AtSign size={11} /> Instagram
               </span>
               <input
                 value={form.instagram}
@@ -329,7 +329,7 @@ function ClubCard({ club, onEdit }: { club: Club; onEdit: (c: Club) => void }) {
             )}
             {club.instagram && (
               <a href={`https://instagram.com/${club.instagram.replace("@", "")}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-foreground">
-                <Instagram size={10} /> {club.instagram}
+                <AtSign size={10} /> {club.instagram}
               </a>
             )}
           </div>
