@@ -65,9 +65,19 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className={cn(
-        "flex items-center border-b border-[var(--sidebar-border)] transition-all duration-200",
+        "relative flex items-center border-b border-[var(--sidebar-border)] transition-all duration-200",
         collapsed && !isMobile ? "justify-center px-0 py-6" : "flex-col gap-1 px-6 py-6",
       )}>
+        {/* Botón cerrar — solo en el drawer móvil, siempre dentro del sidebar */}
+        {isMobile && (
+          <button
+            onClick={() => setMobileOpen(false)}
+            aria-label="Cerrar menú"
+            className="absolute top-3 right-3 flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            <X size={15} />
+          </button>
+        )}
         {collapsed && !isMobile ? (
           <span className="font-heading text-lg text-[#D4AF37] tracking-[3px]">A</span>
         ) : (
@@ -174,14 +184,6 @@ export function Sidebar() {
       >
         <div className="relative h-full">
           {sidebarContent(true)}
-          {/* Botón cerrar drawer */}
-          <button
-            onClick={() => setMobileOpen(false)}
-            aria-label="Cerrar menú"
-            className="absolute top-4 right-[-40px] flex items-center justify-center w-9 h-9 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X size={18} />
-          </button>
         </div>
       </div>
 
