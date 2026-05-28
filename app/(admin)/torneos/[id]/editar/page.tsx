@@ -2,6 +2,7 @@
 
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
+import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +19,7 @@ import { z } from "zod";
 const schema = z.object({
   name:                 z.string().min(3, "Nombre requerido"),
   clubId:               z.string().min(1, "Club requerido"),
+  imageUrl:             z.string().optional(),
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
@@ -101,6 +103,7 @@ export default function EditarTorneoPage() {
     reset({
       name:                 tournament.name,
       clubId:               tournament.club?.id ?? "",
+      imageUrl:             tournament.imageUrl ?? "",
       startDate:            startStr,
       endDate:              endStr,
       prize:                tournament.prize ?? "",
@@ -199,6 +202,12 @@ export default function EditarTorneoPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Nombre del torneo" error={errors.name?.message}>
                 <Input {...register("name")} placeholder="AMT GOLD MADRID" />
+              </Field>
+              <Field label="Imagen del banner">
+                <TournamentImageUploader
+                  value={watch("imageUrl") ?? ""}
+                  onChange={(url) => setValue("imageUrl", url, { shouldDirty: true })}
+                />
               </Field>
               <Field label="Club" error={errors.clubId?.message}>
                 <CustomSelect

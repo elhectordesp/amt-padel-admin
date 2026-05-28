@@ -3,6 +3,7 @@
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
+import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import type { CategoryLevel, Gender } from "@/types";
@@ -22,7 +23,7 @@ const infoSchema = z.object({
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:     z.string().optional(),
-  imageUrl:  z.string().url("Debe ser una URL válida").optional().or(z.literal("")),
+  imageUrl:  z.string().optional(),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
@@ -369,22 +370,11 @@ export default function NuevoTorneoPage() {
                   />
                 </Field>
               </div>
-              <Field label="URL de imagen del banner (opcional)" error={infoForm.formState.errors.imageUrl?.message}>
-                <div className="flex flex-col gap-3">
-                  <Input
-                    {...infoForm.register("imageUrl")}
-                    placeholder="https://example.com/banner.jpg"
-                  />
-                  {infoForm.watch("imageUrl") && (
-                    <img
-                      src={infoForm.watch("imageUrl")}
-                      alt="Preview banner"
-                      className="w-full h-32 object-cover rounded-md border border-border"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      onLoad={(e) => { (e.target as HTMLImageElement).style.display = "block"; }}
-                    />
-                  )}
-                </div>
+              <Field label="Imagen del banner (opcional)">
+                <TournamentImageUploader
+                  value={infoForm.watch("imageUrl") ?? ""}
+                  onChange={(url) => infoForm.setValue("imageUrl", url, { shouldDirty: true })}
+                />
               </Field>
             </div>
           )}
