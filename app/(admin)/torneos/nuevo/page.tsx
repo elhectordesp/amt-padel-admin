@@ -649,31 +649,29 @@ export default function NuevoTorneoPage() {
                     <div className="space-y-2">
                       {day.blocks.map((block, bIdx) => (
                         <div key={bIdx} className="flex items-center gap-3">
-                          <div className="flex-1 grid grid-cols-2 gap-2">
-                            <Field label="Inicio">
-                              <input
-                                type="time"
-                                defaultValue={block.start}
-                                onBlur={(e) => {
-                                  const b = [...scheduleForm.getValues().days[dIdx].blocks];
-                                  b[bIdx] = { ...b[bIdx], start: e.target.value };
-                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
-                                }}
-                                className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
-                              />
-                            </Field>
-                            <Field label="Fin">
-                              <input
-                                type="time"
-                                defaultValue={block.end}
-                                onBlur={(e) => {
-                                  const b = [...scheduleForm.getValues().days[dIdx].blocks];
-                                  b[bIdx] = { ...b[bIdx], end: e.target.value };
-                                  scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
-                                }}
-                                className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
-                              />
-                            </Field>
+                          <div className="flex-1 flex items-center gap-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Inicio</span>
+                            <input
+                              type="time"
+                              defaultValue={block.start}
+                              onBlur={(e) => {
+                                const b = [...scheduleForm.getValues().days[dIdx].blocks];
+                                b[bIdx] = { ...b[bIdx], start: e.target.value };
+                                scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
+                              }}
+                              className="flex-1 h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
+                            />
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Fin</span>
+                            <input
+                              type="time"
+                              defaultValue={block.end}
+                              onBlur={(e) => {
+                                const b = [...scheduleForm.getValues().days[dIdx].blocks];
+                                b[bIdx] = { ...b[bIdx], end: e.target.value };
+                                scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
+                              }}
+                              className="flex-1 h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
+                            />
                           </div>
                           {day.blocks.length > 1 && (
                             <button
@@ -682,7 +680,7 @@ export default function NuevoTorneoPage() {
                                 const b = scheduleForm.getValues().days[dIdx].blocks.filter((_, i) => i !== bIdx);
                                 scheduleForm.setValue(`days.${dIdx}.blocks`, b);
                               }}
-                              className="p-2 mt-5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                              className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
