@@ -80,7 +80,7 @@ export default async function TorneoPublicoPage({ params }: { params: { id: stri
           <h1 className="text-3xl font-serif font-bold">{tournament.name}</h1>
           <div className="flex items-center gap-5 text-sm text-zinc-400 flex-wrap">
             <span className="flex items-center gap-1.5"><Calendar size={14} />{tournament.dates}</span>
-            <span className="flex items-center gap-1.5"><Trophy size={14} />{tournament.venue}</span>
+            <span className="flex items-center gap-1.5"><Trophy size={14} />{tournament.club?.name ?? ""}</span>
             {tournament.prize && <span className="text-[#D4AF37] font-semibold">{tournament.prize}</span>}
           </div>
         </div>

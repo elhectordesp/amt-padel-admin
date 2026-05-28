@@ -17,8 +17,7 @@ import { z } from "zod";
 // ── Schema ───────────────────────────────────────────────────────────────
 const schema = z.object({
   name:                 z.string().min(3, "Nombre requerido"),
-  venue:                z.string().min(2, "Sede requerida"),
-  city:                 z.string().min(2, "Ciudad requerida"),
+  clubId:               z.string().min(1, "Club requerido"),
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
@@ -53,6 +52,11 @@ export default function EditarTorneoPage() {
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
+  });
+
+  const { data: clubs = [] } = useQuery({
+    queryKey: ["admin-clubs"],
+    queryFn:  () => adminService.clubs.list(),
   });
 
   const { data: activeRegistrations = 0 } = useQuery({
@@ -96,8 +100,7 @@ export default function EditarTorneoPage() {
 
     reset({
       name:                 tournament.name,
-      venue:                tournament.venue,
-      city:                 tournament.city ?? "",
+      clubId:               tournament.club?.id ?? "",
       startDate:            startStr,
       endDate:              endStr,
       prize:                tournament.prize ?? "",
@@ -197,11 +200,15 @@ export default function EditarTorneoPage() {
               <Field label="Nombre del torneo" error={errors.name?.message}>
                 <Input {...register("name")} placeholder="AMT GOLD MADRID" />
               </Field>
-              <Field label="Club / Sede" error={errors.venue?.message}>
-                <Input {...register("venue")} placeholder="Club La Moraleja" />
-              </Field>
-              <Field label="Ciudad" error={errors.city?.message}>
-                <Input {...register("city")} placeholder="Madrid" />
+              <Field label="Club" error={errors.clubId?.message}>
+                <CustomSelect
+                  value={watch("clubId") ?? ""}
+                  onChange={(v) => setValue("clubId", v, { shouldValidate: true, shouldDirty: true })}
+                  options={[
+                    { value: "", label: "Selecciona un club…" },
+                    ...clubs.map((c) => ({ value: c.id, label: `${c.name} — ${c.city}` })),
+                  ]}
+                />
               </Field>
               <Field label="Premio (descripción)" error={errors.prize?.message}>
                 <Input {...register("prize")} placeholder="5.000 € + trofeo" />

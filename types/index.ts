@@ -39,14 +39,28 @@ export interface TournamentScheduleDay {
   isFinal?:           boolean;
 }
 
+export interface Club {
+  id:            string;
+  name:          string;
+  city:          string;
+  address?:      string | null;
+  phone?:        string | null;
+  website?:      string | null;
+  instagram?:    string | null;
+  logoUrl?:      string | null;
+  contactEmail?: string | null;
+  isAmtPartner?: boolean;
+  active?:       boolean;
+  tournamentCount?: number;
+}
+
 export interface Tournament {
   id:          string;
   name:        string;
   dates:       string;
   startDate?:  string;
   endDate?:    string;
-  venue:       string;
-  city?:       string;
+  club:        Club;
   prize?:       string;
   prizeAmount?: number;
   status:       TournamentStatus;
@@ -279,8 +293,7 @@ export interface Sponsor {
 // Form types for creating a tournament
 export interface CreateTournamentPayload {
   name:        string;
-  venue:       string;
-  city:        string;
+  clubId:      string;
   startDate:   string;
   endDate:     string;
   prize?:      string;

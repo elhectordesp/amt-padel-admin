@@ -3,7 +3,7 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope,
+  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
@@ -129,6 +129,19 @@ export const adminService = {
     config:      ()                        => api.get<SpaConfig>("/admin/spa/config").then((r) => r.data),
     updateConfig:(data: Partial<SpaConfig>)=> api.put<SpaConfig>("/admin/spa/config", data).then((r) => r.data),
     recalculate: ()                        => api.post("/admin/spa/recalculate").then((r) => r.data),
+  },
+
+  clubs: {
+    list:       (includeInactive?: boolean) =>
+      api.get<Club[]>("/admin/clubs", { params: includeInactive ? { includeInactive: true } : {} }).then((r) => r.data ?? []),
+    listPublic: () =>
+      api.get<Club[]>("/clubs").then((r) => r.data ?? []),
+    create:     (data: Omit<Club, "id" | "active" | "tournamentCount">) =>
+      api.post<Club>("/admin/clubs", data).then((r) => r.data),
+    update:     (id: string, data: Partial<Omit<Club, "id" | "tournamentCount">>) =>
+      api.patch<Club>(`/admin/clubs/${id}`, data).then((r) => r.data),
+    deactivate: (id: string) =>
+      api.delete(`/admin/clubs/${id}`).then((r) => r.data),
   },
 
   sponsors: {

@@ -57,12 +57,12 @@ export function SearchModal() {
     const q = query.toLowerCase();
 
     const tResults: SearchResult[] = (tournaments as Tournament[])
-      .filter((t) => t.name.toLowerCase().includes(q) || t.venue.toLowerCase().includes(q))
+      .filter((t) => t.name.toLowerCase().includes(q) || (t.club?.name ?? "").toLowerCase().includes(q))
       .slice(0, 4)
       .map((t) => ({
         type: "tournament", id: t.id,
         title: t.name,
-        sub:   `${t.dates} · ${t.venue}`,
+        sub:   `${t.dates} · ${t.club?.name ?? ""}`,
         href:  `/torneos/${t.id}`,
       }));
 

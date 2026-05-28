@@ -47,7 +47,7 @@ interface LiveData {
     id:     string;
     name:   string;
     status: string;
-    venue:  string;
+    club:   { name: string };
     tier:   string;
   };
   matches: LiveMatch[];
@@ -319,7 +319,7 @@ export default function LiveWidgetPage() {
               {STATUS_LABEL[tournament.status] ?? tournament.status}
             </span>
           )}
-          <p className="text-[10px] text-zinc-700">{tournament.venue}</p>
+          <p className="text-[10px] text-zinc-700">{tournament.club?.name ?? ""}</p>
         </div>
 
         {/* Right: clock */}

@@ -580,7 +580,7 @@ export default function TorneoDetailPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin size={14} className="text-[#D4AF37]" />
-                  {tournament.venue}
+                  {tournament.club?.name ?? ""}
                 </span>
                 {tournament.prize && (
                   <span className="flex items-center gap-1.5">
