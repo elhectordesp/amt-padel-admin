@@ -54,9 +54,9 @@ const configSchema = z.object({
 });
 
 const DAY_TYPE_OPTIONS = [
-  { value: "AMBOS",         label: "Grupos + Eliminatorias" },
-  { value: "GRUPOS",        label: "Solo grupos" },
-  { value: "ELIMINATORIAS", label: "Solo eliminatorias" },
+  { value: "AMBOS",         label: "Grupos + Eliminatorias", labelShort: "Ambos" },
+  { value: "GRUPOS",        label: "Solo grupos",            labelShort: "Grupos" },
+  { value: "ELIMINATORIAS", label: "Solo eliminatorias",     labelShort: "Elim." },
 ] as const;
 
 const scheduleSchema = z.object({
@@ -401,8 +401,8 @@ export default function NuevoTorneoPage() {
               )}
 
               <div className="space-y-3">
-                {/* Table header */}
-                <div className="grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 px-1">
+                {/* Table header — desktop only */}
+                <div className="hidden sm:grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 px-1">
                   {["Género", "Nivel", "Plazas", "Precio (€)", ""].map((h) => (
                     <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
                   ))}
@@ -414,41 +414,37 @@ export default function NuevoTorneoPage() {
                   const hasConsolation  = catForm.watch(`categories.${index}.hasConsolation`);
                   return (
                     <div key={field.id} className="p-3 bg-secondary/50 rounded-md border border-border space-y-3">
-                      {/* Fila principal */}
-                      <div className="grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center">
-                        <CustomSelect
-                          compact
-                          options={[
-                            { value: "M", label: "Masculino" },
-                            { value: "F", label: "Femenino" },
-                          ]}
-                          value={genderVal}
-                          onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")}
-                        />
-                        <CustomSelect
-                          compact
-                          options={LEVELS.map((l) => ({ value: l.value, label: l.label }))}
-                          value={levelVal}
-                          onChange={(v) => catForm.setValue(`categories.${index}.level`, v)}
-                        />
-                        <Input
-                          type="number"
-                          {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })}
-                          min={4} max={128}
-                        />
-                        <Input
-                          type="number"
-                          {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })}
-                          min={0} step={0.5}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          disabled={fields.length === 1}
-                          className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                      {/* Fila principal — desktop: 5 cols / mobile: 2 rows */}
+                      <div className="hidden sm:grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center">
+                        <CustomSelect compact options={[{ value: "M", label: "Masculino" }, { value: "F", label: "Femenino" }]} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")} />
+                        <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
+                        <Input type="number" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
+                        <Input type="number" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={0.5} />
+                        <button type="button" onClick={() => remove(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
+                      </div>
+                      {/* Mobile layout */}
+                      <div className="sm:hidden space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Género</p>
+                            <CustomSelect compact options={[{ value: "M", label: "Masculino" }, { value: "F", label: "Femenino" }]} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")} />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Nivel</p>
+                            <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-[1fr_1fr_36px] gap-2 items-end">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Plazas</p>
+                            <Input type="number" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Precio (€)</p>
+                            <Input type="number" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={0.5} />
+                          </div>
+                          <button type="button" onClick={() => remove(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
+                        </div>
                       </div>
 
                       {/* Premios por categoría */}
@@ -629,9 +625,9 @@ export default function NuevoTorneoPage() {
                     </div>
 
                     {/* Tipo de jornada */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs text-muted-foreground shrink-0">Tipo de jornada:</span>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 flex-wrap">
                         {DAY_TYPE_OPTIONS.map((opt) => (
                           <button
                             key={opt.value}
@@ -643,7 +639,8 @@ export default function NuevoTorneoPage() {
                                 : "border-border text-muted-foreground hover:border-border/80"
                             }`}
                           >
-                            {opt.label}
+                            <span className="sm:hidden">{opt.labelShort}</span>
+                            <span className="hidden sm:inline">{opt.label}</span>
                           </button>
                         ))}
                       </div>
