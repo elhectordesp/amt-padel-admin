@@ -149,30 +149,62 @@ export interface AdminRegistration {
 }
 
 export interface Player {
-  id:          string;
-  name:        string;
-  spa?:        SpaProfile;
-  firstName?:  string;
-  lastName?:   string;
-  email?:      string;
-  phone?:      string;
-  city?:       string;
-  partner?:    string;
-  partnerId?:  string | null;
-  bio?:        string;
-  photoUrl?:   string;
-  gender:      Gender;
-  level:       CategoryLevel;
-  played:      number;
-  wins:        number;
-  points:      number;
-  trend:       "up" | "down" | "stable";
-  isMe?:        boolean;
-  status?:      "active" | "inactive" | "suspended";
-  createdAt?:   string;
-  globalRank?:  number;
-  categoryRank?:number;
-  matches?:     PlayerMatch[];
+  id:             string;
+  name:           string;
+  spa?:           SpaProfile;
+  firstName?:     string;
+  lastName?:      string;
+  email?:         string | null;
+  phone?:         string | null;
+  city?:          string | null;
+  partner?:       string;
+  partnerId?:     string | null;
+  bio?:           string | null;
+  photoUrl?:      string | null;
+  gender:         Gender;
+  level:          CategoryLevel;
+  played:         number;
+  wins:           number;
+  points:         number;
+  trend:          "up" | "down" | "stable";
+  isMe?:          boolean;
+  status?:        "active" | "inactive" | "suspended";
+  createdAt?:     string;
+  globalRank?:    number;
+  categoryRank?:  number;
+  matches?:       PlayerMatch[];
+  managedByAdmin?: boolean;
+  invitedAt?:     string | null;
+}
+
+export interface CreatePlayerPayload {
+  firstName:     string;
+  lastName:      string;
+  gender:        Gender;
+  email?:        string;
+  phone?:        string;
+  city?:         string;
+  categoryLevel?: CategoryLevel;
+  position?:     "reves" | "drive" | "indiferente";
+  hand?:         "diestro" | "zurdo" | "ambidiestro";
+  playsMasc?:    boolean;
+  playsFem?:     boolean;
+  bio?:          string;
+}
+
+export interface UpdatePlayerPayload {
+  firstName?:    string;
+  lastName?:     string;
+  gender?:       Gender;
+  email?:        string;
+  phone?:        string;
+  city?:         string;
+  categoryLevel?: CategoryLevel;
+  position?:     "reves" | "drive" | "indiferente";
+  hand?:         "diestro" | "zurdo" | "ambidiestro";
+  playsMasc?:    boolean;
+  playsFem?:     boolean;
+  bio?:          string;
 }
 
 export interface PlayerMatch {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   flexRender,
@@ -10,12 +11,14 @@ import {
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download, Loader2,
+  UserPlus, X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Player, Gender, CategoryLevel } from "@/types";
+import type { Player, Gender, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 const PAGE_SIZE = 50;
 
@@ -53,13 +56,35 @@ function SortBtn({ column, label }: {
   );
 }
 
+const EMPTY_FORM: CreatePlayerPayload = {
+  firstName: "", lastName: "", gender: "M",
+  email: "", phone: "", city: "", categoryLevel: undefined,
+};
+
 export default function JugadoresPage() {
+  const router  = useRouter();
+  const qc      = useQueryClient();
+
   const [page,         setPage]         = useState(1);
   const [searchInput,  setSearchInput]  = useState("");
   const [search,       setSearch]       = useState("");
   const [genderFilter, setGenderFilter] = useState<"all" | Gender>("all");
   const [levelFilter,  setLevelFilter]  = useState<"all" | CategoryLevel>("all");
   const [sorting,      setSorting]      = useState<SortingState>([{ id: "points", desc: true }]);
+  const [showCreate,   setShowCreate]   = useState(false);
+  const [form,         setForm]         = useState<CreatePlayerPayload>(EMPTY_FORM);
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreatePlayerPayload) => adminService.players.create(data),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["admin-players"] });
+      toast.success(`Jugador "${res.name}" creado correctamente`);
+      setShowCreate(false);
+      setForm(EMPTY_FORM);
+      router.push(`/jugadores/${res.id}`);
+    },
+    onError: (err: Error) => toast.error(err.message ?? "Error al crear jugador"),
+  });
 
   // Debounce text search 300 ms
   useEffect(() => {
@@ -255,6 +280,12 @@ export default function JugadoresPage() {
               {total} jugadores
             </span>
             <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.25)] transition-colors"
+            >
+              <UserPlus size={13} /> Crear jugador
+            </button>
+            <button
               onClick={() => downloadCsv(
                 `jugadores-p${page}`,
                 table.getRowModel().rows.map((row, i) => ({
@@ -354,6 +385,176 @@ export default function JugadoresPage() {
           )}
         </div>
       </div>
+
+      {/* Create player modal */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <UserPlus size={16} className="text-[#D4AF37]" />
+                <h2 className="text-sm font-semibold text-foreground">Nuevo jugador</h2>
+              </div>
+              <button
+                onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); }}
+                className="p-1 rounded-md hover:bg-secondary text-muted-foreground transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              {/* Name row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
+                  <input
+                    value={form.firstName}
+                    onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+                    placeholder="Ej: Carlos"
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Apellidos *</label>
+                  <input
+                    value={form.lastName}
+                    onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+                    placeholder="Ej: García López"
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+              </div>
+
+              {/* Gender + Level */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Género *</label>
+                  <div className="flex gap-2">
+                    {([["M", "Masculino"], ["F", "Femenino"]] as [Gender, string][]).map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, gender: val }))}
+                        className={`flex-1 h-9 rounded-md text-xs font-medium border transition-colors ${
+                          form.gender === val
+                            ? "bg-[rgba(212,175,55,0.15)] border-[rgba(212,175,55,0.4)] text-[#D4AF37]"
+                            : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Categoría</label>
+                  <select
+                    value={form.categoryLevel ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, categoryLevel: (e.target.value || undefined) as CategoryLevel | undefined }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  >
+                    <option value="">Sin asignar</option>
+                    {(["1a","2a","3a","4a","5a","6a","iniciacion"] as CategoryLevel[]).map((l) => (
+                      <option key={l} value={l}>{CATEGORY_LABEL[l]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Email</label>
+                <input
+                  type="email"
+                  value={form.email ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="jugador@email.com (se le enviará invitación)"
+                  className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                />
+                <p className="text-[10px] text-muted-foreground">Si se indica, recibirá un email para activar su cuenta.</p>
+              </div>
+
+              {/* Phone + City */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Teléfono</label>
+                  <input
+                    value={form.phone ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="+34 600 000 000"
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Ciudad</label>
+                  <input
+                    value={form.city ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                    placeholder="Madrid"
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+              </div>
+
+              {/* Position + Hand */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Posición</label>
+                  <select
+                    value={form.position ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, position: (e.target.value || undefined) as CreatePlayerPayload["position"] }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  >
+                    <option value="">No indicado</option>
+                    <option value="reves">Revés</option>
+                    <option value="drive">Drive</option>
+                    <option value="indiferente">Indiferente</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Mano</label>
+                  <select
+                    value={form.hand ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, hand: (e.target.value || undefined) as CreatePlayerPayload["hand"] }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  >
+                    <option value="">No indicado</option>
+                    <option value="diestro">Diestro</option>
+                    <option value="zurdo">Zurdo</option>
+                    <option value="ambidiestro">Ambidiestro</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3 shrink-0">
+              <button
+                onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); }}
+                className="px-4 py-2 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!form.firstName.trim() || !form.lastName.trim() || createMutation.isPending}
+                onClick={() => createMutation.mutate({
+                  ...form,
+                  email:    form.email?.trim()  || undefined,
+                  phone:    form.phone?.trim()  || undefined,
+                  city:     form.city?.trim()   || undefined,
+                })}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-[#D4AF37] text-black hover:bg-[#C9A227] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {createMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                Crear jugador
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
