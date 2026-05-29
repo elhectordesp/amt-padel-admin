@@ -4,6 +4,7 @@ import type {
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
+  CreatePlayerPayload, UpdatePlayerPayload,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
@@ -118,7 +119,11 @@ export const adminService = {
         } as Player;
       }),
     changeLevel:     (id: string, level: string, reason: string) => api.patch(`/admin/players/${id}/category`, { level, reason }).then((r) => r.data),
-    categoryHistory: (id: string)                  => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
+    categoryHistory: (id: string) => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
+    create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null }>("/admin/players", data).then((r) => r.data),
+    update:       (id: string, data: UpdatePlayerPayload) => api.patch(`/admin/players/${id}/profile`, data).then((r) => r.data),
+    delete:       (id: string)                            => api.delete(`/admin/players/${id}`).then((r) => r.data),
+    resendInvite: (id: string)                            => api.post(`/admin/players/${id}/resend-invite`).then((r) => r.data),
   },
 
   finance: {

@@ -9,13 +9,14 @@ import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
   TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
+  Edit2, Trash2, Send, ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import type { CategoryLevel, CategoryChange } from "@/types";
+import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender } from "@/types";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "1a": "1ª", "2a": "2ª", "3a": "3ª",
@@ -48,7 +49,10 @@ export default function JugadorDetailPage() {
   const { id }  = useParams<{ id: string }>();
   const router  = useRouter();
   const qc      = useQueryClient();
-  const [showCatModal, setShowCatModal] = useState(false);
+  const [showCatModal,  setShowCatModal]  = useState(false);
+  const [showEdit,      setShowEdit]      = useState(false);
+  const [showDelete,    setShowDelete]    = useState(false);
+  const [editForm,      setEditForm]      = useState<UpdatePlayerPayload>({});
 
   const { data: player, isLoading } = useQuery({
     queryKey: ["player", id],
@@ -60,7 +64,50 @@ export default function JugadorDetailPage() {
     queryFn:  () => adminService.players.categoryHistory(id),
   });
 
-  const catForm = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
+  const catForm  = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
+
+  const editMutation = useMutation({
+    mutationFn: (data: UpdatePlayerPayload) => adminService.players.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["player", id] });
+      qc.invalidateQueries({ queryKey: ["admin-players"] });
+      toast.success("Datos del jugador actualizados");
+      setShowEdit(false);
+    },
+    onError: (err: Error) => toast.error(err.message ?? "Error al actualizar"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => adminService.players.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-players"] });
+      toast.success("Jugador eliminado");
+      router.push("/jugadores");
+    },
+    onError: (err: Error) => toast.error(err.message ?? "Error al eliminar"),
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: () => adminService.players.resendInvite(id),
+    onSuccess: () => toast.success("Invitación reenviada"),
+    onError:   (err: Error) => toast.error(err.message ?? "Error al reenviar"),
+  });
+
+  function openEdit() {
+    if (!player) return;
+    const [firstName = "", ...rest] = player.name.split(" ");
+    setEditForm({
+      firstName,
+      lastName:      rest.join(" "),
+      gender:        player.gender,
+      email:         player.email  ?? "",
+      phone:         player.phone  ?? "",
+      city:          player.city   ?? "",
+      categoryLevel: player.level,
+      bio:           player.bio    ?? "",
+    });
+    setShowEdit(true);
+  }
 
   const changeCat = useMutation({
     mutationFn: (data: ChangeCatForm) =>
@@ -137,6 +184,11 @@ export default function JugadorDetailPage() {
                   <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
                     {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
                   </span>
+                  {player.managedByAdmin && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                      <ShieldCheck size={10} /> Cuenta gestionada
+                    </span>
+                  )}
                   <div className={`flex items-center gap-1 ${trendColor}`}>
                     <TrendIcon size={14} />
                     <span className="text-xs font-medium capitalize">{player.trend}</span>
@@ -167,6 +219,28 @@ export default function JugadorDetailPage() {
                   className="px-4 py-2 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-sm text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
                 >
                   Cambiar categoría
+                </button>
+                <button
+                  onClick={openEdit}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-foreground hover:border-[#D4AF37] hover:text-[#D4AF37] transition-colors"
+                >
+                  <Edit2 size={13} /> Editar datos
+                </button>
+                {player.managedByAdmin && (
+                  <button
+                    onClick={() => resendMutation.mutate()}
+                    disabled={resendMutation.isPending}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
+                  >
+                    {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                    Reenviar invitación
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowDelete(true)}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors"
+                >
+                  <Trash2 size={13} /> Eliminar jugador
                 </button>
               </div>
             </div>
@@ -393,6 +467,202 @@ export default function JugadorDetailPage() {
 
         </div>
       </div>
+
+      {/* ── Edit Player Modal ── */}
+      {showEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <Edit2 size={15} className="text-[#D4AF37]" />
+                <h2 className="text-sm font-semibold text-foreground">Editar jugador</h2>
+              </div>
+              <button onClick={() => setShowEdit(false)} className="p-1 rounded-md hover:bg-secondary text-muted-foreground transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+                  <input
+                    value={editForm.firstName ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Apellidos</label>
+                  <input
+                    value={editForm.lastName ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Género</label>
+                  <div className="flex gap-2">
+                    {([["M", "Masculino"], ["F", "Femenino"]] as [Gender, string][]).map(([val, label]) => (
+                      <button key={val} type="button"
+                        onClick={() => setEditForm((f) => ({ ...f, gender: val }))}
+                        className={`flex-1 h-9 rounded-md text-xs font-medium border transition-colors ${
+                          editForm.gender === val
+                            ? "bg-[rgba(212,175,55,0.15)] border-[rgba(212,175,55,0.4)] text-[#D4AF37]"
+                            : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Categoría</label>
+                  <select
+                    value={editForm.categoryLevel ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, categoryLevel: (e.target.value || undefined) as CategoryLevel | undefined }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  >
+                    <option value="">Sin asignar</option>
+                    {(["1a","2a","3a","4a","5a","6a","iniciacion"] as CategoryLevel[]).map((l) => (
+                      <option key={l} value={l}>{CATEGORY_LABEL[l]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email ?? ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                  className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Teléfono</label>
+                  <input
+                    value={editForm.phone ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Ciudad</label>
+                  <input
+                    value={editForm.city ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Posición</label>
+                  <select
+                    value={editForm.position ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, position: (e.target.value || undefined) as UpdatePlayerPayload["position"] }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  >
+                    <option value="">No indicado</option>
+                    <option value="reves">Revés</option>
+                    <option value="drive">Drive</option>
+                    <option value="indiferente">Indiferente</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Mano</label>
+                  <select
+                    value={editForm.hand ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, hand: (e.target.value || undefined) as UpdatePlayerPayload["hand"] }))}
+                    className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  >
+                    <option value="">No indicado</option>
+                    <option value="diestro">Diestro</option>
+                    <option value="zurdo">Zurdo</option>
+                    <option value="ambidiestro">Ambidiestro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Bio</label>
+                <textarea
+                  rows={3}
+                  value={editForm.bio ?? ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, bio: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3 shrink-0">
+              <button
+                onClick={() => setShowEdit(false)}
+                className="px-4 py-2 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={editMutation.isPending}
+                onClick={() => editMutation.mutate({
+                  ...editForm,
+                  email: editForm.email?.trim() || undefined,
+                  phone: editForm.phone?.trim() || undefined,
+                  city:  editForm.city?.trim()  || undefined,
+                  bio:   editForm.bio?.trim()   || undefined,
+                })}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-[#D4AF37] text-black hover:bg-[#C9A227] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {editMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Edit2 size={13} />}
+                Guardar cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {showDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-card border border-border rounded-xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-full bg-destructive/10">
+                <Trash2 size={18} className="text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Eliminar jugador</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? Se perderán todos sus datos, historial y resultados.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowDelete(false)}
+                className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate()}
+                className="flex-1 py-2 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+              >
+                {deleteMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Change Category Modal ── */}
       {showCatModal && (
