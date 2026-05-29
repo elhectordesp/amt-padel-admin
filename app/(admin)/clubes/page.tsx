@@ -380,14 +380,12 @@ export default function ClubesPage() {
               {active.length} club{active.length !== 1 ? "s" : ""} activo{active.length !== 1 ? "s" : ""}
               {inactive.length > 0 && ` · ${inactive.length} inactivo${inactive.length !== 1 ? "s" : ""}`}
             </p>
-            {inactive.length > 0 && (
-              <button
-                onClick={() => setShowInactive((v) => !v)}
-                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-              >
-                {showInactive ? "Ocultar inactivos" : "Ver inactivos"}
-              </button>
-            )}
+            <button
+              onClick={() => setShowInactive((v) => !v)}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              {showInactive ? "Ocultar inactivos" : "Ver inactivos"}
+            </button>
           </div>
           <button
             onClick={() => setModal({ open: true })}
