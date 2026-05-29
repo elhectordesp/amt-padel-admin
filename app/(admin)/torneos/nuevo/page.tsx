@@ -22,8 +22,9 @@ const infoSchema = z.object({
   clubId:    z.string().min(1, "Club requerido"),
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
-  prize:     z.string().optional(),
-  imageUrl:  z.string().optional(),
+  prize:       z.string().optional(),
+  prizeAmount: z.number().min(0).optional(),
+  imageUrl:    z.string().optional(),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
@@ -343,10 +344,19 @@ export default function NuevoTorneoPage() {
                     ]}
                   />
                 </Field>
-                <Field label="Premio total" error={infoForm.formState.errors.prize?.message}>
+                <Field label="Premio (descripción)" error={infoForm.formState.errors.prize?.message}>
                   <Input
                     {...infoForm.register("prize")}
-                    placeholder="5.000 €"
+                    placeholder="5.000 € + trofeo"
+                  />
+                </Field>
+                <Field label="Premio (importe €)" error={infoForm.formState.errors.prizeAmount?.message}>
+                  <Input
+                    {...infoForm.register("prizeAmount", { valueAsNumber: true })}
+                    type="number"
+                    min={0}
+                    step={100}
+                    placeholder="5000"
                   />
                 </Field>
                 <Field label="Fecha de inicio" error={infoForm.formState.errors.startDate?.message}>
@@ -710,7 +720,7 @@ export default function NuevoTorneoPage() {
                     ["Nombre",   infoData.name],
                     ["Club",     clubs.find(c => c.id === infoData.clubId)?.name ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
-                    ["Premio",   infoData.prize ?? "—"],
+                    ["Premio",   [infoData.prize, infoData.prizeAmount != null ? `${infoData.prizeAmount}€` : null].filter(Boolean).join(" · ") || "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>
