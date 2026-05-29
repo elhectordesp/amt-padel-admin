@@ -84,16 +84,10 @@ export default function EditarTorneoPage() {
       return `${y}-${m}-${day}`;
     };
 
-    // Convierte a string YYYY-MM-DDTHH:mm en hora local para datetime-local input
+    // Convierte a string YYYY-MM-DDTHH:mm en UTC para evitar drift de timezone en cada edición
     const toDateTimeInput = (val: string | null | undefined): string => {
       if (!val) return "";
-      const d = new Date(val);
-      const y = d.getFullYear();
-      const mo = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      const h = String(d.getHours()).padStart(2, "0");
-      const min = String(d.getMinutes()).padStart(2, "0");
-      return `${y}-${mo}-${day}T${h}:${min}`;
+      return new Date(val).toISOString().slice(0, 16);
     };
 
     const startStr   = toDateInput(tournament.startDate);

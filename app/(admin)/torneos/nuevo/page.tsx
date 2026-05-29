@@ -62,8 +62,10 @@ const DAY_TYPE_OPTIONS = [
 
 const scheduleSchema = z.object({
   days: z.array(z.object({
-    date: z.string().min(1, "La fecha de la jornada es obligatoria"),
-    type: z.enum(["GRUPOS", "ELIMINATORIAS", "AMBOS"]).default("AMBOS"),
+    date:                z.string().min(1, "La fecha de la jornada es obligatoria"),
+    type:                z.enum(["GRUPOS", "ELIMINATORIAS", "AMBOS"]).default("AMBOS"),
+    isFinal:             z.boolean().default(false),
+    maxUnavailableSlots: z.number().int().min(0).default(0),
     blocks: z.array(z.object({
       start: z.string(),
       end:   z.string(),
@@ -175,9 +177,11 @@ export default function NuevoTorneoPage() {
       const curr = new Date(start);
       while (curr <= end) {
         days.push({
-          date:   curr.toISOString().split("T")[0],
-          type:   "AMBOS" as const,
-          blocks: [{ start: "16:00", end: "21:00" }],
+          date:                curr.toISOString().split("T")[0],
+          type:                "AMBOS" as const,
+          isFinal:             false,
+          maxUnavailableSlots: 0,
+          blocks:              [{ start: "16:00", end: "21:00" }],
         });
         curr.setDate(curr.getDate() + 1);
       }
@@ -210,8 +214,11 @@ export default function NuevoTorneoPage() {
         hasConsolation:  c.hasConsolation  ?? false,
       })),
       schedule: scheduleData?.days.map(d => ({
-        date: d.date,
-        blocks: d.blocks
+        date:                d.date,
+        type:                d.type,
+        isFinal:             d.isFinal,
+        maxUnavailableSlots: d.maxUnavailableSlots,
+        blocks:              d.blocks,
       })),
     }),
     onSuccess: (t) => {
@@ -654,6 +661,34 @@ export default function NuevoTorneoPage() {
                           </button>
                         ))}
                       </div>
+                    </div>
+
+                    {/* isFinal + maxUnavailableSlots */}
+                    <div className="flex flex-wrap items-center gap-4 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={scheduleForm.watch(`days.${dIdx}.isFinal`) ?? false}
+                          onChange={(e) => scheduleForm.setValue(`days.${dIdx}.isFinal`, e.target.checked, { shouldDirty: true })}
+                          className="accent-[#D4AF37] w-3.5 h-3.5"
+                        />
+                        <span className="text-xs text-muted-foreground">Día de finales <span className="text-[10px]">(asistencia obligatoria)</span></span>
+                      </label>
+                      {!scheduleForm.watch(`days.${dIdx}.isFinal`) && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground shrink-0">Franjas bloqueables:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            placeholder="Auto"
+                            value={scheduleForm.watch(`days.${dIdx}.maxUnavailableSlots`) || ""}
+                            onChange={(e) => scheduleForm.setValue(`days.${dIdx}.maxUnavailableSlots`, Number(e.target.value), { shouldDirty: true })}
+                            className="w-16 h-7 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                          />
+                          <span className="text-[10px] text-muted-foreground">(0 = automático · 1 franja = 30 min)</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
