@@ -5,6 +5,8 @@ import type {
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
+  AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
+  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AdminMember,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
@@ -199,5 +201,26 @@ export const adminService = {
         }))
       ),
     recalculate: () => api.post("/admin/rankings/recalculate").then((r) => r.data),
+  },
+
+  config: {
+    getAll:           ()                                                  => api.get<AppConfigAll>("/admin/config").then((r) => r.data),
+    getSection:       (section: string)                                   => api.get(`/admin/config/${section}`).then((r) => r.data),
+    updateGeneral:    (data: Partial<AppConfigGeneral>)                   => api.put("/admin/config/general", data).then((r) => r.data),
+    updateCircuit:    (data: Partial<AppConfigCircuit>)                   => api.put("/admin/config/circuit", data).then((r) => r.data),
+    updateSeason:     (data: Partial<AppConfigSeason>)                    => api.put("/admin/config/season", data).then((r) => r.data),
+    updateEmail:      (data: Partial<AppConfigEmail>)                     => api.put("/admin/config/email", data).then((r) => r.data),
+    updatePush:       (data: Partial<AppConfigPush>)                      => api.put("/admin/config/push", data).then((r) => r.data),
+    updateTournamentDefaults: (data: Partial<AppConfigTournamentDefaults>) => api.put("/admin/config/tournamentDefaults", data).then((r) => r.data),
+    closeSeason:      ()                                                  => api.post<{ previousSeason: number; newSeason: number }>("/admin/config/season/close").then((r) => r.data),
+    advanceSeason:    ()                                                  => api.post<{ newSeason: number }>("/admin/config/season/advance").then((r) => r.data),
+  },
+
+  admins: {
+    list:       ()                                                        => api.get<AdminMember[]>("/admin/admins").then((r) => r.data ?? []),
+    invite:     (data: { email: string; firstName: string; lastName: string; role?: "ADMIN" | "SUPERADMIN" }) =>
+      api.post<AdminMember>("/admin/admins/invite", data).then((r) => r.data),
+    updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               => api.patch(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
+    revoke:     (id: string)                                              => api.delete(`/admin/admins/${id}`).then((r) => r.data),
   },
 };
