@@ -355,3 +355,78 @@ export interface CreateTournamentPayload {
     }[];
   }[];
 }
+
+// ── AppConfig sections ────────────────────────────────────────────────────────
+
+export interface AppConfigGeneral {
+  circuitName:        string;
+  supportWhatsapp:    string;
+  contactEmail:       string;
+  reglamentoUrl:      string;
+  privacyPolicyUrl:   string;
+  announcementBanner: { enabled: boolean; text: string; type: "info" | "warning" | "error" };
+  maintenanceMode:    { enabled: boolean; message: string };
+}
+
+export interface AppConfigCircuit {
+  bestNResults:          number;
+  allowDoubleCategory:   boolean;
+  tiebreaker:            "wins" | "points" | "head2head";
+  rankingFreezeDate:     string | null;
+  showCurrentSeasonOnly: boolean;
+}
+
+export interface AppConfigSeason {
+  currentSeason: number;
+  startDate:     string;
+  endDate:       string;
+  status:        "ACTIVE" | "CLOSED";
+}
+
+export interface AppConfigEmail {
+  fromName:                       string;
+  replyTo:                        string;
+  enableRegistrationConfirmation: boolean;
+  enableResultNotification:       boolean;
+  enableCategoryChange:           boolean;
+  enableInviteEmail:              boolean;
+  enablePasswordReset:            boolean;
+  enableWelcomeEmail:             boolean;
+}
+
+export interface AppConfigPush {
+  enableMatchScheduled:        boolean;
+  enableResultRecorded:        boolean;
+  enableTournamentPublished:   boolean;
+  enableMatchReminder:         boolean;
+  enableRegistrationConfirmed: boolean;
+  enableCategoryChange:        boolean;
+}
+
+export interface AppConfigTournamentDefaults {
+  matchDuration:            number;
+  scoringSystem:            string;
+  registrationDeadlineDays: number;
+  defaultFormat:            string;
+  hasShirtsDefault:         boolean;
+  useSeedingDefault:        boolean;
+  defaultCourts:            string[];
+}
+
+export interface AppConfigAll {
+  general:            AppConfigGeneral;
+  circuit:            AppConfigCircuit;
+  season:             AppConfigSeason;
+  email:              AppConfigEmail;
+  push:               AppConfigPush;
+  tournamentDefaults: AppConfigTournamentDefaults;
+}
+
+export interface AdminMember {
+  id:             string;
+  name:           string;
+  email:          string;
+  role:           "ADMIN" | "SUPERADMIN";
+  createdAt:      string;
+  managedByAdmin: boolean;
+}
