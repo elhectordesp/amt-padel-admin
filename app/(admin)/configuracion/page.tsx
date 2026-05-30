@@ -1078,7 +1078,7 @@ function TabFaqs() {
       {cats.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground border border-dashed border-border rounded-lg">
           <MessageCircleQuestion size={32} />
-          <p className="text-sm">Sin categorías. Pulsa "Añadir categoría" para empezar.</p>
+          <p className="text-sm">Sin categorías. Pulsa &quot;Añadir categoría&quot; para empezar.</p>
         </div>
       )}
 
