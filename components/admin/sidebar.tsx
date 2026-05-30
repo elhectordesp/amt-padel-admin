@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Trophy, Users, BarChart3,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
-  ChevronLeft, ChevronRight, Menu, X, Handshake,
+  ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -37,6 +37,7 @@ const NAV = [
   { href: "/finanzas",        icon: DollarSign,       label: "Finanzas"       },  // ❌ ocultar para CLUB
   { href: "/clubes",           icon: Landmark,         label: "Clubes"         },  // ❌ ocultar para CLUB
   { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },  // ❌ ocultar para CLUB
+  { href: "/soporte",          icon: MessageSquare,    label: "Soporte"        },  // ❌ ocultar para CLUB
   { href: "/configuracion",   icon: Settings,         label: "Configuración"  },  // ❌ ocultar para CLUB
 ];
 

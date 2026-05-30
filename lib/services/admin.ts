@@ -6,7 +6,8 @@ import type {
   SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
-  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AdminMember,
+  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
+  SupportMessage, SupportStatus,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
@@ -212,6 +213,7 @@ export const adminService = {
     updateEmail:      (data: Partial<AppConfigEmail>)                     => api.put("/admin/config/email", data).then((r) => r.data),
     updatePush:       (data: Partial<AppConfigPush>)                      => api.put("/admin/config/push", data).then((r) => r.data),
     updateTournamentDefaults: (data: Partial<AppConfigTournamentDefaults>) => api.put("/admin/config/tournamentDefaults", data).then((r) => r.data),
+    updateFaqs:       (data: AppConfigFaqs)                               => api.put("/admin/config/faqs", data).then((r) => r.data),
     closeSeason:      ()                                                  => api.post<{ previousSeason: number; newSeason: number }>("/admin/config/season/close").then((r) => r.data),
     advanceSeason:    ()                                                  => api.post<{ newSeason: number }>("/admin/config/season/advance").then((r) => r.data),
   },
@@ -222,5 +224,10 @@ export const adminService = {
       api.post<AdminMember>("/admin/admins/invite", data).then((r) => r.data),
     updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               => api.patch(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
     revoke:     (id: string)                                              => api.delete(`/admin/admins/${id}`).then((r) => r.data),
+  },
+
+  support: {
+    list:         (status?: SupportStatus)  => api.get<SupportMessage[]>("/admin/support", { params: status ? { status } : {} }).then((r) => r.data ?? []),
+    updateStatus: (id: string, status: SupportStatus) => api.patch(`/admin/support/${id}/status`, { status }).then((r) => r.data),
   },
 };

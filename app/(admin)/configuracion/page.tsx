@@ -6,7 +6,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Save, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp,
   Settings, Calendar, Trophy, Mail, Bell, Layers, Users, Shield,
-  Plus, Trash2, UserPlus, X, ChevronRight,
+  Plus, Trash2, UserPlus, X, ChevronRight, MessageCircleQuestion,
+  GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -16,6 +17,7 @@ import type {
   SpaConfig,
   AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults,
+  AppConfigFaqs, FaqCategory, FaqEntry,
   AdminMember,
 } from "@/types";
 
@@ -128,14 +130,15 @@ function SaveBar({ isDirty, saving, onSave, onDiscard }: {
 // ── Tab definitions ─────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "general",            label: "General",            icon: Settings  },
-  { id: "temporada",          label: "Temporada",          icon: Calendar  },
-  { id: "circuito",           label: "Circuito",           icon: Trophy    },
-  { id: "comunicaciones",     label: "Comunicaciones",     icon: Mail      },
-  { id: "notificaciones",     label: "Notificaciones",     icon: Bell      },
-  { id: "torneos",            label: "Torneos",            icon: Layers    },
-  { id: "spa",                label: "SPA",                icon: ChevronRight },
-  { id: "administradores",    label: "Administradores",    icon: Users     },
+  { id: "general",            label: "General",            icon: Settings              },
+  { id: "temporada",          label: "Temporada",          icon: Calendar              },
+  { id: "circuito",           label: "Circuito",           icon: Trophy                },
+  { id: "comunicaciones",     label: "Comunicaciones",     icon: Mail                  },
+  { id: "notificaciones",     label: "Notificaciones",     icon: Bell                  },
+  { id: "torneos",            label: "Torneos",            icon: Layers                },
+  { id: "spa",                label: "SPA",                icon: ChevronRight          },
+  { id: "faqs",               label: "FAQs",               icon: MessageCircleQuestion },
+  { id: "administradores",    label: "Administradores",    icon: Users                 },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -933,6 +936,168 @@ function TabAdministradores() {
   );
 }
 
+// ── Tab: FAQs ─────────────────────────────────────────────────────────────────
+
+function TabFaqs() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["config", "faqs"],
+    queryFn:  () => adminService.config.getSection("faqs") as Promise<AppConfigFaqs>,
+  });
+
+  const [cats, setCats] = useState<FaqCategory[]>([]);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (data) {
+      setCats((data as AppConfigFaqs).categories ?? []);
+      setDirty(false);
+    }
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: () => adminService.config.updateFaqs({ categories: cats }),
+    onSuccess: () => {
+      toast.success("FAQs guardadas");
+      setDirty(false);
+      qc.invalidateQueries({ queryKey: ["config", "faqs"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const update = (updated: FaqCategory[]) => { setCats(updated); setDirty(true); };
+
+  const addCategory = () =>
+    update([...cats, { category: "Nueva categoría", faqs: [] }]);
+
+  const removeCategory = (ci: number) =>
+    update(cats.filter((_, i) => i !== ci));
+
+  const updateCategoryName = (ci: number, name: string) =>
+    update(cats.map((c, i) => i === ci ? { ...c, category: name } : c));
+
+  const addFaq = (ci: number) =>
+    update(cats.map((c, i) => i === ci
+      ? { ...c, faqs: [...c.faqs, { q: "", a: "" }] }
+      : c,
+    ));
+
+  const removeFaq = (ci: number, fi: number) =>
+    update(cats.map((c, i) => i === ci
+      ? { ...c, faqs: c.faqs.filter((_, j) => j !== fi) }
+      : c,
+    ));
+
+  const updateFaq = (ci: number, fi: number, field: keyof FaqEntry, value: string) =>
+    update(cats.map((c, i) => i === ci
+      ? { ...c, faqs: c.faqs.map((f, j) => j === fi ? { ...f, [field]: value } : f) }
+      : c,
+    ));
+
+  if (isLoading) return <TabSkeleton />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {cats.reduce((sum, c) => sum + c.faqs.length, 0)} preguntas en {cats.length} categorías · visibles en la app móvil
+        </p>
+        <button
+          onClick={addCategory}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-secondary hover:bg-secondary/80 transition-colors"
+        >
+          <Plus size={13} /> Añadir categoría
+        </button>
+      </div>
+
+      {cats.map((cat, ci) => (
+        <div key={ci} className="bg-card border border-border rounded-lg overflow-hidden">
+          {/* Category header */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-secondary/20">
+            <GripVertical size={14} className="text-muted-foreground shrink-0" />
+            <input
+              className="flex-1 bg-transparent text-sm font-semibold text-foreground focus:outline-none"
+              value={cat.category}
+              onChange={(e) => updateCategoryName(ci, e.target.value)}
+              placeholder="Nombre de categoría"
+            />
+            <button
+              onClick={() => removeCategory(ci)}
+              className="p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="Eliminar categoría"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+
+          {/* FAQ list */}
+          <div className="divide-y divide-border">
+            {cat.faqs.map((faq, fi) => (
+              <div key={fi} className="px-4 py-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <span className="text-xs text-muted-foreground mt-2 shrink-0 w-4">P</span>
+                  <input
+                    className="flex-1 bg-secondary/30 rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    value={faq.q}
+                    onChange={(e) => updateFaq(ci, fi, "q", e.target.value)}
+                    placeholder="Pregunta…"
+                  />
+                  <button
+                    onClick={() => removeFaq(ci, fi)}
+                    className="p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors shrink-0"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-xs text-muted-foreground mt-2 shrink-0 w-4">R</span>
+                  <textarea
+                    className="flex-1 bg-secondary/30 rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"
+                    rows={2}
+                    value={faq.a}
+                    onChange={(e) => updateFaq(ci, fi, "a", e.target.value)}
+                    placeholder="Respuesta…"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add FAQ */}
+          <div className="px-4 py-2 border-t border-border">
+            <button
+              onClick={() => addFaq(ci)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Plus size={12} /> Añadir pregunta
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {cats.length === 0 && (
+        <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground border border-dashed border-border rounded-lg">
+          <MessageCircleQuestion size={32} />
+          <p className="text-sm">Sin categorías. Pulsa &quot;Añadir categoría&quot; para empezar.</p>
+        </div>
+      )}
+
+      {dirty && (
+        <div className="sticky bottom-4 flex justify-end">
+          <button
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Guardar FAQs
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Skeleton ─────────────────────────────────────────────────────────────────
 
 function TabSkeleton() {
@@ -966,6 +1131,7 @@ function ConfiguracionContent() {
     notificaciones:  <TabNotificaciones />,
     torneos:         <TabTorneos />,
     spa:             <TabSpa />,
+    faqs:            <TabFaqs />,
     administradores: <TabAdministradores />,
   };
 
