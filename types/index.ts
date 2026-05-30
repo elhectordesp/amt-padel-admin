@@ -413,6 +413,20 @@ export interface AppConfigTournamentDefaults {
   defaultCourts:            string[];
 }
 
+export interface FaqEntry {
+  q: string;
+  a: string;
+}
+
+export interface FaqCategory {
+  category: string;
+  faqs:     FaqEntry[];
+}
+
+export interface AppConfigFaqs {
+  categories: FaqCategory[];
+}
+
 export interface AppConfigAll {
   general:            AppConfigGeneral;
   circuit:            AppConfigCircuit;
@@ -420,6 +434,7 @@ export interface AppConfigAll {
   email:              AppConfigEmail;
   push:               AppConfigPush;
   tournamentDefaults: AppConfigTournamentDefaults;
+  faqs:               AppConfigFaqs;
 }
 
 export interface AdminMember {
