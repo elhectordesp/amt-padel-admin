@@ -7,6 +7,7 @@ import type {
   CreatePlayerPayload, UpdatePlayerPayload,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AdminMember,
+  SupportMessage, SupportStatus,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
@@ -222,5 +223,10 @@ export const adminService = {
       api.post<AdminMember>("/admin/admins/invite", data).then((r) => r.data),
     updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               => api.patch(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
     revoke:     (id: string)                                              => api.delete(`/admin/admins/${id}`).then((r) => r.data),
+  },
+
+  support: {
+    list:         (status?: SupportStatus)  => api.get<SupportMessage[]>("/admin/support", { params: status ? { status } : {} }).then((r) => r.data ?? []),
+    updateStatus: (id: string, status: SupportStatus) => api.patch(`/admin/support/${id}/status`, { status }).then((r) => r.data),
   },
 };

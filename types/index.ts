@@ -430,3 +430,19 @@ export interface AdminMember {
   createdAt:      string;
   managedByAdmin: boolean;
 }
+
+export type SupportStatus = "NEW" | "READ" | "RESOLVED";
+
+export interface SupportMessage {
+  id:        string;
+  subject:   string;
+  message:   string;
+  status:    SupportStatus;
+  createdAt: string;
+  user: {
+    id:        string;
+    firstName: string;
+    lastName:  string;
+    email:     string;
+  };
+}
