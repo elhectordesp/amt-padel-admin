@@ -8,6 +8,7 @@ import {
   Check, X, Clock, Download, Search, Loader2,
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
+  LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,7 +28,7 @@ import {
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -213,7 +214,240 @@ function CalendarTab({
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro";
+// ── PistasTab ──────────────────────────────────────────────────────────────
+
+const UNAV_LABEL: Record<string, string> = {
+  TOURNAMENT: "Todo el torneo",
+  DAY:        "Día completo",
+  SLOT:       "Franja horaria",
+};
+const UNAV_ICON: Record<string, React.ElementType> = {
+  TOURNAMENT: Ban,
+  DAY:        CalendarOff,
+  SLOT:       AlarmClock,
+};
+
+function UnavailabilityRow({
+  u, tournamentId, courtId, onRemoved,
+}: { u: CourtUnavailability; tournamentId: string; courtId: string; onRemoved: () => void }) {
+  const qc = useQueryClient();
+  const remove = useMutation({
+    mutationFn: () => adminService.tournamentCourts.removeUnavailability(tournamentId, courtId, u.id),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ["tournament-courts", tournamentId] }); onRemoved(); toast.success("Bloqueo eliminado"); },
+    onError:    (e: Error) => toast.error(e.message),
+  });
+  const Icon = UNAV_ICON[u.type] ?? Ban;
+  const dateStr = u.date ? new Date(u.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" }) : "";
+  const timeStr = u.startTime && u.endTime
+    ? `${new Date(u.startTime).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} – ${new Date(u.endTime).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
+    : "";
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-destructive/5 border border-destructive/15 group">
+      <Icon size={11} className="text-destructive shrink-0" />
+      <div className="flex-1 min-w-0 text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground">{UNAV_LABEL[u.type]}</span>
+        {dateStr && <span> · {dateStr}</span>}
+        {timeStr && <span> · {timeStr}</span>}
+        {u.reason && <span> · {u.reason}</span>}
+      </div>
+      <button
+        onClick={() => remove.mutate()}
+        disabled={remove.isPending}
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/15 text-destructive transition-opacity"
+      >
+        {remove.isPending ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+      </button>
+    </div>
+  );
+}
+
+function AddUnavailabilityForm({
+  tournamentId, courtId, onAdded,
+}: { tournamentId: string; courtId: string; onAdded: () => void }) {
+  const qc = useQueryClient();
+  const [type,      setType]      = useState<"TOURNAMENT" | "DAY" | "SLOT">("DAY");
+  const [date,      setDate]      = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime,   setEndTime]   = useState("");
+  const [reason,    setReason]    = useState("");
+
+  const add = useMutation({
+    mutationFn: () => adminService.tournamentCourts.addUnavailability(tournamentId, courtId, {
+      type,
+      date:      date      || undefined,
+      startTime: startTime ? `${date}T${startTime}:00` : undefined,
+      endTime:   endTime   ? `${date}T${endTime}:00`   : undefined,
+      reason:    reason.trim() || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament-courts", tournamentId] });
+      setDate(""); setStartTime(""); setEndTime(""); setReason("");
+      onAdded();
+      toast.success("Bloqueo añadido");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-2 pt-2 border-t border-border">
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Añadir bloqueo</p>
+      <div className="grid grid-cols-3 gap-1">
+        {(["TOURNAMENT", "DAY", "SLOT"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setType(t)}
+            className={`py-1 text-[11px] rounded border transition-colors ${type === t ? "border-[#D4AF37] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            {UNAV_LABEL[t]}
+          </button>
+        ))}
+      </div>
+      {(type === "DAY" || type === "SLOT") && (
+        <input
+          type="date" value={date} onChange={(e) => setDate(e.target.value)}
+          className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+        />
+      )}
+      {type === "SLOT" && (
+        <div className="grid grid-cols-2 gap-1">
+          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none" />
+          <input type="time" value={endTime}   onChange={(e) => setEndTime(e.target.value)}   className="h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none" />
+        </div>
+      )}
+      <input
+        value={reason} onChange={(e) => setReason(e.target.value)}
+        placeholder="Motivo (opcional)"
+        className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+      />
+      <button
+        onClick={() => add.mutate()}
+        disabled={add.isPending}
+        className="w-full py-1.5 text-xs rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center justify-center gap-1"
+      >
+        {add.isPending && <Loader2 size={11} className="animate-spin" />} Añadir bloqueo
+      </button>
+    </div>
+  );
+}
+
+function TournamentCourtCard({ tc, tournamentId }: { tc: TournamentCourt; tournamentId: string }) {
+  const qc = useQueryClient();
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const toggleAvail = useMutation({
+    mutationFn: () => adminService.tournamentCourts.setAvailability(tournamentId, tc.courtId, !tc.isAvailable),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ["tournament-courts", tournamentId] }),
+    onError:    (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className={`bg-card border rounded-lg p-4 space-y-3 ${!tc.isAvailable ? "opacity-60" : ""}`}>
+      {/* Court header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {tc.court.isCentral && <Star size={13} className="text-[#D4AF37] fill-[#D4AF37] shrink-0" />}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{tc.court.name}</p>
+            {(tc.court.surface || tc.court.isIndoor) && (
+              <p className="text-[10px] text-muted-foreground">
+                {tc.court.surface ?? ""}
+                {tc.court.isIndoor ? " · Cubierta" : ""}
+              </p>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => toggleAvail.mutate()}
+          disabled={toggleAvail.isPending}
+          className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded border transition-colors ${tc.isAvailable ? "border-green-400/30 text-green-400 bg-green-400/5 hover:bg-green-400/10" : "border-red-400/30 text-red-400 bg-red-400/5 hover:bg-red-400/10"}`}
+          title={tc.isAvailable ? "Marcar como no disponible" : "Marcar como disponible"}
+        >
+          {toggleAvail.isPending
+            ? <Loader2 size={10} className="animate-spin" />
+            : tc.isAvailable ? <Power size={10} /> : <PowerOff size={10} />
+          }
+          {tc.isAvailable ? "Disponible" : "No disponible"}
+        </button>
+      </div>
+
+      {/* Unavailability blocks */}
+      {tc.unavailabilities.length > 0 && (
+        <div className="space-y-1">
+          {tc.unavailabilities.map((u) => (
+            <UnavailabilityRow
+              key={u.id}
+              u={u}
+              tournamentId={tournamentId}
+              courtId={tc.courtId}
+              onRemoved={() => {}}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Add unavailability */}
+      {tc.isAvailable && (
+        showAddForm ? (
+          <AddUnavailabilityForm
+            tournamentId={tournamentId}
+            courtId={tc.courtId}
+            onAdded={() => setShowAddForm(false)}
+          />
+        ) : (
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="w-full flex items-center justify-center gap-1 py-1 text-[11px] rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/40 transition-colors"
+          >
+            <Plus size={10} /> Añadir bloqueo
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+function PistasTab({ tournamentId }: { tournamentId: string }) {
+  const { data: courts = [], isLoading } = useQuery({
+    queryKey: ["tournament-courts", tournamentId],
+    queryFn:  () => adminService.tournamentCourts.list(tournamentId),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 size={24} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (courts.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <LayoutGrid size={36} className="text-muted-foreground/30" />
+        <p className="text-sm text-muted-foreground">No hay pistas asociadas a este torneo.</p>
+        <p className="text-xs text-muted-foreground/60">Las pistas se añaden automáticamente al crear el torneo desde el club.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        {courts.filter((c) => c.isAvailable).length} de {courts.length} pistas disponibles
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {courts.map((tc) => (
+          <TournamentCourtCard key={tc.id} tc={tc} tournamentId={tournamentId} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────
+
+type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -661,6 +895,7 @@ export default function TorneoDetailPage() {
               { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
               { key: "calendario",    label: "Calendario"     },
               { key: "cuadro",        label: "Cuadro"         },
+              { key: "pistas",        label: "Pistas"         },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
@@ -1331,6 +1566,11 @@ export default function TorneoDetailPage() {
       />
     )}
 
+        {/* ── PISTAS TAB ── */}
+        {tab === "pistas" && (
+          <PistasTab tournamentId={id} />
+        )}
+
     <ConfirmModal
       open={showDeleteModal}
       title="Eliminar torneo"
@@ -1374,6 +1614,7 @@ export default function TorneoDetailPage() {
       onClose={() => setRegenElimCatId(null)}
       onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
     />
+
     </>
   );
 }
