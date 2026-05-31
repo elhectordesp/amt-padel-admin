@@ -54,6 +54,40 @@ export interface Club {
   tournamentCount?: number;
 }
 
+export type UnavailabilityType = "TOURNAMENT" | "DAY" | "SLOT";
+
+export interface Court {
+  id:        string;
+  clubId:    string;
+  name:      string;
+  surface?:  string | null;
+  isIndoor:  boolean;
+  isCentral: boolean;
+  order:     number;
+  active:    boolean;
+  _count?:   { tournamentCourts: number };
+}
+
+export interface CourtUnavailability {
+  id:                string;
+  tournamentCourtId: string;
+  type:              UnavailabilityType;
+  date?:             string | null;
+  startTime?:        string | null;
+  endTime?:          string | null;
+  reason?:           string | null;
+  createdAt:         string;
+}
+
+export interface TournamentCourt {
+  id:               string;
+  tournamentId:     string;
+  courtId:          string;
+  isAvailable:      boolean;
+  court:            Court;
+  unavailabilities: CourtUnavailability[];
+}
+
 export interface Tournament {
   id:          string;
   name:        string;

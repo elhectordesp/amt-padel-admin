@@ -5,11 +5,270 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
+  Star, Trash2, LayoutGrid, X, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Club } from "@/types";
+import type { Club, Court } from "@/types";
+
+// ── CourtsPanel ────────────────────────────────────────────────────────────
+
+const SURFACES = ["CLAY", "GRASS", "HARD", "ARTIFICIAL"];
+const SURFACE_LABEL: Record<string, string> = {
+  CLAY: "Tierra", GRASS: "Hierba", HARD: "Dura", ARTIFICIAL: "Artificial",
+};
+
+const EMPTY_COURT = { name: "", surface: "", isIndoor: false, isCentral: false, order: 0 };
+type CourtForm = typeof EMPTY_COURT;
+
+function CourtRow({
+  court, clubId, onEdited,
+}: {
+  court: Court;
+  clubId: string;
+  onEdited: () => void;
+}) {
+  const qc      = useQueryClient();
+  const [edit, setEdit]   = useState(false);
+  const [form, setForm]   = useState<CourtForm>({
+    name:      court.name,
+    surface:   court.surface ?? "",
+    isIndoor:  court.isIndoor,
+    isCentral: court.isCentral,
+    order:     court.order,
+  });
+
+  const save = useMutation({
+    mutationFn: () => adminService.courts.update(clubId, court.id, {
+      name:      form.name.trim() || undefined,
+      surface:   form.surface    || undefined,
+      isIndoor:  form.isIndoor,
+      isCentral: form.isCentral,
+      order:     form.order,
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-courts", clubId] }); setEdit(false); onEdited(); toast.success("Pista actualizada"); },
+    onError:   (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => adminService.courts.remove(clubId, court.id),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ["admin-courts", clubId] }); toast.success("Pista eliminada"); },
+    onError:    (e: Error) => toast.error(e.message),
+  });
+
+  if (edit) {
+    return (
+      <div className="border border-[#D4AF37]/30 rounded-lg p-3 space-y-2 bg-[rgba(212,175,55,0.04)]">
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="Nombre pista"
+            className="col-span-2 h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+          />
+          <select
+            value={form.surface}
+            onChange={(e) => setForm((f) => ({ ...f, surface: e.target.value }))}
+            className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
+          >
+            <option value="">Sin superficie</option>
+            {SURFACES.map((s) => <option key={s} value={s}>{SURFACE_LABEL[s]}</option>)}
+          </select>
+          <input
+            type="number" min={0}
+            value={form.order}
+            onChange={(e) => setForm((f) => ({ ...f, order: Number(e.target.value) }))}
+            placeholder="Orden"
+            className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={form.isIndoor} onChange={(e) => setForm((f) => ({ ...f, isIndoor: e.target.checked }))} className="accent-[#D4AF37]" />
+            Cubierta
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={form.isCentral} onChange={(e) => setForm((f) => ({ ...f, isCentral: e.target.checked }))} className="accent-[#D4AF37]" />
+            Pista Central
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={() => setEdit(false)} className="px-3 py-1 text-xs rounded border border-border text-muted-foreground hover:text-foreground">Cancelar</button>
+          <button
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="px-3 py-1 text-xs rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-1"
+          >
+            {save.isPending && <Loader2 size={11} className="animate-spin" />} Guardar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-border/80 bg-card group">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          {court.isCentral && <Star size={11} className="text-[#D4AF37] fill-[#D4AF37] shrink-0" />}
+          <span className="text-sm font-medium truncate">{court.name}</span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+          {court.surface && <span>{SURFACE_LABEL[court.surface] ?? court.surface}</span>}
+          {court.isIndoor && <span>· Cubierta</span>}
+          {(court._count?.tournamentCourts ?? 0) > 0 && (
+            <span className="text-[#D4AF37]">· {court._count!.tournamentCourts} torneo{court._count!.tournamentCourts !== 1 ? "s" : ""}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={() => setEdit(true)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
+          <Pencil size={12} />
+        </button>
+        <button
+          onClick={() => { if (confirm(`¿Eliminar "${court.name}"?`)) remove.mutate(); }}
+          disabled={remove.isPending}
+          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+        >
+          {remove.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+  const [newForm, setNewForm] = useState<CourtForm>({ ...EMPTY_COURT });
+
+  const { data: courts = [], isLoading } = useQuery({
+    queryKey: ["admin-courts", club.id],
+    queryFn:  () => adminService.courts.list(club.id),
+  });
+
+  const create = useMutation({
+    mutationFn: () => adminService.courts.create(club.id, {
+      name:      newForm.name.trim(),
+      surface:   newForm.surface || undefined,
+      isIndoor:  newForm.isIndoor,
+      isCentral: newForm.isCentral,
+      order:     newForm.order,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-courts", club.id] });
+      setNewForm({ ...EMPTY_COURT });
+      setShowAdd(false);
+      toast.success("Pista creada");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handleCreate = () => {
+    if (!newForm.name.trim()) { toast.error("El nombre es obligatorio"); return; }
+    create.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <LayoutGrid size={16} className="text-[#D4AF37]" />
+            <h2 className="font-heading text-base">Pistas — {club.name}</h2>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xl leading-none">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Court list */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 size={20} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : courts.length === 0 && !showAdd ? (
+            <div className="text-center py-8 space-y-2">
+              <LayoutGrid size={28} className="mx-auto text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No hay pistas registradas.</p>
+            </div>
+          ) : (
+            courts.map((c) => (
+              <CourtRow key={c.id} court={c} clubId={club.id} onEdited={() => {}} />
+            ))
+          )}
+
+          {/* New court inline form */}
+          {showAdd && (
+            <div className="border border-[#D4AF37]/40 rounded-lg p-3 space-y-2 bg-[rgba(212,175,55,0.04)]">
+              <p className="text-xs font-semibold text-[#D4AF37] uppercase tracking-wide">Nueva pista</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={newForm.name}
+                  onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Nombre *"
+                  className="col-span-2 h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                />
+                <select
+                  value={newForm.surface}
+                  onChange={(e) => setNewForm((f) => ({ ...f, surface: e.target.value }))}
+                  className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
+                >
+                  <option value="">Sin superficie</option>
+                  {SURFACES.map((s) => <option key={s} value={s}>{SURFACE_LABEL[s]}</option>)}
+                </select>
+                <input
+                  type="number" min={0}
+                  value={newForm.order}
+                  onChange={(e) => setNewForm((f) => ({ ...f, order: Number(e.target.value) }))}
+                  placeholder="Orden"
+                  className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-4 text-xs">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={newForm.isIndoor} onChange={(e) => setNewForm((f) => ({ ...f, isIndoor: e.target.checked }))} className="accent-[#D4AF37]" />
+                  Cubierta
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={newForm.isCentral} onChange={(e) => setNewForm((f) => ({ ...f, isCentral: e.target.checked }))} className="accent-[#D4AF37]" />
+                  Pista Central
+                </label>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => { setShowAdd(false); setNewForm({ ...EMPTY_COURT }); }} className="px-3 py-1 text-xs rounded border border-border text-muted-foreground hover:text-foreground">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreate}
+                  disabled={create.isPending}
+                  className="px-3 py-1 text-xs rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-1"
+                >
+                  {create.isPending && <Loader2 size={11} className="animate-spin" />} Crear
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-border shrink-0">
+          {!showAdd && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 transition-colors"
+            >
+              <Plus size={14} /> Añadir pista
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── ClubModal ──────────────────────────────────────────────────────────────
 
@@ -241,7 +500,7 @@ function ClubModal({
 
 // ── ClubCard ───────────────────────────────────────────────────────────────
 
-function ClubCard({ club, onEdit }: { club: Club; onEdit: (c: Club) => void }) {
+function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) => void; onCourts: (c: Club) => void }) {
   const qc = useQueryClient();
 
   const toggle = useMutation({
@@ -286,6 +545,13 @@ function ClubCard({ club, onEdit }: { club: Club; onEdit: (c: Club) => void }) {
               AMT
             </span>
           )}
+          <button
+            onClick={() => onCourts(club)}
+            className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            title="Gestionar pistas"
+          >
+            <LayoutGrid size={13} />
+          </button>
           <button
             onClick={() => onEdit(club)}
             className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
@@ -349,7 +615,8 @@ function ClubCard({ club, onEdit }: { club: Club; onEdit: (c: Club) => void }) {
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function ClubesPage() {
-  const [modal, setModal] = useState<{ open: boolean; club?: Club }>({ open: false });
+  const [modal,        setModal]        = useState<{ open: boolean; club?: Club }>({ open: false });
+  const [courtsClub,   setCourtsClub]   = useState<Club | null>(null);
   const [showInactive, setShowInactive] = useState(false);
 
   const { data: clubs = [], isLoading } = useQuery({
@@ -367,6 +634,12 @@ export default function ClubesPage() {
         <ClubModal
           club={modal.club}
           onClose={() => setModal({ open: false })}
+        />
+      )}
+      {courtsClub && (
+        <CourtsPanel
+          club={courtsClub}
+          onClose={() => setCourtsClub(null)}
         />
       )}
 
@@ -418,6 +691,7 @@ export default function ClubesPage() {
                 key={club.id}
                 club={club}
                 onEdit={(c) => setModal({ open: true, club: c })}
+                onCourts={(c) => setCourtsClub(c)}
               />
             ))}
           </div>

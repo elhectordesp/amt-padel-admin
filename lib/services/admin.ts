@@ -8,6 +8,7 @@ import type {
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
+  Court, TournamentCourt, CourtUnavailability,
 } from "@/types";
 
 export interface AdminUser { name: string; email: string }
@@ -160,6 +161,28 @@ export const adminService = {
       api.patch<Club>(`/admin/clubs/${id}`, data).then((r) => r.data),
     deactivate: (id: string) =>
       api.delete(`/admin/clubs/${id}`).then((r) => r.data),
+  },
+
+  courts: {
+    list:   (clubId: string) =>
+      api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
+    create: (clubId: string, data: { name: string; surface?: string; isIndoor?: boolean; isCentral?: boolean; order?: number }) =>
+      api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
+    update: (clubId: string, courtId: string, data: Partial<{ name: string; surface: string; isIndoor: boolean; isCentral: boolean; order: number }>) =>
+      api.patch<Court>(`/admin/clubs/${clubId}/courts/${courtId}`, data).then((r) => r.data),
+    remove: (clubId: string, courtId: string) =>
+      api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),
+  },
+
+  tournamentCourts: {
+    list: (tournamentId: string) =>
+      api.get<TournamentCourt[]>(`/admin/tournaments/${tournamentId}/courts`).then((r) => r.data ?? []),
+    setAvailability: (tournamentId: string, courtId: string, isAvailable: boolean) =>
+      api.patch<TournamentCourt>(`/admin/tournaments/${tournamentId}/courts/${courtId}/availability`, { isAvailable }).then((r) => r.data),
+    addUnavailability: (tournamentId: string, courtId: string, data: { type: string; date?: string; startTime?: string; endTime?: string; reason?: string }) =>
+      api.post<CourtUnavailability>(`/admin/tournaments/${tournamentId}/courts/${courtId}/unavailability`, data).then((r) => r.data),
+    removeUnavailability: (tournamentId: string, courtId: string, unavailId: string) =>
+      api.delete(`/admin/tournaments/${tournamentId}/courts/${courtId}/unavailability/${unavailId}`).then((r) => r.data),
   },
 
   sponsors: {
