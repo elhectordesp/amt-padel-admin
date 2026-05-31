@@ -11,6 +11,14 @@ import type {
   Court, TournamentCourt, CourtUnavailability,
 } from "@/types";
 
+export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED';
+export interface ScheduleConflict {
+  type:             ConflictType;
+  matchId:          string;
+  conflictMatchId?: string;
+  description:      string;
+}
+
 export interface AdminUser { name: string; email: string }
 
 export const adminService = {
@@ -61,6 +69,15 @@ export const adminService = {
     count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
+  },
+
+  schedule: {
+    validate:   (tournamentId: string, categoryId: string) =>
+      api.get<ScheduleConflict[]>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/validate`).then(r => r.data),
+    publish:    (tournamentId: string, categoryId: string, force?: boolean) =>
+      api.post<{ published: boolean; conflicts: ScheduleConflict[] }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`, { force }).then(r => r.data),
+    patchMatch: (matchId: string, data: { date?: string; court?: string; force?: boolean }) =>
+      api.patch<{ match: any; conflicts: ScheduleConflict[] }>(`/admin/matches/${matchId}/schedule`, data).then(r => r.data),
   },
 
   matches: {
