@@ -29,6 +29,7 @@ export interface TournamentCategory {
   prizeRunnerUp?:       string;
   prizeConsolation?:    string;
   hasConsolation?:      boolean;
+  format?:              string | null;
   schedulePublishedAt?: string | null;
 }
 

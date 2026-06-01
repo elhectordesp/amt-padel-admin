@@ -810,6 +810,7 @@ export default function TorneoDetailPage() {
   const [selectedKeys,    setSelectedKeys]  = useState<Set<string>>(new Set());
   const [updatingIds,     setUpdatingIds]   = useState<Set<string>>(new Set());
   const [bracketCatId,       setBracketCatId]       = useState("");
+  const [bracketFormat,      setBracketFormat]      = useState("");
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
@@ -914,7 +915,8 @@ export default function TorneoDetailPage() {
   };
 
   const generateBracket = useMutation({
-    mutationFn: (customGroups?: string[][]) => adminService.tournaments.generateBracket(id, bracketCatId, customGroups),
+    mutationFn: (customGroups?: string[][]) =>
+      adminService.tournaments.generateBracket(id, bracketCatId, customGroups, bracketFormat || undefined),
     onSuccess:  (res: any) => {
       if (res?.scheduleWarning) {
         toast.success("Cuadro generado correctamente");
@@ -926,6 +928,7 @@ export default function TorneoDetailPage() {
       }
       setBracketPreview(null);
       setBracketCatId("");
+      setBracketFormat("");
       invalidateBracket();
     },
     onError: (err: Error) => { toast.error(err.message); setBracketPreview(null); },
@@ -973,7 +976,7 @@ export default function TorneoDetailPage() {
     if (!bracketCatId) return;
     setLoadingPreview(true);
     try {
-      const preview = await adminService.tournaments.previewBracket(id, bracketCatId) as any;
+      const preview = await adminService.tournaments.previewBracket(id, bracketCatId, bracketFormat || undefined) as any;
       setBracketPreview({ groups: preview.groups, totalMatches: preview.totalMatches, isGroups: preview.isGroups });
     } catch (err: any) {
       toast.error(err.message ?? "Error al generar la previsualización");
@@ -1649,6 +1652,21 @@ export default function TorneoDetailPage() {
                 ? bracketMatches.some((m: any) => m.categoryId === bracketCatId)
                 : false;
 
+              const selectedCat = bracketCatId
+                ? tournament.categories.find((c) => c.id === bracketCatId)
+                : null;
+
+              const confirmedPairs = selectedCat?.registeredCount ?? null;
+
+              // Default format selector value: param > category.format > tournament.format
+              const defaultFormat = bracketFormat || selectedCat?.format || tournament.format || "";
+
+              const FORMAT_OPTIONS = [
+                { value: "grupos+eliminatoria",     label: "Grupos + Eliminatoria" },
+                { value: "eliminatoria",            label: "Eliminatoria directa" },
+                { value: "eliminatoria+consolacion",label: "Eliminatoria + Consolación" },
+              ];
+
               const blockedReason = !deadlinePassed
                 ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Cambia el estado a "Sorteo" para generar el cuadro.`
                 : alreadyGenerated
@@ -1663,18 +1681,31 @@ export default function TorneoDetailPage() {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {blockedReason
                           ? <span className="text-yellow-400">{blockedReason}</span>
+                          : confirmedPairs !== null
+                          ? <span><span className="text-[#D4AF37] font-semibold">{confirmedPairs} parejas confirmadas</span> — elige formato y genera el cuadro.</span>
                           : "Inscripciones cerradas. Selecciona una categoría y genera el cuadro."
                         }
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <div className="w-56">
                         <CustomSelect
                           options={catOptions}
                           value={bracketCatId}
-                          onChange={setBracketCatId}
+                          onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
+                      {bracketCatId && (
+                        <select
+                          value={bracketFormat || defaultFormat}
+                          onChange={(e) => setBracketFormat(e.target.value)}
+                          className="h-9 rounded-md border border-border bg-background text-foreground text-sm px-2 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                        >
+                          {FORMAT_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      )}
                       <button
                         onClick={handlePreviewBracket}
                         disabled={!bracketCatId || loadingPreview || generateBracket.isPending || !!blockedReason}
