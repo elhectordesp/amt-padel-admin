@@ -29,7 +29,7 @@ import {
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability, Gender, CategoryLevel } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -168,6 +168,12 @@ function CalendarTab({
   const [editCourt,    setEditCourt]    = useState("");
   const [editConflicts,setEditConflicts]= useState<ScheduleConflict[]>([]);
 
+  // Courts for inline edit select
+  const { data: courts = [] } = useQuery<TournamentCourt[]>({
+    queryKey: ["tournament-courts", tournamentId],
+    queryFn:  () => adminService.tournamentCourts.list(tournamentId),
+  });
+
   // Group matches by category then by date
   const byCat = useMemo(() => {
     const map: Record<string, MatchResult[]> = {};
@@ -250,7 +256,7 @@ function CalendarTab({
     const catMap = Object.fromEntries(
       (tournament?.categories ?? []).map((c: any) => [
         c.id,
-        `${GENDER_LABEL[c.gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level] ?? c.level}`,
+        `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
       ]),
     );
 
@@ -358,7 +364,7 @@ function CalendarTab({
               <div className="flex items-center justify-between px-5 py-3 bg-secondary/50 border-b border-border">
                 <div className="flex items-center gap-3">
                   <h4 className="text-sm font-semibold text-foreground">
-                    {GENDER_LABEL[cat.gender]?.short ?? cat.gender} {CATEGORY_LABEL_SHORT[cat.level] ?? cat.level}
+                    {GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} {CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}
                   </h4>
                   {isPublished ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-green-400/30 text-green-400 bg-green-400/10">
@@ -540,6 +546,17 @@ function CalendarTab({
           onForce={() => publishCatId && publishMut.mutate({ catId: publishCatId, force: true })}
         />
       )}
+
+      <ConfirmModal
+        open={!!unpublishCatId}
+        title="Despublicar horario"
+        description="Los jugadores dejarán de ver el horario de esta categoría en la app. Podrás volver a publicarlo cuando lo corrijas."
+        confirmLabel="Despublicar"
+        danger
+        loading={unpublishMut.isPending}
+        onClose={() => setUnpublishCatId(null)}
+        onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
+      />
     </div>
   );
 }
@@ -1948,16 +1965,6 @@ export default function TorneoDetailPage() {
       onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
     />
 
-    <ConfirmModal
-      open={!!unpublishCatId}
-      title="Despublicar horario"
-      description="Los jugadores dejarán de ver el horario de esta categoría en la app. Podrás volver a publicarlo cuando lo corrijas."
-      confirmLabel="Despublicar"
-      danger
-      loading={unpublishMut.isPending}
-      onClose={() => setUnpublishCatId(null)}
-      onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
-    />
 
     </>
   );
