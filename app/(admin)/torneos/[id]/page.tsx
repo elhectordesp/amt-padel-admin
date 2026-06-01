@@ -9,6 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
+  Pencil, Send, EyeOff,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,7 +21,7 @@ import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
-import { adminService } from "@/lib/services/admin";
+import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations } from "@/lib/utils/print";
 import {
@@ -28,7 +29,7 @@ import {
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability, Gender, CategoryLevel } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -76,8 +77,73 @@ function groupByPair(regs: AdminRegistration[]): PairReg[] {
   return result;
 }
 
+// ── Conflict labels ───────────────────────────────────────────────────────────
+const CONFLICT_LABEL: Record<ConflictType, string> = {
+  MISSING_ASSIGNMENT:   "Sin horario",
+  COURT_OVERLAP:        "Pista solapada",
+  PLAYER_DOUBLE_BOOKED: "Jugador doblado",
+};
+const CONFLICT_COLOR: Record<ConflictType, string> = {
+  MISSING_ASSIGNMENT:   "text-destructive",
+  COURT_OVERLAP:        "text-yellow-400",
+  PLAYER_DOUBLE_BOOKED: "text-orange-400",
+};
+
+// ── ConflictModal ─────────────────────────────────────────────────────────────
+function ConflictModal({
+  conflicts, forcing, onClose, onForce,
+}: {
+  conflicts: ScheduleConflict[];
+  forcing:   boolean;
+  onClose:   () => void;
+  onForce:   () => void;
+}) {
+  const blocking = conflicts.filter((c) => c.type === "MISSING_ASSIGNMENT");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md overflow-hidden shadow-xl">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">Conflictos de horario</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-5 space-y-2 max-h-72 overflow-y-auto">
+          {conflicts.map((c, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className={`text-[10px] font-bold uppercase shrink-0 mt-0.5 ${CONFLICT_COLOR[c.type]}`}>
+                {CONFLICT_LABEL[c.type]}
+              </span>
+              <span className="text-xs text-muted-foreground">{c.description}</span>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Cancelar
+          </button>
+          {blocking.length === 0 && (
+            <button
+              onClick={onForce}
+              disabled={forcing}
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-sm text-yellow-400 font-semibold hover:bg-yellow-400/15 disabled:opacity-50 transition-colors"
+            >
+              {forcing && <Loader2 size={13} className="animate-spin" />}
+              Publicar igualmente
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
-  matches, loading, isError, refetch, autoSchedule, onMatchClick,
+  matches, loading, isError, refetch, autoSchedule, onMatchClick, tournament, tournamentId,
 }: {
   matches:      MatchResult[];
   loading:      boolean;
@@ -85,25 +151,158 @@ function CalendarTab({
   refetch:      () => void;
   autoSchedule: { mutate: (force?: boolean) => void; isPending: boolean };
   onMatchClick: (m: MatchResult) => void;
+  tournament:   any;
+  tournamentId: string;
 }) {
-  const byDate = useMemo(() =>
-    (Array.isArray(matches) ? matches : []).reduce<Record<string, MatchResult[]>>((acc, m) => {
-      const dateRaw = m.date;
-      const dateStr = typeof dateRaw === "string" ? dateRaw : dateRaw ? String(dateRaw) : null;
-      const date    = dateStr ? (dateStr.includes("T") ? dateStr.split("T")[0] : dateStr) : "sin-fecha";
-      (acc[date] ??= []).push(m);
-      return acc;
-    }, {}),
-  [matches]);
+  const qc = useQueryClient();
+
+  // Publish state
+  const [publishCatId,    setPublishCatId]    = useState<string | null>(null);
+  const [pendingConflicts, setPendingConflicts] = useState<ScheduleConflict[]>([]);
+  const [showConflicts,   setShowConflicts]   = useState(false);
+  const [unpublishCatId,  setUnpublishCatId]  = useState<string | null>(null);
+
+  // Inline match edit state
+  const [editMatchId,  setEditMatchId]  = useState<string | null>(null);
+  const [editDate,     setEditDate]     = useState("");
+  const [editCourt,    setEditCourt]    = useState("");
+  const [editConflicts,setEditConflicts]= useState<ScheduleConflict[]>([]);
+
+  // Courts for inline edit select
+  const { data: courts = [] } = useQuery<TournamentCourt[]>({
+    queryKey: ["tournament-courts", tournamentId],
+    queryFn:  () => adminService.tournamentCourts.list(tournamentId),
+  });
+
+  // Group matches by category then by date
+  const byCat = useMemo(() => {
+    const map: Record<string, MatchResult[]> = {};
+    for (const m of (Array.isArray(matches) ? matches : [])) {
+      const key = (m as any).categoryId ?? "unknown";
+      (map[key] ??= []).push(m);
+    }
+    return map;
+  }, [matches]);
+
+  // ── Publish mutation ────────────────────────────────────────────────────────
+  const publishMut = useMutation({
+    mutationFn: ({ catId, force }: { catId: string; force?: boolean }) =>
+      adminService.schedule.publish(tournamentId, catId, force),
+    onSuccess: (res, { catId }) => {
+      if (!res.published) {
+        setPendingConflicts(res.conflicts);
+        setPublishCatId(catId);
+        setShowConflicts(true);
+      } else {
+        const w = res.conflicts.length;
+        toast.success(w > 0
+          ? `Horario publicado con ${w} advertencia(s)`
+          : "Horario publicado. Jugadores notificados.");
+        setShowConflicts(false);
+        setPublishCatId(null);
+        qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // ── Unpublish mutation ──────────────────────────────────────────────────────
+  const unpublishMut = useMutation({
+    mutationFn: (catId: string) => adminService.schedule.unpublish(tournamentId, catId),
+    onSuccess: () => {
+      toast.success("Horario despublicado. Los jugadores ya no verán el horario.");
+      setUnpublishCatId(null);
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // ── Patch match mutation ────────────────────────────────────────────────────
+  const patchMut = useMutation({
+    mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; force?: boolean } }) =>
+      adminService.schedule.patchMatch(matchId, data),
+    onSuccess: (res, { data }) => {
+      if (res.conflicts?.length > 0 && !data.force) {
+        setEditConflicts(res.conflicts);
+      } else {
+        toast.success("Partido actualizado");
+        setEditMatchId(null);
+        setEditConflicts([]);
+        qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
+        qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const startEdit = (m: MatchResult) => {
+    setEditMatchId(m.id);
+    const d = (m as any).date ? new Date((m as any).date) : null;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setEditDate(d
+      ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+      : "");
+    setEditCourt((m as any).court ?? "");
+    setEditConflicts([]);
+  };
+
+  const cancelEdit = () => { setEditMatchId(null); setEditDate(""); setEditCourt(""); setEditConflicts([]); };
+
+  const saveEdit = (matchId: string, force = false) => {
+    patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, force } });
+  };
+
+  const exportCsv = () => {
+    const catMap = Object.fromEntries(
+      (tournament?.categories ?? []).map((c: any) => [
+        c.id,
+        `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
+      ]),
+    );
+
+    const rows = [...matches]
+      .filter((m) => !!(m as any).date)
+      .sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime())
+      .map((m) => {
+        const d = new Date((m as any).date);
+        return {
+          Fecha:      d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }),
+          Hora:       d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+          Pista:      (m as any).court ?? "—",
+          Categoría:  catMap[(m as any).categoryId ?? ""] ?? "—",
+          Fase:       phaseLabel(m.phase),
+          "Equipo 1": m.team1.join(" / "),
+          "Equipo 2": m.team2.join(" / "),
+          Estado:     m.status === "finished" ? "Finalizado" : "Pendiente",
+        };
+      });
+
+    const name = tournament?.name
+      ? `horario_${tournament.name.replace(/\s+/g, "_").toLowerCase()}`
+      : "horario";
+    downloadCsv(name, rows);
+  };
+
+  // TODO Fix #18: añadir toggle Lista/Grid — grid con eje X=pistas, eje Y=horas por día (tipo Google Calendar)
 
   return (
     <div className="space-y-4">
+      {/* Top toolbar */}
       <div className="flex items-center justify-between gap-4">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
           <Calendar size={14} className="text-[#D4AF37]" />
           Partidos ({matches.length})
         </h3>
         <div className="flex items-center gap-2">
+          <button
+            onClick={exportCsv}
+            disabled={matches.filter((m) => !!(m as any).date).length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            title="Exportar horario como CSV"
+          >
+            <Download size={11} />
+            Exportar CSV
+          </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
             disabled={autoSchedule.isPending || matches.length === 0}
@@ -140,75 +339,224 @@ function CalendarTab({
           <p className="text-sm text-muted-foreground">No hay partidos registrados aún</p>
         </div>
       ) : (
-        Object.entries(byDate).map(([date, dayMatches]) => {
-          const label    = date === "sin-fecha"
-            ? "Sin fecha asignada"
-            : new Date(date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
-          const pending  = dayMatches.filter((m) => !m.isResult).length;
-          const finished = dayMatches.filter((m) =>  m.isResult).length;
+        // Per-category sections
+        tournament.categories.map((cat: any) => {
+          const catMatches = byCat[cat.id] ?? [];
+          if (catMatches.length === 0) return null;
+
+          const isPublished   = !!cat.schedulePublishedAt;
+          const publishedDate = cat.schedulePublishedAt
+            ? new Date(cat.schedulePublishedAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+            : null;
+          const isPublishing  = publishMut.isPending && publishCatId === cat.id;
+
+          const byDate = catMatches.reduce<Record<string, MatchResult[]>>((acc, m) => {
+            const raw  = (m as any).date;
+            const str  = raw ? (typeof raw === "string" ? raw : String(raw)) : null;
+            const date = str ? (str.includes("T") ? str.split("T")[0] : str) : "sin-fecha";
+            (acc[date] ??= []).push(m);
+            return acc;
+          }, {});
 
           return (
-            <div key={date} className="bg-card border border-border rounded-lg overflow-hidden">
+            <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
+              {/* Category header */}
               <div className="flex items-center justify-between px-5 py-3 bg-secondary/50 border-b border-border">
-                <div>
-                  <p className="text-sm font-semibold text-foreground capitalize">{label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{dayMatches.length} partidos</p>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-sm font-semibold text-foreground">
+                    {GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} {CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}
+                  </h4>
+                  {isPublished ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-green-400/30 text-green-400 bg-green-400/10">
+                      <CheckCircle size={9} /> Publicado · {publishedDate}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-border text-muted-foreground">
+                      <Clock size={9} /> Sin publicar
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {finished > 0 && (
-                    <span className="flex items-center gap-1 text-green-400">
-                      <CheckCircle size={12} /> {finished} completados
-                    </span>
+                <div className="flex items-center gap-2">
+                  {isPublished && (
+                    <button
+                      onClick={() => setUnpublishCatId(cat.id)}
+                      disabled={unpublishMut.isPending && unpublishCatId === cat.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-500/10 border border-red-500/30 text-xs text-red-400 font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {unpublishMut.isPending && unpublishCatId === cat.id
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <EyeOff size={11} />}
+                      Despublicar
+                    </button>
                   )}
-                  {pending > 0 && (
-                    <span className="flex items-center gap-1 text-yellow-400">
-                      <Clock size={12} /> {pending} pendientes
-                    </span>
-                  )}
+                  <button
+                    onClick={() => { setPublishCatId(cat.id); publishMut.mutate({ catId: cat.id }); }}
+                    disabled={isPublishing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
+                  >
+                    {isPublishing ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                    {isPublished ? "Republicar" : "Publicar horario"}
+                  </button>
                 </div>
               </div>
 
-              <div className="divide-y divide-border">
-                {dayMatches.map((m) => {
-                  const time = m.date
-                    ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-                    : "—";
-                  return (
-                    <div
-                      key={m.id}
-                      className={`flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors ${!m.isResult ? "cursor-pointer" : ""}`}
-                      onClick={() => !m.isResult && onMatchClick(m)}
-                    >
-                      <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
-                      <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
-                        {phaseLabel(m.phase)}
-                      </span>
-                      <div className="flex-1 flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-foreground truncate">{(m.team1 ?? []).join(" / ") || "Por definir"}</span>
-                        <span className="text-xs text-muted-foreground shrink-0">vs</span>
-                        <span className="text-sm font-medium text-foreground truncate">{(m.team2 ?? []).join(" / ") || "Por definir"}</span>
+              {/* Matches grouped by date */}
+              {Object.entries(byDate).map(([date, dayMatches]) => {
+                const label    = date === "sin-fecha"
+                  ? "Sin fecha asignada"
+                  : new Date(date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+                const pending  = dayMatches.filter((m) => !(m as any).isResult).length;
+                const finished = dayMatches.filter((m) =>  (m as any).isResult).length;
+
+                return (
+                  <div key={date}>
+                    <div className="flex items-center justify-between px-5 py-2 bg-secondary/20 border-b border-border">
+                      <p className="text-xs font-semibold text-foreground capitalize">{label}</p>
+                      <div className="flex items-center gap-3 text-xs">
+                        {finished > 0 && <span className="flex items-center gap-1 text-green-400"><CheckCircle size={11} /> {finished}</span>}
+                        {pending  > 0 && <span className="flex items-center gap-1 text-yellow-400"><Clock size={11} /> {pending} pendientes</span>}
                       </div>
-                      {m.isResult && m.sets1 && m.sets2 ? (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <CheckCircle size={13} className="text-green-400" />
-                          <span className="text-xs font-mono text-foreground">
-                            {m.sets1.map((s, i) => `${s}-${m.sets2![i]}`).join(" / ")}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
-                          <Clock size={12} /> Pendiente
-                        </span>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="divide-y divide-border">
+                      {dayMatches.map((m) => {
+                        const time      = (m as any).date
+                          ? new Date((m as any).date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+                          : "—";
+                        const isEditing = editMatchId === m.id;
+
+                        return (
+                          <div key={m.id}>
+                            {/* Match row */}
+                            <div
+                              className={`flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors ${!(m as any).isResult && !isEditing ? "cursor-pointer" : ""}`}
+                              onClick={() => !(m as any).isResult && !isEditing && onMatchClick(m)}
+                            >
+                              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
+                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{(m as any).court || "—"}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
+                                {phaseLabel(m.phase)}
+                              </span>
+                              <div className="flex-1 flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-medium text-foreground truncate">{((m as any).team1 ?? []).join(" / ") || "Por definir"}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">vs</span>
+                                <span className="text-sm font-medium text-foreground truncate">{((m as any).team2 ?? []).join(" / ") || "Por definir"}</span>
+                              </div>
+                              {(m as any).isResult && (m as any).sets1 && (m as any).sets2 ? (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <CheckCircle size={13} className="text-green-400" />
+                                  <span className="text-xs font-mono text-foreground">
+                                    {(m as any).sets1.map((s: number, i: number) => `${s}-${(m as any).sets2[i]}`).join(" / ")}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
+                                  <Clock size={12} /> Pendiente
+                                </span>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); isEditing ? cancelEdit() : startEdit(m); }}
+                                className={`p-1.5 rounded-md border transition-colors shrink-0 ${
+                                  isEditing
+                                    ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.1)]"
+                                    : "border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)]"
+                                }`}
+                                title="Editar fecha y pista"
+                              >
+                                <Pencil size={11} />
+                              </button>
+                            </div>
+
+                            {/* Inline edit form */}
+                            {isEditing && (
+                              <div className="px-5 pb-4 pt-3 bg-[rgba(212,175,55,0.03)] border-b border-[rgba(212,175,55,0.15)] space-y-3">
+                                <div className="flex items-end gap-3 flex-wrap">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Fecha y hora</label>
+                                    <input
+                                      type="datetime-local"
+                                      value={editDate}
+                                      onChange={(e) => { setEditDate(e.target.value); setEditConflicts([]); }}
+                                      className="h-8 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Pista</label>
+                                    <select
+                                      value={editCourt}
+                                      onChange={(e) => { setEditCourt(e.target.value); setEditConflicts([]); }}
+                                      className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                    >
+                                      <option value="">— Sin pista —</option>
+                                      {courts.filter((c) => c.isAvailable).map((c) => (
+                                        <option key={c.court.name} value={c.court.name}>{c.court.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="flex items-center gap-2 pb-0.5">
+                                    <button
+                                      onClick={() => saveEdit(m.id)}
+                                      disabled={patchMut.isPending}
+                                      className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+                                    >
+                                      {patchMut.isPending && !editConflicts.length ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                                      Guardar
+                                    </button>
+                                    <button onClick={cancelEdit} className="h-8 px-3 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {editConflicts.length > 0 && (
+                                  <div className="rounded-md bg-yellow-400/5 border border-yellow-400/20 p-3 space-y-2">
+                                    <p className="text-xs font-semibold text-yellow-400">Conflictos detectados:</p>
+                                    {editConflicts.map((c, i) => (
+                                      <p key={i} className="text-xs text-muted-foreground">{c.description}</p>
+                                    ))}
+                                    <button
+                                      onClick={() => saveEdit(m.id, true)}
+                                      disabled={patchMut.isPending}
+                                      className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-xs text-yellow-400 font-semibold hover:bg-yellow-400/15 disabled:opacity-50"
+                                    >
+                                      {patchMut.isPending ? <Loader2 size={11} className="animate-spin" /> : null}
+                                      Guardar igualmente
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
-        })
+        }).filter(Boolean)
       )}
+
+      {showConflicts && (
+        <ConflictModal
+          conflicts={pendingConflicts}
+          forcing={publishMut.isPending}
+          onClose={() => { setShowConflicts(false); setPublishCatId(null); }}
+          onForce={() => publishCatId && publishMut.mutate({ catId: publishCatId, force: true })}
+        />
+      )}
+
+      <ConfirmModal
+        open={!!unpublishCatId}
+        title="Despublicar horario"
+        description="Los jugadores dejarán de ver el horario de esta categoría en la app. Podrás volver a publicarlo cuando lo corrijas."
+        confirmLabel="Despublicar"
+        danger
+        loading={unpublishMut.isPending}
+        onClose={() => setUnpublishCatId(null)}
+        onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
+      />
     </div>
   );
 }
@@ -1275,6 +1623,8 @@ export default function TorneoDetailPage() {
             refetch={refetchMatches}
             autoSchedule={autoSchedule}
             onMatchClick={setResultMatch}
+            tournament={tournament}
+            tournamentId={id}
           />
         )}
 
@@ -1614,6 +1964,7 @@ export default function TorneoDetailPage() {
       onClose={() => setRegenElimCatId(null)}
       onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
     />
+
 
     </>
   );
