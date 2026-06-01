@@ -9,7 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
-  Pencil, Send,
+  Pencil, Send, EyeOff,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -160,6 +160,7 @@ function CalendarTab({
   const [publishCatId,    setPublishCatId]    = useState<string | null>(null);
   const [pendingConflicts, setPendingConflicts] = useState<ScheduleConflict[]>([]);
   const [showConflicts,   setShowConflicts]   = useState(false);
+  const [unpublishCatId,  setUnpublishCatId]  = useState<string | null>(null);
 
   // Inline match edit state
   const [editMatchId,  setEditMatchId]  = useState<string | null>(null);
@@ -199,6 +200,17 @@ function CalendarTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // ── Unpublish mutation ──────────────────────────────────────────────────────
+  const unpublishMut = useMutation({
+    mutationFn: (catId: string) => adminService.schedule.unpublish(tournamentId, catId),
+    onSuccess: () => {
+      toast.success("Horario despublicado. Los jugadores ya no verán el horario.");
+      setUnpublishCatId(null);
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   // ── Patch match mutation ────────────────────────────────────────────────────
   const patchMut = useMutation({
     mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; force?: boolean } }) =>
@@ -234,6 +246,39 @@ function CalendarTab({
     patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, force } });
   };
 
+  const exportCsv = () => {
+    const catMap = Object.fromEntries(
+      (tournament?.categories ?? []).map((c: any) => [
+        c.id,
+        `${GENDER_LABEL[c.gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level] ?? c.level}`,
+      ]),
+    );
+
+    const rows = [...matches]
+      .filter((m) => !!(m as any).date)
+      .sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime())
+      .map((m) => {
+        const d = new Date((m as any).date);
+        return {
+          Fecha:      d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }),
+          Hora:       d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+          Pista:      (m as any).court ?? "—",
+          Categoría:  catMap[(m as any).categoryId ?? ""] ?? "—",
+          Fase:       phaseLabel(m.phase),
+          "Equipo 1": m.team1.join(" / "),
+          "Equipo 2": m.team2.join(" / "),
+          Estado:     m.status === "finished" ? "Finalizado" : "Pendiente",
+        };
+      });
+
+    const name = tournament?.name
+      ? `horario_${tournament.name.replace(/\s+/g, "_").toLowerCase()}`
+      : "horario";
+    downloadCsv(name, rows);
+  };
+
+  // TODO Fix #18: añadir toggle Lista/Grid — grid con eje X=pistas, eje Y=horas por día (tipo Google Calendar)
+
   return (
     <div className="space-y-4">
       {/* Top toolbar */}
@@ -243,6 +288,15 @@ function CalendarTab({
           Partidos ({matches.length})
         </h3>
         <div className="flex items-center gap-2">
+          <button
+            onClick={exportCsv}
+            disabled={matches.filter((m) => !!(m as any).date).length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            title="Exportar horario como CSV"
+          >
+            <Download size={11} />
+            Exportar CSV
+          </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
             disabled={autoSchedule.isPending || matches.length === 0}
@@ -316,14 +370,28 @@ function CalendarTab({
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={() => { setPublishCatId(cat.id); publishMut.mutate({ catId: cat.id }); }}
-                  disabled={isPublishing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
-                >
-                  {isPublishing ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
-                  {isPublished ? "Republicar" : "Publicar horario"}
-                </button>
+                <div className="flex items-center gap-2">
+                  {isPublished && (
+                    <button
+                      onClick={() => setUnpublishCatId(cat.id)}
+                      disabled={unpublishMut.isPending && unpublishCatId === cat.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-500/10 border border-red-500/30 text-xs text-red-400 font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {unpublishMut.isPending && unpublishCatId === cat.id
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <EyeOff size={11} />}
+                      Despublicar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setPublishCatId(cat.id); publishMut.mutate({ catId: cat.id }); }}
+                    disabled={isPublishing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
+                  >
+                    {isPublishing ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                    {isPublished ? "Republicar" : "Publicar horario"}
+                  </button>
+                </div>
               </div>
 
               {/* Matches grouped by date */}
@@ -408,13 +476,16 @@ function CalendarTab({
                                   </div>
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Pista</label>
-                                    <input
-                                      type="text"
+                                    <select
                                       value={editCourt}
                                       onChange={(e) => { setEditCourt(e.target.value); setEditConflicts([]); }}
-                                      placeholder="Ej: Pista 1"
                                       className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                                    />
+                                    >
+                                      <option value="">— Sin pista —</option>
+                                      {courts.filter((c) => c.isAvailable).map((c) => (
+                                        <option key={c.court.name} value={c.court.name}>{c.court.name}</option>
+                                      ))}
+                                    </select>
                                   </div>
                                   <div className="flex items-center gap-2 pb-0.5">
                                     <button
@@ -1875,6 +1946,17 @@ export default function TorneoDetailPage() {
       loading={regenerateElimination.isPending}
       onClose={() => setRegenElimCatId(null)}
       onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
+    />
+
+    <ConfirmModal
+      open={!!unpublishCatId}
+      title="Despublicar horario"
+      description="Los jugadores dejarán de ver el horario de esta categoría en la app. Podrás volver a publicarlo cuando lo corrijas."
+      confirmLabel="Despublicar"
+      danger
+      loading={unpublishMut.isPending}
+      onClose={() => setUnpublishCatId(null)}
+      onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
     />
 
     </>

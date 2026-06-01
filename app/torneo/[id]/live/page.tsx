@@ -26,6 +26,7 @@ const PHASE_ORDER: Record<string, number> = {
 interface LiveMatch {
   id:            string;
   phase:         string;
+  round?:        number | null;
   phaseLabel:    string;
   phaseOrder:    number;
   categoryId?:   string;
@@ -71,7 +72,9 @@ function groupMatchesBySection(matches: LiveMatch[]) {
   });
 
   for (const m of sorted) {
-    const key = `${m.phase}::${m.categoryId ?? ""}`;
+    const key = m.phase === "CONSOLATION"
+      ? `${m.phase}::r${m.round ?? 1}::${m.categoryId ?? ""}`
+      : `${m.phase}::${m.categoryId ?? ""}`;
     if (!sections.has(key)) {
       sections.set(key, {
         phaseLabel:    m.phaseLabel,

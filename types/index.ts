@@ -25,10 +25,11 @@ export interface TournamentCategory {
   minPairs?:        number;
   maxPairs?:        number;
   scoringFormat?:   string;
-  prizeChampion?:   string;
-  prizeRunnerUp?:   string;
-  prizeConsolation?:string;
-  hasConsolation?:  boolean;
+  prizeChampion?:       string;
+  prizeRunnerUp?:       string;
+  prizeConsolation?:    string;
+  hasConsolation?:      boolean;
+  schedulePublishedAt?: string | null;
 }
 
 export interface TournamentScheduleDay {

@@ -76,6 +76,8 @@ export const adminService = {
       api.get<ScheduleConflict[]>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/validate`).then(r => r.data),
     publish:    (tournamentId: string, categoryId: string, force?: boolean) =>
       api.post<{ published: boolean; conflicts: ScheduleConflict[] }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`, { force }).then(r => r.data),
+    unpublish:  (tournamentId: string, categoryId: string) =>
+      api.delete<{ unpublished: boolean }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`).then(r => r.data),
     patchMatch: (matchId: string, data: { date?: string; court?: string; force?: boolean }) =>
       api.patch<{ match: any; conflicts: ScheduleConflict[] }>(`/admin/matches/${matchId}/schedule`, data).then(r => r.data),
   },
