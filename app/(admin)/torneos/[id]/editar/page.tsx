@@ -28,6 +28,7 @@ const schema = z.object({
   format:               z.string().optional(),
   scoringSystem:        z.string().optional(),
   matchDuration:             z.number().optional(),
+  elimMatchDuration:         z.number().min(15).max(180).nullable().optional(),
   maxMatchesPerPlayerPerDay: z.number().min(1).max(10).nullable().optional(),
   registrationDeadline:      z.string().optional(),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
@@ -106,6 +107,7 @@ export default function EditarTorneoPage() {
       format:               tournament.format ?? "",
       scoringSystem:        tournament.scoringSystem ?? "",
       matchDuration:             tournament.matchDuration ?? 60,
+      elimMatchDuration:         tournament.elimMatchDuration ?? null,
       maxMatchesPerPlayerPerDay: tournament.maxMatchesPerPlayerPerDay ?? null,
       registrationDeadline:      regDeadline,
       status:               tournament.status as FormData["status"],
@@ -292,7 +294,7 @@ export default function EditarTorneoPage() {
                   onChange={(v) => setValue("scoringSystem", v, { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
-              <Field label="Duración por partido">
+              <Field label="Duración por partido (grupos)">
                 <CustomSelect
                   options={[
                     { value: "60", label: "60 minutos" },
@@ -301,6 +303,18 @@ export default function EditarTorneoPage() {
                   ]}
                   value={String(watch("matchDuration") ?? 60)}
                   onChange={(v) => setValue("matchDuration", Number(v), { shouldValidate: true, shouldDirty: true })}
+                />
+              </Field>
+              <Field label="Duración por partido (eliminatoria)">
+                <CustomSelect
+                  options={[
+                    { value: "", label: "Igual que grupos" },
+                    { value: "60", label: "60 minutos" },
+                    { value: "90", label: "90 minutos" },
+                    { value: "120", label: "120 minutos" },
+                  ]}
+                  value={String(watch("elimMatchDuration") ?? "")}
+                  onChange={(v) => setValue("elimMatchDuration", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
               <Field label="Máx. partidos por jugador/día">

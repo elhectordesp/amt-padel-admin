@@ -112,6 +112,7 @@ export interface Tournament {
   registrationDeadline?: string;
   courts?:     string[];
   matchDuration?: number;
+  elimMatchDuration?: number | null;
   maxMatchesPerPlayerPerDay?: number | null;
   season?:     number;
 }
