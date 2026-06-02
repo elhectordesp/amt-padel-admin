@@ -112,6 +112,7 @@ export interface Tournament {
   registrationDeadline?: string;
   courts?:     string[];
   matchDuration?: number;
+  maxMatchesPerPlayerPerDay?: number | null;
   season?:     number;
 }
 
@@ -372,6 +373,7 @@ export interface CreateTournamentPayload {
   hasShirts?:  boolean;
   useSeeding?: boolean;
   matchDuration?: number;
+  maxMatchesPerPlayerPerDay?: number | null;
   courts?:     string[];
   categories:  {
     gender:          Gender;
