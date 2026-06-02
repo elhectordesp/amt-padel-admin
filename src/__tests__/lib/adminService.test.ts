@@ -292,4 +292,42 @@ describe('adminService', () => {
       });
     });
   });
+
+  // ── categories.updatePrizes ──────────────────────────────────────────
+
+  describe('categories.updatePrizes', () => {
+    it('llama a PATCH /admin/tournaments/:id/categories/:catId/prizes', async () => {
+      mockPatch.mockResolvedValueOnce({ data: { id: 'cat-1', prizeChampion: '200€' } });
+      const result = await adminService.categories.updatePrizes('tour-1', 'cat-1', {
+        prizeChampion: '200€',
+        prizeRunnerUp: '100€',
+      });
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/admin/tournaments/tour-1/categories/cat-1/prizes',
+        { prizeChampion: '200€', prizeRunnerUp: '100€' },
+      );
+      expect(result).toHaveProperty('prizeChampion', '200€');
+    });
+
+    it('envía hasConsolation false para limpiar el premio de consolación', async () => {
+      mockPatch.mockResolvedValueOnce({ data: { id: 'cat-1', hasConsolation: false, prizeConsolation: null } });
+      await adminService.categories.updatePrizes('tour-1', 'cat-1', { hasConsolation: false });
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/admin/tournaments/tour-1/categories/cat-1/prizes',
+        { hasConsolation: false },
+      );
+    });
+
+    it('incluye prizeConsolation cuando hasConsolation es true', async () => {
+      mockPatch.mockResolvedValueOnce({ data: {} });
+      await adminService.categories.updatePrizes('tour-1', 'cat-1', {
+        hasConsolation: true,
+        prizeConsolation: '50€',
+      });
+      expect(mockPatch).toHaveBeenCalledWith(
+        '/admin/tournaments/tour-1/categories/cat-1/prizes',
+        { hasConsolation: true, prizeConsolation: '50€' },
+      );
+    });
+  });
 });
