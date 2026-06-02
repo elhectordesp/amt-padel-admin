@@ -72,6 +72,8 @@ const AUDIT_ACTION_LABELS: Record<string, { label: string; color: string }> = {
   ROUND_FORMATS_UPDATED:          { label: "Formatos por ronda",      color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
   INSCRIPCION_ACTUALIZADA:        { label: "Inscripción actualizada", color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
   INSCRIPCIONES_ACTUALIZADAS_BULK:{ label: "Inscripciones bulk",      color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  BRACKET_MANUAL_INIT:            { label: "Grupos manuales creados", color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  GROUP_MEMBERS_UPDATED:          { label: "Grupo actualizado",       color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
 };
 
 function AuditActionBadge({ action, resource }: { action: string; resource: string }) {
@@ -1098,6 +1100,9 @@ export default function TorneoDetailPage() {
   const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
   const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
   const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
+  const [manualMode,          setManualMode]           = useState(false);
+  const [manualNumGroups,     setManualNumGroups]      = useState(4);
+  const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -1112,7 +1117,7 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey:  ["registrations", id],
     queryFn:   () => adminService.registrations.list(id),
-    enabled:   tab === "inscripciones",
+    enabled:   tab === "inscripciones" || (tab === "cuadro" && manualMode),
     staleTime: 60_000,
   });
 
@@ -1309,6 +1314,28 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Formatos de puntuación guardados");
       setShowRoundFmtCatId(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const initManualBracket = useMutation({
+    mutationFn: ({ catId, numGroups }: { catId: string; numGroups?: number }) =>
+      adminService.tournaments.initBracketManual(id, catId, numGroups),
+    onSuccess: () => {
+      toast.success("Grupos creados. Asigna las parejas a cada grupo.");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      setManualGroupEdits({});
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const saveGroupMembers = useMutation({
+    mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
+      adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
+    onSuccess: () => {
+      toast.success("Grupo guardado correctamente");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2036,6 +2063,188 @@ export default function TorneoDetailPage() {
                 </div>
               );
             })()}
+
+            {/* ── CUADRO MANUAL ── */}
+            <div className="bg-card border border-border rounded-lg p-5">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Asignación de grupos manual</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Crea grupos y asigna las parejas sin usar el algoritmo automático.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setManualMode((m) => !m)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+                    manualMode
+                      ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <List size={12} />
+                  {manualMode ? "Cerrar modo manual" : "Modo manual"}
+                </button>
+              </div>
+
+              {manualMode && (
+                <div className="space-y-4">
+                  <div className="w-56">
+                    <CustomSelect
+                      options={catOptions}
+                      value={bracketCatId}
+                      onChange={(v) => { setBracketCatId(v); setBracketFormat(""); setManualGroupEdits({}); }}
+                    />
+                  </div>
+
+                  {bracketCatId && (() => {
+                    const catGroups: any[] = (allStandings as any)[bracketCatId] ?? [];
+                    const confirmedPairs = groupByPair(
+                      registrations.filter((r: any) => r.categoryId === bracketCatId && r.status === "CONFIRMED")
+                    );
+
+                    if (catGroups.length === 0) {
+                      return (
+                        <div className="space-y-4">
+                          <p className="text-xs text-muted-foreground">
+                            No hay grupos creados todavía. Define cuántos grupos quieres y crea la estructura vacía.
+                          </p>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-medium text-muted-foreground">Nº de grupos</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={16}
+                                value={manualNumGroups}
+                                onChange={(e) => setManualNumGroups(Math.max(1, Math.min(16, Number(e.target.value))))}
+                                className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              />
+                            </div>
+                            <button
+                              onClick={() => initManualBracket.mutate({ catId: bracketCatId, numGroups: manualNumGroups })}
+                              disabled={initManualBracket.isPending}
+                              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
+                            >
+                              {initManualBracket.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
+                              Crear grupos
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (loadingRegs) {
+                      return (
+                        <div className="flex justify-center py-8">
+                          <Loader2 size={18} className="animate-spin text-muted-foreground" />
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          {catGroups.length} grupos · {confirmedPairs.length} parejas confirmadas disponibles.{" "}
+                          <span className="text-yellow-400">Guardar reemplaza todos los miembros del grupo y regenera sus partidos.</span>
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {catGroups.map((grp: any) => {
+                            const groupEdit = manualGroupEdits[grp.id] ?? [];
+                            const assignedToOtherGroups = new Set(
+                              Object.entries(manualGroupEdits)
+                                .filter(([gId]) => gId !== grp.id)
+                                .flatMap(([, members]) => members.map((m) => m.userId))
+                            );
+                            const availablePairs = confirmedPairs.filter((p) => !assignedToOtherGroups.has(p.primary.userId));
+
+                            return (
+                              <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
+                                <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+
+                                {groupEdit.length === 0 && (
+                                  <p className="text-[10px] text-muted-foreground/60 italic">Sin parejas asignadas aún</p>
+                                )}
+
+                                {groupEdit.map((member) => {
+                                  const pair = confirmedPairs.find((p) => p.primary.userId === member.userId);
+                                  return (
+                                    <div key={member.userId} className="flex items-center gap-1.5">
+                                      <span className="flex-1 text-xs text-foreground truncate">
+                                        {pair ? (
+                                          <>
+                                            {pair.primary.user.name}
+                                            {pair.primary.partner && (
+                                              <span className="text-muted-foreground"> / {pair.primary.partner.name}</span>
+                                            )}
+                                          </>
+                                        ) : member.userId}
+                                      </span>
+                                      <button
+                                        onClick={() =>
+                                          setManualGroupEdits((prev) => ({
+                                            ...prev,
+                                            [grp.id]: (prev[grp.id] ?? []).filter((m) => m.userId !== member.userId),
+                                          }))
+                                        }
+                                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                      >
+                                        <X size={10} />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+
+                                {availablePairs.length > 0 && (
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      const pair = confirmedPairs.find((p) => p.primary.userId === e.target.value);
+                                      if (!pair) return;
+                                      setManualGroupEdits((prev) => ({
+                                        ...prev,
+                                        [grp.id]: [
+                                          ...(prev[grp.id] ?? []),
+                                          { userId: pair.primary.userId, partnerId: pair.primary.partnerId ?? null },
+                                        ],
+                                      }));
+                                    }}
+                                    className="w-full h-8 rounded-md border border-dashed border-[rgba(212,175,55,0.3)] bg-background px-2 text-[11px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                  >
+                                    <option value="">+ Añadir pareja…</option>
+                                    {availablePairs.map((p) => (
+                                      <option key={p.primary.userId} value={p.primary.userId}>
+                                        {p.primary.user.name}
+                                        {p.primary.partner ? ` / ${p.primary.partner.name}` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+
+                                <button
+                                  onClick={() =>
+                                    saveGroupMembers.mutate({
+                                      catId: bracketCatId,
+                                      groupId: grp.id,
+                                      members: groupEdit,
+                                    })
+                                  }
+                                  disabled={saveGroupMembers.isPending || groupEdit.length < 2}
+                                  title={groupEdit.length < 2 ? "Añade al menos 2 parejas" : undefined}
+                                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded-md bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)] text-[#D4AF37] hover:bg-[rgba(212,175,55,0.12)] disabled:opacity-50 transition-colors font-medium"
+                                >
+                                  {saveGroupMembers.isPending ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                                  Guardar grupo
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
 
             <div className="space-y-4">
               {tournament.categories.map((cat) => {
