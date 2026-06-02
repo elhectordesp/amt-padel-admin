@@ -1691,7 +1691,7 @@ export default function TorneoDetailPage() {
               </div>
               <div className="divide-y divide-border">
                 {tournament.categories.map((cat: any) => {
-                  const catLabel = `${GENDER_LABEL[cat.gender].short} ${CATEGORY_LABEL_SHORT[cat.level]}`;
+                  const catLabel = `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
                   const isEditing = editPrizesCatId === cat.id;
                   const hasPrizes = cat.prizeChampion || cat.prizeRunnerUp || (cat.hasConsolation && cat.prizeConsolation);
 
