@@ -30,7 +30,7 @@ import {
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability, Gender, CategoryLevel } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability, Gender, CategoryLevel, AuditLogEntry } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -50,6 +50,42 @@ function StatusBadge({ status }: { status: RegistrationStatus }) {
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
       <Icon size={9} />
       {cfg.label}
+    </span>
+  );
+}
+
+const AUDIT_ACTION_LABELS: Record<string, { label: string; color: string }> = {
+  TORNEO_CREADO:                  { label: "Torneo creado",           color: "text-green-400 bg-green-400/10 border-green-400/30"   },
+  TORNEO_EDITADO:                 { label: "Torneo editado",          color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  TORNEO_ELIMINADO:               { label: "Torneo eliminado",        color: "text-red-400 bg-red-400/10 border-red-400/30"        },
+  TORNEO_RESTAURADO:              { label: "Torneo restaurado",       color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  TORNEO_DUPLICADO:               { label: "Torneo duplicado",        color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
+  TORNEO_PUBLICADO:               { label: "Torneo publicado",        color: "text-green-400 bg-green-400/10 border-green-400/30"   },
+  BRACKET_GENERADO:               { label: "Cuadro generado",         color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  BRACKET_REGENERADO:             { label: "Cuadro regenerado",       color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  ELIMINATORIA_REGENERADA:        { label: "Eliminatoria regenerada", color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  PARTIDOS_PROGRAMADOS:           { label: "Partidos programados",    color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  HORARIO_PUBLICADO:              { label: "Horario publicado",       color: "text-green-400 bg-green-400/10 border-green-400/30"   },
+  HORARIO_DESPUBLICADO:           { label: "Horario despublicado",    color: "text-orange-400 bg-orange-400/10 border-orange-400/30"},
+  PARTIDO_REPROGRAMADO:           { label: "Partido reprogramado",    color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  RESULTADO_REGISTRADO:           { label: "Resultado registrado",    color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  ROUND_FORMATS_UPDATED:          { label: "Formatos por ronda",      color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
+  INSCRIPCION_ACTUALIZADA:        { label: "Inscripción actualizada", color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  INSCRIPCIONES_ACTUALIZADAS_BULK:{ label: "Inscripciones bulk",      color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+};
+
+function AuditActionBadge({ action, resource }: { action: string; resource: string }) {
+  const cfg = AUDIT_ACTION_LABELS[action];
+  if (cfg) {
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${cfg.color}`}>
+        {cfg.label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border text-muted-foreground bg-muted/30 border-border">
+      {action} <span className="ml-1 opacity-50">({resource})</span>
     </span>
   );
 }
@@ -1034,7 +1070,7 @@ function PistasTab({ tournamentId }: { tournamentId: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas" | "estado";
+type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas" | "estado" | "historial";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -1102,6 +1138,13 @@ export default function TorneoDetailPage() {
     queryFn:  () => adminService.tournaments.status(id),
     enabled:  tab === "estado",
     staleTime: 30_000,
+  });
+
+  const { data: auditLog = [], isLoading: loadingAudit } = useQuery({
+    queryKey: ["tournament-audit", id],
+    queryFn:  () => adminService.tournaments.auditLog(id, 150),
+    enabled:  tab === "historial",
+    staleTime: 60_000,
   });
 
   // Standings — carga todas las categorías que hayan pasado por grupos
@@ -1516,6 +1559,7 @@ export default function TorneoDetailPage() {
               { key: "calendario",    label: "Calendario"     },
               { key: "cuadro",        label: "Cuadro"         },
               { key: "pistas",        label: "Pistas"         },
+              { key: "historial",     label: "Historial"      },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
@@ -2322,6 +2366,59 @@ export default function TorneoDetailPage() {
         {/* ── PISTAS TAB ── */}
         {tab === "pistas" && (
           <PistasTab tournamentId={id} />
+        )}
+
+        {/* ── HISTORIAL TAB ── */}
+        {tab === "historial" && (
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
+              <span className="text-xs text-muted-foreground">{auditLog.length} registros</span>
+            </div>
+            {loadingAudit ? (
+              <div className="flex justify-center py-12">
+                <Loader2 size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : auditLog.length === 0 ? (
+              <p className="text-center text-muted-foreground text-sm py-12">Sin registros de auditoría todavía</p>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border">
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-36">Fecha</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-28">Admin</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Acción</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Detalles</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLog.map((entry: AuditLogEntry, i: number) => (
+                      <tr key={entry.id} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                          {new Date(entry.createdAt).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="px-3 py-2 font-medium truncate max-w-[7rem]">{entry.adminName}</td>
+                        <td className="px-3 py-2">
+                          <AuditActionBadge action={entry.action} resource={entry.resource} />
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {entry.details ? (
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              {Object.entries(entry.details as Record<string, unknown>)
+                                .filter(([k]) => !["force"].includes(k))
+                                .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+                                .join(" · ")}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
     <ConfirmModal

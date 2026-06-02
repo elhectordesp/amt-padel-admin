@@ -488,6 +488,16 @@ export interface AdminMember {
 
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";
 
+export interface AuditLogEntry {
+  id:          string;
+  adminName:   string;
+  action:      string;
+  resource:    string;
+  resourceId?: string | null;
+  details?:    Record<string, unknown> | null;
+  createdAt:   string;
+}
+
 export interface SupportMessage {
   id:        string;
   subject:   string;
