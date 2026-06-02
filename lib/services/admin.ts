@@ -81,6 +81,12 @@ export const adminService = {
   categories: {
     updateRoundFormats: (tournamentId: string, categoryId: string, roundFormats: Record<string, string> | null) =>
       api.patch<{ success: boolean }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/round-formats`, { roundFormats }).then(r => r.data),
+    updatePrizes: (
+      tournamentId: string,
+      categoryId:   string,
+      prizes: { prizeChampion?: string; prizeRunnerUp?: string; prizeConsolation?: string; hasConsolation?: boolean },
+    ) =>
+      api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}/prizes`, prizes).then(r => r.data),
   },
 
   schedule: {

@@ -74,6 +74,7 @@ const AUDIT_ACTION_LABELS: Record<string, { label: string; color: string }> = {
   INSCRIPCIONES_ACTUALIZADAS_BULK:{ label: "Inscripciones bulk",      color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
   BRACKET_MANUAL_INIT:            { label: "Grupos manuales creados", color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
   GROUP_MEMBERS_UPDATED:          { label: "Grupo actualizado",       color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  PREMIOS_CATEGORIA_ACTUALIZADOS: { label: "Premios actualizados",    color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
 };
 
 function AuditActionBadge({ action, resource }: { action: string; resource: string }) {
@@ -1103,6 +1104,8 @@ export default function TorneoDetailPage() {
   const [manualMode,          setManualMode]           = useState(false);
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
+  const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
+  const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -1336,6 +1339,17 @@ export default function TorneoDetailPage() {
       toast.success("Grupo guardado correctamente");
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updatePrizesMut = useMutation({
+    mutationFn: ({ catId, prizes }: { catId: string; prizes: typeof prizesForm }) =>
+      adminService.categories.updatePrizes(id, catId, prizes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+      toast.success("Premios actualizados");
+      setEditPrizesCatId(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -1664,6 +1678,112 @@ export default function TorneoDetailPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* ── Premios por categoría ── */}
+            <div className="lg:col-span-2 bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Trophy size={14} className="text-[#D4AF37]" />
+                  Premios por categoría
+                </h3>
+              </div>
+              <div className="divide-y divide-border">
+                {tournament.categories.map((cat: any) => {
+                  const catLabel = `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
+                  const isEditing = editPrizesCatId === cat.id;
+                  const hasPrizes = cat.prizeChampion || cat.prizeRunnerUp || (cat.hasConsolation && cat.prizeConsolation);
+
+                  return (
+                    <div key={cat.id} className="px-5 py-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-foreground">{catLabel}</span>
+                        {!isEditing ? (
+                          <button
+                            onClick={() => {
+                              setEditPrizesCatId(cat.id);
+                              setPrizesForm({
+                                prizeChampion:    cat.prizeChampion    ?? "",
+                                prizeRunnerUp:    cat.prizeRunnerUp    ?? "",
+                                prizeConsolation: cat.prizeConsolation ?? "",
+                                hasConsolation:   cat.hasConsolation   ?? false,
+                              });
+                            }}
+                            className="text-xs text-[#D4AF37] hover:underline"
+                          >
+                            Editar
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updatePrizesMut.mutate({ catId: cat.id, prizes: prizesForm })}
+                              disabled={updatePrizesMut.isPending}
+                              className="text-xs bg-[#D4AF37] text-black font-semibold px-3 py-1 rounded hover:bg-[#c9a227] disabled:opacity-50"
+                            >
+                              {updatePrizesMut.isPending ? "Guardando…" : "Guardar"}
+                            </button>
+                            <button
+                              onClick={() => setEditPrizesCatId(null)}
+                              className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">🥇 Campeón</label>
+                            <input
+                              value={prizesForm.prizeChampion}
+                              onChange={(e) => setPrizesForm((f) => ({ ...f, prizeChampion: e.target.value }))}
+                              placeholder="ej: 200€, Copa + camiseta…"
+                              className="mt-1 w-full h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">🥈 Subcampeón</label>
+                            <input
+                              value={prizesForm.prizeRunnerUp}
+                              onChange={(e) => setPrizesForm((f) => ({ ...f, prizeRunnerUp: e.target.value }))}
+                              placeholder="ej: 100€, Medalla…"
+                              className="mt-1 w-full h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                            />
+                          </div>
+                          <div className="sm:col-span-2 flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              id={`hc-${cat.id}`}
+                              checked={prizesForm.hasConsolation}
+                              onChange={(e) => setPrizesForm((f) => ({ ...f, hasConsolation: e.target.checked }))}
+                              className="accent-[#D4AF37]"
+                            />
+                            <label htmlFor={`hc-${cat.id}`} className="text-xs text-muted-foreground">Hay partido de consolación</label>
+                            {prizesForm.hasConsolation && (
+                              <input
+                                value={prizesForm.prizeConsolation}
+                                onChange={(e) => setPrizesForm((f) => ({ ...f, prizeConsolation: e.target.value }))}
+                                placeholder="🏅 Premio consolación"
+                                className="flex-1 h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      ) : hasPrizes ? (
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          {cat.prizeChampion   && <span className="text-foreground">🥇 <span className="text-[#D4AF37] font-medium">{cat.prizeChampion}</span></span>}
+                          {cat.prizeRunnerUp   && <span className="text-foreground">🥈 <span className="text-[#D4AF37] font-medium">{cat.prizeRunnerUp}</span></span>}
+                          {cat.hasConsolation && cat.prizeConsolation && <span className="text-foreground">🏅 <span className="text-[#D4AF37] font-medium">{cat.prizeConsolation}</span></span>}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Sin premios configurados. Pulsa &quot;Editar&quot; para añadirlos.</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
