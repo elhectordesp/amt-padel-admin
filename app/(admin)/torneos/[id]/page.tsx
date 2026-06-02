@@ -24,7 +24,7 @@ import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
-import { printRegistrations } from "@/lib/utils/print";
+import { printRegistrations, printSchedule } from "@/lib/utils/print";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
@@ -299,14 +299,14 @@ function CalendarTab({
     patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, force } });
   };
 
-  const exportCsv = () => {
-    const catMap = Object.fromEntries(
-      (tournament?.categories ?? []).map((c: any) => [
-        c.id,
-        `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
-      ]),
-    );
+  const catMap = Object.fromEntries(
+    (tournament?.categories ?? []).map((c: any) => [
+      c.id,
+      `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
+    ]),
+  );
 
+  const exportCsv = () => {
     const rows = [...matches]
       .filter((m) => !!(m as any).date)
       .sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime())
@@ -328,6 +328,10 @@ function CalendarTab({
       ? `horario_${tournament.name.replace(/\s+/g, "_").toLowerCase()}`
       : "horario";
     downloadCsv(name, rows);
+  };
+
+  const printDoc = () => {
+    if (tournament) printSchedule(tournament, matches, catMap);
   };
 
   return (
@@ -374,6 +378,15 @@ function CalendarTab({
           >
             <Download size={11} />
             Exportar CSV
+          </button>
+          <button
+            onClick={printDoc}
+            disabled={matches.filter((m) => !!(m as any).date).length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            title="Imprimir horario o guardar como PDF"
+          >
+            <Printer size={11} />
+            Imprimir
           </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
@@ -2718,7 +2731,7 @@ export default function TorneoDetailPage() {
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground w-36">Fecha</th>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground w-28">Admin</th>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground">Acción</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Detalles</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Detalles / Cambio</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2731,8 +2744,28 @@ export default function TorneoDetailPage() {
                         <td className="px-3 py-2">
                           <AuditActionBadge action={entry.action} resource={entry.resource} />
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">
-                          {entry.details ? (
+                        <td className="px-3 py-2">
+                          {entry.oldValue || entry.newValue ? (
+                            <div className="flex items-start gap-1.5 flex-wrap">
+                              {entry.oldValue && (
+                                <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 rounded px-1.5 py-0.5">
+                                  {Object.entries(entry.oldValue)
+                                    .map(([k, v]) => `${k}: ${String(v ?? "—")}`)
+                                    .join(", ")}
+                                </span>
+                              )}
+                              {entry.oldValue && entry.newValue && (
+                                <span className="text-muted-foreground/50 text-[10px] self-center">→</span>
+                              )}
+                              {entry.newValue && (
+                                <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 rounded px-1.5 py-0.5">
+                                  {Object.entries(entry.newValue)
+                                    .map(([k, v]) => `${k}: ${String(v ?? "—")}`)
+                                    .join(", ")}
+                                </span>
+                              )}
+                            </div>
+                          ) : entry.details ? (
                             <span className="font-mono text-[10px] text-muted-foreground">
                               {Object.entries(entry.details as Record<string, unknown>)
                                 .filter(([k]) => !["force"].includes(k))

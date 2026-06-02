@@ -1,8 +1,15 @@
+// Characters that Excel/Sheets interpret as formula prefixes — must be neutralised (OWASP CSV injection)
+const FORMULA_PREFIXES = new Set(["=", "+", "-", "@", "\t", "\r"]);
+
+function sanitize(s: string): string {
+  return FORMULA_PREFIXES.has(s[0]) ? `\t${s}` : s;
+}
+
 export function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
   const escape  = (v: string | number) => {
-    const s = String(v);
+    const s = sanitize(String(v));
     return s.includes(",") || s.includes('"') || s.includes("\n")
       ? `"${s.replace(/"/g, '""')}"`
       : s;
