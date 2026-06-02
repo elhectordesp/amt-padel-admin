@@ -9,7 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
-  Pencil, Send, EyeOff,
+  Pencil, Send, EyeOff, RotateCcw, List, Save,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
+import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
@@ -29,7 +30,7 @@ import {
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability, Gender, CategoryLevel } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CourtUnavailability, Gender, CategoryLevel, AuditLogEntry } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -49,6 +50,44 @@ function StatusBadge({ status }: { status: RegistrationStatus }) {
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
       <Icon size={9} />
       {cfg.label}
+    </span>
+  );
+}
+
+const AUDIT_ACTION_LABELS: Record<string, { label: string; color: string }> = {
+  TORNEO_CREADO:                  { label: "Torneo creado",           color: "text-green-400 bg-green-400/10 border-green-400/30"   },
+  TORNEO_EDITADO:                 { label: "Torneo editado",          color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  TORNEO_ELIMINADO:               { label: "Torneo eliminado",        color: "text-red-400 bg-red-400/10 border-red-400/30"        },
+  TORNEO_RESTAURADO:              { label: "Torneo restaurado",       color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  TORNEO_DUPLICADO:               { label: "Torneo duplicado",        color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
+  TORNEO_PUBLICADO:               { label: "Torneo publicado",        color: "text-green-400 bg-green-400/10 border-green-400/30"   },
+  BRACKET_GENERADO:               { label: "Cuadro generado",         color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  BRACKET_REGENERADO:             { label: "Cuadro regenerado",       color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  ELIMINATORIA_REGENERADA:        { label: "Eliminatoria regenerada", color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  PARTIDOS_PROGRAMADOS:           { label: "Partidos programados",    color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  HORARIO_PUBLICADO:              { label: "Horario publicado",       color: "text-green-400 bg-green-400/10 border-green-400/30"   },
+  HORARIO_DESPUBLICADO:           { label: "Horario despublicado",    color: "text-orange-400 bg-orange-400/10 border-orange-400/30"},
+  PARTIDO_REPROGRAMADO:           { label: "Partido reprogramado",    color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  RESULTADO_REGISTRADO:           { label: "Resultado registrado",    color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  ROUND_FORMATS_UPDATED:          { label: "Formatos por ronda",      color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
+  INSCRIPCION_ACTUALIZADA:        { label: "Inscripción actualizada", color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  INSCRIPCIONES_ACTUALIZADAS_BULK:{ label: "Inscripciones bulk",      color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  BRACKET_MANUAL_INIT:            { label: "Grupos manuales creados", color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+  GROUP_MEMBERS_UPDATED:          { label: "Grupo actualizado",       color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
+};
+
+function AuditActionBadge({ action, resource }: { action: string; resource: string }) {
+  const cfg = AUDIT_ACTION_LABELS[action];
+  if (cfg) {
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${cfg.color}`}>
+        {cfg.label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border text-muted-foreground bg-muted/30 border-border">
+      {action} <span className="ml-1 opacity-50">({resource})</span>
     </span>
   );
 }
@@ -143,18 +182,25 @@ function ConflictModal({
 
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
-  matches, loading, isError, refetch, autoSchedule, onMatchClick, tournament, tournamentId,
+  matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, tournament, tournamentId,
+  scheduleWarnings, onClearWarnings,
 }: {
-  matches:      MatchResult[];
-  loading:      boolean;
-  isError:      boolean;
-  refetch:      () => void;
-  autoSchedule: { mutate: (force?: boolean) => void; isPending: boolean };
-  onMatchClick: (m: MatchResult) => void;
-  tournament:   any;
-  tournamentId: string;
+  matches:          MatchResult[];
+  loading:          boolean;
+  isError:          boolean;
+  refetch:          () => void;
+  autoSchedule:     { mutate: (force?: boolean) => void; isPending: boolean };
+  onMatchClick:     (m: MatchResult) => void;
+  onCorrectClick:   (m: MatchResult) => void;
+  tournament:       any;
+  tournamentId:     string;
+  scheduleWarnings: { pair: string; phase: string; category: string }[];
+  onClearWarnings:  () => void;
 }) {
   const qc = useQueryClient();
+
+  // View mode
+  const [viewMode, setViewMode] = useState<"lista" | "grid">("lista");
 
   // Publish state
   const [publishCatId,    setPublishCatId]    = useState<string | null>(null);
@@ -283,16 +329,41 @@ function CalendarTab({
     downloadCsv(name, rows);
   };
 
-  // TODO Fix #18: añadir toggle Lista/Grid — grid con eje X=pistas, eje Y=horas por día (tipo Google Calendar)
-
   return (
     <div className="space-y-4">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between gap-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-          <Calendar size={14} className="text-[#D4AF37]" />
-          Partidos ({matches.length})
-        </h3>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Calendar size={14} className="text-[#D4AF37]" />
+            Partidos ({matches.length})
+          </h3>
+          {/* Lista / Grid toggle */}
+          <div className="flex items-center rounded-md border border-border overflow-hidden">
+            <button
+              onClick={() => setViewMode("lista")}
+              title="Vista lista"
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                viewMode === "lista"
+                  ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <List size={12} />
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              title="Vista grid (por pistas)"
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs border-l border-border transition-colors ${
+                viewMode === "grid"
+                  ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid size={12} />
+            </button>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={exportCsv}
@@ -323,6 +394,38 @@ function CalendarTab({
         </div>
       </div>
 
+      {/* Unscheduled-players warning banner */}
+      {scheduleWarnings.length > 0 && (
+        <div className="rounded-lg border border-yellow-400/30 bg-yellow-400/5 p-4 space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlarmClock size={14} className="text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-yellow-400">
+                {scheduleWarnings.length} partido(s) sin hueco disponible
+              </p>
+            </div>
+            <button
+              onClick={onClearWarnings}
+              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title="Cerrar aviso"
+            >
+              <X size={13} />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground pl-5">
+            Los siguientes jugadores no pudieron ser programados. Ajusta las jornadas, pistas o el límite diario e intenta de nuevo.
+          </p>
+          <ul className="pl-5 space-y-1">
+            {scheduleWarnings.map((w, i) => (
+              <li key={i} className="text-xs text-yellow-300/80 flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-yellow-400/10 text-[10px] font-semibold shrink-0">{w.phase} · {w.category}</span>
+                {w.pair}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -338,8 +441,16 @@ function CalendarTab({
           <Calendar size={36} className="text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No hay partidos registrados aún</p>
         </div>
+      ) : viewMode === "grid" ? (
+        <ScheduleGrid
+          matches={matches}
+          duration={tournament?.matchDuration ?? 60}
+          tournament={tournament}
+          onMatchClick={onMatchClick}
+          onCorrectClick={onCorrectClick}
+        />
       ) : (
-        // Per-category sections
+        // Per-category sections (lista)
         tournament.categories.map((cat: any) => {
           const catMatches = byCat[cat.id] ?? [];
           if (catMatches.length === 0) return null;
@@ -443,11 +554,20 @@ function CalendarTab({
                                 <span className="text-sm font-medium text-foreground truncate">{((m as any).team2 ?? []).join(" / ") || "Por definir"}</span>
                               </div>
                               {(m as any).isResult && (m as any).sets1 && (m as any).sets2 ? (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <CheckCircle size={13} className="text-green-400" />
-                                  <span className="text-xs font-mono text-foreground">
-                                    {(m as any).sets1.map((s: number, i: number) => `${s}-${(m as any).sets2[i]}`).join(" / ")}
-                                  </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <CheckCircle size={13} className="text-green-400" />
+                                    <span className="text-xs font-mono text-foreground">
+                                      {(m as any).sets1.map((s: number, i: number) => `${s}-${(m as any).sets2[i]}`).join(" / ")}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
+                                    className="p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
+                                    title="Corregir resultado"
+                                  >
+                                    <RotateCcw size={10} />
+                                  </button>
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
@@ -557,6 +677,163 @@ function CalendarTab({
         onClose={() => setUnpublishCatId(null)}
         onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
       />
+    </div>
+  );
+}
+
+// ── StatusTab ─────────────────────────────────────────────────────────────
+function StatusTab({ status, loading, onRefresh }: { status: any; loading: boolean; onRefresh: () => void }) {
+  const [expandedCat, setExpandedCat] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <Loader2 size={18} className="animate-spin" /> Cargando estado…
+      </div>
+    );
+  }
+  if (!status) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+        <p className="text-sm">No se pudo cargar el estado del torneo.</p>
+        <button onClick={onRefresh} className="text-xs underline">Reintentar</button>
+      </div>
+    );
+  }
+
+  const { summary, categories } = status;
+  const pct = summary.totalMatches > 0 ? Math.round((summary.finishedMatches / summary.totalMatches) * 100) : 0;
+  const hasIssues = summary.unscheduled > 0 || summary.totalConflicts > 0;
+
+  return (
+    <div className="space-y-6 p-4">
+      {/* ── Summary bar ── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading text-base text-foreground">Progreso global</h3>
+          <button onClick={onRefresh} className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors" title="Actualizar">
+            <RefreshCw size={13} />
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{summary.finishedMatches} / {summary.totalMatches} partidos jugados</span>
+            <span className="font-semibold text-foreground">{pct}%</span>
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+            <div className="h-full bg-[#D4AF37] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+
+        {/* Key numbers */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Categorías finalizadas", value: `${summary.completedCategories}/${summary.totalCategories}`, color: summary.completedCategories === summary.totalCategories ? "text-green-400" : "text-foreground" },
+            { label: "Sin programar",          value: summary.unscheduled,   color: summary.unscheduled   > 0 ? "text-amber-400" : "text-green-400" },
+            { label: "Conflictos",             value: summary.totalConflicts, color: summary.totalConflicts > 0 ? "text-red-400"   : "text-green-400" },
+            { label: "Categorías en curso",    value: summary.totalCategories - summary.completedCategories, color: "text-foreground" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-secondary/40 rounded-lg p-3 text-center">
+              <p className={`text-xl font-bold font-mono ${color}`}>{value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {!hasIssues && summary.completedCategories === summary.totalCategories && (
+          <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+            <CheckCircle size={15} /> Todas las categorías finalizadas. ¡Torneo completo!
+          </div>
+        )}
+        {!hasIssues && summary.completedCategories < summary.totalCategories && (
+          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+            <CheckCircle size={13} className="text-green-400" /> Sin conflictos ni partidos sin programar
+          </div>
+        )}
+      </div>
+
+      {/* ── Category cards ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {categories.map((cat: any) => {
+          const catLabel = `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
+          const catPct   = cat.totalMatches > 0 ? Math.round((cat.finishedMatches / cat.totalMatches) * 100) : 0;
+          const hasConflicts  = cat.conflicts.length > 0;
+          const hasUnscheduled = cat.unscheduled > 0;
+          const isExpanded = expandedCat === cat.categoryId;
+
+          return (
+            <div key={cat.categoryId} className={`bg-card border rounded-xl overflow-hidden transition-colors ${cat.isComplete ? "border-green-400/30" : hasConflicts ? "border-red-400/30" : hasUnscheduled ? "border-amber-400/30" : "border-border"}`}>
+              {/* Card header */}
+              <div className="px-4 pt-4 pb-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{catLabel}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-border text-muted-foreground">{phaseLabel(cat.currentPhase)}</span>
+                  </div>
+                  {cat.isComplete && (
+                    <span className="flex items-center gap-1 text-[10px] text-green-400 font-semibold"><CheckCircle size={11} /> Finalizada</span>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{cat.finishedMatches}/{cat.totalMatches} jugados</span>
+                    <span>{catPct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${catPct}%`, backgroundColor: cat.isComplete ? "#4ade80" : "#D4AF37" }} />
+                  </div>
+                </div>
+
+                {/* Status chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                    <Clock size={9} /> {cat.pendingWithTime} con hora
+                  </span>
+                  {hasUnscheduled && (
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-400">
+                      <CalendarOff size={9} /> {cat.unscheduled} sin programar
+                    </span>
+                  )}
+                  {hasConflicts && (
+                    <button onClick={() => setExpandedCat(isExpanded ? null : cat.categoryId)} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-400/10 border border-red-400/30 text-red-400 hover:bg-red-400/20 transition-colors">
+                      <Ban size={9} /> {cat.conflicts.length} conflicto{cat.conflicts.length !== 1 ? "s" : ""} {isExpanded ? "▲" : "▼"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Winner badge */}
+                {cat.winner && (
+                  <div className="flex items-center gap-2 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)] rounded-lg px-3 py-2">
+                    <Trophy size={13} className="text-[#D4AF37] shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Campeona</p>
+                      <p className="text-xs font-semibold text-[#D4AF37]">{cat.winner.join(" / ")}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Conflicts detail */}
+              {isExpanded && hasConflicts && (
+                <div className="border-t border-red-400/20 bg-red-400/5 px-4 py-3 space-y-2">
+                  <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wide">Conflictos de horario</p>
+                  {cat.conflicts.map((c: any, idx: number) => (
+                    <div key={idx} className="text-[10px] text-muted-foreground space-y-0.5">
+                      <p className="text-xs font-medium text-red-300">{c.playerName}</p>
+                      <p>{phaseLabel(c.phase1)} · {new Date(c.time1).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court1}</p>
+                      <p>{phaseLabel(c.phase2)} · {new Date(c.time2).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court2}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -795,7 +1072,7 @@ function PistasTab({ tournamentId }: { tournamentId: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas";
+type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas" | "estado" | "historial";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -810,6 +1087,7 @@ export default function TorneoDetailPage() {
   const [selectedKeys,    setSelectedKeys]  = useState<Set<string>>(new Set());
   const [updatingIds,     setUpdatingIds]   = useState<Set<string>>(new Set());
   const [bracketCatId,       setBracketCatId]       = useState("");
+  const [bracketFormat,      setBracketFormat]      = useState("");
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
@@ -817,8 +1095,14 @@ export default function TorneoDetailPage() {
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
+  const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
-  const [showStandingsCatId, setShowStandingsCatId] = useState<string | null>(null);
+  const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
+  const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
+  const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
+  const [manualMode,          setManualMode]           = useState(false);
+  const [manualNumGroups,     setManualNumGroups]      = useState(4);
+  const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -833,7 +1117,7 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey:  ["registrations", id],
     queryFn:   () => adminService.registrations.list(id),
-    enabled:   tab === "inscripciones",
+    enabled:   tab === "inscripciones" || (tab === "cuadro" && manualMode),
     staleTime: 60_000,
   });
 
@@ -850,6 +1134,22 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey: ["bracket", id],
     queryFn:  () => adminService.matches.list(id),
+  });
+
+  const {
+    data: tournamentStatus, isLoading: loadingStatus, refetch: refetchStatus,
+  } = useQuery({
+    queryKey: ["tournament-status", id],
+    queryFn:  () => adminService.tournaments.status(id),
+    enabled:  tab === "estado",
+    staleTime: 30_000,
+  });
+
+  const { data: auditLog = [], isLoading: loadingAudit } = useQuery({
+    queryKey: ["tournament-audit", id],
+    queryFn:  () => adminService.tournaments.auditLog(id, 150),
+    enabled:  tab === "historial",
+    staleTime: 60_000,
   });
 
   // Standings — carga todas las categorías que hayan pasado por grupos
@@ -914,7 +1214,8 @@ export default function TorneoDetailPage() {
   };
 
   const generateBracket = useMutation({
-    mutationFn: (customGroups?: string[][]) => adminService.tournaments.generateBracket(id, bracketCatId, customGroups),
+    mutationFn: (customGroups?: string[][]) =>
+      adminService.tournaments.generateBracket(id, bracketCatId, customGroups, bracketFormat || undefined),
     onSuccess:  (res: any) => {
       if (res?.scheduleWarning) {
         toast.success("Cuadro generado correctamente");
@@ -926,6 +1227,7 @@ export default function TorneoDetailPage() {
       }
       setBracketPreview(null);
       setBracketCatId("");
+      setBracketFormat("");
       invalidateBracket();
     },
     onError: (err: Error) => { toast.error(err.message); setBracketPreview(null); },
@@ -958,6 +1260,7 @@ export default function TorneoDetailPage() {
       await adminService.matches.setResult(resultMatch.id, sets1, sets2);
       toast.success("Resultado guardado");
       setResultMatch(null);
+      setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
       qc.invalidateQueries({ queryKey: ["standings", id] });
@@ -973,7 +1276,7 @@ export default function TorneoDetailPage() {
     if (!bracketCatId) return;
     setLoadingPreview(true);
     try {
-      const preview = await adminService.tournaments.previewBracket(id, bracketCatId) as any;
+      const preview = await adminService.tournaments.previewBracket(id, bracketCatId, bracketFormat || undefined) as any;
       setBracketPreview({ groups: preview.groups, totalMatches: preview.totalMatches, isGroups: preview.isGroups });
     } catch (err: any) {
       toast.error(err.message ?? "Error al generar la previsualización");
@@ -982,13 +1285,18 @@ export default function TorneoDetailPage() {
     }
   };
 
+  const [scheduleWarnings, setScheduleWarnings] = useState<{ pair: string; phase: string; category: string }[]>([]);
+
   const autoSchedule = useMutation({
     mutationFn: (force?: boolean) => adminService.tournaments.autoSchedule(id, force),
     onSuccess:  (res) => {
-      const msg = res.failures?.length
-        ? `${res.count} partidos programados. Sin hueco: ${res.failures.join(", ")}`
-        : `Se han asignado horarios a ${res.count} partidos`;
-      toast.success(msg);
+      const unscheduled = res.unscheduledPlayers ?? [];
+      setScheduleWarnings(unscheduled);
+      if (unscheduled.length > 0) {
+        toast.warning(`${res.count} partidos programados. ${unscheduled.length} partido(s) sin hueco — ver aviso en el calendario.`);
+      } else {
+        toast.success(`Se han asignado horarios a ${res.count} partidos`);
+      }
       qc.invalidateQueries({ queryKey: ["matches", id] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -998,6 +1306,39 @@ export default function TorneoDetailPage() {
     setUpdatingIds(new Set(pair.ids));
     bulkStatus.mutate({ ids: pair.ids, status });
   };
+
+  const saveRoundFormats = useMutation({
+    mutationFn: ({ catId, formats }: { catId: string; formats: Record<string, string> | null }) =>
+      adminService.categories.updateRoundFormats(id, catId, formats),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+      toast.success("Formatos de puntuación guardados");
+      setShowRoundFmtCatId(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const initManualBracket = useMutation({
+    mutationFn: ({ catId, numGroups }: { catId: string; numGroups?: number }) =>
+      adminService.tournaments.initBracketManual(id, catId, numGroups),
+    onSuccess: () => {
+      toast.success("Grupos creados. Asigna las parejas a cada grupo.");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      setManualGroupEdits({});
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const saveGroupMembers = useMutation({
+    mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
+      adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
+    onSuccess: () => {
+      toast.success("Grupo guardado correctamente");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const pairs = useMemo(() => groupByPair(registrations), [registrations]);
@@ -1240,10 +1581,12 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
+              { key: "estado",        label: "Estado"         },
               { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
               { key: "calendario",    label: "Calendario"     },
               { key: "cuadro",        label: "Cuadro"         },
               { key: "pistas",        label: "Pistas"         },
+              { key: "historial",     label: "Historial"      },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
@@ -1623,8 +1966,11 @@ export default function TorneoDetailPage() {
             refetch={refetchMatches}
             autoSchedule={autoSchedule}
             onMatchClick={setResultMatch}
+            onCorrectClick={(m) => { setResultMatch(m); setResultCorrection(true); }}
             tournament={tournament}
             tournamentId={id}
+            scheduleWarnings={scheduleWarnings}
+            onClearWarnings={() => setScheduleWarnings([])}
           />
         )}
 
@@ -1649,6 +1995,21 @@ export default function TorneoDetailPage() {
                 ? bracketMatches.some((m: any) => m.categoryId === bracketCatId)
                 : false;
 
+              const selectedCat = bracketCatId
+                ? tournament.categories.find((c) => c.id === bracketCatId)
+                : null;
+
+              const confirmedPairs = selectedCat?.registeredCount ?? null;
+
+              // Default format selector value: param > category.format > tournament.format
+              const defaultFormat = bracketFormat || selectedCat?.format || tournament.format || "";
+
+              const FORMAT_OPTIONS = [
+                { value: "grupos+eliminatoria",     label: "Grupos + Eliminatoria" },
+                { value: "eliminatoria",            label: "Eliminatoria directa" },
+                { value: "eliminatoria+consolacion",label: "Eliminatoria + Consolación" },
+              ];
+
               const blockedReason = !deadlinePassed
                 ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Cambia el estado a "Sorteo" para generar el cuadro.`
                 : alreadyGenerated
@@ -1663,18 +2024,31 @@ export default function TorneoDetailPage() {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {blockedReason
                           ? <span className="text-yellow-400">{blockedReason}</span>
+                          : confirmedPairs !== null
+                          ? <span><span className="text-[#D4AF37] font-semibold">{confirmedPairs} parejas confirmadas</span> — elige formato y genera el cuadro.</span>
                           : "Inscripciones cerradas. Selecciona una categoría y genera el cuadro."
                         }
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <div className="w-56">
                         <CustomSelect
                           options={catOptions}
                           value={bracketCatId}
-                          onChange={setBracketCatId}
+                          onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
+                      {bracketCatId && (
+                        <select
+                          value={bracketFormat || defaultFormat}
+                          onChange={(e) => setBracketFormat(e.target.value)}
+                          className="h-9 rounded-md border border-border bg-background text-foreground text-sm px-2 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                        >
+                          {FORMAT_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      )}
                       <button
                         onClick={handlePreviewBracket}
                         disabled={!bracketCatId || loadingPreview || generateBracket.isPending || !!blockedReason}
@@ -1689,6 +2063,188 @@ export default function TorneoDetailPage() {
                 </div>
               );
             })()}
+
+            {/* ── CUADRO MANUAL ── */}
+            <div className="bg-card border border-border rounded-lg p-5">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Asignación de grupos manual</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Crea grupos y asigna las parejas sin usar el algoritmo automático.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setManualMode((m) => !m)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+                    manualMode
+                      ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <List size={12} />
+                  {manualMode ? "Cerrar modo manual" : "Modo manual"}
+                </button>
+              </div>
+
+              {manualMode && (
+                <div className="space-y-4">
+                  <div className="w-56">
+                    <CustomSelect
+                      options={catOptions}
+                      value={bracketCatId}
+                      onChange={(v) => { setBracketCatId(v); setBracketFormat(""); setManualGroupEdits({}); }}
+                    />
+                  </div>
+
+                  {bracketCatId && (() => {
+                    const catGroups: any[] = (allStandings as any)[bracketCatId] ?? [];
+                    const confirmedPairs = groupByPair(
+                      registrations.filter((r: any) => r.categoryId === bracketCatId && r.status === "CONFIRMED")
+                    );
+
+                    if (catGroups.length === 0) {
+                      return (
+                        <div className="space-y-4">
+                          <p className="text-xs text-muted-foreground">
+                            No hay grupos creados todavía. Define cuántos grupos quieres y crea la estructura vacía.
+                          </p>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-medium text-muted-foreground">Nº de grupos</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={16}
+                                value={manualNumGroups}
+                                onChange={(e) => setManualNumGroups(Math.max(1, Math.min(16, Number(e.target.value))))}
+                                className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              />
+                            </div>
+                            <button
+                              onClick={() => initManualBracket.mutate({ catId: bracketCatId, numGroups: manualNumGroups })}
+                              disabled={initManualBracket.isPending}
+                              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
+                            >
+                              {initManualBracket.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
+                              Crear grupos
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (loadingRegs) {
+                      return (
+                        <div className="flex justify-center py-8">
+                          <Loader2 size={18} className="animate-spin text-muted-foreground" />
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          {catGroups.length} grupos · {confirmedPairs.length} parejas confirmadas disponibles.{" "}
+                          <span className="text-yellow-400">Guardar reemplaza todos los miembros del grupo y regenera sus partidos.</span>
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {catGroups.map((grp: any) => {
+                            const groupEdit = manualGroupEdits[grp.id] ?? [];
+                            const assignedToOtherGroups = new Set(
+                              Object.entries(manualGroupEdits)
+                                .filter(([gId]) => gId !== grp.id)
+                                .flatMap(([, members]) => members.map((m) => m.userId))
+                            );
+                            const availablePairs = confirmedPairs.filter((p) => !assignedToOtherGroups.has(p.primary.userId));
+
+                            return (
+                              <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
+                                <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+
+                                {groupEdit.length === 0 && (
+                                  <p className="text-[10px] text-muted-foreground/60 italic">Sin parejas asignadas aún</p>
+                                )}
+
+                                {groupEdit.map((member) => {
+                                  const pair = confirmedPairs.find((p) => p.primary.userId === member.userId);
+                                  return (
+                                    <div key={member.userId} className="flex items-center gap-1.5">
+                                      <span className="flex-1 text-xs text-foreground truncate">
+                                        {pair ? (
+                                          <>
+                                            {pair.primary.user.name}
+                                            {pair.primary.partner && (
+                                              <span className="text-muted-foreground"> / {pair.primary.partner.name}</span>
+                                            )}
+                                          </>
+                                        ) : member.userId}
+                                      </span>
+                                      <button
+                                        onClick={() =>
+                                          setManualGroupEdits((prev) => ({
+                                            ...prev,
+                                            [grp.id]: (prev[grp.id] ?? []).filter((m) => m.userId !== member.userId),
+                                          }))
+                                        }
+                                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                      >
+                                        <X size={10} />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+
+                                {availablePairs.length > 0 && (
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      const pair = confirmedPairs.find((p) => p.primary.userId === e.target.value);
+                                      if (!pair) return;
+                                      setManualGroupEdits((prev) => ({
+                                        ...prev,
+                                        [grp.id]: [
+                                          ...(prev[grp.id] ?? []),
+                                          { userId: pair.primary.userId, partnerId: pair.primary.partnerId ?? null },
+                                        ],
+                                      }));
+                                    }}
+                                    className="w-full h-8 rounded-md border border-dashed border-[rgba(212,175,55,0.3)] bg-background px-2 text-[11px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                  >
+                                    <option value="">+ Añadir pareja…</option>
+                                    {availablePairs.map((p) => (
+                                      <option key={p.primary.userId} value={p.primary.userId}>
+                                        {p.primary.user.name}
+                                        {p.primary.partner ? ` / ${p.primary.partner.name}` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+
+                                <button
+                                  onClick={() =>
+                                    saveGroupMembers.mutate({
+                                      catId: bracketCatId,
+                                      groupId: grp.id,
+                                      members: groupEdit,
+                                    })
+                                  }
+                                  disabled={saveGroupMembers.isPending || groupEdit.length < 2}
+                                  title={groupEdit.length < 2 ? "Añade al menos 2 parejas" : undefined}
+                                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded-md bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)] text-[#D4AF37] hover:bg-[rgba(212,175,55,0.12)] disabled:opacity-50 transition-colors font-medium"
+                                >
+                                  {saveGroupMembers.isPending ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                                  Guardar grupo
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
 
             <div className="space-y-4">
               {tournament.categories.map((cat) => {
@@ -1706,6 +2262,20 @@ export default function TorneoDetailPage() {
                     const order: Record<string, number> = { R16: 0, QF: 1, SF: 2, FINAL: 3 };
                     return (order[a] ?? 0) - (order[b] ?? 0);
                   });
+                const roundFmtOpen = showRoundFmtCatId === cat.id;
+                const ROUND_PHASES = [
+                  { key: "GROUPS",      label: "Grupos"      },
+                  { key: "R16",         label: "Octavos"     },
+                  { key: "QF",          label: "Cuartos"     },
+                  { key: "SF",          label: "Semifinales" },
+                  { key: "FINAL",       label: "Final"       },
+                  { key: "CONSOLATION", label: "Consolación" },
+                ] as const;
+                const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
+                const FORMAT_LABEL: Record<string, string> = {
+                  BEST_OF_3:        "3 sets",
+                  BEST_OF_2_SUPERTB:"2 sets + STB",
+                };
                 return (
                   <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -1714,6 +2284,26 @@ export default function TorneoDetailPage() {
                       </h4>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-[#D4AF37]">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                        {/* Formatos de puntuación por fase */}
+                        <button
+                          onClick={() => {
+                            if (roundFmtOpen) {
+                              setShowRoundFmtCatId(null);
+                            } else {
+                              setShowRoundFmtCatId(cat.id);
+                              setEditRoundFormats({ ...(cat.roundFormats ?? {}) });
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                            roundFmtOpen
+                              ? "border-purple-400/40 text-purple-400 bg-purple-400/10"
+                              : "border-border text-muted-foreground hover:text-foreground"
+                          }`}
+                          title="Configurar formato de puntuación por fase"
+                        >
+                          <Star size={11} />
+                          Formatos
+                        </button>
                         {hasGroups && (
                           <div className="flex items-center gap-2">
                             {/* En eliminatoria: botón para ver/ocultar clasificación de grupos */}
@@ -1750,6 +2340,49 @@ export default function TorneoDetailPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* ── Formato por fase (collapsible) ── */}
+                    {roundFmtOpen && (
+                      <div className="border-b border-border bg-secondary/20 px-5 py-4 space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          Formato base de la categoría: <span className="text-foreground font-medium">{FORMAT_LABEL[baseFormat] ?? baseFormat}</span>. Configura un formato diferente por fase si lo necesitas.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {ROUND_PHASES.map(({ key, label }) => (
+                            <div key={key} className="flex flex-col gap-1">
+                              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</label>
+                              <select
+                                value={editRoundFormats[key] ?? ""}
+                                onChange={(e) => setEditRoundFormats((prev) => {
+                                  const next = { ...prev };
+                                  if (e.target.value === "") delete next[key];
+                                  else next[key] = e.target.value;
+                                  return next;
+                                })}
+                                className="h-8 rounded-md border border-border bg-background text-foreground text-xs px-2 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                              >
+                                <option value="">Auto ({FORMAT_LABEL[baseFormat] ?? baseFormat})</option>
+                                <option value="BEST_OF_3">3 sets</option>
+                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-end gap-3 pt-1">
+                          <button
+                            onClick={() => {
+                              saveRoundFormats.mutate({ catId: cat.id, formats: Object.keys(editRoundFormats).length > 0 ? editRoundFormats : null });
+                            }}
+                            disabled={saveRoundFormats.isPending}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-500/10 border border-purple-400/30 text-xs text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 transition-colors"
+                          >
+                            {saveRoundFormats.isPending ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                            Guardar formatos
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Grupos: siempre visible. Eliminatoria: solo si botón activo */}
                     {(cat.currentPhase === "GROUPS" || showStandingsCatId === cat.id) && (
                       <div className="border-b border-border p-4 space-y-4">
@@ -1839,12 +2472,23 @@ export default function TorneoDetailPage() {
                                           {m.team2?.join(" / ") || "Por definir"}
                                         </span>
                                       </div>
-                                      {(matchTime || m.court) && (
-                                        <div className="flex items-center gap-2">
-                                          {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
-                                          {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
-                                        </div>
-                                      )}
+                                      <div className="flex items-center justify-between">
+                                        {(matchTime || m.court) ? (
+                                          <div className="flex items-center gap-2">
+                                            {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
+                                            {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
+                                          </div>
+                                        ) : <span />}
+                                        {m.isResult && (
+                                          <button
+                                            onClick={() => { setResultMatch(m); setResultCorrection(true); }}
+                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                            title="Corregir resultado"
+                                          >
+                                            <RotateCcw size={9} /> Corregir
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -1877,16 +2521,23 @@ export default function TorneoDetailPage() {
                                       </span>
                                       <span className="truncate text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
-                                    {(matchTime || m.court) && (
-                                      <div className="flex items-center gap-2 pl-0.5">
-                                        {matchTime && (
-                                          <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>
-                                        )}
-                                        {m.court && (
-                                          <span className="text-[10px] text-muted-foreground/60">{m.court}</span>
-                                        )}
-                                      </div>
-                                    )}
+                                    <div className="flex items-center justify-between pl-0.5">
+                                      {(matchTime || m.court) ? (
+                                        <div className="flex items-center gap-2">
+                                          {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
+                                          {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
+                                        </div>
+                                      ) : <span />}
+                                      {m.isResult && (
+                                        <button
+                                          onClick={() => { setResultMatch(m); setResultCorrection(true); }}
+                                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                          title="Corregir resultado"
+                                        >
+                                          <RotateCcw size={9} /> Corregir
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -1916,9 +2567,67 @@ export default function TorneoDetailPage() {
       />
     )}
 
+        {/* ── ESTADO TAB ── */}
+        {tab === "estado" && (
+          <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
+        )}
+
         {/* ── PISTAS TAB ── */}
         {tab === "pistas" && (
           <PistasTab tournamentId={id} />
+        )}
+
+        {/* ── HISTORIAL TAB ── */}
+        {tab === "historial" && (
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
+              <span className="text-xs text-muted-foreground">{auditLog.length} registros</span>
+            </div>
+            {loadingAudit ? (
+              <div className="flex justify-center py-12">
+                <Loader2 size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : auditLog.length === 0 ? (
+              <p className="text-center text-muted-foreground text-sm py-12">Sin registros de auditoría todavía</p>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border">
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-36">Fecha</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-28">Admin</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Acción</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Detalles</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLog.map((entry: AuditLogEntry, i: number) => (
+                      <tr key={entry.id} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                          {new Date(entry.createdAt).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="px-3 py-2 font-medium truncate max-w-[7rem]">{entry.adminName}</td>
+                        <td className="px-3 py-2">
+                          <AuditActionBadge action={entry.action} resource={entry.resource} />
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {entry.details ? (
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              {Object.entries(entry.details as Record<string, unknown>)
+                                .filter(([k]) => !["force"].includes(k))
+                                .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+                                .join(" · ")}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
     <ConfirmModal
@@ -1939,9 +2648,10 @@ export default function TorneoDetailPage() {
     {resultMatch && (
       <ResultModal
         match={resultMatch}
-        onClose={() => setResultMatch(null)}
+        onClose={() => { setResultMatch(null); setResultCorrection(false); }}
         onSave={saveResult}
         saving={savingResultId === resultMatch.id}
+        isCorrection={resultCorrection}
       />
     )}
 

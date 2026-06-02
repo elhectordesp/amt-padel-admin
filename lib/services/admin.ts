@@ -9,6 +9,7 @@ import type {
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtUnavailability,
+  AuditLogEntry,
 } from "@/types";
 
 export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED';
@@ -55,13 +56,19 @@ export const adminService = {
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
     duplicate:       (id: string)                  => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
-    previewBracket:  (id: string, categoryId: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId } }).then((r) => r.data),
-    generateBracket:   (id: string, categoryId: string, customGroups?: string[][]) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups }).then((r) => r.data),
+    previewBracket:  (id: string, categoryId: string, format?: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId, ...(format ? { format } : {}) } }).then((r) => r.data),
+    generateBracket: (id: string, categoryId: string, customGroups?: string[][], format?: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups, ...(format !== undefined ? { format } : {}) }).then((r) => r.data),
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
-    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
+    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
+    status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
+    auditLog:        (id: string, limit = 100)      => api.get<AuditLogEntry[]>(`/admin/tournaments/${id}/audit`, { params: { limit } }).then((r) => r.data),
+    initBracketManual: (id: string, catId: string, numGroups?: number) =>
+      api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
+    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[]) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, { members }).then((r) => r.data),
   },
 
   registrations: {
@@ -69,6 +76,11 @@ export const adminService = {
     count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
+  },
+
+  categories: {
+    updateRoundFormats: (tournamentId: string, categoryId: string, roundFormats: Record<string, string> | null) =>
+      api.patch<{ success: boolean }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/round-formats`, { roundFormats }).then(r => r.data),
   },
 
   schedule: {

@@ -10,17 +10,23 @@ export function ResultModal({
   onClose,
   onSave,
   saving,
+  isCorrection = false,
 }: {
-  match:   MatchResult;
-  onClose: () => void;
-  onSave:  (sets1: number[], sets2: number[]) => void;
-  saving:  boolean;
+  match:        MatchResult;
+  onClose:      () => void;
+  onSave:       (sets1: number[], sets2: number[]) => void;
+  saving:       boolean;
+  isCorrection?: boolean;
 }) {
-  const [sets, setSets] = useState<{ a: string; b: string }[]>([
-    { a: "", b: "" },
-    { a: "", b: "" },
-    { a: "", b: "" },
-  ]);
+  const initialSets: { a: string; b: string }[] = isCorrection && match.sets1 && match.sets2
+    ? [
+        { a: String(match.sets1[0] ?? ""), b: String(match.sets2[0] ?? "") },
+        { a: String(match.sets1[1] ?? ""), b: String(match.sets2[1] ?? "") },
+        { a: String(match.sets1[2] ?? ""), b: String(match.sets2[2] ?? "") },
+      ]
+    : [{ a: "", b: "" }, { a: "", b: "" }, { a: "", b: "" }];
+
+  const [sets, setSets] = useState<{ a: string; b: string }[]>(initialSets);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const validSets = sets.filter((s) => s.a !== "" && s.b !== "");
@@ -58,7 +64,7 @@ export function ResultModal({
       <div className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-6 space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-heading text-lg text-foreground">Introducir resultado</h3>
+            <h3 className="font-heading text-lg text-foreground">{isCorrection ? "Corregir resultado" : "Introducir resultado"}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">{phaseLabel(match.phase)} · {match.court ?? "—"}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
@@ -119,7 +125,7 @@ export function ResultModal({
             className="flex-1 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
-            Guardar resultado
+            {isCorrection ? "Guardar corrección" : "Guardar resultado"}
           </button>
         </div>
       </div>

@@ -27,8 +27,10 @@ const schema = z.object({
   tier:                 z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:               z.string().optional(),
   scoringSystem:        z.string().optional(),
-  matchDuration:        z.number().optional(),
-  registrationDeadline: z.string().optional(),
+  matchDuration:             z.number().optional(),
+  elimMatchDuration:         z.number().min(15).max(180).nullable().optional(),
+  maxMatchesPerPlayerPerDay: z.number().min(1).max(10).nullable().optional(),
+  registrationDeadline:      z.string().optional(),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
@@ -104,8 +106,10 @@ export default function EditarTorneoPage() {
       prizeAmount:          tournament.prizeAmount != null ? Number(tournament.prizeAmount) : undefined,
       format:               tournament.format ?? "",
       scoringSystem:        tournament.scoringSystem ?? "",
-      matchDuration:        tournament.matchDuration ?? 60,
-      registrationDeadline: regDeadline,
+      matchDuration:             tournament.matchDuration ?? 60,
+      elimMatchDuration:         tournament.elimMatchDuration ?? null,
+      maxMatchesPerPlayerPerDay: tournament.maxMatchesPerPlayerPerDay ?? null,
+      registrationDeadline:      regDeadline,
       status:               tournament.status as FormData["status"],
       tier:                 tournament.tier ?? "BRONZE",
     });
@@ -290,7 +294,7 @@ export default function EditarTorneoPage() {
                   onChange={(v) => setValue("scoringSystem", v, { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
-              <Field label="Duración por partido">
+              <Field label="Duración por partido (grupos)">
                 <CustomSelect
                   options={[
                     { value: "60", label: "60 minutos" },
@@ -299,6 +303,31 @@ export default function EditarTorneoPage() {
                   ]}
                   value={String(watch("matchDuration") ?? 60)}
                   onChange={(v) => setValue("matchDuration", Number(v), { shouldValidate: true, shouldDirty: true })}
+                />
+              </Field>
+              <Field label="Duración por partido (eliminatoria)">
+                <CustomSelect
+                  options={[
+                    { value: "", label: "Igual que grupos" },
+                    { value: "60", label: "60 minutos" },
+                    { value: "90", label: "90 minutos" },
+                    { value: "120", label: "120 minutos" },
+                  ]}
+                  value={String(watch("elimMatchDuration") ?? "")}
+                  onChange={(v) => setValue("elimMatchDuration", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
+                />
+              </Field>
+              <Field label="Máx. partidos por jugador/día">
+                <CustomSelect
+                  options={[
+                    { value: "", label: "Sin límite" },
+                    { value: "1", label: "1 partido" },
+                    { value: "2", label: "2 partidos" },
+                    { value: "3", label: "3 partidos" },
+                    { value: "4", label: "4 partidos" },
+                  ]}
+                  value={String(watch("maxMatchesPerPlayerPerDay") ?? "")}
+                  onChange={(v) => setValue("maxMatchesPerPlayerPerDay", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
               <Field label="Cierre de inscripciones">

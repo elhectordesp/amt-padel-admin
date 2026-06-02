@@ -25,10 +25,12 @@ export interface TournamentCategory {
   minPairs?:        number;
   maxPairs?:        number;
   scoringFormat?:   string;
+  roundFormats?:        Record<string, string> | null;
   prizeChampion?:       string;
   prizeRunnerUp?:       string;
   prizeConsolation?:    string;
   hasConsolation?:      boolean;
+  format?:              string | null;
   schedulePublishedAt?: string | null;
 }
 
@@ -111,6 +113,8 @@ export interface Tournament {
   registrationDeadline?: string;
   courts?:     string[];
   matchDuration?: number;
+  elimMatchDuration?: number | null;
+  maxMatchesPerPlayerPerDay?: number | null;
   season?:     number;
 }
 
@@ -371,6 +375,7 @@ export interface CreateTournamentPayload {
   hasShirts?:  boolean;
   useSeeding?: boolean;
   matchDuration?: number;
+  maxMatchesPerPlayerPerDay?: number | null;
   courts?:     string[];
   categories:  {
     gender:          Gender;
@@ -482,6 +487,16 @@ export interface AdminMember {
 }
 
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";
+
+export interface AuditLogEntry {
+  id:          string;
+  adminName:   string;
+  action:      string;
+  resource:    string;
+  resourceId?: string | null;
+  details?:    Record<string, unknown> | null;
+  createdAt:   string;
+}
 
 export interface SupportMessage {
   id:        string;
