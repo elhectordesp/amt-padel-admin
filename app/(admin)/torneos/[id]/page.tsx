@@ -9,7 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
-  Pencil, Send, EyeOff, RotateCcw,
+  Pencil, Send, EyeOff, RotateCcw, List,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
+import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
@@ -157,6 +158,9 @@ function CalendarTab({
 }) {
   const qc = useQueryClient();
 
+  // View mode
+  const [viewMode, setViewMode] = useState<"lista" | "grid">("lista");
+
   // Publish state
   const [publishCatId,    setPublishCatId]    = useState<string | null>(null);
   const [pendingConflicts, setPendingConflicts] = useState<ScheduleConflict[]>([]);
@@ -284,16 +288,41 @@ function CalendarTab({
     downloadCsv(name, rows);
   };
 
-  // TODO Fix #18: añadir toggle Lista/Grid — grid con eje X=pistas, eje Y=horas por día (tipo Google Calendar)
-
   return (
     <div className="space-y-4">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between gap-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-          <Calendar size={14} className="text-[#D4AF37]" />
-          Partidos ({matches.length})
-        </h3>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Calendar size={14} className="text-[#D4AF37]" />
+            Partidos ({matches.length})
+          </h3>
+          {/* Lista / Grid toggle */}
+          <div className="flex items-center rounded-md border border-border overflow-hidden">
+            <button
+              onClick={() => setViewMode("lista")}
+              title="Vista lista"
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                viewMode === "lista"
+                  ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <List size={12} />
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              title="Vista grid (por pistas)"
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs border-l border-border transition-colors ${
+                viewMode === "grid"
+                  ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid size={12} />
+            </button>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={exportCsv}
@@ -339,8 +368,16 @@ function CalendarTab({
           <Calendar size={36} className="text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No hay partidos registrados aún</p>
         </div>
+      ) : viewMode === "grid" ? (
+        <ScheduleGrid
+          matches={matches}
+          duration={tournament?.matchDuration ?? 60}
+          tournament={tournament}
+          onMatchClick={onMatchClick}
+          onCorrectClick={onCorrectClick}
+        />
       ) : (
-        // Per-category sections
+        // Per-category sections (lista)
         tournament.categories.map((cat: any) => {
           const catMatches = byCat[cat.id] ?? [];
           if (catMatches.length === 0) return null;
