@@ -495,6 +495,8 @@ export interface AuditLogEntry {
   resource:    string;
   resourceId?: string | null;
   details?:    Record<string, unknown> | null;
+  oldValue?:   Record<string, unknown> | null;
+  newValue?:   Record<string, unknown> | null;
   createdAt:   string;
 }
 
