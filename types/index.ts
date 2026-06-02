@@ -25,6 +25,7 @@ export interface TournamentCategory {
   minPairs?:        number;
   maxPairs?:        number;
   scoringFormat?:   string;
+  roundFormats?:        Record<string, string> | null;
   prizeChampion?:       string;
   prizeRunnerUp?:       string;
   prizeConsolation?:    string;

@@ -9,7 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
-  Pencil, Send, EyeOff, RotateCcw, List,
+  Pencil, Send, EyeOff, RotateCcw, List, Save,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1059,7 +1059,9 @@ export default function TorneoDetailPage() {
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
-  const [showStandingsCatId, setShowStandingsCatId] = useState<string | null>(null);
+  const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
+  const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
+  const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -1256,6 +1258,17 @@ export default function TorneoDetailPage() {
     setUpdatingIds(new Set(pair.ids));
     bulkStatus.mutate({ ids: pair.ids, status });
   };
+
+  const saveRoundFormats = useMutation({
+    mutationFn: ({ catId, formats }: { catId: string; formats: Record<string, string> | null }) =>
+      adminService.categories.updateRoundFormats(id, catId, formats),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+      toast.success("Formatos de puntuación guardados");
+      setShowRoundFmtCatId(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const pairs = useMemo(() => groupByPair(registrations), [registrations]);
@@ -1996,6 +2009,20 @@ export default function TorneoDetailPage() {
                     const order: Record<string, number> = { R16: 0, QF: 1, SF: 2, FINAL: 3 };
                     return (order[a] ?? 0) - (order[b] ?? 0);
                   });
+                const roundFmtOpen = showRoundFmtCatId === cat.id;
+                const ROUND_PHASES = [
+                  { key: "GROUPS",      label: "Grupos"      },
+                  { key: "R16",         label: "Octavos"     },
+                  { key: "QF",          label: "Cuartos"     },
+                  { key: "SF",          label: "Semifinales" },
+                  { key: "FINAL",       label: "Final"       },
+                  { key: "CONSOLATION", label: "Consolación" },
+                ] as const;
+                const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
+                const FORMAT_LABEL: Record<string, string> = {
+                  BEST_OF_3:        "3 sets",
+                  BEST_OF_2_SUPERTB:"2 sets + STB",
+                };
                 return (
                   <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -2004,6 +2031,26 @@ export default function TorneoDetailPage() {
                       </h4>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-[#D4AF37]">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                        {/* Formatos de puntuación por fase */}
+                        <button
+                          onClick={() => {
+                            if (roundFmtOpen) {
+                              setShowRoundFmtCatId(null);
+                            } else {
+                              setShowRoundFmtCatId(cat.id);
+                              setEditRoundFormats({ ...(cat.roundFormats ?? {}) });
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                            roundFmtOpen
+                              ? "border-purple-400/40 text-purple-400 bg-purple-400/10"
+                              : "border-border text-muted-foreground hover:text-foreground"
+                          }`}
+                          title="Configurar formato de puntuación por fase"
+                        >
+                          <Star size={11} />
+                          Formatos
+                        </button>
                         {hasGroups && (
                           <div className="flex items-center gap-2">
                             {/* En eliminatoria: botón para ver/ocultar clasificación de grupos */}
@@ -2040,6 +2087,49 @@ export default function TorneoDetailPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* ── Formato por fase (collapsible) ── */}
+                    {roundFmtOpen && (
+                      <div className="border-b border-border bg-secondary/20 px-5 py-4 space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          Formato base de la categoría: <span className="text-foreground font-medium">{FORMAT_LABEL[baseFormat] ?? baseFormat}</span>. Configura un formato diferente por fase si lo necesitas.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {ROUND_PHASES.map(({ key, label }) => (
+                            <div key={key} className="flex flex-col gap-1">
+                              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</label>
+                              <select
+                                value={editRoundFormats[key] ?? ""}
+                                onChange={(e) => setEditRoundFormats((prev) => {
+                                  const next = { ...prev };
+                                  if (e.target.value === "") delete next[key];
+                                  else next[key] = e.target.value;
+                                  return next;
+                                })}
+                                className="h-8 rounded-md border border-border bg-background text-foreground text-xs px-2 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                              >
+                                <option value="">Auto ({FORMAT_LABEL[baseFormat] ?? baseFormat})</option>
+                                <option value="BEST_OF_3">3 sets</option>
+                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-end gap-3 pt-1">
+                          <button
+                            onClick={() => {
+                              saveRoundFormats.mutate({ catId: cat.id, formats: Object.keys(editRoundFormats).length > 0 ? editRoundFormats : null });
+                            }}
+                            disabled={saveRoundFormats.isPending}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-500/10 border border-purple-400/30 text-xs text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 transition-colors"
+                          >
+                            {saveRoundFormats.isPending ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                            Guardar formatos
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Grupos: siempre visible. Eliminatoria: solo si botón activo */}
                     {(cat.currentPhase === "GROUPS" || showStandingsCatId === cat.id) && (
                       <div className="border-b border-border p-4 space-y-4">

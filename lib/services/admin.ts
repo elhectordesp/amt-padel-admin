@@ -72,6 +72,11 @@ export const adminService = {
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
   },
 
+  categories: {
+    updateRoundFormats: (tournamentId: string, categoryId: string, roundFormats: Record<string, string> | null) =>
+      api.patch<{ success: boolean }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/round-formats`, { roundFormats }).then(r => r.data),
+  },
+
   schedule: {
     validate:   (tournamentId: string, categoryId: string) =>
       api.get<ScheduleConflict[]>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/validate`).then(r => r.data),
