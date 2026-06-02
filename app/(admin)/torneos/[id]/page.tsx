@@ -571,6 +571,163 @@ function CalendarTab({
   );
 }
 
+// ── StatusTab ─────────────────────────────────────────────────────────────
+function StatusTab({ status, loading, onRefresh }: { status: any; loading: boolean; onRefresh: () => void }) {
+  const [expandedCat, setExpandedCat] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <Loader2 size={18} className="animate-spin" /> Cargando estado…
+      </div>
+    );
+  }
+  if (!status) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+        <p className="text-sm">No se pudo cargar el estado del torneo.</p>
+        <button onClick={onRefresh} className="text-xs underline">Reintentar</button>
+      </div>
+    );
+  }
+
+  const { summary, categories } = status;
+  const pct = summary.totalMatches > 0 ? Math.round((summary.finishedMatches / summary.totalMatches) * 100) : 0;
+  const hasIssues = summary.unscheduled > 0 || summary.totalConflicts > 0;
+
+  return (
+    <div className="space-y-6 p-4">
+      {/* ── Summary bar ── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading text-base text-foreground">Progreso global</h3>
+          <button onClick={onRefresh} className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors" title="Actualizar">
+            <RefreshCw size={13} />
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{summary.finishedMatches} / {summary.totalMatches} partidos jugados</span>
+            <span className="font-semibold text-foreground">{pct}%</span>
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+            <div className="h-full bg-[#D4AF37] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+
+        {/* Key numbers */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Categorías finalizadas", value: `${summary.completedCategories}/${summary.totalCategories}`, color: summary.completedCategories === summary.totalCategories ? "text-green-400" : "text-foreground" },
+            { label: "Sin programar",          value: summary.unscheduled,   color: summary.unscheduled   > 0 ? "text-amber-400" : "text-green-400" },
+            { label: "Conflictos",             value: summary.totalConflicts, color: summary.totalConflicts > 0 ? "text-red-400"   : "text-green-400" },
+            { label: "Categorías en curso",    value: summary.totalCategories - summary.completedCategories, color: "text-foreground" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-secondary/40 rounded-lg p-3 text-center">
+              <p className={`text-xl font-bold font-mono ${color}`}>{value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {!hasIssues && summary.completedCategories === summary.totalCategories && (
+          <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+            <CheckCircle size={15} /> Todas las categorías finalizadas. ¡Torneo completo!
+          </div>
+        )}
+        {!hasIssues && summary.completedCategories < summary.totalCategories && (
+          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+            <CheckCircle size={13} className="text-green-400" /> Sin conflictos ni partidos sin programar
+          </div>
+        )}
+      </div>
+
+      {/* ── Category cards ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {categories.map((cat: any) => {
+          const catLabel = `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
+          const catPct   = cat.totalMatches > 0 ? Math.round((cat.finishedMatches / cat.totalMatches) * 100) : 0;
+          const hasConflicts  = cat.conflicts.length > 0;
+          const hasUnscheduled = cat.unscheduled > 0;
+          const isExpanded = expandedCat === cat.categoryId;
+
+          return (
+            <div key={cat.categoryId} className={`bg-card border rounded-xl overflow-hidden transition-colors ${cat.isComplete ? "border-green-400/30" : hasConflicts ? "border-red-400/30" : hasUnscheduled ? "border-amber-400/30" : "border-border"}`}>
+              {/* Card header */}
+              <div className="px-4 pt-4 pb-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{catLabel}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-border text-muted-foreground">{phaseLabel(cat.currentPhase)}</span>
+                  </div>
+                  {cat.isComplete && (
+                    <span className="flex items-center gap-1 text-[10px] text-green-400 font-semibold"><CheckCircle size={11} /> Finalizada</span>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{cat.finishedMatches}/{cat.totalMatches} jugados</span>
+                    <span>{catPct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${catPct}%`, backgroundColor: cat.isComplete ? "#4ade80" : "#D4AF37" }} />
+                  </div>
+                </div>
+
+                {/* Status chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                    <Clock size={9} /> {cat.pendingWithTime} con hora
+                  </span>
+                  {hasUnscheduled && (
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-400">
+                      <CalendarOff size={9} /> {cat.unscheduled} sin programar
+                    </span>
+                  )}
+                  {hasConflicts && (
+                    <button onClick={() => setExpandedCat(isExpanded ? null : cat.categoryId)} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-400/10 border border-red-400/30 text-red-400 hover:bg-red-400/20 transition-colors">
+                      <Ban size={9} /> {cat.conflicts.length} conflicto{cat.conflicts.length !== 1 ? "s" : ""} {isExpanded ? "▲" : "▼"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Winner badge */}
+                {cat.winner && (
+                  <div className="flex items-center gap-2 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)] rounded-lg px-3 py-2">
+                    <Trophy size={13} className="text-[#D4AF37] shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Campeona</p>
+                      <p className="text-xs font-semibold text-[#D4AF37]">{cat.winner.join(" / ")}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Conflicts detail */}
+              {isExpanded && hasConflicts && (
+                <div className="border-t border-red-400/20 bg-red-400/5 px-4 py-3 space-y-2">
+                  <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wide">Conflictos de horario</p>
+                  {cat.conflicts.map((c: any, idx: number) => (
+                    <div key={idx} className="text-[10px] text-muted-foreground space-y-0.5">
+                      <p className="text-xs font-medium text-red-300">{c.playerName}</p>
+                      <p>{phaseLabel(c.phase1)} · {new Date(c.time1).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court1}</p>
+                      <p>{phaseLabel(c.phase2)} · {new Date(c.time2).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court2}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 // ── PistasTab ──────────────────────────────────────────────────────────────
 
@@ -805,7 +962,7 @@ function PistasTab({ tournamentId }: { tournamentId: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas";
+type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas" | "estado";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -862,6 +1019,15 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey: ["bracket", id],
     queryFn:  () => adminService.matches.list(id),
+  });
+
+  const {
+    data: tournamentStatus, isLoading: loadingStatus, refetch: refetchStatus,
+  } = useQuery({
+    queryKey: ["tournament-status", id],
+    queryFn:  () => adminService.tournaments.status(id),
+    enabled:  tab === "estado",
+    staleTime: 30_000,
   });
 
   // Standings — carga todas las categorías que hayan pasado por grupos
@@ -1255,6 +1421,7 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
+              { key: "estado",        label: "Estado"         },
               { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
               { key: "calendario",    label: "Calendario"     },
               { key: "cuadro",        label: "Cuadro"         },
@@ -1977,6 +2144,11 @@ export default function TorneoDetailPage() {
         onCancel={() => setBracketPreview(null)}
       />
     )}
+
+        {/* ── ESTADO TAB ── */}
+        {tab === "estado" && (
+          <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
+        )}
 
         {/* ── PISTAS TAB ── */}
         {tab === "pistas" && (
