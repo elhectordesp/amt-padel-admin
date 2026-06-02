@@ -9,7 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Power, PowerOff, Plus, Ban, CalendarOff, AlarmClock,
-  Pencil, Send, EyeOff,
+  Pencil, Send, EyeOff, RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -143,16 +143,17 @@ function ConflictModal({
 
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
-  matches, loading, isError, refetch, autoSchedule, onMatchClick, tournament, tournamentId,
+  matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, tournament, tournamentId,
 }: {
-  matches:      MatchResult[];
-  loading:      boolean;
-  isError:      boolean;
-  refetch:      () => void;
-  autoSchedule: { mutate: (force?: boolean) => void; isPending: boolean };
-  onMatchClick: (m: MatchResult) => void;
-  tournament:   any;
-  tournamentId: string;
+  matches:        MatchResult[];
+  loading:        boolean;
+  isError:        boolean;
+  refetch:        () => void;
+  autoSchedule:   { mutate: (force?: boolean) => void; isPending: boolean };
+  onMatchClick:   (m: MatchResult) => void;
+  onCorrectClick: (m: MatchResult) => void;
+  tournament:     any;
+  tournamentId:   string;
 }) {
   const qc = useQueryClient();
 
@@ -443,11 +444,20 @@ function CalendarTab({
                                 <span className="text-sm font-medium text-foreground truncate">{((m as any).team2 ?? []).join(" / ") || "Por definir"}</span>
                               </div>
                               {(m as any).isResult && (m as any).sets1 && (m as any).sets2 ? (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <CheckCircle size={13} className="text-green-400" />
-                                  <span className="text-xs font-mono text-foreground">
-                                    {(m as any).sets1.map((s: number, i: number) => `${s}-${(m as any).sets2[i]}`).join(" / ")}
-                                  </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <CheckCircle size={13} className="text-green-400" />
+                                    <span className="text-xs font-mono text-foreground">
+                                      {(m as any).sets1.map((s: number, i: number) => `${s}-${(m as any).sets2[i]}`).join(" / ")}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
+                                    className="p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
+                                    title="Corregir resultado"
+                                  >
+                                    <RotateCcw size={10} />
+                                  </button>
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
@@ -818,6 +828,7 @@ export default function TorneoDetailPage() {
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
+  const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
   const [showStandingsCatId, setShowStandingsCatId] = useState<string | null>(null);
 
@@ -961,6 +972,7 @@ export default function TorneoDetailPage() {
       await adminService.matches.setResult(resultMatch.id, sets1, sets2);
       toast.success("Resultado guardado");
       setResultMatch(null);
+      setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
       qc.invalidateQueries({ queryKey: ["standings", id] });
@@ -1626,6 +1638,7 @@ export default function TorneoDetailPage() {
             refetch={refetchMatches}
             autoSchedule={autoSchedule}
             onMatchClick={setResultMatch}
+            onCorrectClick={(m) => { setResultMatch(m); setResultCorrection(true); }}
             tournament={tournament}
             tournamentId={id}
           />
@@ -1870,12 +1883,23 @@ export default function TorneoDetailPage() {
                                           {m.team2?.join(" / ") || "Por definir"}
                                         </span>
                                       </div>
-                                      {(matchTime || m.court) && (
-                                        <div className="flex items-center gap-2">
-                                          {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
-                                          {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
-                                        </div>
-                                      )}
+                                      <div className="flex items-center justify-between">
+                                        {(matchTime || m.court) ? (
+                                          <div className="flex items-center gap-2">
+                                            {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
+                                            {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
+                                          </div>
+                                        ) : <span />}
+                                        {m.isResult && (
+                                          <button
+                                            onClick={() => { setResultMatch(m); setResultCorrection(true); }}
+                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                            title="Corregir resultado"
+                                          >
+                                            <RotateCcw size={9} /> Corregir
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -1908,16 +1932,23 @@ export default function TorneoDetailPage() {
                                       </span>
                                       <span className="truncate text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
-                                    {(matchTime || m.court) && (
-                                      <div className="flex items-center gap-2 pl-0.5">
-                                        {matchTime && (
-                                          <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>
-                                        )}
-                                        {m.court && (
-                                          <span className="text-[10px] text-muted-foreground/60">{m.court}</span>
-                                        )}
-                                      </div>
-                                    )}
+                                    <div className="flex items-center justify-between pl-0.5">
+                                      {(matchTime || m.court) ? (
+                                        <div className="flex items-center gap-2">
+                                          {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
+                                          {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
+                                        </div>
+                                      ) : <span />}
+                                      {m.isResult && (
+                                        <button
+                                          onClick={() => { setResultMatch(m); setResultCorrection(true); }}
+                                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                          title="Corregir resultado"
+                                        >
+                                          <RotateCcw size={9} /> Corregir
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -1970,9 +2001,10 @@ export default function TorneoDetailPage() {
     {resultMatch && (
       <ResultModal
         match={resultMatch}
-        onClose={() => setResultMatch(null)}
+        onClose={() => { setResultMatch(null); setResultCorrection(false); }}
         onSave={saveResult}
         saving={savingResultId === resultMatch.id}
+        isCorrection={resultCorrection}
       />
     )}
 
