@@ -24,7 +24,7 @@ import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
-import { printRegistrations } from "@/lib/utils/print";
+import { printRegistrations, printSchedule } from "@/lib/utils/print";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
@@ -299,14 +299,14 @@ function CalendarTab({
     patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, force } });
   };
 
-  const exportCsv = () => {
-    const catMap = Object.fromEntries(
-      (tournament?.categories ?? []).map((c: any) => [
-        c.id,
-        `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
-      ]),
-    );
+  const catMap = Object.fromEntries(
+    (tournament?.categories ?? []).map((c: any) => [
+      c.id,
+      `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
+    ]),
+  );
 
+  const exportCsv = () => {
     const rows = [...matches]
       .filter((m) => !!(m as any).date)
       .sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime())
@@ -328,6 +328,10 @@ function CalendarTab({
       ? `horario_${tournament.name.replace(/\s+/g, "_").toLowerCase()}`
       : "horario";
     downloadCsv(name, rows);
+  };
+
+  const printDoc = () => {
+    if (tournament) printSchedule(tournament, matches, catMap);
   };
 
   return (
@@ -374,6 +378,15 @@ function CalendarTab({
           >
             <Download size={11} />
             Exportar CSV
+          </button>
+          <button
+            onClick={printDoc}
+            disabled={matches.filter((m) => !!(m as any).date).length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            title="Imprimir horario o guardar como PDF"
+          >
+            <Printer size={11} />
+            Imprimir
           </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
