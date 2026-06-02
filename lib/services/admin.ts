@@ -61,7 +61,7 @@ export const adminService = {
     regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
-    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
+    autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
     status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
   },
 

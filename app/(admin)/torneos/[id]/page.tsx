@@ -145,16 +145,19 @@ function ConflictModal({
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
   matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, tournament, tournamentId,
+  scheduleWarnings, onClearWarnings,
 }: {
-  matches:        MatchResult[];
-  loading:        boolean;
-  isError:        boolean;
-  refetch:        () => void;
-  autoSchedule:   { mutate: (force?: boolean) => void; isPending: boolean };
-  onMatchClick:   (m: MatchResult) => void;
-  onCorrectClick: (m: MatchResult) => void;
-  tournament:     any;
-  tournamentId:   string;
+  matches:          MatchResult[];
+  loading:          boolean;
+  isError:          boolean;
+  refetch:          () => void;
+  autoSchedule:     { mutate: (force?: boolean) => void; isPending: boolean };
+  onMatchClick:     (m: MatchResult) => void;
+  onCorrectClick:   (m: MatchResult) => void;
+  tournament:       any;
+  tournamentId:     string;
+  scheduleWarnings: { pair: string; phase: string; category: string }[];
+  onClearWarnings:  () => void;
 }) {
   const qc = useQueryClient();
 
@@ -352,6 +355,38 @@ function CalendarTab({
           </button>
         </div>
       </div>
+
+      {/* Unscheduled-players warning banner */}
+      {scheduleWarnings.length > 0 && (
+        <div className="rounded-lg border border-yellow-400/30 bg-yellow-400/5 p-4 space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlarmClock size={14} className="text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-yellow-400">
+                {scheduleWarnings.length} partido(s) sin hueco disponible
+              </p>
+            </div>
+            <button
+              onClick={onClearWarnings}
+              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title="Cerrar aviso"
+            >
+              <X size={13} />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground pl-5">
+            Los siguientes jugadores no pudieron ser programados. Ajusta las jornadas, pistas o el límite diario e intenta de nuevo.
+          </p>
+          <ul className="pl-5 space-y-1">
+            {scheduleWarnings.map((w, i) => (
+              <li key={i} className="text-xs text-yellow-300/80 flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-yellow-400/10 text-[10px] font-semibold shrink-0">{w.phase} · {w.category}</span>
+                {w.pair}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -1200,13 +1235,18 @@ export default function TorneoDetailPage() {
     }
   };
 
+  const [scheduleWarnings, setScheduleWarnings] = useState<{ pair: string; phase: string; category: string }[]>([]);
+
   const autoSchedule = useMutation({
     mutationFn: (force?: boolean) => adminService.tournaments.autoSchedule(id, force),
     onSuccess:  (res) => {
-      const msg = res.failures?.length
-        ? `${res.count} partidos programados. Sin hueco: ${res.failures.join(", ")}`
-        : `Se han asignado horarios a ${res.count} partidos`;
-      toast.success(msg);
+      const unscheduled = res.unscheduledPlayers ?? [];
+      setScheduleWarnings(unscheduled);
+      if (unscheduled.length > 0) {
+        toast.warning(`${res.count} partidos programados. ${unscheduled.length} partido(s) sin hueco — ver aviso en el calendario.`);
+      } else {
+        toast.success(`Se han asignado horarios a ${res.count} partidos`);
+      }
       qc.invalidateQueries({ queryKey: ["matches", id] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -1845,6 +1885,8 @@ export default function TorneoDetailPage() {
             onCorrectClick={(m) => { setResultMatch(m); setResultCorrection(true); }}
             tournament={tournament}
             tournamentId={id}
+            scheduleWarnings={scheduleWarnings}
+            onClearWarnings={() => setScheduleWarnings([])}
           />
         )}
 
