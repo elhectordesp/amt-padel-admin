@@ -1779,7 +1779,7 @@ export default function TorneoDetailPage() {
                           {cat.hasConsolation && cat.prizeConsolation && <span className="text-foreground">🏅 <span className="text-[#D4AF37] font-medium">{cat.prizeConsolation}</span></span>}
                         </div>
                       ) : (
-                        <p className="text-xs text-muted-foreground italic">Sin premios configurados. Pulsa "Editar" para añadirlos.</p>
+                        <p className="text-xs text-muted-foreground italic">Sin premios configurados. Pulsa &quot;Editar&quot; para añadirlos.</p>
                       )}
                     </div>
                   );
