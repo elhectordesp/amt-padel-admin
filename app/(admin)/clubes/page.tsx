@@ -100,8 +100,7 @@ function CourtRow({
           <span className="text-sm font-medium truncate">{court.name}</span>
         </div>
         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-          {court.surface && <span>{SURFACE_LABEL[court.surface] ?? court.surface}</span>}
-          {court.isIndoor && <span>· Cubierta</span>}
+          {court.isIndoor && <span>Cubierta</span>}
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
