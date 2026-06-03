@@ -46,6 +46,10 @@ export function ResultModal({
     for (let i = 0; i < validSets.length; i++) {
       const a = Number(validSets[i].a), b = Number(validSets[i].b);
       const setNum = i + 1;
+      if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
+        setValidationError(`Set ${setNum}: los valores deben ser números enteros no negativos`);
+        return;
+      }
       if (a === b) { setValidationError(`Set ${setNum}: no puede haber empate`); return; }
       const isSuperTb = match.scoringFormat === "BEST_OF_2_SUPERTB" && setNum === 3;
       const valid = isSuperTb ? isValidSuperTiebreak(a, b) : isValidNormalSet(a, b);

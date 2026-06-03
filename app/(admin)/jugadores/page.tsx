@@ -11,7 +11,7 @@ import {
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download, Loader2,
-  UserPlus, X,
+  UserPlus, X, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/utils/csv";
@@ -95,7 +95,7 @@ export default function JugadoresPage() {
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [genderFilter, levelFilter]);
 
-  const { data: result, isLoading, isFetching } = useQuery({
+  const { data: result, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey:        ["admin-players", page, genderFilter, levelFilter, search],
     queryFn:         () => adminService.players.list({
       page,
@@ -339,7 +339,22 @@ export default function JugadoresPage() {
                     ))}
                   </thead>
                   <tbody>
-                    {table.getRowModel().rows.length === 0 ? (
+                    {isError ? (
+                      <tr>
+                        <td colSpan={columns.length} className="py-12 text-center">
+                          <div className="flex flex-col items-center gap-2 text-sm text-destructive">
+                            <AlertTriangle size={18} />
+                            <span>Error al cargar los jugadores</span>
+                            <button
+                              onClick={() => refetch()}
+                              className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
+                            >
+                              Reintentar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : table.getRowModel().rows.length === 0 ? (
                       <tr>
                         <td colSpan={columns.length} className="py-12 text-center text-sm text-muted-foreground">
                           No se encontraron jugadores

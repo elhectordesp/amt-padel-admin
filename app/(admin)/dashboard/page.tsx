@@ -72,25 +72,29 @@ export default function DashboardPage() {
   const { data: adminUser } = useAdminUser();
 
   const { data: stats, isLoading, isError: statsError } = useQuery({
-    queryKey: ["admin-stats"],
-    queryFn:  adminService.stats,
+    queryKey:        ["admin-stats"],
+    queryFn:         adminService.stats,
+    staleTime:       30_000,
     refetchInterval: 60_000,
   });
 
   const { data: tournaments = [], isLoading: loadingTournaments, isError: tournamentsError } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey:  ["tournaments"],
+    queryFn:   adminService.tournaments.list,
+    staleTime: 60_000,
   });
 
   const { data: alerts = [], isError: alertsError } = useQuery({
-    queryKey:       ["admin-alerts"],
-    queryFn:        adminService.alerts,
+    queryKey:        ["admin-alerts"],
+    queryFn:         adminService.alerts,
+    staleTime:       30_000,
     refetchInterval: 60_000,
   });
 
   const { data: activity = [], isError: activityError } = useQuery({
-    queryKey:       ["admin-activity"],
-    queryFn:        adminService.activity,
+    queryKey:        ["admin-activity"],
+    queryFn:         adminService.activity,
+    staleTime:       30_000,
     refetchInterval: 60_000,
   });
 
