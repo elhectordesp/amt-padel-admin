@@ -988,11 +988,8 @@ function TournamentCourtCard({ tc, tournamentId }: { tc: TournamentCourt; tourna
           {tc.court.isCentral && <Star size={13} className="text-[#D4AF37] fill-[#D4AF37] shrink-0" />}
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate">{tc.court.name}</p>
-            {(tc.court.surface || tc.court.isIndoor) && (
-              <p className="text-[10px] text-muted-foreground">
-                {tc.court.surface ?? ""}
-                {tc.court.isIndoor ? " · Cubierta" : ""}
-              </p>
+            {tc.court.isIndoor && (
+              <p className="text-[10px] text-muted-foreground">Cubierta</p>
             )}
           </div>
         </div>

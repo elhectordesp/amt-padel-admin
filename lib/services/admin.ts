@@ -204,9 +204,9 @@ export const adminService = {
   courts: {
     list:   (clubId: string) =>
       api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
-    create: (clubId: string, data: { name: string; surface?: string; isIndoor?: boolean; isCentral?: boolean; order?: number }) =>
+    create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean; order?: number }) =>
       api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
-    update: (clubId: string, courtId: string, data: Partial<{ name: string; surface: string; isIndoor: boolean; isCentral: boolean; order: number }>) =>
+    update: (clubId: string, courtId: string, data: Partial<{ name: string; isIndoor: boolean; isCentral: boolean; order: number }>) =>
       api.patch<Court>(`/admin/clubs/${clubId}/courts/${courtId}`, data).then((r) => r.data),
     remove: (clubId: string, courtId: string) =>
       api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),
