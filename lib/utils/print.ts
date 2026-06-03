@@ -1,5 +1,14 @@
 import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
 
+function esc(s: string | null | undefined): string {
+  return (s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface PairReg {
   pairKey: string;
   ids:     string[];
@@ -40,8 +49,8 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
         <tr class="${i % 2 === 0 ? "row-alt" : ""}">
           <td class="num">${i + 1}</td>
           <td>
-            <strong>${reg.user.name}</strong>
-            ${reg.partner?.name ? `<br><span class="secondary">${reg.partner.name}</span>` : "<br><span class='secondary italic'>Sin pareja</span>"}
+            <strong>${esc(reg.user.name)}</strong>
+            ${reg.partner?.name ? `<br><span class="secondary">${esc(reg.partner.name)}</span>` : "<br><span class='secondary italic'>Sin pareja</span>"}
           </td>
           <td class="center">
             ${reg.user.categoryLevel ?? "—"}
@@ -132,8 +141,8 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
   <button class="print-btn" onclick="window.print()">Imprimir</button>
   <div class="page-header">
     <div>
-      <h1>${tournament.name}</h1>
-      <div class="meta">${tournament.dates} · ${(tournament as any).club?.name ?? ""}${(tournament as any).club?.city ? `, ${(tournament as any).club.city}` : ""}</div>
+      <h1>${esc(tournament.name)}</h1>
+      <div class="meta">${esc(tournament.dates)} · ${esc((tournament as any).club?.name)}${(tournament as any).club?.city ? `, ${esc((tournament as any).club.city)}` : ""}</div>
     </div>
     <div>
       <div class="logo">AMT PÁDEL</div>
@@ -188,8 +197,8 @@ export function printSchedule(
       const time    = new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
       const cat     = catMap[m.categoryId ?? ""] ?? "—";
       const phase   = PHASE_LABEL[m.phase] ?? m.phase;
-      const t1      = m.team1.join(" / ") || "—";
-      const t2      = m.team2.join(" / ") || "—";
+      const t1      = m.team1.map(esc).join(" / ") || "—";
+      const t2      = m.team2.map(esc).join(" / ") || "—";
       const done    = m.status === "finished";
       const score   = done && m.sets1?.length
         ? m.sets1.map((s, j) => `${s}-${m.sets2?.[j] ?? 0}`).join(", ")
@@ -228,13 +237,13 @@ export function printSchedule(
 
   const now = new Date().toLocaleString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const club = (tournament as any).club;
-  const meta = [(tournament as any).dates, club?.name, club?.city].filter(Boolean).join(" · ");
+  const meta = [(tournament as any).dates, club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
 
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Horario — ${tournament.name}</title>
+  <title>Horario — ${esc(tournament.name)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px 28px; }
@@ -266,7 +275,7 @@ export function printSchedule(
   <button class="print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
   <div class="page-header">
     <div>
-      <h1>Horario — ${tournament.name}</h1>
+      <h1>Horario — ${esc(tournament.name)}</h1>
       <div class="meta">${meta}</div>
     </div>
     <div>
