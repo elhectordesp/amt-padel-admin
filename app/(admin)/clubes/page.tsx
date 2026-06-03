@@ -117,9 +117,6 @@ function CourtRow({
         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
           {court.surface && <span>{SURFACE_LABEL[court.surface] ?? court.surface}</span>}
           {court.isIndoor && <span>· Cubierta</span>}
-          {(court._count?.tournamentCourts ?? 0) > 0 && (
-            <span className="text-[#D4AF37]">· {court._count!.tournamentCourts} torneo{court._count!.tournamentCourts !== 1 ? "s" : ""}</span>
-          )}
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

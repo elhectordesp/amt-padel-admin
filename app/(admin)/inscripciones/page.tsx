@@ -2,13 +2,14 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays } from "lucide-react";
+import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
+import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import { adminService } from "@/lib/services/admin";
 import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
 
@@ -84,7 +85,8 @@ export default function InscripcionesPage() {
   const [page,          setPage]        = useState(0);
   const [confirmCancel,    setConfirmCancel]    = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
-  const [availRegId,    setAvailRegId]    = useState<string | null>(null);
+  const [availRegId,       setAvailRegId]       = useState<string | null>(null);
+  const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -99,6 +101,13 @@ export default function InscripcionesPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: tournamentDetail } = useQuery({
+    queryKey:  ["tournament-detail", tournamentId],
+    queryFn:   () => adminService.tournaments.adminDetail(tournamentId),
+    enabled:   !!tournamentId,
+    staleTime: 120_000,
+  });
+
   const bulkStatus = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
@@ -110,6 +119,17 @@ export default function InscripcionesPage() {
       setUpdatingIds(new Set());
     },
     onError: (err: Error) => { toast.error(err.message); setUpdatingIds(new Set()); },
+  });
+
+  const moveCategory = useMutation({
+    mutationFn: ({ registrationId, newCategoryId }: { registrationId: string; newCategoryId: string }) =>
+      adminService.registrations.moveCategory(registrationId, newCategoryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      toast.success("Inscripción movida a la nueva categoría");
+      setMovePair(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const handlePairStatus = (pair: PairRegistration, status: string) => {
@@ -188,6 +208,18 @@ export default function InscripcionesPage() {
     <div className="flex flex-col min-h-full">
       {availRegId && (
         <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+      )}
+
+      {movePair && (
+        <MoveCategoryModal
+          pair={movePair}
+          categories={tournamentDetail?.categories ?? availableCategories}
+          saving={moveCategory.isPending}
+          onSave={(newCategoryId) =>
+            moveCategory.mutate({ registrationId: movePair.primary.id, newCategoryId })
+          }
+          onClose={() => setMovePair(null)}
+        />
       )}
 
       <ConfirmModal
@@ -503,6 +535,14 @@ export default function InscripcionesPage() {
                                         <Clock size={14} />
                                       </button>
                                     )}
+                                    <button
+                                      onClick={() => setMovePair(pair)}
+                                      disabled={isUpdating}
+                                      title="Cambiar categoría"
+                                      className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40 transition-colors"
+                                    >
+                                      <ArrowLeftRight size={14} />
+                                    </button>
                                     <button
                                       onClick={() => handlePairStatus(pair, "CANCELLED")}
                                       disabled={isUpdating}

@@ -51,7 +51,6 @@ const configSchema = z.object({
   registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
-  courts:              z.string().min(1, "Añade al menos una pista (necesario para programar partidos automáticamente)"),
 });
 
 const DAY_TYPE_OPTIONS = [
@@ -128,6 +127,21 @@ export default function NuevoTorneoPage() {
     queryFn:  () => adminService.clubs.list(),
   });
 
+  // ── Courts for selected club ──────────────────────────────────────────
+  const [selectedCourtIds, setSelectedCourtIds] = useState<string[]>([]);
+
+  const { data: clubCourts = [] } = useQuery({
+    queryKey: ["club-courts", infoData?.clubId],
+    queryFn:  () => adminService.courts.list(infoData!.clubId),
+    enabled:  !!infoData?.clubId,
+  });
+
+  useEffect(() => {
+    if (clubCourts.length > 0) {
+      setSelectedCourtIds(clubCourts.map((c) => c.id));
+    }
+  }, [clubCourts]);
+
   // ── Step 1: Info ───────────────────────────────────────────────────────
   const infoForm = useForm<InfoData>({
     resolver:      zodResolver(infoSchema),
@@ -159,7 +173,7 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, hasShirts: false, useSeeding: false, courts: "" },
+    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, hasShirts: false, useSeeding: false },
   });
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
@@ -200,9 +214,7 @@ export default function NuevoTorneoPage() {
       registrationDeadline: configData!.registrationDeadline || undefined,
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
-      courts:      configData!.courts
-        ? configData!.courts.split(",").map((c) => c.trim()).filter(Boolean)
-        : [],
+      courtIds:    selectedCourtIds,
       categories: catData!.categories.map((c) => ({
         gender:          c.gender as Gender,
         level:           c.level  as CategoryLevel,
@@ -592,11 +604,35 @@ export default function NuevoTorneoPage() {
                     />
                   </Field>
                   <Field label="Pistas disponibles">
-                    <Input
-                      {...configForm.register("courts")}
-                      placeholder="Pista 1, Pista 2, Pista 3..."
-                    />
-                    <p className="text-[11px] text-muted-foreground mt-1">Separadas por coma</p>
+                    {clubCourts.length === 0 ? (
+                      <p className="text-xs text-yellow-500 py-2">
+                        Este club no tiene pistas configuradas. Añádelas desde la sección de Clubs.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 pt-1">
+                        {clubCourts.map((court) => (
+                          <label key={court.id} className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={selectedCourtIds.includes(court.id)}
+                              onChange={(e) =>
+                                setSelectedCourtIds((prev) =>
+                                  e.target.checked ? [...prev, court.id] : prev.filter((id) => id !== court.id)
+                                )
+                              }
+                              className="w-4 h-4 accent-[#D4AF37]"
+                            />
+                            <span className="text-sm text-foreground">{court.name}</span>
+                            {court.surface && (
+                              <span className="text-xs text-muted-foreground">· {court.surface}</span>
+                            )}
+                            {court.isCentral && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#D4AF37]">central</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </Field>
                 </div>
                 <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
@@ -803,7 +839,7 @@ export default function NuevoTorneoPage() {
                       : "—"],
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
-                    ["Pistas",       configData.courts || "—"],
+                    ["Pistas",       selectedCourtIds.length > 0 ? `${selectedCourtIds.length} pista(s)` : "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>
