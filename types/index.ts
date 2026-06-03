@@ -63,7 +63,6 @@ export interface Court {
   id:        string;
   clubId:    string;
   name:      string;
-  surface?:  string | null;
   isIndoor:  boolean;
   isCentral: boolean;
   order:     number;

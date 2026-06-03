@@ -623,9 +623,6 @@ export default function NuevoTorneoPage() {
                               className="w-4 h-4 accent-[#D4AF37]"
                             />
                             <span className="text-sm text-foreground">{court.name}</span>
-                            {court.surface && (
-                              <span className="text-xs text-muted-foreground">· {court.surface}</span>
-                            )}
                             {court.isCentral && (
                               <span className="text-[10px] font-semibold uppercase tracking-wide text-[#D4AF37]">central</span>
                             )}

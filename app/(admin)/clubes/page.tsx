@@ -14,12 +14,7 @@ import type { Club, Court } from "@/types";
 
 // ── CourtsPanel ────────────────────────────────────────────────────────────
 
-const SURFACES = ["CLAY", "GRASS", "HARD", "ARTIFICIAL"];
-const SURFACE_LABEL: Record<string, string> = {
-  CLAY: "Tierra", GRASS: "Hierba", HARD: "Dura", ARTIFICIAL: "Artificial",
-};
-
-const EMPTY_COURT = { name: "", surface: "", isIndoor: false, isCentral: false, order: 0 };
+const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false, order: 0 };
 type CourtForm = typeof EMPTY_COURT;
 
 function CourtRow({
@@ -33,7 +28,6 @@ function CourtRow({
   const [edit, setEdit]   = useState(false);
   const [form, setForm]   = useState<CourtForm>({
     name:      court.name,
-    surface:   court.surface ?? "",
     isIndoor:  court.isIndoor,
     isCentral: court.isCentral,
     order:     court.order,
@@ -42,7 +36,6 @@ function CourtRow({
   const save = useMutation({
     mutationFn: () => adminService.courts.update(clubId, court.id, {
       name:      form.name.trim() || undefined,
-      surface:   form.surface    || undefined,
       isIndoor:  form.isIndoor,
       isCentral: form.isCentral,
       order:     form.order,
@@ -67,14 +60,6 @@ function CourtRow({
             placeholder="Nombre pista"
             className="col-span-2 h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
           />
-          <select
-            value={form.surface}
-            onChange={(e) => setForm((f) => ({ ...f, surface: e.target.value }))}
-            className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
-          >
-            <option value="">Sin superficie</option>
-            {SURFACES.map((s) => <option key={s} value={s}>{SURFACE_LABEL[s]}</option>)}
-          </select>
           <input
             type="number" min={0}
             value={form.order}
@@ -115,8 +100,7 @@ function CourtRow({
           <span className="text-sm font-medium truncate">{court.name}</span>
         </div>
         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-          {court.surface && <span>{SURFACE_LABEL[court.surface] ?? court.surface}</span>}
-          {court.isIndoor && <span>· Cubierta</span>}
+          {court.isIndoor && <span>Cubierta</span>}
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -148,7 +132,6 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
   const create = useMutation({
     mutationFn: () => adminService.courts.create(club.id, {
       name:      newForm.name.trim(),
-      surface:   newForm.surface || undefined,
       isIndoor:  newForm.isIndoor,
       isCentral: newForm.isCentral,
       order:     newForm.order,
@@ -209,14 +192,6 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
                   placeholder="Nombre *"
                   className="col-span-2 h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
-                <select
-                  value={newForm.surface}
-                  onChange={(e) => setNewForm((f) => ({ ...f, surface: e.target.value }))}
-                  className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
-                >
-                  <option value="">Sin superficie</option>
-                  {SURFACES.map((s) => <option key={s} value={s}>{SURFACE_LABEL[s]}</option>)}
-                </select>
                 <input
                   type="number" min={0}
                   value={newForm.order}
