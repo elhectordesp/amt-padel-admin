@@ -76,6 +76,7 @@ export const adminService = {
     count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
+    moveCategory: (registrationId: string, newCategoryId: string) => api.patch(`/admin/registrations/${registrationId}/category`, { newCategoryId }).then((r) => r.data),
   },
 
   categories: {

@@ -376,7 +376,7 @@ export interface CreateTournamentPayload {
   useSeeding?: boolean;
   matchDuration?: number;
   maxMatchesPerPlayerPerDay?: number | null;
-  courts?:     string[];
+  courtIds?:   string[];
   categories:  {
     gender:          Gender;
     level:           CategoryLevel;
