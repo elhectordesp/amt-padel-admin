@@ -111,7 +111,7 @@ describe('LoginForm', () => {
   });
 
   it('muestra "Iniciando sesión..." y spinner mientras el formulario se envía', async () => {
-    let resolve!: () => void;
+    let resolve!: (v?: unknown) => void;
     mockLogin.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
     render(<LoginForm />);
     await userEvent.type(screen.getByPlaceholderText('admin@amptournaments.com'), 'admin@test.com');
