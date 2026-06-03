@@ -101,7 +101,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Lista de inscripciones — ${tournament.name}</title>
+  <title>Lista de inscripciones — ${esc(tournament.name)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px 28px; }
