@@ -8,7 +8,7 @@ import type {
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
-  Court, TournamentCourt, CourtUnavailability,
+  Court, TournamentCourt,
   AuditLogEntry,
 } from "@/types";
 
