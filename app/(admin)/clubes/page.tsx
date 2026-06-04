@@ -5,17 +5,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
-  Star, Trash2, LayoutGrid, X, ChevronUp, ChevronDown,
+  Star, Trash2, LayoutGrid, X, ChevronUp, ChevronDown, CalendarOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Club, Court } from "@/types";
+import type { Club, Court, CourtBlock } from "@/types";
 
 // ── CourtsPanel ────────────────────────────────────────────────────────────
 
 const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false };
 type CourtForm = typeof EMPTY_COURT;
+
+const EMPTY_BLOCK = { startDate: "", endDate: "", startTime: "", endTime: "", reason: "" };
+type BlockForm = typeof EMPTY_BLOCK;
 
 function CourtRow({
   court, clubId, onEdited,
@@ -24,12 +27,21 @@ function CourtRow({
   clubId: string;
   onEdited: () => void;
 }) {
-  const qc      = useQueryClient();
-  const [edit, setEdit]   = useState(false);
-  const [form, setForm]   = useState<CourtForm>({
+  const qc = useQueryClient();
+  const [edit, setEdit]           = useState(false);
+  const [showBlocks, setShowBlocks] = useState(false);
+  const [showAddBlock, setShowAddBlock] = useState(false);
+  const [blockForm, setBlockForm]  = useState<BlockForm>({ ...EMPTY_BLOCK });
+  const [form, setForm] = useState<CourtForm>({
     name:      court.name,
     isIndoor:  court.isIndoor,
     isCentral: court.isCentral,
+  });
+
+  const { data: blocks = [], isLoading: blocksLoading } = useQuery({
+    queryKey: ["court-blocks", clubId, court.id],
+    queryFn:  () => adminService.courts.blocks.list(clubId, court.id),
+    enabled:  showBlocks,
   });
 
   const save = useMutation({
@@ -45,6 +57,29 @@ function CourtRow({
   const remove = useMutation({
     mutationFn: () => adminService.courts.remove(clubId, court.id),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ["admin-courts", clubId] }); toast.success("Pista eliminada"); },
+    onError:    (e: Error) => toast.error(e.message),
+  });
+
+  const addBlock = useMutation({
+    mutationFn: () => adminService.courts.blocks.create(clubId, court.id, {
+      startDate: blockForm.startDate,
+      endDate:   blockForm.endDate || blockForm.startDate,
+      startTime: blockForm.startTime || undefined,
+      endTime:   blockForm.endTime   || undefined,
+      reason:    blockForm.reason.trim() || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["court-blocks", clubId, court.id] });
+      setBlockForm({ ...EMPTY_BLOCK });
+      setShowAddBlock(false);
+      toast.success("Bloqueo añadido");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeBlock = useMutation({
+    mutationFn: (blockId: string) => adminService.courts.blocks.remove(clubId, court.id, blockId),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ["court-blocks", clubId, court.id] }); toast.success("Bloqueo eliminado"); },
     onError:    (e: Error) => toast.error(e.message),
   });
 
@@ -82,28 +117,133 @@ function CourtRow({
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-border/80 bg-card group">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          {court.isCentral && <Star size={11} className="text-[#D4AF37] fill-[#D4AF37] shrink-0" />}
-          <span className="text-sm font-medium truncate">{court.name}</span>
+    <div className="rounded-lg border border-border bg-card">
+      {/* Court header row */}
+      <div className="flex items-center gap-2 px-3 py-2 group">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            {court.isCentral && <Star size={11} className="text-[#D4AF37] fill-[#D4AF37] shrink-0" />}
+            <span className="text-sm font-medium truncate">{court.name}</span>
+          </div>
+          {court.isIndoor && <p className="text-[10px] text-muted-foreground mt-0.5">Cubierta</p>}
         </div>
-        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-          {court.isIndoor && <span>Cubierta</span>}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => { setShowBlocks((v) => !v); setShowAddBlock(false); }}
+            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+            title="Gestionar bloqueos"
+          >
+            <CalendarOff size={12} />
+          </button>
+          <button onClick={() => setEdit(true)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
+            <Pencil size={12} />
+          </button>
+          <button
+            onClick={() => { if (confirm(`¿Eliminar "${court.name}"?`)) remove.mutate(); }}
+            disabled={remove.isPending}
+            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+          >
+            {remove.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+          </button>
         </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={() => setEdit(true)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
-          <Pencil size={12} />
-        </button>
-        <button
-          onClick={() => { if (confirm(`¿Eliminar "${court.name}"?`)) remove.mutate(); }}
-          disabled={remove.isPending}
-          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-        >
-          {remove.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-        </button>
-      </div>
+
+      {/* Blocks section */}
+      {showBlocks && (
+        <div className="px-3 pb-3 space-y-2 border-t border-border pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Bloqueos</p>
+
+          {blocksLoading ? (
+            <Loader2 size={14} className="animate-spin text-muted-foreground" />
+          ) : blocks.length === 0 && !showAddBlock ? (
+            <p className="text-[11px] text-muted-foreground">Sin bloqueos</p>
+          ) : (
+            <div className="space-y-1">
+              {blocks.map((b: CourtBlock) => (
+                <div key={b.id} className="flex items-center gap-2 px-2 py-1 rounded bg-secondary/60 text-[11px] group/block">
+                  <CalendarOff size={10} className="text-muted-foreground shrink-0" />
+                  <span className="flex-1 min-w-0 truncate">
+                    {b.startDate === b.endDate ? b.startDate : `${b.startDate} – ${b.endDate}`}
+                    {b.startTime && b.endTime && ` · ${b.startTime}–${b.endTime}`}
+                    {b.reason && ` · ${b.reason}`}
+                  </span>
+                  <button
+                    onClick={() => removeBlock.mutate(b.id)}
+                    disabled={removeBlock.isPending}
+                    className="opacity-0 group-hover/block:opacity-100 p-0.5 rounded hover:bg-destructive/15 text-destructive transition-opacity"
+                  >
+                    {removeBlock.isPending ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showAddBlock ? (
+            <div className="space-y-1.5 pt-1 border-t border-border">
+              <div className="grid grid-cols-2 gap-1">
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Desde *</p>
+                  <input
+                    type="date" value={blockForm.startDate}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, startDate: e.target.value }))}
+                    className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Hasta</p>
+                  <input
+                    type="date" value={blockForm.endDate}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, endDate: e.target.value }))}
+                    className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Hora inicio</p>
+                  <input
+                    type="time" value={blockForm.startTime}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, startTime: e.target.value }))}
+                    className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Hora fin</p>
+                  <input
+                    type="time" value={blockForm.endTime}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, endTime: e.target.value }))}
+                    className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none"
+                  />
+                </div>
+              </div>
+              <input
+                value={blockForm.reason}
+                onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))}
+                placeholder="Motivo (opcional)"
+                className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setShowAddBlock(false); setBlockForm({ ...EMPTY_BLOCK }); }} className="px-2 py-1 text-[11px] rounded border border-border text-muted-foreground hover:text-foreground">Cancelar</button>
+                <button
+                  onClick={() => { if (!blockForm.startDate) { toast.error("La fecha de inicio es obligatoria"); return; } addBlock.mutate(); }}
+                  disabled={addBlock.isPending}
+                  className="px-2 py-1 text-[11px] rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-1"
+                >
+                  {addBlock.isPending && <Loader2 size={10} className="animate-spin" />} Añadir
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddBlock(true)}
+              className="w-full flex items-center justify-center gap-1 py-1 text-[11px] rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/40 transition-colors"
+            >
+              <Plus size={10} /> Añadir bloqueo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -57,7 +57,16 @@ export interface Club {
   tournamentCount?: number;
 }
 
-export type UnavailabilityType = "TOURNAMENT" | "DAY" | "SLOT";
+export interface CourtBlock {
+  id:        string;
+  courtId:   string;
+  startDate: string;       // "YYYY-MM-DD"
+  endDate:   string;       // "YYYY-MM-DD"
+  startTime?: string | null; // "HH:MM"
+  endTime?:   string | null;
+  reason?:    string | null;
+  createdAt:  string;
+}
 
 export interface Court {
   id:        string;
@@ -67,27 +76,14 @@ export interface Court {
   isCentral: boolean;
   order:     number;
   active:    boolean;
-  _count?:   { tournamentCourts: number };
-}
-
-export interface CourtUnavailability {
-  id:                string;
-  tournamentCourtId: string;
-  type:              UnavailabilityType;
-  date?:             string | null;
-  startTime?:        string | null;
-  endTime?:          string | null;
-  reason?:           string | null;
-  createdAt:         string;
+  blocks?:   CourtBlock[];
 }
 
 export interface TournamentCourt {
-  id:               string;
-  tournamentId:     string;
-  courtId:          string;
-  isAvailable:      boolean;
-  court:            Court;
-  unavailabilities: CourtUnavailability[];
+  id:          string;
+  tournamentId: string;
+  courtId:     string;
+  court:       Court;
 }
 
 export interface Tournament {
