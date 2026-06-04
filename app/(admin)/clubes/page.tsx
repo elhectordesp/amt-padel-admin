@@ -14,7 +14,7 @@ import type { Club, Court } from "@/types";
 
 // ── CourtsPanel ────────────────────────────────────────────────────────────
 
-const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false, order: 0 };
+const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false };
 type CourtForm = typeof EMPTY_COURT;
 
 function CourtRow({
@@ -30,7 +30,6 @@ function CourtRow({
     name:      court.name,
     isIndoor:  court.isIndoor,
     isCentral: court.isCentral,
-    order:     court.order,
   });
 
   const save = useMutation({
@@ -38,7 +37,6 @@ function CourtRow({
       name:      form.name.trim() || undefined,
       isIndoor:  form.isIndoor,
       isCentral: form.isCentral,
-      order:     form.order,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-courts", clubId] }); setEdit(false); onEdited(); toast.success("Pista actualizada"); },
     onError:   (e: Error) => toast.error(e.message),
@@ -53,21 +51,12 @@ function CourtRow({
   if (edit) {
     return (
       <div className="border border-[#D4AF37]/30 rounded-lg p-3 space-y-2 bg-[rgba(212,175,55,0.04)]">
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            placeholder="Nombre pista"
-            className="col-span-2 h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-          />
-          <input
-            type="number" min={0}
-            value={form.order}
-            onChange={(e) => setForm((f) => ({ ...f, order: Number(e.target.value) }))}
-            placeholder="Orden"
-            className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
-          />
-        </div>
+        <input
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          placeholder="Nombre pista"
+          className="w-full h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+        />
         <div className="flex items-center gap-4 text-xs">
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={form.isIndoor} onChange={(e) => setForm((f) => ({ ...f, isIndoor: e.target.checked }))} className="accent-[#D4AF37]" />
@@ -134,7 +123,6 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
       name:      newForm.name.trim(),
       isIndoor:  newForm.isIndoor,
       isCentral: newForm.isCentral,
-      order:     newForm.order,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-courts", club.id] });
@@ -185,21 +173,12 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
           {showAdd && (
             <div className="border border-[#D4AF37]/40 rounded-lg p-3 space-y-2 bg-[rgba(212,175,55,0.04)]">
               <p className="text-xs font-semibold text-[#D4AF37] uppercase tracking-wide">Nueva pista</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  value={newForm.name}
-                  onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Nombre *"
-                  className="col-span-2 h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                />
-                <input
-                  type="number" min={0}
-                  value={newForm.order}
-                  onChange={(e) => setNewForm((f) => ({ ...f, order: Number(e.target.value) }))}
-                  placeholder="Orden"
-                  className="h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none"
-                />
-              </div>
+              <input
+                value={newForm.name}
+                onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Nombre *"
+                className="w-full h-8 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              />
               <div className="flex items-center gap-4 text-xs">
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input type="checkbox" checked={newForm.isIndoor} onChange={(e) => setNewForm((f) => ({ ...f, isIndoor: e.target.checked }))} className="accent-[#D4AF37]" />
