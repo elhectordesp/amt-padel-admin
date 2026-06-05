@@ -403,16 +403,27 @@ function ClubModal({
     setForm((f) => ({ ...f, [k]: v }));
 
   const geocode = async () => {
-    const query = [form.address, form.city].filter(Boolean).join(", ");
-    if (!query) { toast.error("Introduce al menos la ciudad para geocodificar"); return; }
+    // Try name+city first (most accurate for sports clubs), fallback to address+city
+    const byName    = [form.name, form.city].filter(Boolean).join(", ");
+    const byAddress = [form.address, form.city].filter(Boolean).join(", ");
+    const query = byName || byAddress;
+    if (!query) { toast.error("El club necesita al menos nombre o ciudad para geocodificar"); return; }
     setGeocoding(true);
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
-        { headers: { "Accept-Language": "es" } },
-      );
-      const data: { lat: string; lon: string }[] = await res.json();
-      if (data.length === 0) { toast.error("No se encontraron coordenadas para esa dirección"); return; }
+      const tryFetch = async (q: string) => {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+          { headers: { "Accept-Language": "es" } },
+        );
+        return res.json() as Promise<{ lat: string; lon: string }[]>;
+      };
+
+      let data = await tryFetch(byName);
+      // If name search returns nothing, retry with address
+      if (data.length === 0 && byAddress && byAddress !== byName) {
+        data = await tryFetch(byAddress);
+      }
+      if (data.length === 0) { toast.error("No se encontraron coordenadas. Prueba a editar la dirección."); return; }
       setForm((f) => ({ ...f, lat: data[0].lat, lng: data[0].lon }));
       toast.success(`Coordenadas obtenidas: ${data[0].lat}, ${data[0].lon}`);
     } catch {
