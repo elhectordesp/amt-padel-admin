@@ -1,22 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Pencil, Trash2, ExternalLink, Globe, Trophy, MapPin,
   Image as ImageIcon, ToggleLeft, ToggleRight, GripVertical, Loader2,
+  Upload, Crown, Star, Users, MousePointerClick,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Sponsor, SponsorScope } from "@/types";
+import type { Sponsor, SponsorScope, SponsorTier } from "@/types";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const SCOPE_CONFIG: Record<SponsorScope, { label: string; icon: React.ElementType; color: string; description: string }> = {
-  CIRCUIT:    { label: "Circuito",   icon: Trophy,  color: "text-[#D4AF37] bg-[rgba(212,175,55,0.1)] border-[rgba(212,175,55,0.3)]",   description: "Visible en toda la app" },
-  TOURNAMENT: { label: "Torneo",    icon: Globe,   color: "text-blue-400 bg-blue-400/10 border-blue-400/30",                           description: "Visible solo en ese torneo" },
-  REGIONAL:   { label: "Regional",  icon: MapPin,  color: "text-purple-400 bg-purple-400/10 border-purple-400/30",                     description: "Visible al filtrar por ciudad" },
+  CIRCUIT:    { label: "Circuito",  icon: Trophy, color: "text-[#D4AF37] bg-[rgba(212,175,55,0.1)] border-[rgba(212,175,55,0.3)]", description: "Visible en toda la app" },
+  TOURNAMENT: { label: "Torneo",   icon: Globe,  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",                         description: "Visible solo en ese torneo" },
+  REGIONAL:   { label: "Regional", icon: MapPin, color: "text-purple-400 bg-purple-400/10 border-purple-400/30",                   description: "Visible al filtrar por ciudad" },
+};
+
+const TIER_CONFIG: Record<SponsorTier, { label: string; icon: React.ElementType; color: string; description: string }> = {
+  TITLE:    { label: "Principal",  icon: Crown, color: "text-[#D4AF37] bg-[rgba(212,175,55,0.1)] border-[rgba(212,175,55,0.3)]", description: "Banner completo + logo grande" },
+  OFFICIAL: { label: "Oficial",    icon: Star,  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",                        description: "Logo mediano en strip" },
+  PARTNER:  { label: "Colaborador",icon: Users, color: "text-muted-foreground bg-secondary border-border",                       description: "Logo pequeño (base)" },
 };
 
 const TABS: { key: SponsorScope | "ALL"; label: string }[] = [
@@ -26,10 +41,21 @@ const TABS: { key: SponsorScope | "ALL"; label: string }[] = [
   { key: "REGIONAL",   label: "Regional" },
 ];
 
-// ── ScopeBadge ─────────────────────────────────────────────────────────────
+// ── Badges ─────────────────────────────────────────────────────────────────
 
 function ScopeBadge({ scope }: { scope: SponsorScope }) {
   const cfg = SCOPE_CONFIG[scope];
+  const Icon = cfg.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
+      <Icon size={9} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function TierBadge({ tier }: { tier: SponsorTier }) {
+  const cfg = TIER_CONFIG[tier];
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
@@ -56,21 +82,91 @@ function LogoPreview({ url, name }: { url?: string | null; name: string }) {
   );
 }
 
-// ── SponsorModal ───────────────────────────────────────────────────────────
+// ── ImageUploader ──────────────────────────────────────────────────────────
 
-interface ModalState {
-  open:     boolean;
-  editing?: Sponsor;
+function ImageUploader({
+  label, hint, url, onUrl, uploadFn, maxMB, aspectHint,
+}: {
+  label:      string;
+  hint?:      string;
+  url:        string;
+  onUrl:      (url: string) => void;
+  uploadFn:   (file: File) => Promise<{ imageUrl: string }>;
+  maxMB:      number;
+  aspectHint?: string;
+}) {
+  const inputRef           = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    if (file.size > maxMB * 1024 * 1024) { toast.error(`Máximo ${maxMB} MB`); return; }
+    setUploading(true);
+    try {
+      const { imageUrl } = await uploadFn(file);
+      onUrl(imageUrl);
+    } catch {
+      toast.error("Error al subir la imagen");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-muted-foreground mb-1">
+        {label}{hint && <span className="opacity-60"> {hint}</span>}
+      </label>
+      <div className="flex gap-2">
+        <input
+          value={url}
+          onChange={(e) => onUrl(e.target.value)}
+          placeholder="https://..."
+          className="flex-1 px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-secondary border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.5)] disabled:opacity-50 transition-colors shrink-0"
+        >
+          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+          Subir
+        </button>
+        {url && (
+          <div className="w-9 h-9 rounded-md border border-border bg-secondary overflow-hidden flex items-center justify-center shrink-0">
+            <img src={url} alt="" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          </div>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+        />
+      </div>
+      {aspectHint && <p className="text-[10px] text-muted-foreground mt-1 opacity-60">{aspectHint}</p>}
+    </div>
+  );
 }
 
-const EMPTY_FORM = { name: "", logoUrl: "", websiteUrl: "", tagline: "", scope: "TOURNAMENT" as SponsorScope, tournamentId: "", city: "", displayOrder: 0, active: true };
+// ── SponsorModal ───────────────────────────────────────────────────────────
+
+interface ModalState { open: boolean; editing?: Sponsor }
+
+const EMPTY_FORM = {
+  name: "", logoUrl: "", bannerUrl: "", websiteUrl: "", tagline: "",
+  scope: "TOURNAMENT" as SponsorScope, tier: "PARTNER" as SponsorTier,
+  tournamentId: "", city: "", displayOrder: 0, active: true,
+  validFrom: "", validUntil: "",
+};
 type FormState = typeof EMPTY_FORM;
 
 function SponsorModal({
   state, onClose, tournaments,
 }: {
-  state: ModalState;
-  onClose: () => void;
+  state:       ModalState;
+  onClose:     () => void;
   tournaments: { id: string; name: string }[];
 }) {
   const qc        = useQueryClient();
@@ -80,14 +176,18 @@ function SponsorModal({
     state.editing
       ? {
           name:         state.editing.name,
-          logoUrl:      state.editing.logoUrl ?? "",
+          logoUrl:      state.editing.logoUrl    ?? "",
+          bannerUrl:    state.editing.bannerUrl  ?? "",
           websiteUrl:   state.editing.websiteUrl ?? "",
-          tagline:      state.editing.tagline ?? "",
+          tagline:      state.editing.tagline    ?? "",
           scope:        state.editing.scope,
+          tier:         state.editing.tier       ?? "PARTNER",
           tournamentId: state.editing.tournamentId ?? "",
-          city:         state.editing.city ?? "",
+          city:         state.editing.city       ?? "",
           displayOrder: state.editing.displayOrder,
           active:       state.editing.active,
+          validFrom:    state.editing.validFrom  ? state.editing.validFrom.slice(0, 10)  : "",
+          validUntil:   state.editing.validUntil ? state.editing.validUntil.slice(0, 10) : "",
         }
       : EMPTY_FORM,
   );
@@ -98,14 +198,18 @@ function SponsorModal({
     mutationFn: () => {
       const payload = {
         name:         form.name.trim(),
-        logoUrl:      form.logoUrl.trim()      || undefined,
-        websiteUrl:   form.websiteUrl.trim()   || undefined,
-        tagline:      form.tagline.trim()      || undefined,
+        logoUrl:      form.logoUrl.trim()    || undefined,
+        bannerUrl:    form.bannerUrl.trim()  || undefined,
+        websiteUrl:   form.websiteUrl.trim() || undefined,
+        tagline:      form.tagline.trim()    || undefined,
         scope:        form.scope,
+        tier:         form.tier,
         tournamentId: form.scope === "TOURNAMENT" ? (form.tournamentId || undefined) : undefined,
         city:         form.scope === "REGIONAL"   ? (form.city.trim() || undefined)  : undefined,
         displayOrder: Number(form.displayOrder),
         active:       form.active,
+        validFrom:    form.validFrom  || undefined,
+        validUntil:   form.validUntil || undefined,
       };
       return isEditing
         ? adminService.sponsors.update(state.editing!.id, payload)
@@ -118,8 +222,6 @@ function SponsorModal({
     },
     onError: () => toast.error("Error al guardar el patrocinador"),
   });
-
-  const scopeCfg = SCOPE_CONFIG[form.scope];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -135,7 +237,7 @@ function SponsorModal({
         <div className="p-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
           {/* Scope selector */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-2">Tipo de patrocinador</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-2">Alcance</label>
             <div className="grid grid-cols-3 gap-2">
               {(["CIRCUIT", "TOURNAMENT", "REGIONAL"] as SponsorScope[]).map((s) => {
                 const cfg  = SCOPE_CONFIG[s];
@@ -143,9 +245,37 @@ function SponsorModal({
                 return (
                   <button
                     key={s}
+                    type="button"
                     onClick={() => set("scope", s)}
                     className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-center transition-all ${
                       form.scope === s
+                        ? `${cfg.color} border-current`
+                        : "border-border text-muted-foreground hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span className="text-[11px] font-semibold">{cfg.label}</span>
+                    <span className="text-[9px] opacity-70 leading-tight">{cfg.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tier selector */}
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-2">Nivel</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["TITLE", "OFFICIAL", "PARTNER"] as SponsorTier[]).map((t) => {
+                const cfg  = TIER_CONFIG[t];
+                const Icon = cfg.icon;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => set("tier", t)}
+                    className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-center transition-all ${
+                      form.tier === t
                         ? `${cfg.color} border-current`
                         : "border-border text-muted-foreground hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
                     }`}
@@ -181,23 +311,28 @@ function SponsorModal({
             />
           </div>
 
-          {/* Logo URL */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">URL del logo <span className="opacity-60">(PNG/SVG con fondo transparente)</span></label>
-            <div className="flex gap-2">
-              <input
-                value={form.logoUrl}
-                onChange={(e) => set("logoUrl", e.target.value)}
-                placeholder="https://example.com/logo.png"
-                className="flex-1 px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
-              />
-              {form.logoUrl && (
-                <div className="w-9 h-9 rounded-md border border-border bg-secondary overflow-hidden flex items-center justify-center shrink-0">
-                  <img src={form.logoUrl} alt="" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Logo */}
+          <ImageUploader
+            label="Logo"
+            hint="(PNG/SVG transparente, recomendado 400×200)"
+            url={form.logoUrl}
+            onUrl={(v) => set("logoUrl", v)}
+            uploadFn={adminService.upload.sponsorLogo}
+            maxMB={2}
+          />
+
+          {/* Banner — solo TITLE */}
+          {form.tier === "TITLE" && (
+            <ImageUploader
+              label="Banner"
+              hint="(solo patrocinador Principal)"
+              url={form.bannerUrl}
+              onUrl={(v) => set("bannerUrl", v)}
+              uploadFn={adminService.upload.sponsorBanner}
+              maxMB={8}
+              aspectHint="Recomendado 1200×400 px"
+            />
+          )}
 
           {/* Website */}
           <div>
@@ -210,10 +345,10 @@ function SponsorModal({
             />
           </div>
 
-          {/* Torneo (solo scope TOURNAMENT) */}
+          {/* Torneo (solo TOURNAMENT) */}
           {form.scope === "TOURNAMENT" && (
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Torneo <span className="opacity-60">(opcional — vincula al torneo específico)</span></label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Torneo <span className="opacity-60">(opcional)</span></label>
               <select
                 value={form.tournamentId}
                 onChange={(e) => set("tournamentId", e.target.value)}
@@ -227,7 +362,7 @@ function SponsorModal({
             </div>
           )}
 
-          {/* Ciudad (solo scope REGIONAL) */}
+          {/* Ciudad (solo REGIONAL) */}
           {form.scope === "REGIONAL" && (
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Ciudad</label>
@@ -239,6 +374,28 @@ function SponsorModal({
               />
             </div>
           )}
+
+          {/* Validez */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Válido desde <span className="opacity-60">(opcional)</span></label>
+              <input
+                type="date"
+                value={form.validFrom}
+                onChange={(e) => set("validFrom", e.target.value)}
+                className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Válido hasta <span className="opacity-60">(opcional)</span></label>
+              <input
+                type="date"
+                value={form.validUntil}
+                onChange={(e) => set("validUntil", e.target.value)}
+                className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
+              />
+            </div>
+          </div>
 
           {/* Orden y activo */}
           <div className="grid grid-cols-2 gap-3">
@@ -254,6 +411,7 @@ function SponsorModal({
             </div>
             <div className="flex flex-col justify-end">
               <button
+                type="button"
                 onClick={() => set("active", !form.active)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm font-medium transition-all ${
                   form.active
@@ -287,9 +445,9 @@ function SponsorModal({
   );
 }
 
-// ── SponsorRow ──────────────────────────────────────────────────────────────
+// ── SortableSponsorRow ──────────────────────────────────────────────────────
 
-function SponsorRow({
+function SortableSponsorRow({
   sponsor, onEdit, onDelete, onToggle,
 }: {
   sponsor:  Sponsor;
@@ -297,11 +455,30 @@ function SponsorRow({
   onDelete: (s: Sponsor) => void;
   onToggle: (s: Sponsor) => void;
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: sponsor.id });
+
+  const style: React.CSSProperties = {
+    transform:  CSS.Transform.toString(transform),
+    transition,
+    opacity:    isDragging ? 0.5 : 1,
+    position:   isDragging ? "relative" : undefined,
+    zIndex:     isDragging ? 10 : undefined,
+  };
+
   return (
-    <tr className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors group">
+    <tr ref={setNodeRef} style={style} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors group">
+      {/* Patrocinador */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <GripVertical size={14} className="text-muted-foreground/40 cursor-grab shrink-0" />
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0"
+            title="Arrastrar para reordenar"
+          >
+            <GripVertical size={14} />
+          </button>
           <LogoPreview url={sponsor.logoUrl} name={sponsor.name} />
           <div>
             <p className="text-sm font-medium text-foreground">{sponsor.name}</p>
@@ -309,18 +486,21 @@ function SponsorRow({
           </div>
         </div>
       </td>
+      {/* Alcance */}
       <td className="px-4 py-3">
         <ScopeBadge scope={sponsor.scope} />
         {sponsor.scope === "TOURNAMENT" && sponsor.tournament && (
-          <p className="text-[10px] text-muted-foreground mt-1 truncate max-w-[140px]">{sponsor.tournament.name}</p>
+          <p className="text-[10px] text-muted-foreground mt-1 truncate max-w-[120px]">{sponsor.tournament.name}</p>
         )}
         {sponsor.scope === "REGIONAL" && sponsor.city && (
           <p className="text-[10px] text-muted-foreground mt-1">{sponsor.city}</p>
         )}
       </td>
-      <td className="px-4 py-3 text-center">
-        <span className="text-sm text-muted-foreground tabular-nums">{sponsor.displayOrder}</span>
+      {/* Tier */}
+      <td className="px-4 py-3">
+        <TierBadge tier={sponsor.tier ?? "PARTNER"} />
       </td>
+      {/* Enlace */}
       <td className="px-4 py-3">
         {sponsor.websiteUrl ? (
           <a
@@ -330,12 +510,20 @@ function SponsorRow({
             className="inline-flex items-center gap-1 text-[11px] text-[#D4AF37] hover:underline"
           >
             <ExternalLink size={10} />
-            <span className="truncate max-w-[120px]">{sponsor.websiteUrl.replace(/^https?:\/\//, "")}</span>
+            <span className="truncate max-w-[100px]">{sponsor.websiteUrl.replace(/^https?:\/\//, "")}</span>
           </a>
         ) : (
           <span className="text-[11px] text-muted-foreground/40">—</span>
         )}
       </td>
+      {/* Clics */}
+      <td className="px-4 py-3 text-center">
+        <span className={`inline-flex items-center gap-1 text-xs tabular-nums ${(sponsor.clickCount ?? 0) > 0 ? "text-[#D4AF37]" : "text-muted-foreground/40"}`}>
+          {(sponsor.clickCount ?? 0) > 0 && <MousePointerClick size={10} />}
+          {sponsor.clickCount ?? 0}
+        </span>
+      </td>
+      {/* Estado */}
       <td className="px-4 py-3">
         <button
           onClick={() => onToggle(sponsor)}
@@ -349,6 +537,7 @@ function SponsorRow({
           {sponsor.active ? "Activo" : "Inactivo"}
         </button>
       </td>
+      {/* Acciones */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
@@ -379,6 +568,8 @@ export default function PatrocinadoresPage() {
   const [modal, setModal]         = useState<ModalState>({ open: false });
   const [deleting, setDeleting]   = useState<Sponsor | null>(null);
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
   const { data: sponsors = [], isLoading } = useQuery({
     queryKey:  ["sponsors"],
     queryFn:   () => adminService.sponsors.list(),
@@ -404,7 +595,37 @@ export default function PatrocinadoresPage() {
     onError:    () => toast.error("Error al eliminar el patrocinador"),
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: (ids: string[]) => adminService.sponsors.reorder(ids),
+    onMutate: async (ids: string[]) => {
+      await qc.cancelQueries({ queryKey: ["sponsors"] });
+      const previous = qc.getQueryData<Sponsor[]>(["sponsors"]);
+      qc.setQueryData<Sponsor[]>(["sponsors"], (old = []) => {
+        const byId = Object.fromEntries(old.map((s) => [s.id, s]));
+        const reordered = ids.map((id, i) => byId[id] ? { ...byId[id], displayOrder: i } : null).filter(Boolean) as Sponsor[];
+        const rest = old.filter((s) => !ids.includes(s.id));
+        return [...reordered, ...rest];
+      });
+      return { previous };
+    },
+    onError: (_err, _ids, ctx) => {
+      if (ctx?.previous) qc.setQueryData(["sponsors"], ctx.previous);
+      toast.error("Error al reordenar");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["sponsors"] }),
+  });
+
   const filtered = activeTab === "ALL" ? sponsors : sponsors.filter((s) => s.scope === activeTab);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = filtered.findIndex((s) => s.id === active.id);
+    const newIndex = filtered.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(filtered, oldIndex, newIndex);
+    reorderMutation.mutate(reordered.map((s) => s.id));
+  };
 
   const counts: Record<string, number> = {
     ALL:        sponsors.length,
@@ -492,30 +713,34 @@ export default function PatrocinadoresPage() {
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-secondary/50">
-                    {["Patrocinador", "Tipo", "Orden", "Enlace", "Estado", ""].map((h) => (
-                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((sponsor) => (
-                    <SponsorRow
-                      key={sponsor.id}
-                      sponsor={sponsor}
-                      onEdit={(s)   => setModal({ open: true, editing: s })}
-                      onDelete={(s) => setDeleting(s)}
-                      onToggle={(s) => toggleMutation.mutate(s)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/50">
+                      {["Patrocinador", "Alcance", "Nivel", "Enlace", "Clics", "Estado", ""].map((h) => (
+                        <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <SortableContext items={filtered.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                    <tbody>
+                      {filtered.map((sponsor) => (
+                        <SortableSponsorRow
+                          key={sponsor.id}
+                          sponsor={sponsor}
+                          onEdit={(s)   => setModal({ open: true, editing: s })}
+                          onDelete={(s) => setDeleting(s)}
+                          onToggle={(s) => toggleMutation.mutate(s)}
+                        />
+                      ))}
+                    </tbody>
+                  </SortableContext>
+                </table>
+              </div>
+            </DndContext>
           )}
         </div>
       </div>

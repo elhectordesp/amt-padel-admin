@@ -3,7 +3,7 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
+  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, SponsorTier, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
@@ -186,6 +186,20 @@ export const adminService = {
         headers: { "Content-Type": "multipart/form-data" },
       }).then((r) => r.data);
     },
+    sponsorLogo: (file: File) => {
+      const form = new FormData();
+      form.append("image", file);
+      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-logo", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }).then((r) => r.data);
+    },
+    sponsorBanner: (file: File) => {
+      const form = new FormData();
+      form.append("image", file);
+      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-banner", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }).then((r) => r.data);
+    },
   },
 
   clubs: {
@@ -226,14 +240,16 @@ export const adminService = {
   },
 
   sponsors: {
-    list:   (scope?: SponsorScope, tournamentId?: string) =>
+    list:    (scope?: SponsorScope, tournamentId?: string) =>
       api.get<Sponsor[]>("/admin/sponsors", { params: { ...(scope ? { scope } : {}), ...(tournamentId ? { tournamentId } : {}) } }).then((r) => r.data ?? []),
-    create: (data: Omit<Sponsor, "id" | "createdAt" | "tournament">) =>
+    create:  (data: Omit<Sponsor, "id" | "createdAt" | "tournament" | "clickCount">) =>
       api.post<Sponsor>("/admin/sponsors", data).then((r) => r.data),
-    update: (id: string, data: Partial<Omit<Sponsor, "id" | "createdAt" | "tournament">>) =>
+    update:  (id: string, data: Partial<Omit<Sponsor, "id" | "createdAt" | "tournament" | "clickCount">>) =>
       api.patch<Sponsor>(`/admin/sponsors/${id}`, data).then((r) => r.data),
-    delete: (id: string) =>
+    delete:  (id: string) =>
       api.delete(`/admin/sponsors/${id}`).then((r) => r.data),
+    reorder: (ids: string[]) =>
+      api.post("/admin/sponsors/reorder", { ids }).then((r) => r.data),
   },
 
   rankings: {
