@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
-  Star, Trash2, LayoutGrid, X, ChevronUp, ChevronDown, CalendarOff,
+  Star, Trash2, LayoutGrid, X, CalendarOff,
   Navigation,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -547,7 +547,7 @@ function ClubModal({
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Pulsa "Geocodificar" para rellenar automáticamente desde la dirección/ciudad.
+              Pulsa &quot;Geocodificar&quot; para rellenar automáticamente desde la dirección/ciudad.
             </p>
           </div>
 
