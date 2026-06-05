@@ -8,7 +8,7 @@ import type {
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
-  Court, TournamentCourt, CourtUnavailability,
+  Court, TournamentCourt, CourtBlock,
   AuditLogEntry,
 } from "@/types";
 
@@ -204,23 +204,25 @@ export const adminService = {
   courts: {
     list:   (clubId: string) =>
       api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
-    create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean; order?: number }) =>
+    create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean }) =>
       api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
-    update: (clubId: string, courtId: string, data: Partial<{ name: string; isIndoor: boolean; isCentral: boolean; order: number }>) =>
+    update: (clubId: string, courtId: string, data: Partial<{ name: string; isIndoor: boolean; isCentral: boolean }>) =>
       api.patch<Court>(`/admin/clubs/${clubId}/courts/${courtId}`, data).then((r) => r.data),
     remove: (clubId: string, courtId: string) =>
       api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),
+    blocks: {
+      list:   (clubId: string, courtId: string) =>
+        api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`).then((r) => r.data ?? []),
+      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string }) =>
+        api.post<CourtBlock>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, data).then((r) => r.data),
+      remove: (clubId: string, courtId: string, blockId: string) =>
+        api.delete(`/admin/clubs/${clubId}/courts/${courtId}/blocks/${blockId}`).then((r) => r.data),
+    },
   },
 
   tournamentCourts: {
     list: (tournamentId: string) =>
       api.get<TournamentCourt[]>(`/admin/tournaments/${tournamentId}/courts`).then((r) => r.data ?? []),
-    setAvailability: (tournamentId: string, courtId: string, isAvailable: boolean) =>
-      api.patch<TournamentCourt>(`/admin/tournaments/${tournamentId}/courts/${courtId}/availability`, { isAvailable }).then((r) => r.data),
-    addUnavailability: (tournamentId: string, courtId: string, data: { type: string; date?: string; startTime?: string; endTime?: string; reason?: string }) =>
-      api.post<CourtUnavailability>(`/admin/tournaments/${tournamentId}/courts/${courtId}/unavailability`, data).then((r) => r.data),
-    removeUnavailability: (tournamentId: string, courtId: string, unavailId: string) =>
-      api.delete(`/admin/tournaments/${tournamentId}/courts/${courtId}/unavailability/${unavailId}`).then((r) => r.data),
   },
 
   sponsors: {
