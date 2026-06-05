@@ -6,6 +6,7 @@ import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
   Star, Trash2, LayoutGrid, X, ChevronUp, ChevronDown, CalendarOff,
+  Navigation,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -366,6 +367,7 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
 const EMPTY_FORM = {
   name: "", city: "", address: "", phone: "", website: "",
   instagram: "", logoUrl: "", contactEmail: "", isAmtPartner: true,
+  lat: "", lng: "",
 };
 type FormState = typeof EMPTY_FORM & { isAmtPartner: boolean };
 
@@ -378,7 +380,7 @@ function ClubModal({
   const qc        = useQueryClient();
   const isEditing = !!club;
 
-  const [form, setForm] = useState<FormState>(() =>
+  const [form,         setForm]         = useState<FormState>(() =>
     club
       ? {
           name:         club.name,
@@ -390,15 +392,40 @@ function ClubModal({
           logoUrl:      club.logoUrl      ?? "",
           contactEmail: club.contactEmail ?? "",
           isAmtPartner: club.isAmtPartner ?? true,
+          lat:          club.lat != null ? String(club.lat) : "",
+          lng:          club.lng != null ? String(club.lng) : "",
         }
       : { ...EMPTY_FORM }
   );
+  const [geocoding, setGeocoding] = useState(false);
 
   const set = (k: keyof FormState, v: string | boolean) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const geocode = async () => {
+    const query = [form.address, form.city].filter(Boolean).join(", ");
+    if (!query) { toast.error("Introduce al menos la ciudad para geocodificar"); return; }
+    setGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
+        { headers: { "Accept-Language": "es" } },
+      );
+      const data: { lat: string; lon: string }[] = await res.json();
+      if (data.length === 0) { toast.error("No se encontraron coordenadas para esa dirección"); return; }
+      setForm((f) => ({ ...f, lat: data[0].lat, lng: data[0].lon }));
+      toast.success(`Coordenadas obtenidas: ${data[0].lat}, ${data[0].lon}`);
+    } catch {
+      toast.error("Error al geocodificar. Inténtalo de nuevo.");
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
   const save = useMutation({
     mutationFn: () => {
+      const latN = form.lat.trim() !== "" ? Number(form.lat) : undefined;
+      const lngN = form.lng.trim() !== "" ? Number(form.lng) : undefined;
       const payload = {
         name:         form.name.trim(),
         city:         form.city.trim(),
@@ -409,6 +436,8 @@ function ClubModal({
         logoUrl:      form.logoUrl.trim()      || undefined,
         contactEmail: form.contactEmail.trim() || undefined,
         isAmtPartner: form.isAmtPartner,
+        lat:          latN != null && !isNaN(latN) ? latN : undefined,
+        lng:          lngN != null && !isNaN(lngN) ? lngN : undefined,
       };
       return isEditing
         ? adminService.clubs.update(club!.id, payload)
@@ -486,6 +515,41 @@ function ClubModal({
               className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
           </label>
+
+          {/* Coordenadas GPS */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Navigation size={11} /> Coordenadas GPS
+              </span>
+              <button
+                type="button"
+                onClick={geocode}
+                disabled={geocoding}
+                className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-md border border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#D4AF37] hover:bg-[#D4AF37]/20 disabled:opacity-50 transition-colors"
+              >
+                {geocoding ? <Loader2 size={11} className="animate-spin" /> : <MapPin size={11} />}
+                {geocoding ? "Geocodificando…" : "Geocodificar"}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={form.lat}
+                onChange={(e) => set("lat", e.target.value)}
+                placeholder="40.4168 (latitud)"
+                className="h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              />
+              <input
+                value={form.lng}
+                onChange={(e) => set("lng", e.target.value)}
+                placeholder="-3.7038 (longitud)"
+                className="h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Pulsa "Geocodificar" para rellenar automáticamente desde la dirección/ciudad.
+            </p>
+          </div>
 
           {/* Phone + Email */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

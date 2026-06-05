@@ -56,6 +56,8 @@ export interface Club {
   isAmtPartner?: boolean;
   active?:       boolean;
   tournamentCount?: number;
+  lat?:          number | null;
+  lng?:          number | null;
 }
 
 export interface CourtBlock {
