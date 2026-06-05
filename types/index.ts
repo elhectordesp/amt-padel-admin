@@ -94,7 +94,6 @@ export interface Tournament {
   endDate?:    string;
   club:        Club;
   prize?:       string;
-  prizeAmount?: number;
   status:       TournamentStatus;
   tier?:       TournamentTier;   // DB enum — usado por el admin
   spaTier?:    string;            // Clave SPA traducida — usado por la app móvil
