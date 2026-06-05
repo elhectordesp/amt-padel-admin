@@ -23,7 +23,6 @@ const infoSchema = z.object({
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:       z.string().optional(),
-  prizeAmount: z.number().min(0).optional(),
   imageUrl:    z.string().optional(),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
@@ -351,15 +350,6 @@ export default function NuevoTorneoPage() {
                   <Input
                     {...infoForm.register("prize")}
                     placeholder="5.000 € + trofeo"
-                  />
-                </Field>
-                <Field label="Premio (importe €)" error={infoForm.formState.errors.prizeAmount?.message}>
-                  <Input
-                    {...infoForm.register("prizeAmount", { valueAsNumber: true })}
-                    type="number"
-                    min={0}
-                    step={100}
-                    placeholder="5000"
                   />
                 </Field>
                 <Field label="Fecha de inicio" error={infoForm.formState.errors.startDate?.message}>
@@ -744,7 +734,7 @@ export default function NuevoTorneoPage() {
                     ["Nombre",   infoData.name],
                     ["Club",     clubs.find(c => c.id === infoData.clubId)?.name ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
-                    ["Premio",   [infoData.prize, infoData.prizeAmount != null ? `${infoData.prizeAmount}€` : null].filter(Boolean).join(" · ") || "—"],
+                    ["Premio",   infoData.prize || "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>

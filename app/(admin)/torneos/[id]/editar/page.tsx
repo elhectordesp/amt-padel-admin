@@ -23,7 +23,6 @@ const schema = z.object({
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
-  prizeAmount:          z.number().min(0).optional(),
   tier:                 z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:               z.string().optional(),
   scoringSystem:        z.string().optional(),
@@ -103,7 +102,6 @@ export default function EditarTorneoPage() {
       startDate:            startStr,
       endDate:              endStr,
       prize:                tournament.prize ?? "",
-      prizeAmount:          tournament.prizeAmount != null ? Number(tournament.prizeAmount) : undefined,
       format:               tournament.format ?? "",
       scoringSystem:        tournament.scoringSystem ?? "",
       matchDuration:             tournament.matchDuration ?? 60,
@@ -219,15 +217,6 @@ export default function EditarTorneoPage() {
               </Field>
               <Field label="Premio (descripción)" error={errors.prize?.message}>
                 <Input {...register("prize")} placeholder="5.000 € + trofeo" />
-              </Field>
-              <Field label="Premio (importe €)" error={errors.prizeAmount?.message}>
-                <Input
-                  {...register("prizeAmount", { valueAsNumber: true })}
-                  type="number"
-                  min={0}
-                  step={100}
-                  placeholder="5000"
-                />
               </Field>
               <Field label="Fecha de inicio" error={errors.startDate?.message}>
                 <Input {...register("startDate")} type="date" />
