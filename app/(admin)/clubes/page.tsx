@@ -398,36 +398,49 @@ function ClubModal({
       : { ...EMPTY_FORM }
   );
   const [geocoding, setGeocoding] = useState(false);
+  const [geocodeLog, setGeoLog]   = useState<{ query: string; found: string | null }[]>([]);
 
   const set = (k: keyof FormState, v: string | boolean) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   const geocode = async () => {
-    // Try name+city first (most accurate for sports clubs), fallback to address+city
-    const byName    = [form.name, form.city].filter(Boolean).join(", ");
-    const byAddress = [form.address, form.city].filter(Boolean).join(", ");
-    const query = byName || byAddress;
-    if (!query) { toast.error("El club necesita al menos nombre o ciudad para geocodificar"); return; }
+    if (!form.city && !form.address && !form.name) {
+      toast.error("El club necesita al menos nombre o ciudad");
+      return;
+    }
     setGeocoding(true);
-    try {
-      const tryFetch = async (q: string) => {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
-          { headers: { "Accept-Language": "es" } },
-        );
-        return res.json() as Promise<{ lat: string; lon: string }[]>;
-      };
+    setGeoLog([]);
 
-      let data = await tryFetch(byName);
-      // If name search returns nothing, retry with address
-      if (data.length === 0 && byAddress && byAddress !== byName) {
-        data = await tryFetch(byAddress);
+    type NomResult = { lat: string; lon: string; display_name: string };
+    const tryFetch = async (q: string): Promise<NomResult[]> => {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&q=${encodeURIComponent(q)}`,
+        { headers: { "Accept-Language": "es" } },
+      );
+      return res.json();
+    };
+
+    // Estrategias en orden: nombre+ciudad, dirección+ciudad, solo ciudad
+    const strategies = [
+      [form.name, form.city].filter(Boolean).join(", "),
+      [form.address, form.city].filter(Boolean).join(", "),
+      form.city,
+    ].filter((q, i, arr) => q && arr.indexOf(q) === i); // únicas y no vacías
+
+    try {
+      for (const q of strategies) {
+        const data = await tryFetch(q);
+        const found = data[0]?.display_name ?? null;
+        setGeoLog((prev) => [...prev, { query: q, found }]);
+        if (data.length > 0) {
+          setForm((f) => ({ ...f, lat: data[0].lat, lng: data[0].lon }));
+          toast.success(`Encontrado: ${found}`);
+          return;
+        }
       }
-      if (data.length === 0) { toast.error("No se encontraron coordenadas. Prueba a editar la dirección."); return; }
-      setForm((f) => ({ ...f, lat: data[0].lat, lng: data[0].lon }));
-      toast.success(`Coordenadas obtenidas: ${data[0].lat}, ${data[0].lon}`);
+      toast.error("Sin resultados. Revisa el log y ajusta el nombre o dirección.");
     } catch {
-      toast.error("Error al geocodificar. Inténtalo de nuevo.");
+      toast.error("Error de red al geocodificar.");
     } finally {
       setGeocoding(false);
     }
@@ -558,8 +571,21 @@ function ClubModal({
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Pulsa &quot;Geocodificar&quot; para rellenar automáticamente desde la dirección/ciudad.
+              Busca primero por nombre+ciudad, luego dirección+ciudad, luego solo ciudad.
             </p>
+            {geocodeLog.length > 0 && (
+              <div className="mt-1 space-y-0.5 rounded-md border border-border bg-secondary/40 p-2">
+                {geocodeLog.map((entry, i) => (
+                  <div key={i} className="text-[10px] font-mono leading-4">
+                    <span className="text-muted-foreground">↳ &quot;{entry.query}&quot;</span>
+                    {entry.found
+                      ? <span className="text-green-500 ml-1">✓ {entry.found}</span>
+                      : <span className="text-destructive ml-1">✗ sin resultado</span>
+                    }
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Phone + Email */}
