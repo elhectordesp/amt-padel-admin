@@ -12,7 +12,7 @@ import type {
   AuditLogEntry,
 } from "@/types";
 
-export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED';
+export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED' | 'AVAILABILITY_VIOLATION';
 export interface ScheduleConflict {
   type:             ConflictType;
   matchId:          string;

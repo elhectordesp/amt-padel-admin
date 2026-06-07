@@ -2349,12 +2349,14 @@ export default function TorneoDetailPage() {
                             {conflictsByCat[cat.id].map((c, i) => (
                               <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                                 <span className={`mt-0.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
-                                  c.type === "PLAYER_DOUBLE_BOOKED" ? "border-red-400/40 text-red-400 bg-red-400/10"
-                                  : c.type === "COURT_OVERLAP"      ? "border-orange-400/40 text-orange-400 bg-orange-400/10"
+                                  c.type === "PLAYER_DOUBLE_BOOKED"     ? "border-red-400/40 text-red-400 bg-red-400/10"
+                                  : c.type === "COURT_OVERLAP"          ? "border-orange-400/40 text-orange-400 bg-orange-400/10"
+                                  : c.type === "AVAILABILITY_VIOLATION" ? "border-blue-400/40 text-blue-400 bg-blue-400/10"
                                   : "border-yellow-400/40 text-yellow-400 bg-yellow-400/10"
                                 }`}>
-                                  {c.type === "PLAYER_DOUBLE_BOOKED" ? "DOBLE RESERVA"
-                                   : c.type === "COURT_OVERLAP"      ? "PISTA OCUPADA"
+                                  {c.type === "PLAYER_DOUBLE_BOOKED"    ? "DOBLE RESERVA"
+                                   : c.type === "COURT_OVERLAP"        ? "PISTA OCUPADA"
+                                   : c.type === "AVAILABILITY_VIOLATION" ? "DISPONIBILIDAD"
                                    : "SIN ASIGNAR"}
                                 </span>
                                 <span>{c.description}</span>
