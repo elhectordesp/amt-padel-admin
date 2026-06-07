@@ -9,7 +9,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
-  Pencil, Send, EyeOff, RotateCcw, List, Save,
+  Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -939,6 +939,9 @@ export default function TorneoDetailPage() {
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
+  const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
+  const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
+  const [showConflictsCatId, setShowConflictsCatId] = useState<string | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -2237,6 +2240,41 @@ export default function TorneoDetailPage() {
                       </h4>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-[#D4AF37]">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                        {/* Validar conflictos de horario */}
+                        <button
+                          onClick={async () => {
+                            if (showConflictsCatId === cat.id) {
+                              setShowConflictsCatId(null);
+                              return;
+                            }
+                            setValidatingCatId(cat.id);
+                            setShowConflictsCatId(cat.id);
+                            try {
+                              const conflicts = await adminService.schedule.validate(id, cat.id);
+                              setConflictsByCat((prev) => ({ ...prev, [cat.id]: conflicts }));
+                            } catch {
+                              toast.error("Error al validar el horario");
+                              setShowConflictsCatId(null);
+                            } finally {
+                              setValidatingCatId(null);
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                            showConflictsCatId === cat.id
+                              ? (conflictsByCat[cat.id]?.length ?? 0) > 0
+                                ? "border-red-400/40 text-red-400 bg-red-400/10"
+                                : "border-green-400/40 text-green-400 bg-green-400/10"
+                              : "border-border text-muted-foreground hover:text-foreground hover:border-orange-400/40"
+                          }`}
+                          title="Validar conflictos de horario"
+                        >
+                          {validatingCatId === cat.id
+                            ? <Loader2 size={11} className="animate-spin" />
+                            : <ShieldAlert size={11} />
+                          }
+                          Validar
+                        </button>
+
                         {/* Formatos de puntuación por fase */}
                         <button
                           onClick={() => {
@@ -2293,6 +2331,39 @@ export default function TorneoDetailPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* ── Panel de conflictos de horario ── */}
+                    {showConflictsCatId === cat.id && conflictsByCat[cat.id] !== undefined && (
+                      <div className={`border-b border-border px-5 py-3 ${conflictsByCat[cat.id].length === 0 ? "bg-green-400/5" : "bg-red-400/5"}`}>
+                        {conflictsByCat[cat.id].length === 0 ? (
+                          <div className="flex items-center gap-2 text-green-400 text-xs">
+                            <ShieldCheck size={13} />
+                            <span className="font-medium">Sin conflictos — el horario es válido</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-red-400 text-xs font-semibold">
+                              <ShieldAlert size={13} />
+                              {conflictsByCat[cat.id].length} conflicto{conflictsByCat[cat.id].length !== 1 ? "s" : ""} detectado{conflictsByCat[cat.id].length !== 1 ? "s" : ""}
+                            </div>
+                            {conflictsByCat[cat.id].map((c, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <span className={`mt-0.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
+                                  c.type === "PLAYER_DOUBLE_BOOKED" ? "border-red-400/40 text-red-400 bg-red-400/10"
+                                  : c.type === "COURT_OVERLAP"      ? "border-orange-400/40 text-orange-400 bg-orange-400/10"
+                                  : "border-yellow-400/40 text-yellow-400 bg-yellow-400/10"
+                                }`}>
+                                  {c.type === "PLAYER_DOUBLE_BOOKED" ? "DOBLE RESERVA"
+                                   : c.type === "COURT_OVERLAP"      ? "PISTA OCUPADA"
+                                   : "SIN ASIGNAR"}
+                                </span>
+                                <span>{c.description}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* ── Formato por fase (collapsible) ── */}
                     {roundFmtOpen && (
