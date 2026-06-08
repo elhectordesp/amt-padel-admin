@@ -1933,10 +1933,10 @@ export default function TorneoDetailPage() {
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {(tournament.status === "OPEN" || tournament.status === "DRAW") && (() => {
+            {(tournament.status === "OPEN" || tournament.status === "DRAW" || tournament.status === "SCHEDULED" || tournament.status === "ONGOING") && (() => {
               const st = tournament.status;
-              // En DRAW las inscripciones siempre están cerradas
-              const deadlinePassed = st === "DRAW"
+              // En DRAW/SCHEDULED/ONGOING las inscripciones siempre están cerradas
+              const deadlinePassed = (st === "DRAW" || st === "SCHEDULED" || st === "ONGOING")
                 ? true
                 : tournament.registrationDeadline
                   ? new Date() > new Date(tournament.registrationDeadline)
