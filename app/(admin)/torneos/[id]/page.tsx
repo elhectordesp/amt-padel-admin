@@ -119,14 +119,16 @@ function groupByPair(regs: AdminRegistration[]): PairReg[] {
 
 // ── Conflict labels ───────────────────────────────────────────────────────────
 const CONFLICT_LABEL: Record<ConflictType, string> = {
-  MISSING_ASSIGNMENT:   "Sin horario",
-  COURT_OVERLAP:        "Pista solapada",
-  PLAYER_DOUBLE_BOOKED: "Jugador doblado",
+  MISSING_ASSIGNMENT:    "Sin horario",
+  COURT_OVERLAP:         "Pista solapada",
+  PLAYER_DOUBLE_BOOKED:  "Jugador doblado",
+  AVAILABILITY_VIOLATION: "Disponibilidad",
 };
 const CONFLICT_COLOR: Record<ConflictType, string> = {
-  MISSING_ASSIGNMENT:   "text-destructive",
-  COURT_OVERLAP:        "text-yellow-400",
-  PLAYER_DOUBLE_BOOKED: "text-orange-400",
+  MISSING_ASSIGNMENT:    "text-destructive",
+  COURT_OVERLAP:         "text-yellow-400",
+  PLAYER_DOUBLE_BOOKED:  "text-orange-400",
+  AVAILABILITY_VIOLATION: "text-blue-400",
 };
 
 // ── ConflictModal ─────────────────────────────────────────────────────────────
@@ -1933,10 +1935,10 @@ export default function TorneoDetailPage() {
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {(tournament.status === "OPEN" || tournament.status === "DRAW") && (() => {
+            {(tournament.status === "OPEN" || tournament.status === "DRAW" || tournament.status === "SCHEDULED" || tournament.status === "ONGOING") && (() => {
               const st = tournament.status;
-              // En DRAW las inscripciones siempre están cerradas
-              const deadlinePassed = st === "DRAW"
+              // En DRAW/SCHEDULED/ONGOING las inscripciones siempre están cerradas
+              const deadlinePassed = (st === "DRAW" || st === "SCHEDULED" || st === "ONGOING")
                 ? true
                 : tournament.registrationDeadline
                   ? new Date() > new Date(tournament.registrationDeadline)
@@ -2349,12 +2351,14 @@ export default function TorneoDetailPage() {
                             {conflictsByCat[cat.id].map((c, i) => (
                               <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                                 <span className={`mt-0.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
-                                  c.type === "PLAYER_DOUBLE_BOOKED" ? "border-red-400/40 text-red-400 bg-red-400/10"
-                                  : c.type === "COURT_OVERLAP"      ? "border-orange-400/40 text-orange-400 bg-orange-400/10"
+                                  c.type === "PLAYER_DOUBLE_BOOKED"     ? "border-red-400/40 text-red-400 bg-red-400/10"
+                                  : c.type === "COURT_OVERLAP"          ? "border-orange-400/40 text-orange-400 bg-orange-400/10"
+                                  : c.type === "AVAILABILITY_VIOLATION" ? "border-blue-400/40 text-blue-400 bg-blue-400/10"
                                   : "border-yellow-400/40 text-yellow-400 bg-yellow-400/10"
                                 }`}>
-                                  {c.type === "PLAYER_DOUBLE_BOOKED" ? "DOBLE RESERVA"
-                                   : c.type === "COURT_OVERLAP"      ? "PISTA OCUPADA"
+                                  {c.type === "PLAYER_DOUBLE_BOOKED"    ? "DOBLE RESERVA"
+                                   : c.type === "COURT_OVERLAP"        ? "PISTA OCUPADA"
+                                   : c.type === "AVAILABILITY_VIOLATION" ? "DISPONIBILIDAD"
                                    : "SIN ASIGNAR"}
                                 </span>
                                 <span>{c.description}</span>
