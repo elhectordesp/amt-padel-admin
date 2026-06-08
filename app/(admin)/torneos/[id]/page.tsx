@@ -119,14 +119,16 @@ function groupByPair(regs: AdminRegistration[]): PairReg[] {
 
 // ── Conflict labels ───────────────────────────────────────────────────────────
 const CONFLICT_LABEL: Record<ConflictType, string> = {
-  MISSING_ASSIGNMENT:   "Sin horario",
-  COURT_OVERLAP:        "Pista solapada",
-  PLAYER_DOUBLE_BOOKED: "Jugador doblado",
+  MISSING_ASSIGNMENT:    "Sin horario",
+  COURT_OVERLAP:         "Pista solapada",
+  PLAYER_DOUBLE_BOOKED:  "Jugador doblado",
+  AVAILABILITY_VIOLATION: "Disponibilidad",
 };
 const CONFLICT_COLOR: Record<ConflictType, string> = {
-  MISSING_ASSIGNMENT:   "text-destructive",
-  COURT_OVERLAP:        "text-yellow-400",
-  PLAYER_DOUBLE_BOOKED: "text-orange-400",
+  MISSING_ASSIGNMENT:    "text-destructive",
+  COURT_OVERLAP:         "text-yellow-400",
+  PLAYER_DOUBLE_BOOKED:  "text-orange-400",
+  AVAILABILITY_VIOLATION: "text-blue-400",
 };
 
 // ── ConflictModal ─────────────────────────────────────────────────────────────
