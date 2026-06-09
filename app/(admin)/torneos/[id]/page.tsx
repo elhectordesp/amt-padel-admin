@@ -2527,9 +2527,9 @@ export default function TorneoDetailPage() {
                       </div>
                     )}
 
-                    {!hasGroups ? (
+                    {!hasGroups && !hasElim ? (
                       <p className="text-xs text-muted-foreground text-center py-6">Sin partidos generados</p>
-                    ) : (
+                    ) : hasGroups ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
                         {groupNames.map((grp) => {
                           const grpMatches = catMatches.filter((m: any) => (m.group ?? "Grupo") === grp);
@@ -2573,7 +2573,7 @@ export default function TorneoDetailPage() {
                           );
                         })}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}
