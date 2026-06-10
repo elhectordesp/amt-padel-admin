@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const TOKEN_KEY    = "amt_admin_token";
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/eliminar-cuenta"];
 
 function isTokenValid(token: string): boolean {
   try {
