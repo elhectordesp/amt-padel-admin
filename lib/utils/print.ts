@@ -1,4 +1,5 @@
 import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 function esc(s: string | null | undefined): string {
   return (s ?? "")
@@ -142,7 +143,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
   <div class="page-header">
     <div>
       <h1>${esc(tournament.name)}</h1>
-      <div class="meta">${esc(tournament.dates)} · ${esc((tournament as any).club?.name)}${(tournament as any).club?.city ? `, ${esc((tournament as any).club.city)}` : ""}</div>
+      <div class="meta">${esc(formatDateRange(tournament.startDate, tournament.endDate))} · ${esc((tournament as any).club?.name)}${(tournament as any).club?.city ? `, ${esc((tournament as any).club.city)}` : ""}</div>
     </div>
     <div>
       <div class="logo">AMT PÁDEL</div>
@@ -237,7 +238,7 @@ export function printSchedule(
 
   const now = new Date().toLocaleString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const club = (tournament as any).club;
-  const meta = [(tournament as any).dates, club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
+  const meta = [formatDateRange(tournament.startDate, tournament.endDate), club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
 
   const html = `<!DOCTYPE html>
 <html lang="es">

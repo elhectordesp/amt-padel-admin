@@ -807,6 +807,7 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function ClubesPage() {
+  const qc = useQueryClient();
   const [modal,        setModal]        = useState<{ open: boolean; club?: Club }>({ open: false });
   const [courtsClub,   setCourtsClub]   = useState<Club | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -819,6 +820,17 @@ export default function ClubesPage() {
   const active   = clubs.filter((c) => c.active !== false);
   const inactive = clubs.filter((c) => c.active === false);
   const displayed = showInactive ? clubs : active;
+  const noCoords  = displayed.filter((c) => c.lat == null || c.lng == null);
+
+  const batchGeocode = useMutation({
+    mutationFn: () => adminService.clubs.geocodeBatch(),
+    onSuccess:  (r) => {
+      qc.invalidateQueries({ queryKey: ["admin-clubs"] });
+      const errPart = r.errors.length > 0 ? `, ${r.errors.length} error${r.errors.length !== 1 ? "es" : ""}` : "";
+      toast.success(`Geocodificado: ${r.updated} actualizado${r.updated !== 1 ? "s" : ""}, ${r.skipped} sin resultado${errPart}`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   return (
     <>
@@ -852,12 +864,28 @@ export default function ClubesPage() {
               {showInactive ? "Ocultar inactivos" : "Ver inactivos"}
             </button>
           </div>
-          <button
-            onClick={() => setModal({ open: true })}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227]"
-          >
-            <Plus size={15} /> Nuevo club
-          </button>
+          <div className="flex items-center gap-2">
+            {noCoords.length > 0 && (
+              <button
+                onClick={() => batchGeocode.mutate()}
+                disabled={batchGeocode.isPending}
+                title={`Geocodificar ${noCoords.length} club${noCoords.length !== 1 ? "s" : ""} sin coordenadas GPS`}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-border bg-card hover:bg-muted text-muted-foreground disabled:opacity-50"
+              >
+                {batchGeocode.isPending
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <Navigation size={14} />
+                }
+                <span className="hidden sm:inline">GPS ({noCoords.length})</span>
+              </button>
+            )}
+            <button
+              onClick={() => setModal({ open: true })}
+              className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227]"
+            >
+              <Plus size={15} /> Nuevo club
+            </button>
+          </div>
         </div>
 
         {/* Grid */}

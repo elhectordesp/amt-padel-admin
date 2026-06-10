@@ -14,6 +14,7 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR, resolveTier } from "@/lib/constants";
 import type { Tournament, TournamentStatus } from "@/types";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 type FilterStatus = "all" | TournamentStatus;
 
@@ -280,7 +281,7 @@ export default function TorneosPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between mt-2.5 text-xs text-muted-foreground">
-                        <span>{(t as any).dates ?? "—"}</span>
+                        <span>{formatDateRange(t.startDate, t.endDate)}</span>
                         <div className="flex items-center gap-2">
                           <span>{reg}/{total} parejas</span>
                           <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">

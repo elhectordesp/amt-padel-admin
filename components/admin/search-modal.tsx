@@ -8,6 +8,7 @@ import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
 import { useSearch } from "@/components/admin/search-context";
 import type { Tournament, Player } from "@/types";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { useState } from "react";
 
 interface SearchResult {
@@ -62,7 +63,7 @@ export function SearchModal() {
       .map((t) => ({
         type: "tournament", id: t.id,
         title: t.name,
-        sub:   `${t.dates} · ${t.club?.name ?? ""}`,
+        sub:   `${formatDateRange(t.startDate, t.endDate)} · ${t.club?.name ?? ""}`,
         href:  `/torneos/${t.id}`,
       }));
 

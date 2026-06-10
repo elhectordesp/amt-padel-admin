@@ -37,7 +37,7 @@ const mockUseQuery  = useQuery  as ReturnType<typeof vi.fn>;
 const mockUseSearch = useSearch as ReturnType<typeof vi.fn>;
 
 const fakeTournaments = [
-  { id: 't-1', name: 'Torneo Madrid', dates: '1-3 Jul', club: { name: 'Club A' } },
+  { id: 't-1', name: 'Torneo Madrid', startDate: '2026-07-01T00:00:00Z', endDate: '2026-07-03T00:00:00Z', club: { name: 'Club A' } },
 ];
 const fakePlayers = [
   { id: 'p-1', name: 'Carlos García', gender: 'M', level: '4a', points: 1200 },

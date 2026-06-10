@@ -53,6 +53,32 @@ export const MOCK_PLAYER = {
   spa:           null,
 };
 
+export const MOCK_PLAYER_DETAIL = {
+  id:             'p1',
+  name:           'Ana García',
+  firstName:      'Ana',
+  lastName:       'García',
+  email:          'ana@test.com',
+  phone:          null,
+  bio:            null,
+  gender:         'F',
+  level:          '3a',
+  categoryLevel:  '3a',
+  points:         100,
+  wins:           10,
+  played:         20,
+  globalRank:     5,
+  categoryRank:   2,
+  city:           'Madrid',
+  spa:            null,
+  matches:        [],
+  partner:        null,
+  partnerId:      null,
+  managedByAdmin: false,
+  trend:          'stable',
+  rankingPoints:  100,
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Sets the auth cookie so the Next.js middleware lets the request through. */
@@ -75,14 +101,16 @@ export async function setupAuth(context: BrowserContext) {
 export async function mockApiRoutes(
   page: Page,
   overrides: {
-    tournaments?: object[];
-    players?:     object[];
-    stats?:       object;
+    tournaments?:  object[];
+    players?:      object[];
+    playerDetail?: object;
+    stats?:        object;
   } = {},
 ) {
-  const tournaments = overrides.tournaments ?? [MOCK_TOURNAMENT];
-  const players     = overrides.players     ?? [MOCK_PLAYER];
-  const stats       = overrides.stats       ?? MOCK_STATS;
+  const tournaments  = overrides.tournaments  ?? [MOCK_TOURNAMENT];
+  const players      = overrides.players      ?? [MOCK_PLAYER];
+  const playerDetail = overrides.playerDetail ?? MOCK_PLAYER_DETAIL;
+  const stats        = overrides.stats        ?? MOCK_STATS;
 
   await page.route(
     (url) => url.toString().startsWith(API_URL),
@@ -122,6 +150,16 @@ export async function mockApiRoutes(
       // ── Admin resources ──────────────────────────────────────────────────
       if (url.includes('/admin/tournaments')) {
         return route.fulfill({ json: { data: tournaments } });
+      }
+      // Player detail sub-routes must be checked before the list route
+      if (url.match(/\/admin\/players\/[^/]+\/category-history/)) {
+        return route.fulfill({ json: { data: [] } });
+      }
+      if (method === 'DELETE' && url.match(/\/admin\/players\/[^/]+$/)) {
+        return route.fulfill({ json: { data: null } });
+      }
+      if (method === 'GET' && url.match(/\/admin\/players\/[^/]+$/)) {
+        return route.fulfill({ json: { data: playerDetail } });
       }
       if (url.includes('/admin/players')) {
         return route.fulfill({

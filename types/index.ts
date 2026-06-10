@@ -92,9 +92,8 @@ export interface TournamentCourt {
 export interface Tournament {
   id:          string;
   name:        string;
-  dates:       string;
-  startDate?:  string;
-  endDate?:    string;
+  startDate:   string;
+  endDate:     string;
   club:        Club;
   prize?:       string;
   status:       TournamentStatus;

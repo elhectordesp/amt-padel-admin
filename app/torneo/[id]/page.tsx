@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Trophy, Users, Calendar } from "lucide-react";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -79,7 +80,7 @@ export default async function TorneoPublicoPage({ params }: { params: { id: stri
           </div>
           <h1 className="text-3xl font-serif font-bold">{tournament.name}</h1>
           <div className="flex items-center gap-5 text-sm text-zinc-400 flex-wrap">
-            <span className="flex items-center gap-1.5"><Calendar size={14} />{tournament.dates}</span>
+            <span className="flex items-center gap-1.5"><Calendar size={14} />{formatDateRange(tournament.startDate, tournament.endDate)}</span>
             <span className="flex items-center gap-1.5"><Trophy size={14} />{tournament.club?.name ?? ""}</span>
             {tournament.prize && <span className="text-[#D4AF37] font-semibold">{tournament.prize}</span>}
           </div>
