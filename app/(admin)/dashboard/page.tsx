@@ -5,6 +5,7 @@ import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activit
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 function StatCard({
   label, value, sub, icon: Icon, loading,
@@ -242,7 +243,7 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-foreground truncate">{t.name}</p>
-                            <p className="text-[11px] text-muted-foreground">{t.dates} · {t.club?.name ?? ""}</p>
+                            <p className="text-[11px] text-muted-foreground">{formatDateRange(t.startDate, t.endDate)} · {t.club?.name ?? ""}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-[11px] text-muted-foreground">{totalRegistered}/{totalSpots}</p>

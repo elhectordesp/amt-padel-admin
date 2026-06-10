@@ -31,6 +31,7 @@ import {
   resolveTier, phaseLabel,
 } from "@/lib/constants";
 import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, Gender, CategoryLevel, AuditLogEntry } from "@/types";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -1352,7 +1353,7 @@ export default function TorneoDetailPage() {
               <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5">
                   <Calendar size={14} className="text-[#D4AF37]" />
-                  {tournament.dates}
+                  {formatDateRange(tournament.startDate, tournament.endDate)}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin size={14} className="text-[#D4AF37]" />

@@ -11,7 +11,8 @@ const makeMockWindow = () => {
 const makeTournament = (overrides: any = {}): any => ({
   id: 't1',
   name: 'Torneo Test',
-  dates: '10-11 Mayo',
+  startDate: '2026-05-10T00:00:00Z',
+  endDate:   '2026-05-11T00:00:00Z',
   status: 'OPEN',
   categories: [],
   club: { id: 'c1', name: 'Club Madrid', city: 'Madrid' },
