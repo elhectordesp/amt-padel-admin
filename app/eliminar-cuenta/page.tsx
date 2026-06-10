@@ -34,7 +34,6 @@ export default function EliminarCuentaPage() {
             <ol style={{ margin: 0, paddingLeft: 20, color: "#ccc", fontSize: 14, lineHeight: 2.2 }}>
               <li>Open the <strong style={{ color: "#fff" }}>AMT Pádel</strong> app · Abre la app</li>
               <li>Go to your <strong style={{ color: "#fff" }}>Profile</strong> (bottom-right icon) · Ve a tu <strong style={{ color: "#fff" }}>Perfil</strong></li>
-              <li>Tap the <strong style={{ color: "#fff" }}>Settings</strong> icon (gear) · Pulsa <strong style={{ color: "#fff" }}>Ajustes</strong></li>
               <li>Scroll down and tap <strong style={{ color: "#D4AF37" }}>Delete account</strong> · Pulsa <strong style={{ color: "#D4AF37" }}>Eliminar cuenta</strong></li>
               <li>Confirm — your account will be permanently deleted · Confirma la acción</li>
             </ol>
