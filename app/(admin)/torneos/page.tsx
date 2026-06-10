@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   getFilteredRowModel, flexRender,
   type ColumnDef, type SortingState,
 } from "@tanstack/react-table";
-import { Plus, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight, Copy } from "lucide-react";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
@@ -25,11 +25,114 @@ function SortIcon({ column }: { column: { getIsSorted: () => false | "asc" | "de
   return <ArrowUpDown size={13} className="text-muted-foreground" />;
 }
 
+function CloneTournamentModal({
+  tournament,
+  onClose,
+}: {
+  tournament: Tournament;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const nameRef      = useRef<HTMLInputElement>(null);
+  const startDateRef = useRef<HTMLInputElement>(null);
+  const endDateRef   = useRef<HTMLInputElement>(null);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: (body: { name?: string; startDate?: string; endDate?: string }) =>
+      adminService.tournaments.duplicate(tournament.id, body),
+    onSuccess: (cloned) => {
+      queryClient.invalidateQueries({ queryKey: ["tournaments"] });
+      onClose();
+      router.push(`/torneos/${cloned.id}`);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name      = nameRef.current?.value.trim() || undefined;
+    const startDate = startDateRef.current?.value || undefined;
+    const endDate   = endDateRef.current?.value || undefined;
+    mutate({ name, startDate, endDate });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 space-y-5">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Clonar torneo</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Clonando: <span className="text-foreground font-medium">{tournament.name}</span>
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Nombre del nuevo torneo</label>
+            <input
+              ref={nameRef}
+              defaultValue={`${tournament.name} (Copia)`}
+              placeholder="Nombre del torneo"
+              className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:border-[#D4AF37] transition-colors"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Fecha inicio</label>
+              <input
+                ref={startDateRef}
+                type="date"
+                className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:border-[#D4AF37] transition-colors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Fecha fin</label>
+              <input
+                ref={endDateRef}
+                type="date"
+                className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:border-[#D4AF37] transition-colors"
+              />
+            </div>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Si no indicas fechas, se aplicará un desplazamiento de +1 año.
+          </p>
+
+          {error && (
+            <p className="text-xs text-red-400">{(error as Error).message ?? "Error al clonar el torneo"}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isPending}
+              className="flex-1 px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isPending}
+              className="flex-1 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-60"
+            >
+              {isPending ? "Clonando..." : "Clonar"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function TorneosPage() {
   const router = useRouter();
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [cloning, setCloning] = useState<Tournament | null>(null);
 
   const { data: all = [], isLoading } = useQuery({
     queryKey: ["tournaments"],
@@ -132,12 +235,22 @@ export default function TorneosPage() {
     {
       id:   "actions",
       cell: ({ row }) => (
-        <Link
-          href={`/torneos/${row.original.id}`}
-          className="flex items-center gap-1 text-xs text-[#D4AF37] hover:underline"
-        >
-          Ver <ChevronRight size={13} />
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={(e) => { e.stopPropagation(); setCloning(row.original); }}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title="Clonar torneo"
+          >
+            <Copy size={13} />
+          </button>
+          <Link
+            href={`/torneos/${row.original.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 text-xs text-[#D4AF37] hover:underline"
+          >
+            Ver <ChevronRight size={13} />
+          </Link>
+        </div>
       ),
     },
   ];
@@ -256,10 +369,10 @@ export default function TorneosPage() {
                   const reg   = t.categories.reduce((s, c) => s + c.registeredCount, 0);
                   const pct   = total > 0 ? Math.round((reg / total) * 100) : 0;
                   return (
-                    <button
+                    <div
                       key={row.id}
+                      className="w-full text-left bg-card border border-border rounded-lg px-4 py-3.5 hover:bg-secondary/30 transition-colors cursor-pointer"
                       onClick={() => router.push(`/torneos/${t.id}`)}
-                      className="w-full text-left bg-card border border-border rounded-lg px-4 py-3.5 hover:bg-secondary/30 transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -276,9 +389,18 @@ export default function TorneosPage() {
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{t.club?.name ?? ""}</p>
                         </div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${TOURNAMENT_STATUS_COLOR[t.status]}`}>
-                          {TOURNAMENT_STATUS_LABEL[t.status]}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setCloning(t); }}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Clonar torneo"
+                          >
+                            <Copy size={13} />
+                          </button>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TOURNAMENT_STATUS_COLOR[t.status]}`}>
+                            {TOURNAMENT_STATUS_LABEL[t.status]}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between mt-2.5 text-xs text-muted-foreground">
                         <span>{formatDateRange(t.startDate, t.endDate)}</span>
@@ -289,7 +411,7 @@ export default function TorneosPage() {
                           </div>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })
               )}
@@ -339,6 +461,10 @@ export default function TorneosPage() {
           </>
         )}
       </div>
+
+      {cloning && (
+        <CloneTournamentModal tournament={cloning} onClose={() => setCloning(null)} />
+      )}
     </div>
   );
 }
