@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,7 +24,7 @@ import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
-import { printRegistrations, printSchedule } from "@/lib/utils/print";
+import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
@@ -390,6 +390,15 @@ function CalendarTab({
           >
             <Printer size={11} />
             Imprimir
+          </button>
+          <button
+            onClick={() => tournament && printTournamentReport(tournament, matches)}
+            disabled={matches.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-50"
+            title="Generar informe post-torneo (PDF)"
+          >
+            <Trophy size={11} />
+            Informe PDF
           </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
@@ -855,6 +864,266 @@ function StatusTab({ status, loading, onRefresh }: { status: any; loading: boole
   );
 }
 
+// ── CourtBoard ──────────────────────────────────────────────────────────────
+
+const BOARD_STATUS: Record<string, string> = {
+  SCHEDULED: "border-slate-500/30 bg-slate-500/10",
+  ONGOING:   "border-yellow-400/30 bg-yellow-400/10",
+  FINISHED:  "border-green-400/30 bg-green-400/10",
+  WALKOVER:  "border-red-400/30 bg-red-400/10",
+};
+
+function CourtBoard({
+  tournamentId,
+  categories,
+}: {
+  tournamentId: string;
+  categories:   { id: string; gender: string; level: string }[];
+}) {
+  const qc = useQueryClient();
+  const [selectedDay,  setSelectedDay]  = useState("");
+  const [editingId,    setEditingId]    = useState<string | null>(null);
+  const [newCourt,     setNewCourt]     = useState("");
+  const [boardConflicts, setBoardConflicts] = useState<ScheduleConflict[]>([]);
+
+  const catMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of categories) {
+      m[c.id] = `${c.gender === "M" ? "Masc." : "Fem."} ${c.level}`;
+    }
+    return m;
+  }, [categories]);
+
+  const { data: courts = [] } = useQuery<TournamentCourt[]>({
+    queryKey: ["tournament-courts", tournamentId],
+    queryFn:  () => adminService.tournamentCourts.list(tournamentId),
+  });
+
+  const { data: allMatches = [], isLoading } = useQuery<MatchResult[]>({
+    queryKey: ["matches-board", tournamentId],
+    queryFn:  () => adminService.matches.list(tournamentId, { pageSize: 500 }),
+  });
+
+  const scheduled = useMemo(
+    () => allMatches.filter((m) => !!m.date),
+    [allMatches],
+  );
+
+  const days = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of scheduled) {
+      const d = new Date(m.date);
+      const key = d.toISOString().slice(0, 10);
+      if (!map.has(key))
+        map.set(key, d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }));
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [scheduled]);
+
+  useEffect(() => {
+    if (days.length > 0 && !selectedDay) setSelectedDay(days[0][0]);
+  }, [days, selectedDay]);
+
+  const dayMatches = useMemo(
+    () => scheduled.filter((m) => new Date(m.date).toISOString().slice(0, 10) === selectedDay),
+    [scheduled, selectedDay],
+  );
+
+  const timeSlots = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of dayMatches)
+      set.add(new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }));
+    return [...set].sort();
+  }, [dayMatches]);
+
+  const courtNames = useMemo(() => courts.map((c) => c.court.name), [courts]);
+
+  const grid = useMemo(() => {
+    const g: Record<string, Record<string, MatchResult>> = {};
+    for (const m of dayMatches) {
+      const t = new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      (g[t] ??= {})[(m.court as string) || ""] = m;
+    }
+    return g;
+  }, [dayMatches]);
+
+  const unassigned = useMemo(() => dayMatches.filter((m) => !m.court), [dayMatches]);
+
+  const patchMut = useMutation({
+    mutationFn: ({ matchId, court, force }: { matchId: string; court: string; force?: boolean }) =>
+      adminService.schedule.patchMatch(matchId, { court, force }),
+    onSuccess: (res, { matchId }) => {
+      const blocking = res.conflicts.filter(
+        (c) => c.type === "COURT_OVERLAP" || c.type === "PLAYER_DOUBLE_BOOKED",
+      );
+      if (blocking.length > 0) {
+        setBoardConflicts(res.conflicts);
+      } else {
+        setBoardConflicts([]);
+        setEditingId(null);
+        toast.success("Pista actualizada");
+      }
+      qc.invalidateQueries({ queryKey: ["matches-board", tournamentId] });
+    },
+    onError: () => toast.error("Error al cambiar la pista"),
+  });
+
+  if (isLoading) return (
+    <div className="flex justify-center py-12">
+      <Loader2 size={20} className="animate-spin text-muted-foreground" />
+    </div>
+  );
+
+  if (scheduled.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+      <CalendarDays size={28} className="text-muted-foreground/30" />
+      <p className="text-sm text-muted-foreground">No hay partidos programados todavía.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Day selector */}
+      {days.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          {days.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSelectedDay(key)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                selectedDay === key
+                  ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border-[rgba(212,175,55,0.3)]"
+                  : "bg-secondary text-muted-foreground border-transparent hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Conflict warning */}
+      {boardConflicts.length > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-400/10 border border-yellow-400/30 text-yellow-400 text-xs">
+          <ShieldAlert size={13} className="shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            {boardConflicts.map((c, i) => <p key={i}>{c.description}</p>)}
+            <div className="flex gap-3 pt-1">
+              <button
+                className="underline"
+                onClick={() => {
+                  if (editingId) patchMut.mutate({ matchId: editingId, court: newCourt, force: true });
+                }}
+              >
+                Forzar igualmente
+              </button>
+              <button className="opacity-60" onClick={() => { setBoardConflicts([]); setEditingId(null); }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Board */}
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-secondary/50 border-b border-border">
+              <th className="sticky left-0 z-10 bg-secondary/50 px-3 py-2.5 text-left font-semibold text-muted-foreground w-16 border-r border-border">
+                Hora
+              </th>
+              {courtNames.map((name) => (
+                <th key={name} className="px-3 py-2.5 text-center font-semibold text-muted-foreground min-w-[160px] border-l border-border">
+                  {name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {timeSlots.map((time) => (
+              <tr key={time} className="border-t border-border">
+                <td className="sticky left-0 z-10 bg-card px-3 py-2 font-mono text-muted-foreground border-r border-border whitespace-nowrap">
+                  {time}
+                </td>
+                {courtNames.map((courtName) => {
+                  const match = grid[time]?.[courtName];
+                  const statusKey = ((match?.status as string) ?? "").toUpperCase();
+                  const style = BOARD_STATUS[statusKey] ?? BOARD_STATUS.SCHEDULED;
+                  return (
+                    <td key={courtName} className="px-2 py-2 align-top border-l border-border">
+                      {match ? (
+                        <div
+                          className={`rounded-md border p-2 space-y-1 cursor-pointer transition-all hover:brightness-110 ${style}`}
+                          onClick={() => {
+                            if (editingId === match.id) { setEditingId(null); setBoardConflicts([]); return; }
+                            setEditingId(match.id);
+                            setNewCourt((match.court as string) ?? "");
+                            setBoardConflicts([]);
+                          }}
+                        >
+                          <p className="font-medium text-foreground leading-tight truncate">
+                            {match.team1.join(" / ")}
+                          </p>
+                          <p className="text-muted-foreground leading-tight truncate">
+                            vs {match.team2.join(" / ")}
+                          </p>
+                          {match.categoryId && catMap[match.categoryId] && (
+                            <span className="text-[10px] text-muted-foreground/70">
+                              {catMap[match.categoryId]}
+                            </span>
+                          )}
+                          {editingId === match.id && (
+                            <div className="mt-2 flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              <select
+                                value={newCourt}
+                                onChange={(e) => setNewCourt(e.target.value)}
+                                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              >
+                                <option value="">— Sin pista —</option>
+                                {courtNames.map((n) => (
+                                  <option key={n} value={n}>{n}</option>
+                                ))}
+                              </select>
+                              <button
+                                disabled={patchMut.isPending}
+                                onClick={() => patchMut.mutate({ matchId: match.id, court: newCourt })}
+                                className="px-2 py-1 rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold disabled:opacity-50"
+                              >
+                                {patchMut.isPending ? "…" : <Save size={11} />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="h-8 rounded-md border border-dashed border-border/40" />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Unassigned matches */}
+      {unassigned.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Sin pista asignada ({unassigned.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {unassigned.map((m) => (
+              <div key={m.id} className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                {m.team1.join(" / ")} vs {m.team2.join(" / ")}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── PistasTab ──────────────────────────────────────────────────────────────
 
 function TournamentCourtCard({ tc }: { tc: TournamentCourt }) {
@@ -869,7 +1138,13 @@ function TournamentCourtCard({ tc }: { tc: TournamentCourt }) {
   );
 }
 
-function PistasTab({ tournamentId }: { tournamentId: string }) {
+function PistasTab({
+  tournamentId,
+  categories,
+}: {
+  tournamentId: string;
+  categories:   { id: string; gender: string; level: string }[];
+}) {
   const { data: courts = [], isLoading } = useQuery({
     queryKey: ["tournament-courts", tournamentId],
     queryFn:  () => adminService.tournamentCourts.list(tournamentId),
@@ -894,14 +1169,23 @@ function PistasTab({ tournamentId }: { tournamentId: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        {courts.length} pista{courts.length !== 1 ? "s" : ""} · Los bloqueos se gestionan desde el panel del club
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {courts.map((tc) => (
-          <TournamentCourtCard key={tc.id} tc={tc} />
-        ))}
+    <div className="space-y-8">
+      {/* Board */}
+      <div>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Tablero del día</h3>
+        <CourtBoard tournamentId={tournamentId} categories={categories} />
+      </div>
+
+      {/* Court list */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-3">
+          {courts.length} pista{courts.length !== 1 ? "s" : ""} · Los bloqueos se gestionan desde el panel del club
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {courts.map((tc) => (
+            <TournamentCourtCard key={tc.id} tc={tc} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -2603,7 +2887,7 @@ export default function TorneoDetailPage() {
 
         {/* ── PISTAS TAB ── */}
         {tab === "pistas" && (
-          <PistasTab tournamentId={id} />
+          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} />
         )}
 
         {/* ── HISTORIAL TAB ── */}
