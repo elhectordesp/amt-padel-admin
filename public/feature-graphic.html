@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1024px; height: 500px; overflow: hidden; background: #0a0a0a; }
+
+  .container {
+    width: 1024px;
+    height: 500px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #111 40%, #1a1408 100%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Decorative circles */
+  .circle-1 {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    border: 1px solid rgba(212,175,55,0.07);
+    top: -150px;
+    right: -100px;
+  }
+  .circle-2 {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    border: 1px solid rgba(212,175,55,0.05);
+    top: -80px;
+    right: 20px;
+  }
+  .circle-3 {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    border: 1px solid rgba(212,175,55,0.08);
+    bottom: -60px;
+    left: 40px;
+  }
+
+  /* Gold accent line */
+  .accent-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #D4AF37, #f0d060, #D4AF37, transparent);
+  }
+
+  /* Left: logo + tagline */
+  .left {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    z-index: 1;
+  }
+
+  .logo-badge {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: #000;
+    border: 2px solid #D4AF37;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    box-shadow: 0 0 40px rgba(212,175,55,0.2);
+  }
+  .logo-amt {
+    font-family: Arial, sans-serif;
+    font-size: 26px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 2px;
+  }
+  .logo-padel {
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    font-weight: 800;
+    color: #D4AF37;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .brand-name {
+    font-family: Arial, sans-serif;
+    font-size: 52px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+  .brand-name span {
+    color: #D4AF37;
+  }
+
+  .tagline {
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    color: #aaa;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+
+  /* Right: feature pills */
+  .right {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 1;
+    align-items: flex-end;
+  }
+
+  .feature {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(212,175,55,0.15);
+    border-radius: 12px;
+    padding: 14px 20px;
+    width: 300px;
+  }
+
+  .feature-icon {
+    font-size: 24px;
+    width: 32px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .feature-text {
+    font-family: Arial, sans-serif;
+  }
+  .feature-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 2px;
+  }
+  .feature-sub {
+    font-size: 12px;
+    color: #777;
+  }
+
+  /* Bottom label */
+  .bottom-label {
+    position: absolute;
+    bottom: 24px;
+    left: 80px;
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .bottom-label span {
+    color: #D4AF37;
+    opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="accent-line"></div>
+  <div class="circle-1"></div>
+  <div class="circle-2"></div>
+  <div class="circle-3"></div>
+
+  <div class="left">
+    <div class="logo-badge">
+      <div class="logo-amt">AMT</div>
+      <div class="logo-padel">Pádel</div>
+    </div>
+    <div>
+      <div class="brand-name">AMT <span>Pádel</span></div>
+      <div class="tagline">Tu circuito de pádel, en tu móvil</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="feature">
+      <div class="feature-icon">🏆</div>
+      <div class="feature-text">
+        <div class="feature-title">Torneos y resultados</div>
+        <div class="feature-sub">Cuadros, grupos y horarios</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📊</div>
+      <div class="feature-text">
+        <div class="feature-title">Ranking SPA</div>
+        <div class="feature-sub">Tu posición en el circuito</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔔</div>
+      <div class="feature-text">
+        <div class="feature-title">Notificaciones</div>
+        <div class="feature-sub">Horarios, plazas y resultados</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-label">AMT Pádel · <span>Circuito oficial</span></div>
+</div>
+</body>
+</html>
