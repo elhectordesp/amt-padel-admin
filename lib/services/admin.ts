@@ -3,7 +3,7 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, SponsorTier, Club,
+  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
@@ -195,17 +195,10 @@ export const adminService = {
         headers: { "Content-Type": "multipart/form-data" },
       }).then((r) => r.data);
     },
-    sponsorLogo: (file: File) => {
+    sponsorImage: (file: File) => {
       const form = new FormData();
       form.append("image", file);
-      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-logo", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      }).then((r) => r.data);
-    },
-    sponsorBanner: (file: File) => {
-      const form = new FormData();
-      form.append("image", file);
-      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-banner", form, {
+      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-image", form, {
         headers: { "Content-Type": "multipart/form-data" },
       }).then((r) => r.data);
     },

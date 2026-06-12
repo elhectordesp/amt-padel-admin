@@ -13,12 +13,12 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Pencil, Trash2, ExternalLink, Globe, Trophy, MapPin,
   Image as ImageIcon, ToggleLeft, ToggleRight, GripVertical, Loader2,
-  Upload, Crown, Star, Users, MousePointerClick,
+  Upload, MousePointerClick,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import type { Sponsor, SponsorScope, SponsorTier } from "@/types";
+import type { Sponsor, SponsorScope } from "@/types";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -26,12 +26,6 @@ const SCOPE_CONFIG: Record<SponsorScope, { label: string; icon: React.ElementTyp
   CIRCUIT:    { label: "Circuito",  icon: Trophy, color: "text-[#D4AF37] bg-[rgba(212,175,55,0.1)] border-[rgba(212,175,55,0.3)]", description: "Visible en toda la app" },
   TOURNAMENT: { label: "Torneo",   icon: Globe,  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",                         description: "Visible solo en ese torneo" },
   REGIONAL:   { label: "Regional", icon: MapPin, color: "text-purple-400 bg-purple-400/10 border-purple-400/30",                   description: "Visible al filtrar por ciudad" },
-};
-
-const TIER_CONFIG: Record<SponsorTier, { label: string; icon: React.ElementType; color: string; description: string }> = {
-  TITLE:    { label: "Principal",  icon: Crown, color: "text-[#D4AF37] bg-[rgba(212,175,55,0.1)] border-[rgba(212,175,55,0.3)]", description: "Banner completo + logo grande" },
-  OFFICIAL: { label: "Oficial",    icon: Star,  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",                        description: "Logo mediano en strip" },
-  PARTNER:  { label: "Colaborador",icon: Users, color: "text-muted-foreground bg-secondary border-border",                       description: "Logo pequeño (base)" },
 };
 
 const TABS: { key: SponsorScope | "ALL"; label: string }[] = [
@@ -54,30 +48,19 @@ function ScopeBadge({ scope }: { scope: SponsorScope }) {
   );
 }
 
-function TierBadge({ tier }: { tier: SponsorTier }) {
-  const cfg = TIER_CONFIG[tier];
-  const Icon = cfg.icon;
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
-      <Icon size={9} />
-      {cfg.label}
-    </span>
-  );
-}
+// ── ImagePreview ────────────────────────────────────────────────────────────
 
-// ── LogoPreview ────────────────────────────────────────────────────────────
-
-function LogoPreview({ url, name }: { url?: string | null; name: string }) {
+function ImagePreview({ url, name }: { url?: string | null; name: string }) {
   if (!url) {
     return (
-      <div className="w-10 h-10 rounded-md bg-secondary border border-border flex items-center justify-center shrink-0">
-        <ImageIcon size={14} className="text-muted-foreground" />
+      <div className="w-16 h-[22px] rounded bg-secondary border border-border flex items-center justify-center shrink-0">
+        <ImageIcon size={10} className="text-muted-foreground" />
       </div>
     );
   }
   return (
-    <div className="w-10 h-10 rounded-md bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0">
-      <img src={url} alt={name} className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+    <div className="w-16 h-[22px] rounded bg-secondary border border-border overflow-hidden shrink-0">
+      <img src={url} alt={name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
     </div>
   );
 }
@@ -85,24 +68,19 @@ function LogoPreview({ url, name }: { url?: string | null; name: string }) {
 // ── ImageUploader ──────────────────────────────────────────────────────────
 
 function ImageUploader({
-  label, hint, url, onUrl, uploadFn, maxMB, aspectHint,
+  url, onUrl,
 }: {
-  label:      string;
-  hint?:      string;
-  url:        string;
-  onUrl:      (url: string) => void;
-  uploadFn:   (file: File) => Promise<{ imageUrl: string }>;
-  maxMB:      number;
-  aspectHint?: string;
+  url:   string;
+  onUrl: (url: string) => void;
 }) {
   const inputRef           = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File) => {
-    if (file.size > maxMB * 1024 * 1024) { toast.error(`Máximo ${maxMB} MB`); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Máximo 5 MB"); return; }
     setUploading(true);
     try {
-      const { imageUrl } = await uploadFn(file);
+      const { imageUrl } = await adminService.upload.sponsorImage(file);
       onUrl(imageUrl);
     } catch {
       toast.error("Error al subir la imagen");
@@ -114,7 +92,8 @@ function ImageUploader({
   return (
     <div>
       <label className="block text-xs font-medium text-muted-foreground mb-1">
-        {label}{hint && <span className="opacity-60"> {hint}</span>}
+        Imagen del banner{" "}
+        <span className="opacity-60">(JPG/PNG, ratio 3:1 — ej. 1200×400 px, máx 5 MB)</span>
       </label>
       <div className="flex gap-2">
         <input
@@ -132,20 +111,22 @@ function ImageUploader({
           {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
           Subir
         </button>
-        {url && (
-          <div className="w-9 h-9 rounded-md border border-border bg-secondary overflow-hidden flex items-center justify-center shrink-0">
-            <img src={url} alt="" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          </div>
-        )}
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
         />
       </div>
-      {aspectHint && <p className="text-[10px] text-muted-foreground mt-1 opacity-60">{aspectHint}</p>}
+      {url && (
+        <div className="mt-2 rounded-md border border-border bg-secondary overflow-hidden" style={{ aspectRatio: "3/1", maxHeight: 120 }}>
+          <img src={url} alt="Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground mt-1 opacity-70">
+        La imagen se mostrará como banner horizontal en el carrusel de la app. Usa tu logo sobre fondo de marca, o una imagen diseñada con nombre y slogan.
+      </p>
     </div>
   );
 }
@@ -155,8 +136,8 @@ function ImageUploader({
 interface ModalState { open: boolean; editing?: Sponsor }
 
 const EMPTY_FORM = {
-  name: "", logoUrl: "", bannerUrl: "", websiteUrl: "", tagline: "",
-  scope: "TOURNAMENT" as SponsorScope, tier: "PARTNER" as SponsorTier,
+  name: "", imageUrl: "", websiteUrl: "", tagline: "",
+  scope: "TOURNAMENT" as SponsorScope,
   tournamentId: "", city: "", displayOrder: 0, active: true,
   validFrom: "", validUntil: "",
 };
@@ -176,14 +157,12 @@ function SponsorModal({
     state.editing
       ? {
           name:         state.editing.name,
-          logoUrl:      state.editing.logoUrl    ?? "",
-          bannerUrl:    state.editing.bannerUrl  ?? "",
-          websiteUrl:   state.editing.websiteUrl ?? "",
-          tagline:      state.editing.tagline    ?? "",
+          imageUrl:     state.editing.imageUrl    ?? "",
+          websiteUrl:   state.editing.websiteUrl  ?? "",
+          tagline:      state.editing.tagline     ?? "",
           scope:        state.editing.scope,
-          tier:         state.editing.tier       ?? "PARTNER",
           tournamentId: state.editing.tournamentId ?? "",
-          city:         state.editing.city       ?? "",
+          city:         state.editing.city        ?? "",
           displayOrder: state.editing.displayOrder,
           active:       state.editing.active,
           validFrom:    state.editing.validFrom  ? state.editing.validFrom.slice(0, 10)  : "",
@@ -198,12 +177,10 @@ function SponsorModal({
     mutationFn: () => {
       const payload = {
         name:         form.name.trim(),
-        logoUrl:      form.logoUrl.trim()    || undefined,
-        bannerUrl:    form.bannerUrl.trim()  || undefined,
+        imageUrl:     form.imageUrl.trim()   || undefined,
         websiteUrl:   form.websiteUrl.trim() || undefined,
         tagline:      form.tagline.trim()    || undefined,
         scope:        form.scope,
-        tier:         form.tier,
         tournamentId: form.scope === "TOURNAMENT" ? (form.tournamentId || undefined) : undefined,
         city:         form.scope === "REGIONAL"   ? (form.city.trim() || undefined)  : undefined,
         displayOrder: Number(form.displayOrder),
@@ -262,33 +239,6 @@ function SponsorModal({
             </div>
           </div>
 
-          {/* Tier selector */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-2">Nivel</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["TITLE", "OFFICIAL", "PARTNER"] as SponsorTier[]).map((t) => {
-                const cfg  = TIER_CONFIG[t];
-                const Icon = cfg.icon;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => set("tier", t)}
-                    className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-center transition-all ${
-                      form.tier === t
-                        ? `${cfg.color} border-current`
-                        : "border-border text-muted-foreground hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    <span className="text-[11px] font-semibold">{cfg.label}</span>
-                    <span className="text-[9px] opacity-70 leading-tight">{cfg.description}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Nombre */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Nombre *</label>
@@ -311,32 +261,15 @@ function SponsorModal({
             />
           </div>
 
-          {/* Logo */}
+          {/* Imagen */}
           <ImageUploader
-            label="Logo"
-            hint="(PNG/SVG transparente, recomendado 400×200)"
-            url={form.logoUrl}
-            onUrl={(v) => set("logoUrl", v)}
-            uploadFn={adminService.upload.sponsorLogo}
-            maxMB={2}
+            url={form.imageUrl}
+            onUrl={(v) => set("imageUrl", v)}
           />
-
-          {/* Banner — solo TITLE */}
-          {form.tier === "TITLE" && (
-            <ImageUploader
-              label="Banner"
-              hint="(solo patrocinador Principal)"
-              url={form.bannerUrl}
-              onUrl={(v) => set("bannerUrl", v)}
-              uploadFn={adminService.upload.sponsorBanner}
-              maxMB={8}
-              aspectHint="Recomendado 1200×400 px"
-            />
-          )}
 
           {/* Website */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">URL destino <span className="opacity-60">(al hacer tap en el logo)</span></label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">URL destino <span className="opacity-60">(al hacer tap en el banner)</span></label>
             <input
               value={form.websiteUrl}
               onChange={(e) => set("websiteUrl", e.target.value)}
@@ -479,7 +412,7 @@ function SortableSponsorRow({
           >
             <GripVertical size={14} />
           </button>
-          <LogoPreview url={sponsor.logoUrl} name={sponsor.name} />
+          <ImagePreview url={sponsor.imageUrl} name={sponsor.name} />
           <div>
             <p className="text-sm font-medium text-foreground">{sponsor.name}</p>
             {sponsor.tagline && <p className="text-[11px] text-muted-foreground mt-0.5">{sponsor.tagline}</p>}
@@ -495,10 +428,6 @@ function SortableSponsorRow({
         {sponsor.scope === "REGIONAL" && sponsor.city && (
           <p className="text-[10px] text-muted-foreground mt-1">{sponsor.city}</p>
         )}
-      </td>
-      {/* Tier */}
-      <td className="px-4 py-3">
-        <TierBadge tier={sponsor.tier ?? "PARTNER"} />
       </td>
       {/* Enlace */}
       <td className="px-4 py-3">
@@ -718,7 +647,7 @@ export default function PatrocinadoresPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
-                      {["Patrocinador", "Alcance", "Nivel", "Enlace", "Clics", "Estado", ""].map((h) => (
+                      {["Patrocinador", "Alcance", "Enlace", "Clics", "Estado", ""].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                           {h}
                         </th>
