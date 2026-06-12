@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -131,6 +131,180 @@ function ImageUploader({
   );
 }
 
+// ── CarouselPreview ────────────────────────────────────────────────────────
+
+type SlideEntry = { id: string; name: string; imageUrl?: string | null; tagline?: string | null };
+
+function CarouselPreview({
+  peers,
+  editingId,
+  formName,
+  formImageUrl,
+  formTagline,
+}: {
+  peers:        Sponsor[];
+  editingId?:   string;
+  formName:     string;
+  formImageUrl: string;
+  formTagline:  string;
+}) {
+  const [idx,    setIdx]    = useState(0);
+  const [fading, setFading] = useState(false);
+
+  const slides = useMemo<SlideEntry[]>(() => {
+    const live: SlideEntry = {
+      id:       editingId ?? "__new__",
+      name:     formName     || "Nombre del patrocinador",
+      imageUrl: formImageUrl || null,
+      tagline:  formTagline  || null,
+    };
+    if (editingId) {
+      const found = peers.some((p) => p.id === editingId);
+      if (found) return peers.map<SlideEntry>((p) => (p.id === editingId ? { ...p, ...live } : p));
+    }
+    return [...peers.map<SlideEntry>((p) => ({ id: p.id, name: p.name, imageUrl: p.imageUrl, tagline: p.tagline })), live];
+  }, [peers, editingId, formName, formImageUrl, formTagline]);
+
+  const safeIdx   = Math.min(idx, slides.length - 1);
+  const slide     = slides[safeIdx];
+  const previewPos = slides.findIndex((s) => s.id === (editingId ?? "__new__")) + 1;
+
+  // Auto-advance with fade
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const next = (safeIdx + 1) % slides.length;
+    const outer = setTimeout(() => {
+      setFading(true);
+      const inner = setTimeout(() => { setIdx(next); setFading(false); }, 200);
+      return () => clearTimeout(inner);
+    }, 3500);
+    return () => clearTimeout(outer);
+  }, [safeIdx, slides.length]);
+
+  const goTo = (next: number) => {
+    setFading(true);
+    setTimeout(() => { setIdx(next); setFading(false); }, 200);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Vista previa · App</p>
+        <p className="text-[10px] text-muted-foreground/60 mt-0.5">Carrusel en tiempo real</p>
+      </div>
+
+      {/* Phone mockup */}
+      <div className="flex justify-center">
+        <div
+          className="rounded-[28px] border-2 border-[rgba(212,175,55,0.2)] shadow-2xl overflow-hidden"
+          style={{ width: 256, background: "#0B0B0B" }}
+        >
+          {/* Status bar */}
+          <div className="px-5 pt-3 pb-1 flex justify-between items-center">
+            <span className="text-[7px] text-[#555] font-semibold">9:41</span>
+            <div className="w-10 h-2 bg-[#111] rounded-full" />
+            <div className="flex gap-0.5 items-center">
+              <div className="w-2 h-1.5 bg-[#444] rounded-[1px]" />
+              <div className="w-1.5 h-1.5 bg-[#444] rounded-sm" />
+              <div className="w-2 h-1.5 bg-[#444] rounded-[1px]" />
+            </div>
+          </div>
+
+          {/* App header */}
+          <div className="px-4 py-2 flex items-center justify-between">
+            <div>
+              <div className="text-[9px] font-black text-[#D4AF37] tracking-widest">AMT PÁDEL</div>
+              <div className="text-[6.5px] text-[#444] mt-0.5">¡Hola, Usuario!</div>
+            </div>
+            <div className="w-5 h-5 rounded-full bg-[#1a1a1a] border border-[#282828]" />
+          </div>
+
+          {/* Stats strip */}
+          <div className="mx-4 mb-3 bg-[#141414] border border-[#1e1e1e] rounded-lg flex justify-around py-2">
+            {["#3", "1.240", "12", "CM"].map((v, i) => (
+              <div key={i} className="flex flex-col items-center gap-0.5">
+                <span className="text-[7.5px] font-bold text-[#D4AF37]">{v}</span>
+                <span className="text-[5.5px] text-[#3a3a3a] uppercase tracking-wider">···</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Sponsor label */}
+          <div className="px-4 mb-1.5 flex items-center justify-between">
+            <span className="text-[6.5px] text-[#3a3a3a] uppercase tracking-widest font-bold">Patrocinadores</span>
+            {slides.length > 1 && (
+              <span className="text-[6px] text-[#3a3a3a]">{safeIdx + 1}/{slides.length}</span>
+            )}
+          </div>
+
+          {/* Banner slide */}
+          <div className="mx-4 rounded-xl overflow-hidden relative" style={{ height: 86 }}>
+            <div
+              className="w-full h-full"
+              style={{ transition: "opacity 0.2s ease", opacity: fading ? 0 : 1 }}
+            >
+              {slide?.imageUrl ? (
+                <img
+                  src={slide.imageUrl}
+                  alt={slide.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-full h-full bg-[#141414] border border-[#1e1e1e] flex flex-col items-center justify-center gap-1">
+                  <span className="text-[9px] font-bold text-[#D4AF37] text-center px-3 leading-snug">{slide?.name}</span>
+                  {slide?.tagline && (
+                    <span className="text-[7px] text-[#444] text-center px-3 leading-snug">{slide.tagline}</span>
+                  )}
+                </div>
+              )}
+              {slide?.imageUrl && (slide.name || slide.tagline) && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-1.5 pt-5">
+                  <p className="text-[7.5px] font-bold text-white leading-tight">{slide.name}</p>
+                  {slide.tagline && <p className="text-[6px] text-white/60 mt-0.5">{slide.tagline}</p>}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Dots */}
+          <div className="flex justify-center gap-1 py-2.5">
+            {slides.length > 1 ? slides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className="rounded-full transition-all duration-300 focus:outline-none"
+                style={{ width: i === safeIdx ? 10 : 4, height: 4, backgroundColor: i === safeIdx ? "#D4AF37" : "#2a2a2a" }}
+              />
+            )) : (
+              <div className="w-2.5 h-1 rounded-full bg-[#D4AF37]" />
+            )}
+          </div>
+
+          {/* Bottom placeholders */}
+          <div className="px-4 pb-4 space-y-1.5">
+            <div className="h-2 bg-[#141414] rounded w-28" />
+            <div className="h-9 bg-[#141414] rounded-lg" />
+            <div className="h-9 bg-[#141414] rounded-lg" />
+          </div>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="bg-[rgba(212,175,55,0.05)] border border-[rgba(212,175,55,0.12)] rounded-lg p-3 space-y-1">
+        <p className="text-[10px] font-semibold text-[#D4AF37]">
+          {slides.length} patrocinador{slides.length !== 1 ? "es" : ""} en el carrusel
+        </p>
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          Tu banner ocupa la posición{" "}
+          <span className="text-foreground font-medium">{previewPos}</span>.
+          El orden se ajusta desde la tabla principal.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── SponsorModal ───────────────────────────────────────────────────────────
 
 interface ModalState { open: boolean; editing?: Sponsor }
@@ -200,18 +374,35 @@ function SponsorModal({
     onError: () => toast.error("Error al guardar el patrocinador"),
   });
 
+  const allSponsors  = (qc.getQueryData<Sponsor[]>(["sponsors"]) ?? []).filter((s) => s.active);
+  const previewPeers = allSponsors.filter((s) => s.scope === form.scope);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-xl w-full max-w-lg shadow-2xl">
+      <div className="bg-card border border-border rounded-xl w-full max-w-[880px] shadow-2xl flex flex-col max-h-[calc(100vh-48px)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="font-heading font-semibold text-foreground">
             {isEditing ? "Editar patrocinador" : "Nuevo patrocinador"}
           </h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none">×</button>
         </div>
 
-        <div className="p-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+        {/* Body: 2-column */}
+        <div className="grid grid-cols-[280px_1fr] flex-1 overflow-hidden">
+          {/* Left: live preview */}
+          <div className="bg-secondary/20 border-r border-border px-5 py-5 overflow-y-auto">
+            <CarouselPreview
+              peers={previewPeers}
+              editingId={state.editing?.id}
+              formName={form.name}
+              formImageUrl={form.imageUrl}
+              formTagline={form.tagline}
+            />
+          </div>
+
+          {/* Right: form */}
+          <div className="p-6 space-y-4 overflow-y-auto">
           {/* Scope selector */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-2">Alcance</label>
@@ -357,10 +548,11 @@ function SponsorModal({
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </div>{/* end grid */}
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-border">
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             Cancelar
           </button>
