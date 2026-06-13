@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
 import type { Club, Court, CourtBlock } from "@/types";
 
 // ── CourtsPanel ────────────────────────────────────────────────────────────
@@ -365,7 +366,7 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
 // ── ClubModal ──────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
-  name: "", city: "", address: "", phone: "", website: "",
+  name: "", city: "", province: "", address: "", phone: "", website: "",
   instagram: "", logoUrl: "", contactEmail: "", isAmtPartner: true,
   lat: "", lng: "",
 };
@@ -385,6 +386,7 @@ function ClubModal({
       ? {
           name:         club.name,
           city:         club.city,
+          province:     club.province     ?? "",
           address:      club.address      ?? "",
           phone:        club.phone        ?? "",
           website:      club.website      ?? "",
@@ -453,6 +455,7 @@ function ClubModal({
       const payload = {
         name:         form.name.trim(),
         city:         form.city.trim(),
+        province:     form.province.trim()     || undefined,
         address:      form.address.trim()      || undefined,
         phone:        form.phone.trim()        || undefined,
         website:      form.website.trim()      || undefined,
@@ -525,6 +528,31 @@ function ClubModal({
                 className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
             </label>
+          </div>
+
+          {/* Province + CCAA (derived) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Provincia</span>
+              <select
+                value={form.province}
+                onChange={(e) => set("province", e.target.value)}
+                className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              >
+                <option value="">— Sin especificar —</option>
+                {PROVINCES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+            <div className="space-y-1.5">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">
+                Comunidad Autónoma <span className="opacity-50">(auto)</span>
+              </span>
+              <div className="h-9 rounded-md border border-border bg-secondary/50 px-3 flex items-center text-sm text-muted-foreground">
+                {form.province ? (PROVINCE_TO_CCAA[form.province] ?? "—") : "—"}
+              </div>
+            </div>
           </div>
 
           {/* Address */}
@@ -727,7 +755,7 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
           <div className="min-w-0">
             <p className="font-semibold text-sm truncate">{club.name}</p>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <MapPin size={10} /> {club.city}
+              <MapPin size={10} /> {club.city}{club.autonomousCommunity ? ` · ${club.autonomousCommunity}` : ""}
             </p>
           </div>
         </div>
