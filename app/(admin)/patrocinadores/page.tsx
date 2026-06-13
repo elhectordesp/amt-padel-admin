@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { AUTONOMOUS_COMMUNITIES } from "@/lib/constants/spain";
 import type { Sponsor, SponsorScope } from "@/types";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ import type { Sponsor, SponsorScope } from "@/types";
 const SCOPE_CONFIG: Record<SponsorScope, { label: string; icon: React.ElementType; color: string; description: string }> = {
   CIRCUIT:    { label: "Circuito",  icon: Trophy, color: "text-[#D4AF37] bg-[rgba(212,175,55,0.1)] border-[rgba(212,175,55,0.3)]", description: "Visible en toda la app" },
   TOURNAMENT: { label: "Torneo",   icon: Globe,  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",                         description: "Visible solo en ese torneo" },
-  REGIONAL:   { label: "Regional", icon: MapPin, color: "text-purple-400 bg-purple-400/10 border-purple-400/30",                   description: "Visible al filtrar por ciudad" },
+  REGIONAL:   { label: "Regional", icon: MapPin, color: "text-purple-400 bg-purple-400/10 border-purple-400/30",                   description: "Visible al filtrar por CCAA" },
 };
 
 const TABS: { key: SponsorScope | "ALL"; label: string }[] = [
@@ -312,7 +313,7 @@ interface ModalState { open: boolean; editing?: Sponsor }
 const EMPTY_FORM = {
   name: "", imageUrl: "", websiteUrl: "", tagline: "",
   scope: "TOURNAMENT" as SponsorScope,
-  tournamentId: "", city: "", displayOrder: 0, active: true,
+  tournamentId: "", autonomousCommunity: "", displayOrder: 0, active: true,
   validFrom: "", validUntil: "",
 };
 type FormState = typeof EMPTY_FORM;
@@ -333,11 +334,11 @@ function SponsorModal({
           name:         state.editing.name,
           imageUrl:     state.editing.imageUrl    ?? "",
           websiteUrl:   state.editing.websiteUrl  ?? "",
-          tagline:      state.editing.tagline     ?? "",
-          scope:        state.editing.scope,
-          tournamentId: state.editing.tournamentId ?? "",
-          city:         state.editing.city        ?? "",
-          displayOrder: state.editing.displayOrder,
+          tagline:             state.editing.tagline             ?? "",
+          scope:               state.editing.scope,
+          tournamentId:        state.editing.tournamentId        ?? "",
+          autonomousCommunity: state.editing.autonomousCommunity ?? "",
+          displayOrder:        state.editing.displayOrder,
           active:       state.editing.active,
           validFrom:    state.editing.validFrom  ? state.editing.validFrom.slice(0, 10)  : "",
           validUntil:   state.editing.validUntil ? state.editing.validUntil.slice(0, 10) : "",
@@ -353,11 +354,11 @@ function SponsorModal({
         name:         form.name.trim(),
         imageUrl:     form.imageUrl.trim()   || undefined,
         websiteUrl:   form.websiteUrl.trim() || undefined,
-        tagline:      form.tagline.trim()    || undefined,
-        scope:        form.scope,
-        tournamentId: form.scope === "TOURNAMENT" ? (form.tournamentId || undefined) : undefined,
-        city:         form.scope === "REGIONAL"   ? (form.city.trim() || undefined)  : undefined,
-        displayOrder: Number(form.displayOrder),
+        tagline:             form.tagline.trim()            || undefined,
+        scope:               form.scope,
+        tournamentId:        form.scope === "TOURNAMENT" ? (form.tournamentId || undefined)        : undefined,
+        autonomousCommunity: form.scope === "REGIONAL"   ? (form.autonomousCommunity || undefined) : undefined,
+        displayOrder:        Number(form.displayOrder),
         active:       form.active,
         validFrom:    form.validFrom  || undefined,
         validUntil:   form.validUntil || undefined,
@@ -486,16 +487,20 @@ function SponsorModal({
             </div>
           )}
 
-          {/* Ciudad (solo REGIONAL) */}
+          {/* Comunidad Autónoma (solo REGIONAL) */}
           {form.scope === "REGIONAL" && (
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Ciudad</label>
-              <input
-                value={form.city}
-                onChange={(e) => set("city", e.target.value)}
-                placeholder="Sevilla"
-                className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
-              />
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Comunidad Autónoma</label>
+              <select
+                value={form.autonomousCommunity}
+                onChange={(e) => set("autonomousCommunity", e.target.value)}
+                className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
+              >
+                <option value="">— Selecciona CCAA —</option>
+                {AUTONOMOUS_COMMUNITIES.map((ccaa) => (
+                  <option key={ccaa} value={ccaa}>{ccaa}</option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -617,8 +622,8 @@ function SortableSponsorRow({
         {sponsor.scope === "TOURNAMENT" && sponsor.tournament && (
           <p className="text-[10px] text-muted-foreground mt-1 truncate max-w-[120px]">{sponsor.tournament.name}</p>
         )}
-        {sponsor.scope === "REGIONAL" && sponsor.city && (
-          <p className="text-[10px] text-muted-foreground mt-1">{sponsor.city}</p>
+        {sponsor.scope === "REGIONAL" && sponsor.autonomousCommunity && (
+          <p className="text-[10px] text-muted-foreground mt-1">{sponsor.autonomousCommunity}</p>
         )}
       </td>
       {/* Enlace */}
