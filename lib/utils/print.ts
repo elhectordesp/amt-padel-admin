@@ -1,4 +1,5 @@
 import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
+import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 function esc(s: string | null | undefined): string {
   return (s ?? "")
@@ -142,7 +143,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
   <div class="page-header">
     <div>
       <h1>${esc(tournament.name)}</h1>
-      <div class="meta">${esc(tournament.dates)} · ${esc((tournament as any).club?.name)}${(tournament as any).club?.city ? `, ${esc((tournament as any).club.city)}` : ""}</div>
+      <div class="meta">${esc(formatDateRange(tournament.startDate, tournament.endDate))} · ${esc((tournament as any).club?.name)}${(tournament as any).club?.city ? `, ${esc((tournament as any).club.city)}` : ""}</div>
     </div>
     <div>
       <div class="logo">AMT PÁDEL</div>
@@ -157,6 +158,240 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
   if (!win) return;
   win.document.write(html);
   win.document.close();
+}
+
+// ── printTournamentReport ──────────────────────────────────────────────────────
+
+const REPORT_PHASE_ORDER = ["GROUPS", "R16", "QF", "SF", "CONSOLATION", "FINAL"] as const;
+const REPORT_PHASE_LABEL: Record<string, string> = {
+  GROUPS: "Grupos", R16: "Octavos", QF: "Cuartos", SF: "Semis", CONSOLATION: "Consolación", FINAL: "Final",
+};
+
+export function printTournamentReport(
+  tournament: Tournament,
+  matches:    MatchResult[],
+): void {
+  const accent = (tournament as any).imageColor ?? "#D4AF37";
+
+  const catMap: Record<string, string> = {};
+  for (const c of tournament.categories ?? []) {
+    catMap[(c as any).id] = `${(c as any).gender === "M" ? "Masc." : "Fem."} ${(c as any).level}`;
+  }
+
+  const finals        = matches.filter((m) => m.phase === "FINAL" && m.winner);
+  const finishedCount = matches.filter((m) => m.status === "finished").length;
+  const now           = new Date().toLocaleString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const club          = (tournament as any).club;
+  const meta          = [club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
+  const dateRange     = formatDateRange(tournament.startDate, tournament.endDate);
+
+  const championsHtml = finals.length > 0 ? `
+    <section class="section">
+      <h2 class="section-title">&#127942; Campeones</h2>
+      <div class="champions-grid">
+        ${finals.map((m) => {
+          const champion = m.winner === "team1" ? m.team1 : m.team2;
+          const runnerUp = m.winner === "team1" ? m.team2 : m.team1;
+          const score    = m.sets1?.length
+            ? m.sets1.map((s, i) => `${s}-${m.sets2?.[i] ?? 0}`).join(", ")
+            : "";
+          return `
+            <div class="champion-card">
+              <div class="cat-pill">${esc(catMap[(m as any).categoryId ?? ""] ?? "—")}</div>
+              <div class="trophy-icon">&#127942;</div>
+              <div class="champion-names">${champion.map(esc).join(" / ")}</div>
+              ${runnerUp.length ? `<div class="runner-up">&#129352; ${runnerUp.map(esc).join(" / ")}</div>` : ""}
+              ${score ? `<div class="final-score">${esc(score)}</div>` : ""}
+            </div>`;
+        }).join("")}
+      </div>
+    </section>` : "";
+
+  const byCat = new Map<string, MatchResult[]>();
+  for (const m of matches) {
+    const cid = (m as any).categoryId ?? "unknown";
+    if (!byCat.has(cid)) byCat.set(cid, []);
+    byCat.get(cid)!.push(m);
+  }
+
+  const resultsHtml = [...byCat.entries()].map(([catId, catMatches]) => {
+    const catLabel = catMap[catId] ?? "Desconocida";
+    const byPhase  = new Map<string, MatchResult[]>();
+    for (const m of catMatches) {
+      if (!byPhase.has(m.phase)) byPhase.set(m.phase, []);
+      byPhase.get(m.phase)!.push(m);
+    }
+
+    const phaseSections = REPORT_PHASE_ORDER
+      .filter((ph) => byPhase.has(ph))
+      .map((ph) => {
+        const phMatches = [...(byPhase.get(ph) ?? [])].sort((a, b) =>
+          a.date && b.date ? new Date(a.date).getTime() - new Date(b.date).getTime() : 0,
+        );
+        const rows = phMatches.map((m, i) => {
+          const done  = m.status === "finished";
+          const score = done && m.sets1?.length
+            ? m.sets1.map((s, j) => `${s}-${m.sets2?.[j] ?? 0}`).join(", ")
+            : "";
+          const w1   = m.winner === "team1";
+          const w2   = m.winner === "team2";
+          const time = m.date
+            ? new Date(m.date).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+            : "—";
+          return `
+            <tr class="${i % 2 === 0 ? "row-alt" : ""}">
+              <td class="center tcell-time">${esc(time)}</td>
+              <td class="center tcell-court">${esc((m as any).court ?? "—")}</td>
+              <td class="${w1 ? "winner" : ""}">${m.team1.map(esc).join(" / ") || "—"}</td>
+              <td class="center tcell-vs">vs</td>
+              <td class="${w2 ? "winner" : ""}">${m.team2.map(esc).join(" / ") || "—"}</td>
+              <td class="center">${done ? `<span class="score">${esc(score || "—")}</span>` : '<span class="pending">Pendiente</span>'}</td>
+            </tr>`;
+        }).join("");
+
+        return `
+          <div class="phase-group">
+            <div class="phase-label">${REPORT_PHASE_LABEL[ph] ?? ph}</div>
+            <table>
+              <thead><tr>
+                <th class="center">Fecha/Hora</th><th class="center">Pista</th>
+                <th>Equipo 1</th><th class="center" style="width:20px"></th><th>Equipo 2</th>
+                <th class="center">Resultado</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      }).join("");
+
+    const done = catMatches.filter((m) => m.status === "finished").length;
+    return `
+      <div class="cat-block">
+        <div class="cat-header">
+          ${esc(catLabel)}
+          <span class="cat-meta">${catMatches.length} partidos &middot; ${done} finalizados</span>
+        </div>
+        ${phaseSections}
+      </div>`;
+  }).join("");
+
+  const reportHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Informe &mdash; ${esc(tournament.name)}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, Arial, sans-serif; font-size: 11px; color: #111; background: #f0f0f0; }
+    .report-header {
+      background: linear-gradient(135deg, #0f0f0f 0%, #1c1c1c 65%, ${accent}18 100%);
+      padding: 28px 32px 22px; border-bottom: 3px solid ${accent};
+    }
+    .header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+    .logo { font-size: 11px; font-weight: 800; color: ${accent}; letter-spacing: 2px; text-transform: uppercase; }
+    .generated { font-size: 9px; color: #888; text-align: right; margin-top: 3px; }
+    .tournament-name { font-size: 24px; font-weight: 800; color: #fff; letter-spacing: -0.5px; margin-bottom: 5px; }
+    .tournament-meta { font-size: 11px; color: #999; margin-bottom: 16px; }
+    .stats-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stat-chip {
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 3px 11px; font-size: 10px; color: #bbb;
+    }
+    .stat-chip strong { color: ${accent}; }
+    .content { padding: 22px 32px; max-width: 920px; margin: 0 auto; }
+    .section { margin-bottom: 28px; }
+    .section-title {
+      font-size: 13px; font-weight: 700; color: #111;
+      margin-bottom: 14px; padding-bottom: 7px; border-bottom: 2px solid ${accent};
+    }
+    .champions-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+    .champion-card {
+      background: linear-gradient(145deg, #181818 0%, #252525 100%);
+      border: 1px solid ${accent}44; border-radius: 8px;
+      padding: 14px 16px; min-width: 150px; flex: 1;
+      text-align: center; page-break-inside: avoid;
+    }
+    .cat-pill {
+      display: inline-block; background: ${accent}18; border: 1px solid ${accent}44; color: ${accent};
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 2px 8px; border-radius: 10px; margin-bottom: 8px;
+    }
+    .trophy-icon { font-size: 24px; margin-bottom: 6px; }
+    .champion-names { font-size: 11px; font-weight: 700; color: #fff; line-height: 1.3; margin-bottom: 5px; }
+    .runner-up { font-size: 10px; color: #999; margin-bottom: 4px; }
+    .final-score { font-size: 10px; font-weight: 700; color: ${accent}; }
+    .cat-block { margin-bottom: 20px; page-break-inside: avoid; }
+    .cat-header {
+      background: #1a1a1a; color: ${accent}; font-weight: 700; font-size: 11px;
+      padding: 7px 12px; border-radius: 4px 4px 0 0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .cat-meta { font-weight: 400; font-size: 9px; color: #aaa; }
+    .phase-group { margin-bottom: 1px; }
+    .phase-label {
+      background: #e8e8e8; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.8px; color: #555; padding: 4px 12px;
+    }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    thead tr { background: #fafafa; }
+    th { padding: 5px 8px; text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #777; border-bottom: 1px solid #eee; }
+    td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    tr.row-alt td { background: #fafafa; }
+    .center { text-align: center; }
+    .tcell-time { color: #666; white-space: nowrap; font-size: 10px; }
+    .tcell-court { color: #666; font-size: 10px; }
+    .tcell-vs { color: #ccc; font-size: 10px; width: 20px; }
+    .winner { font-weight: 700; }
+    .score { font-weight: 700; white-space: nowrap; color: ${accent}; }
+    .pending { color: #bbb; font-style: italic; font-size: 10px; }
+    .print-btn {
+      position: fixed; top: 16px; right: 20px; padding: 8px 18px;
+      background: ${accent}; color: #111; border: none; border-radius: 4px;
+      font-size: 12px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    @media print {
+      .print-btn { display: none; }
+      body { background: #fff; }
+      .report-header, .champion-card, .cat-header, .phase-label {
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="print-btn" onclick="window.print()">Guardar PDF</button>
+  <div class="report-header">
+    <div class="header-top">
+      <div class="logo">AMT P&aacute;del</div>
+      <div>
+        <div class="logo" style="font-size:9px;letter-spacing:1.5px">Informe post-torneo</div>
+        <div class="generated">Generado: ${now}</div>
+      </div>
+    </div>
+    <div class="tournament-name">${esc(tournament.name)}</div>
+    <div class="tournament-meta">${esc(dateRange)}${meta ? ` &nbsp;&middot;&nbsp; ${meta}` : ""}</div>
+    <div class="stats-bar">
+      <div class="stat-chip"><strong>${tournament.categories?.length ?? 0}</strong> categor&iacute;as</div>
+      <div class="stat-chip"><strong>${matches.length}</strong> partidos</div>
+      <div class="stat-chip"><strong>${finishedCount}</strong> finalizados</div>
+      ${finals.length > 0 ? `<div class="stat-chip"><strong>${finals.length}</strong> campe&oacute;n(es)</div>` : ""}
+    </div>
+  </div>
+  <div class="content">
+    ${championsHtml}
+    ${resultsHtml ? `
+    <section class="section">
+      <h2 class="section-title">&#128203; Resultados por Categor&iacute;a</h2>
+      ${resultsHtml}
+    </section>` : ""}
+  </div>
+</body>
+</html>`;
+
+  const reportWin = window.open("", "_blank");
+  if (!reportWin) return;
+  reportWin.document.write(reportHtml);
+  reportWin.document.close();
 }
 
 // ── printSchedule ──────────────────────────────────────────────────────────────
@@ -237,7 +472,7 @@ export function printSchedule(
 
   const now = new Date().toLocaleString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const club = (tournament as any).club;
-  const meta = [(tournament as any).dates, club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
+  const meta = [formatDateRange(tournament.startDate, tournament.endDate), club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
 
   const html = `<!DOCTYPE html>
 <html lang="es">

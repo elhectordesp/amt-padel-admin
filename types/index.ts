@@ -1,6 +1,5 @@
 export type Gender             = "M" | "F";
 export type SponsorScope       = "CIRCUIT" | "TOURNAMENT" | "REGIONAL";
-export type SponsorTier        = "TITLE" | "OFFICIAL" | "PARTNER";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
 export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
@@ -44,20 +43,22 @@ export interface TournamentScheduleDay {
 }
 
 export interface Club {
-  id:            string;
-  name:          string;
-  city:          string;
-  address?:      string | null;
-  phone?:        string | null;
-  website?:      string | null;
-  instagram?:    string | null;
-  logoUrl?:      string | null;
-  contactEmail?: string | null;
-  isAmtPartner?: boolean;
-  active?:       boolean;
-  tournamentCount?: number;
-  lat?:          number | null;
-  lng?:          number | null;
+  id:                   string;
+  name:                 string;
+  city:                 string;
+  province?:            string | null;
+  autonomousCommunity?: string | null;
+  address?:             string | null;
+  phone?:               string | null;
+  website?:             string | null;
+  instagram?:           string | null;
+  logoUrl?:             string | null;
+  contactEmail?:        string | null;
+  isAmtPartner?:        boolean;
+  active?:              boolean;
+  tournamentCount?:     number;
+  lat?:                 number | null;
+  lng?:                 number | null;
 }
 
 export interface CourtBlock {
@@ -92,9 +93,8 @@ export interface TournamentCourt {
 export interface Tournament {
   id:          string;
   name:        string;
-  dates:       string;
-  startDate?:  string;
-  endDate?:    string;
+  startDate:   string;
+  endDate:     string;
   club:        Club;
   prize?:       string;
   status:       TournamentStatus;
@@ -344,23 +344,21 @@ export interface ActivityItem {
 }
 
 export interface Sponsor {
-  id:           string;
-  name:         string;
-  logoUrl?:     string | null;
-  bannerUrl?:   string | null;
-  websiteUrl?:  string | null;
-  tagline?:     string | null;
-  scope:        SponsorScope;
-  tier:         SponsorTier;
-  tournamentId?:string | null;
-  city?:        string | null;
-  displayOrder: number;
-  active:       boolean;
-  clickCount:   number;
-  validFrom?:   string | null;
-  validUntil?:  string | null;
-  createdAt:    string;
-  tournament?:  { id: string; name: string } | null;
+  id:                   string;
+  name:                 string;
+  imageUrl?:            string | null;
+  websiteUrl?:          string | null;
+  tagline?:             string | null;
+  scope:                SponsorScope;
+  tournamentId?:        string | null;
+  autonomousCommunity?: string | null;
+  displayOrder:         number;
+  active:               boolean;
+  clickCount:           number;
+  validFrom?:           string | null;
+  validUntil?:          string | null;
+  createdAt:            string;
+  tournament?:          { id: string; name: string } | null;
 }
 
 // Form types for creating a tournament

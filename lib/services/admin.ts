@@ -3,7 +3,7 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, SponsorTier, Club,
+  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
@@ -54,7 +54,7 @@ export const adminService = {
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
-    duplicate:       (id: string)                  => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`).then((r) => r.data),
+    duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
     previewBracket:  (id: string, categoryId: string, format?: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId, ...(format ? { format } : {}) } }).then((r) => r.data),
     generateBracket: (id: string, categoryId: string, customGroups?: string[][], format?: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups, ...(format !== undefined ? { format } : {}) }).then((r) => r.data),
@@ -102,9 +102,17 @@ export const adminService = {
   },
 
   matches: {
-    list: (tournamentId: string) =>
-      api.get<any[]>(`/admin/tournaments/${tournamentId}/matches`).then((r) =>
-        (r.data ?? []).map((m: any): MatchResult => ({
+    list: (tournamentId: string, params?: { categoryId?: string; phase?: string; status?: string; page?: number; pageSize?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.categoryId) query.set('categoryId', params.categoryId);
+      if (params?.phase)      query.set('phase',      params.phase);
+      if (params?.status)     query.set('status',     params.status);
+      if (params?.page)       query.set('page',       String(params.page));
+      if (params?.pageSize)   query.set('pageSize',   String(params.pageSize));
+      const qs = query.toString();
+      return api.get<any>(`/admin/tournaments/${tournamentId}/matches${qs ? `?${qs}` : ''}`).then((r) => {
+        const items: any[] = r.data?.data ?? r.data ?? [];
+        return items.map((m: any): MatchResult => ({
           ...m,
           categoryId: m.categoryId ?? m.category?.id,
           group:    m.group?.name ?? m.groupName ?? null,
@@ -117,14 +125,15 @@ export const adminService = {
           phase:    m.phase,
           status:   m.status,
           scoringFormat: m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
-        }))
-      ),
+        }));
+      });
+    },
     setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2) =>
       api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}) }).then((r) => r.data),
   },
 
   players: {
-    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string }) =>
+    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string }) =>
       api.get<{ data: any[]; total: number; page: number; pageSize: number }>(
         "/admin/players",
         { params: { pageSize: 50, ...params } },
@@ -186,17 +195,10 @@ export const adminService = {
         headers: { "Content-Type": "multipart/form-data" },
       }).then((r) => r.data);
     },
-    sponsorLogo: (file: File) => {
+    sponsorImage: (file: File) => {
       const form = new FormData();
       form.append("image", file);
-      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-logo", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      }).then((r) => r.data);
-    },
-    sponsorBanner: (file: File) => {
-      const form = new FormData();
-      form.append("image", file);
-      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-banner", form, {
+      return api.post<{ imageUrl: string }>("/admin/upload/sponsor-image", form, {
         headers: { "Content-Type": "multipart/form-data" },
       }).then((r) => r.data);
     },
@@ -211,8 +213,10 @@ export const adminService = {
       api.post<Club>("/admin/clubs", data).then((r) => r.data),
     update:     (id: string, data: Partial<Omit<Club, "id" | "tournamentCount">>) =>
       api.patch<Club>(`/admin/clubs/${id}`, data).then((r) => r.data),
-    deactivate: (id: string) =>
+    deactivate:   (id: string) =>
       api.delete(`/admin/clubs/${id}`).then((r) => r.data),
+    geocodeBatch: () =>
+      api.post<{ updated: number; skipped: number; errors: string[] }>('/admin/clubs/geocode-batch').then((r) => r.data),
   },
 
   courts: {

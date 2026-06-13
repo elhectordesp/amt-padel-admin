@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
-  useReactTable, getCoreRowModel, getSortedRowModel,
+  useReactTable, getCoreRowModel,
   flexRender,
   type ColumnDef, type SortingState,
 } from "@tanstack/react-table";
@@ -71,6 +71,8 @@ export default function JugadoresPage() {
   const [genderFilter, setGenderFilter] = useState<"all" | Gender>("all");
   const [levelFilter,  setLevelFilter]  = useState<"all" | CategoryLevel>("all");
   const [sorting,      setSorting]      = useState<SortingState>([{ id: "points", desc: true }]);
+  const sortBy  = sorting[0]?.id   ?? "points";
+  const sortDir = sorting[0]?.desc === false ? "asc" : "desc";
   const [showCreate,   setShowCreate]   = useState(false);
   const [form,         setForm]         = useState<CreatePlayerPayload>(EMPTY_FORM);
 
@@ -92,17 +94,19 @@ export default function JugadoresPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1); }, [genderFilter, levelFilter]);
+  // Reset page when filters or sorting change
+  useEffect(() => { setPage(1); }, [genderFilter, levelFilter, sortBy, sortDir]);
 
   const { data: result, isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey:        ["admin-players", page, genderFilter, levelFilter, search],
+    queryKey:        ["admin-players", page, genderFilter, levelFilter, search, sortBy, sortDir],
     queryFn:         () => adminService.players.list({
       page,
       pageSize: PAGE_SIZE,
       gender:   genderFilter !== "all" ? genderFilter : undefined,
       level:    levelFilter  !== "all" ? levelFilter  : undefined,
       q:        search || undefined,
+      sortBy,
+      sortDir,
     }),
     placeholderData: (prev) => prev,
   });
@@ -221,8 +225,8 @@ export default function JugadoresPage() {
     state:            { sorting },
     onSortingChange:  setSorting,
     getCoreRowModel:  getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     manualPagination: true,
+    manualSorting:    true,
   });
 
   const levels: CategoryLevel[] = ["1a","2a","3a","4a","5a","6a","iniciacion"];
