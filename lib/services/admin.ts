@@ -82,6 +82,8 @@ export const adminService = {
     moveCategory: (registrationId: string, newCategoryId: string) => api.patch(`/admin/registrations/${registrationId}/category`, { newCategoryId }).then((r) => r.data),
     enroll:       (tournamentId: string, data: AdminEnrollTeamPayload) =>
       api.post<AdminEnrollResult>(`/admin/tournaments/${tournamentId}/enrollments`, data).then((r) => r.data),
+    replacePartner: (registrationId: string, newPartnerId: string) =>
+      api.patch(`/admin/registrations/${registrationId}/partner`, { newPartnerId }).then((r) => r.data),
   },
 
   categories: {

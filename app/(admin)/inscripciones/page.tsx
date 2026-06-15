@@ -11,6 +11,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
+import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import { adminService } from "@/lib/services/admin";
 import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
 
@@ -90,6 +91,7 @@ export default function InscripcionesPage() {
   const [availEditMode,    setAvailEditMode]    = useState(false);
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
   const [enrollOpen,       setEnrollOpen]       = useState(false);
+  const [replaceReg,       setReplaceReg]       = useState<AdminRegistration | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -238,6 +240,14 @@ export default function InscripcionesPage() {
             moveCategory.mutate({ registrationId: movePair.primary.id, newCategoryId })
           }
           onClose={() => setMovePair(null)}
+        />
+      )}
+
+      {replaceReg && (
+        <ReplacePartnerModal
+          registration={replaceReg}
+          tournamentId={tournamentId}
+          onClose={() => setReplaceReg(null)}
         />
       )}
 
@@ -585,6 +595,16 @@ export default function InscripcionesPage() {
                                     >
                                       <ArrowLeftRight size={14} />
                                     </button>
+                                    {reg.partnerId && (
+                                      <button
+                                        onClick={() => setReplaceReg(reg)}
+                                        disabled={isUpdating}
+                                        title="Cambiar pareja"
+                                        className="p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40 transition-colors"
+                                      >
+                                        <Users size={14} />
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handlePairStatus(pair, "CANCELLED")}
                                       disabled={isUpdating}
