@@ -15,6 +15,8 @@ const LEVEL_LABEL: Record<string, string> = {
 interface Props {
   tournament: Tournament;
   onClose: () => void;
+  /** Llamado tras inscripción exitosa con el ID de la primera inscripción */
+  onEnrolled?: (registrationId: string) => void;
 }
 
 interface PlayerSlot {
@@ -37,7 +39,7 @@ const emptyCreateForm = (): Partial<CreatePlayerPayload> => ({
   email: "", phone: "", categoryLevel: undefined,
 });
 
-export function EnrollTeamModal({ tournament, onClose }: Props) {
+export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
   const qc = useQueryClient();
 
   const [slot1, setSlot1] = useState<PlayerSlot>({ ...emptySlot(), createForm: emptyCreateForm() });
@@ -48,8 +50,8 @@ export function EnrollTeamModal({ tournament, onClose }: Props) {
   const [paid,        setPaid]        = useState(false);
   const [forceEnroll, setForceEnroll] = useState(false);
 
-  const searchDebounce1 = useRef<ReturnType<typeof setTimeout>>();
-  const searchDebounce2 = useRef<ReturnType<typeof setTimeout>>();
+  const searchDebounce1 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchDebounce2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const selectedCategory = tournament.categories?.find((c) => c.id === categoryId);
   const isNotOpen = !["OPEN", "DRAW", "SCHEDULED"].includes(tournament.status ?? "");
@@ -137,10 +139,16 @@ export function EnrollTeamModal({ tournament, onClose }: Props) {
       adminService.registrations.enroll(tournament.id, data),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["admin", "registrations", tournament.id] });
+      const hasSchedule = (tournament.schedule?.length ?? 0) > 0;
+      const regId = res.registration1.id;
+      const action = hasSchedule && onEnrolled
+        ? { label: "Disponibilidad →", onClick: () => onEnrolled(regId) }
+        : undefined;
+
       if (res.movedToWaitlist) {
-        toast.warning("La categoría estaba llena. La pareja ha sido añadida a la lista de espera.");
+        toast.warning("La categoría estaba llena. La pareja ha sido añadida a la lista de espera.", { action });
       } else {
-        toast.success("Pareja inscrita correctamente.");
+        toast.success("Pareja inscrita correctamente.", { action });
       }
       onClose();
     },
@@ -304,7 +312,7 @@ export function EnrollTeamModal({ tournament, onClose }: Props) {
               </div>
               <select
                 value={slot.createForm.categoryLevel ?? ""}
-                onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, categoryLevel: e.target.value || undefined } }))}
+                onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, categoryLevel: (e.target.value || undefined) as import("@/types").CategoryLevel | undefined } }))}
                 className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-white focus:outline-none focus:border-blue-500"
               >
                 <option value="">Nivel (opc.)</option>

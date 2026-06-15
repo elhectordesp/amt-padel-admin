@@ -87,6 +87,7 @@ export default function InscripcionesPage() {
   const [confirmCancel,    setConfirmCancel]    = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [availRegId,       setAvailRegId]       = useState<string | null>(null);
+  const [availEditMode,    setAvailEditMode]    = useState(false);
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
   const [enrollOpen,       setEnrollOpen]       = useState(false);
 
@@ -204,17 +205,23 @@ export default function InscripcionesPage() {
     waitlist:  pairs.filter((p) => p.status === "WAITLIST").length,
   };
 
-  const selectedTournament = tournaments.find((t: Tournament) => t.id === tournamentId);
+  const selectedTournament    = tournaments.find((t: Tournament) => t.id === tournamentId);
+  const tournamentHasSchedule = (tournamentDetail?.schedule?.length ?? 0) > 0;
 
   return (
     <div className="flex flex-col min-h-full">
       {availRegId && (
-        <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+        <AvailabilityModal
+          registrationId={availRegId}
+          editMode={availEditMode}
+          onClose={() => { setAvailRegId(null); setAvailEditMode(false); }}
+        />
       )}
 
       {enrollOpen && selectedTournament && (
         <EnrollTeamModal
           tournament={selectedTournament}
+          onEnrolled={(regId) => { setAvailRegId(regId); setAvailEditMode(true); }}
           onClose={() => {
             setEnrollOpen(false);
             qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
@@ -303,6 +310,7 @@ export default function InscripcionesPage() {
               Inscribir equipo
             </button>
           )}
+
         </div>
 
         {!tournamentId ? (
@@ -530,13 +538,25 @@ export default function InscripcionesPage() {
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={() => setAvailRegId(reg.id)}
-                                      title="Ver disponibilidad"
-                                      className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
-                                    >
-                                      <CalendarDays size={14} />
-                                    </button>
+                                    {(() => {
+                                      const noAvail = tournamentHasSchedule && !reg.availability;
+                                      return (
+                                        <button
+                                          onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
+                                          title={noAvail ? "Sin disponibilidad — click para establecer" : "Ver / editar disponibilidad"}
+                                          className={`relative p-1.5 rounded-md transition-colors ${
+                                            noAvail
+                                              ? "text-orange-400 hover:bg-orange-400/10"
+                                              : "text-muted-foreground hover:bg-[rgba(212,175,55,0.1)] hover:text-[#D4AF37]"
+                                          }`}
+                                        >
+                                          <CalendarDays size={14} />
+                                          {noAvail && (
+                                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-400" />
+                                          )}
+                                        </button>
+                                      );
+                                    })()}
                                     {pair.status !== "CONFIRMED" && (
                                       <button
                                         onClick={() => handlePairStatus(pair, "CONFIRMED")}
