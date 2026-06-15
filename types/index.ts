@@ -517,6 +517,22 @@ export interface AuditLogEntry {
   createdAt:   string;
 }
 
+export interface PlayerRegistrationEntry {
+  id:           string;
+  tournamentId: string;
+  tournament:   string;
+  startDate:    string;
+  endDate:      string;
+  tier?:        TournamentTier | null;
+  categoryId:   string;
+  gender:       string;
+  level:        string;
+  price:        number;
+  status:       RegistrationStatus;
+  paid:         boolean;
+  createdAt:    string;
+}
+
 export interface SupportMessage {
   id:        string;
   subject:   string;

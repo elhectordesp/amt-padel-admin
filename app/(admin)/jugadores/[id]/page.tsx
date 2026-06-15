@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender } from "@/types";
+import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry } from "@/types";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "1a": "1ª", "2a": "2ª", "3a": "3ª",
@@ -62,6 +62,11 @@ export default function JugadorDetailPage() {
   const { data: catHistory = [] } = useQuery({
     queryKey: ["player-cat-history", id],
     queryFn:  () => adminService.players.categoryHistory(id),
+  });
+
+  const { data: playerRegs = [] } = useQuery({
+    queryKey: ["player-registrations", id],
+    queryFn:  () => adminService.players.registrations(id),
   });
 
   const catForm  = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
@@ -395,6 +400,64 @@ export default function JugadorDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Tournament registrations */}
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <Trophy size={15} className="text-[#D4AF37]" />
+              <h3 className="text-sm font-semibold text-foreground">Torneos</h3>
+              {playerRegs.length > 0 && (
+                <span className="ml-auto text-xs text-muted-foreground">{playerRegs.length} inscripción(es)</span>
+              )}
+            </div>
+            {playerRegs.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Sin inscripciones registradas</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/50">
+                      {["Torneo", "Fecha", "Categoría", "Estado", "Pago"].map((h) => (
+                        <th key={h} className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(playerRegs as PlayerRegistrationEntry[]).map((r) => {
+                      const STATUS_CFG: Record<string, { label: string; cls: string }> = {
+                        CONFIRMED: { label: "Confirmado", cls: "text-green-400 bg-green-400/10 border-green-400/30" },
+                        PENDING:   { label: "Pendiente",  cls: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+                        WAITLIST:  { label: "En espera",  cls: "text-blue-400 bg-blue-400/10 border-blue-400/30" },
+                        CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30" },
+                      };
+                      const scfg = STATUS_CFG[r.status] ?? STATUS_CFG.PENDING;
+                      return (
+                        <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                          <td className="px-5 py-3 text-xs text-foreground max-w-[180px] truncate">{r.tournament}</td>
+                          <td className="px-5 py-3 text-xs text-muted-foreground">
+                            {new Date(r.startDate).toLocaleDateString("es-ES")}
+                          </td>
+                          <td className="px-5 py-3 text-xs text-muted-foreground">
+                            {r.gender} {CATEGORY_LABEL[r.level] ?? r.level}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
+                              {scfg.label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`text-xs font-medium ${r.paid ? "text-green-400" : "text-yellow-400"}`}>
+                              {r.paid ? "Pagado" : "Pendiente"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {/* Match history */}
           {player.matches && player.matches.length > 0 && (

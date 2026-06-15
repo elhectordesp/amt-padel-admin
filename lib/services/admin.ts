@@ -10,7 +10,7 @@ import type {
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
-  AuditLogEntry,
+  AuditLogEntry, PlayerRegistrationEntry,
 } from "@/types";
 
 export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED' | 'AVAILABILITY_VIOLATION';
@@ -177,7 +177,8 @@ export const adminService = {
         } as Player;
       }),
     changeLevel:     (id: string, level: string, reason: string) => api.patch(`/admin/players/${id}/category`, { level, reason }).then((r) => r.data),
-    categoryHistory: (id: string) => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
+    categoryHistory:   (id: string) => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
+    registrations:     (id: string) => api.get<PlayerRegistrationEntry[]>(`/admin/players/${id}/registrations`).then((r) => r.data ?? []).catch(() => [] as PlayerRegistrationEntry[]),
     create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null }>("/admin/players", data).then((r) => r.data),
     update:       (id: string, data: UpdatePlayerPayload) => api.patch(`/admin/players/${id}/profile`, data).then((r) => r.data),
     delete:       (id: string)                            => api.delete(`/admin/players/${id}`).then((r) => r.data),
