@@ -138,7 +138,7 @@ export const adminService = {
   },
 
   players: {
-    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string }) =>
+    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string; activationStatus?: string }) =>
       api.get<{ data: any[]; total: number; page: number; pageSize: number }>(
         "/admin/players",
         { params: { pageSize: 50, ...params } },

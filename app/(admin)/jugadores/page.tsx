@@ -68,8 +68,9 @@ export default function JugadoresPage() {
   const [page,         setPage]         = useState(1);
   const [searchInput,  setSearchInput]  = useState("");
   const [search,       setSearch]       = useState("");
-  const [genderFilter, setGenderFilter] = useState<"all" | Gender>("all");
-  const [levelFilter,  setLevelFilter]  = useState<"all" | CategoryLevel>("all");
+  const [genderFilter,     setGenderFilter]     = useState<"all" | Gender>("all");
+  const [levelFilter,      setLevelFilter]      = useState<"all" | CategoryLevel>("all");
+  const [activationFilter, setActivationFilter] = useState<"all" | "unactivated" | "active">("all");
   const [sorting,      setSorting]      = useState<SortingState>([{ id: "points", desc: true }]);
   const sortBy  = sorting[0]?.id   ?? "points";
   const sortDir = sorting[0]?.desc === false ? "asc" : "desc";
@@ -95,15 +96,16 @@ export default function JugadoresPage() {
   }, [searchInput]);
 
   // Reset page when filters or sorting change
-  useEffect(() => { setPage(1); }, [genderFilter, levelFilter, sortBy, sortDir]);
+  useEffect(() => { setPage(1); }, [genderFilter, levelFilter, activationFilter, sortBy, sortDir]);
 
   const { data: result, isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey:        ["admin-players", page, genderFilter, levelFilter, search, sortBy, sortDir],
+    queryKey:        ["admin-players", page, genderFilter, levelFilter, activationFilter, search, sortBy, sortDir],
     queryFn:         () => adminService.players.list({
       page,
       pageSize: PAGE_SIZE,
-      gender:   genderFilter !== "all" ? genderFilter : undefined,
-      level:    levelFilter  !== "all" ? levelFilter  : undefined,
+      gender:           genderFilter     !== "all" ? genderFilter     : undefined,
+      level:            levelFilter      !== "all" ? levelFilter      : undefined,
+      activationStatus: activationFilter !== "all" ? activationFilter : undefined,
       q:        search || undefined,
       sortBy,
       sortDir,
@@ -267,6 +269,28 @@ export default function JugadoresPage() {
             <option value="all">Todas las categorías</option>
             {levels.map((l) => <option key={l} value={l}>{CATEGORY_LABEL[l]}</option>)}
           </select>
+
+          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
+            {([
+              { key: "all",        label: "Todos"        },
+              { key: "unactivated", label: "Sin activar"  },
+              { key: "active",     label: "Activados"    },
+            ] as { key: "all" | "unactivated" | "active"; label: string }[]).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setActivationFilter(f.key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activationFilter === f.key
+                    ? f.key === "unactivated"
+                      ? "bg-orange-500/10 text-orange-400 border border-orange-500/30"
+                      : "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border flex-1 max-w-xs">
             <Search size={14} className="text-muted-foreground shrink-0" />

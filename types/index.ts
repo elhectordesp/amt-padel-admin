@@ -209,8 +209,9 @@ export interface Player {
   globalRank?:    number;
   categoryRank?:  number;
   matches?:       PlayerMatch[];
-  managedByAdmin?: boolean;
-  invitedAt?:     string | null;
+  managedByAdmin?:   boolean;
+  invitedAt?:        string | null;
+  activationStatus?: "pending_invite" | "invited" | "active";
 }
 
 export interface AdminEnrollTeamPayload {

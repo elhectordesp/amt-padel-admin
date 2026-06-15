@@ -9,7 +9,7 @@ import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
   TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
-  Edit2, Trash2, Send, ShieldCheck,
+  Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -174,7 +174,24 @@ export default function JugadorDetailPage() {
                     </div>
                   )
                 }
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-card" />
+                {player.managedByAdmin ? (
+                  <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-card flex items-center justify-center ${
+                    player.activationStatus === "active"
+                      ? "bg-green-500"
+                      : player.activationStatus === "invited"
+                      ? "bg-yellow-500"
+                      : "bg-orange-500"
+                  }`}>
+                    {player.activationStatus === "active"
+                      ? null
+                      : player.activationStatus === "invited"
+                      ? <Clock size={10} className="text-black" />
+                      : <AlertCircle size={10} className="text-black" />
+                    }
+                  </div>
+                ) : (
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-card" />
+                )}
               </div>
 
               {/* Info */}
@@ -184,11 +201,19 @@ export default function JugadorDetailPage() {
                   <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
                     {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
                   </span>
-                  {player.managedByAdmin && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                      <ShieldCheck size={10} /> Cuenta gestionada
-                    </span>
-                  )}
+                  {player.managedByAdmin && (() => {
+                    const cfg = {
+                      pending_invite: { label: "Sin invitar",        cls: "bg-orange-500/10 text-orange-400 border-orange-500/30", Icon: AlertCircle },
+                      invited:        { label: "Invitado — pendiente", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30", Icon: Clock       },
+                      active:         { label: "Cuenta gestionada",    cls: "bg-blue-500/10 text-blue-400 border-blue-500/30",       Icon: ShieldCheck  },
+                    };
+                    const s = cfg[player.activationStatus ?? "active"];
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${s.cls}`}>
+                        <s.Icon size={10} /> {s.label}
+                      </span>
+                    );
+                  })()}
                   <div className={`flex items-center gap-1 ${trendColor}`}>
                     <TrendIcon size={14} />
                     <span className="text-xs font-medium capitalize">{player.trend}</span>
@@ -226,14 +251,14 @@ export default function JugadorDetailPage() {
                 >
                   <Edit2 size={13} /> Editar datos
                 </button>
-                {player.managedByAdmin && (
+                {player.managedByAdmin && player.activationStatus !== "active" && (
                   <button
                     onClick={() => resendMutation.mutate()}
                     disabled={resendMutation.isPending}
                     className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
                   >
                     {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    Reenviar invitación
+                    {player.activationStatus === "pending_invite" ? "Enviar invitación" : "Reenviar invitación"}
                   </button>
                 )}
                 <button
