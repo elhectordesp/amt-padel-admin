@@ -517,7 +517,13 @@ export default function JugadoresPage() {
                   placeholder="jugador@email.com (se le enviará invitación)"
                   className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
-                <p className="text-[10px] text-muted-foreground">Si se indica, recibirá un email para activar su cuenta.</p>
+                {!form.email?.trim() && form.firstName.trim() ? (
+                  <p className="text-[10px] text-amber-500 flex items-center gap-1">
+                    <span>⚠</span> Sin email este jugador no podrá activar su cuenta en la app
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">Si se indica, recibirá un email para activar su cuenta.</p>
+                )}
               </div>
 
               {/* Phone + City */}

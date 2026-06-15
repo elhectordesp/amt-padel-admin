@@ -224,8 +224,15 @@ export default function JugadorDetailPage() {
                   {player.city && (
                     <span className="flex items-center gap-1.5"><MapPin size={13} className="text-[#D4AF37]" />{player.city}</span>
                   )}
-                  {player.email && (
+                  {player.email ? (
                     <span className="flex items-center gap-1.5"><Mail size={13} className="text-[#D4AF37]" />{player.email}</span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-400/10 border-amber-400/30 text-amber-400"
+                      title="Sin email: este jugador no puede activar su cuenta ni recibir notificaciones"
+                    >
+                      <AlertCircle size={10} /> Sin email
+                    </span>
                   )}
                   {player.phone && (
                     <span className="flex items-center gap-1.5"><Phone size={13} className="text-[#D4AF37]" />{player.phone}</span>
