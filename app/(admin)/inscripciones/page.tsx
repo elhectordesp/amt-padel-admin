@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight } from "lucide-react";
+import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight, UserPlus } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
+import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import { adminService } from "@/lib/services/admin";
 import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
 
@@ -87,6 +88,7 @@ export default function InscripcionesPage() {
   const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [availRegId,       setAvailRegId]       = useState<string | null>(null);
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
+  const [enrollOpen,       setEnrollOpen]       = useState(false);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -210,6 +212,16 @@ export default function InscripcionesPage() {
         <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
       )}
 
+      {enrollOpen && selectedTournament && (
+        <EnrollTeamModal
+          tournament={selectedTournament}
+          onClose={() => {
+            setEnrollOpen(false);
+            qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+          }}
+        />
+      )}
+
       {movePair && (
         <MoveCategoryModal
           pair={movePair}
@@ -280,6 +292,16 @@ export default function InscripcionesPage() {
             >
               Ver torneo <ChevronRight size={12} />
             </Link>
+          )}
+
+          {selectedTournament && (
+            <button
+              onClick={() => setEnrollOpen(true)}
+              className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
+            >
+              <UserPlus size={13} />
+              Inscribir equipo
+            </button>
           )}
         </div>
 

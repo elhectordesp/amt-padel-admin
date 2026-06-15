@@ -213,6 +213,23 @@ export interface Player {
   invitedAt?:     string | null;
 }
 
+export interface AdminEnrollTeamPayload {
+  categoryId:   string;
+  player1Id:    string;
+  player2Id?:   string;
+  noPartner?:   boolean;
+  status?:      "PENDING" | "CONFIRMED";
+  paid?:        boolean;
+  forceEnroll?: boolean;
+}
+
+export interface AdminEnrollResult {
+  registration1:  AdminRegistration;
+  registration2:  AdminRegistration | null;
+  status:         string;
+  movedToWaitlist: boolean;
+}
+
 export interface CreatePlayerPayload {
   firstName:     string;
   lastName:      string;

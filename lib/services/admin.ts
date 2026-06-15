@@ -5,6 +5,7 @@ import type {
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
+  AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
@@ -77,6 +78,8 @@ export const adminService = {
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
     moveCategory: (registrationId: string, newCategoryId: string) => api.patch(`/admin/registrations/${registrationId}/category`, { newCategoryId }).then((r) => r.data),
+    enroll:       (tournamentId: string, data: AdminEnrollTeamPayload) =>
+      api.post<AdminEnrollResult>(`/admin/tournaments/${tournamentId}/enrollments`, data).then((r) => r.data),
   },
 
   categories: {
