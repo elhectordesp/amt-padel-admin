@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from "@/lib/api";
 import type {
   AdminStats, Tournament, AdminRegistration,
@@ -5,11 +6,12 @@ import type {
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload,
+  AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
-  AuditLogEntry,
+  AuditLogEntry, PlayerRegistrationEntry,
 } from "@/types";
 
 export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED' | 'AVAILABILITY_VIOLATION';
@@ -59,6 +61,8 @@ export const adminService = {
     previewBracket:  (id: string, categoryId: string, format?: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId, ...(format ? { format } : {}) } }).then((r) => r.data),
     generateBracket: (id: string, categoryId: string, customGroups?: string[][], format?: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups, ...(format !== undefined ? { format } : {}) }).then((r) => r.data),
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
+    updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
+      api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),
     regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
@@ -77,6 +81,12 @@ export const adminService = {
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
     moveCategory: (registrationId: string, newCategoryId: string) => api.patch(`/admin/registrations/${registrationId}/category`, { newCategoryId }).then((r) => r.data),
+    enroll:       (tournamentId: string, data: AdminEnrollTeamPayload) =>
+      api.post<AdminEnrollResult>(`/admin/tournaments/${tournamentId}/enrollments`, data).then((r) => r.data),
+    replacePartner: (registrationId: string, newPartnerId: string) =>
+      api.patch(`/admin/registrations/${registrationId}/partner`, { newPartnerId }).then((r) => r.data),
+    updatePayment: (registrationId: string, data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string }) =>
+      api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
   },
 
   categories: {
@@ -133,7 +143,7 @@ export const adminService = {
   },
 
   players: {
-    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string }) =>
+    list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string; activationStatus?: string }) =>
       api.get<{ data: any[]; total: number; page: number; pageSize: number }>(
         "/admin/players",
         { params: { pageSize: 50, ...params } },
@@ -170,11 +180,14 @@ export const adminService = {
         } as Player;
       }),
     changeLevel:     (id: string, level: string, reason: string) => api.patch(`/admin/players/${id}/category`, { level, reason }).then((r) => r.data),
-    categoryHistory: (id: string) => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
+    categoryHistory:   (id: string) => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
+    registrations:     (id: string) => api.get<PlayerRegistrationEntry[]>(`/admin/players/${id}/registrations`).then((r) => r.data ?? []).catch(() => [] as PlayerRegistrationEntry[]),
+    auditLog:          (id: string) => api.get<AuditLogEntry[]>(`/admin/players/${id}/audit`).then((r) => r.data ?? []).catch(() => [] as AuditLogEntry[]),
     create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null }>("/admin/players", data).then((r) => r.data),
     update:       (id: string, data: UpdatePlayerPayload) => api.patch(`/admin/players/${id}/profile`, data).then((r) => r.data),
     delete:       (id: string)                            => api.delete(`/admin/players/${id}`).then((r) => r.data),
     resendInvite: (id: string)                            => api.post(`/admin/players/${id}/resend-invite`).then((r) => r.data),
+    bulkInvite:   ()                                       => api.post<{ sent: number; skipped: number; total: number }>("/admin/players/bulk-invite").then((r) => r.data),
   },
 
   finance: {

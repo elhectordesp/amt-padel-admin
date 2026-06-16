@@ -170,18 +170,22 @@ export interface AdminRegistrationUser {
 }
 
 export interface AdminRegistration {
-  id:           string;
-  tournamentId: string;
-  categoryId:   string;
-  userId:       string;
-  partnerId?:   string | null;
-  user:         AdminRegistrationUser;
-  partner?:     AdminRegistrationUser | null;
-  category:     { gender: string; level: string; price: number };
-  status:       RegistrationStatus;
-  paid:         boolean;
-  createdAt:    string;
-  availability?: { sat: string; sun: string };
+  id:             string;
+  tournamentId:   string;
+  categoryId:     string;
+  userId:         string;
+  partnerId?:     string | null;
+  user:           AdminRegistrationUser;
+  partner?:       AdminRegistrationUser | null;
+  category:       { gender: string; level: string; price: number };
+  status:         RegistrationStatus;
+  paid:           boolean;
+  paymentMethod?: string | null;
+  paidAt?:        string | null;
+  paymentNote?:   string | null;
+  enrolledByAdmin?: boolean;
+  createdAt:      string;
+  availability?:  { sat: string; sun: string };
 }
 
 export interface Player {
@@ -209,8 +213,26 @@ export interface Player {
   globalRank?:    number;
   categoryRank?:  number;
   matches?:       PlayerMatch[];
-  managedByAdmin?: boolean;
-  invitedAt?:     string | null;
+  managedByAdmin?:   boolean;
+  invitedAt?:        string | null;
+  activationStatus?: "pending_invite" | "invited" | "active";
+}
+
+export interface AdminEnrollTeamPayload {
+  categoryId:   string;
+  player1Id:    string;
+  player2Id?:   string;
+  noPartner?:   boolean;
+  status?:      "PENDING" | "CONFIRMED";
+  paid?:        boolean;
+  forceEnroll?: boolean;
+}
+
+export interface AdminEnrollResult {
+  registration1:  AdminRegistration;
+  registration2:  AdminRegistration | null;
+  status:         string;
+  movedToWaitlist: boolean;
 }
 
 export interface CreatePlayerPayload {
@@ -497,6 +519,22 @@ export interface AuditLogEntry {
   oldValue?:   Record<string, unknown> | null;
   newValue?:   Record<string, unknown> | null;
   createdAt:   string;
+}
+
+export interface PlayerRegistrationEntry {
+  id:           string;
+  tournamentId: string;
+  tournament:   string;
+  startDate:    string;
+  endDate:      string;
+  tier?:        TournamentTier | null;
+  categoryId:   string;
+  gender:       string;
+  level:        string;
+  price:        number;
+  status:       RegistrationStatus;
+  paid:         boolean;
+  createdAt:    string;
 }
 
 export interface SupportMessage {

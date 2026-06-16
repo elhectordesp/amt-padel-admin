@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useMemo, useState } from "react";
 import { Clock, RotateCcw } from "lucide-react";
@@ -37,7 +38,10 @@ export function ScheduleGrid({ matches, duration, tournament, onMatchClick, onCo
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const effectiveDate =
     selectedDate && matchesByDate[selectedDate] ? selectedDate : (dates[0] ?? null);
-  const dayMatches = effectiveDate ? (matchesByDate[effectiveDate] ?? []) : [];
+  const dayMatches = useMemo(
+    () => effectiveDate ? (matchesByDate[effectiveDate] ?? []) : [],
+    [effectiveDate, matchesByDate],
+  );
 
   const courts = useMemo(() => {
     const s = new Set<string>();

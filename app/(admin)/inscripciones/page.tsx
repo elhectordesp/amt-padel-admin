@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight } from "lucide-react";
+import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight, UserPlus } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -10,6 +10,9 @@ import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
+import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
+import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
+import PaymentModal from "@/components/admin/payment-modal";
 import { adminService } from "@/lib/services/admin";
 import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
 
@@ -86,7 +89,11 @@ export default function InscripcionesPage() {
   const [confirmCancel,    setConfirmCancel]    = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [availRegId,       setAvailRegId]       = useState<string | null>(null);
+  const [availEditMode,    setAvailEditMode]    = useState(false);
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
+  const [enrollOpen,       setEnrollOpen]       = useState(false);
+  const [replaceReg,       setReplaceReg]       = useState<AdminRegistration | null>(null);
+  const [paymentReg,       setPaymentReg]       = useState<AdminRegistration | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -111,7 +118,7 @@ export default function InscripcionesPage() {
   const bulkStatus = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
-    onSuccess: (res: any, vars) => {
+    onSuccess: (res: { count?: number; updated?: number }, vars) => {
       qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
       const updated = res?.count ?? res?.updated ?? vars.ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
@@ -152,7 +159,7 @@ export default function InscripcionesPage() {
   const toggleSelect = (key: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) { next.delete(key); } else { next.add(key); }
       return next;
     });
 
@@ -170,6 +177,7 @@ export default function InscripcionesPage() {
     setPage(0);
   };
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const pairs = useMemo(() => groupByPair(registrations), [registrations]);
 
   const availableCategories = useMemo(() => {
@@ -202,12 +210,28 @@ export default function InscripcionesPage() {
     waitlist:  pairs.filter((p) => p.status === "WAITLIST").length,
   };
 
-  const selectedTournament = tournaments.find((t: Tournament) => t.id === tournamentId);
+  const selectedTournament    = tournaments.find((t: Tournament) => t.id === tournamentId);
+  const tournamentHasSchedule = (tournamentDetail?.schedule?.length ?? 0) > 0;
 
   return (
     <div className="flex flex-col min-h-full">
       {availRegId && (
-        <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+        <AvailabilityModal
+          registrationId={availRegId}
+          editMode={availEditMode}
+          onClose={() => { setAvailRegId(null); setAvailEditMode(false); }}
+        />
+      )}
+
+      {enrollOpen && selectedTournament && (
+        <EnrollTeamModal
+          tournament={selectedTournament}
+          onEnrolled={(regId) => { setAvailRegId(regId); setAvailEditMode(true); }}
+          onClose={() => {
+            setEnrollOpen(false);
+            qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+          }}
+        />
       )}
 
       {movePair && (
@@ -219,6 +243,22 @@ export default function InscripcionesPage() {
             moveCategory.mutate({ registrationId: movePair.primary.id, newCategoryId })
           }
           onClose={() => setMovePair(null)}
+        />
+      )}
+
+      {replaceReg && (
+        <ReplacePartnerModal
+          registration={replaceReg}
+          tournamentId={tournamentId}
+          onClose={() => setReplaceReg(null)}
+        />
+      )}
+
+      {paymentReg && (
+        <PaymentModal
+          registration={paymentReg}
+          tournamentId={tournamentId}
+          onClose={() => setPaymentReg(null)}
         />
       )}
 
@@ -281,6 +321,17 @@ export default function InscripcionesPage() {
               Ver torneo <ChevronRight size={12} />
             </Link>
           )}
+
+          {selectedTournament && (
+            <button
+              onClick={() => setEnrollOpen(true)}
+              className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
+            >
+              <UserPlus size={13} />
+              Inscribir equipo
+            </button>
+          )}
+
         </div>
 
         {!tournamentId ? (
@@ -460,7 +511,12 @@ export default function InscripcionesPage() {
                                   />
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
+                                    {reg.enrolledByAdmin && (
+                                      <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-400/10 text-purple-400 border border-purple-400/30 leading-none">Admin</span>
+                                    )}
+                                  </div>
                                   {reg.partner?.name
                                     ? <p className="text-xs text-muted-foreground">{reg.partner.name}</p>
                                     : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
@@ -502,19 +558,35 @@ export default function InscripcionesPage() {
                                   </span>
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
+                                  <button
+                                    onClick={() => setPaymentReg(reg)}
+                                    title="Ver / editar pago"
+                                    className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
+                                  >
                                     {reg.paid ? "Pagado" : "Pendiente"}
-                                  </span>
+                                  </button>
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={() => setAvailRegId(reg.id)}
-                                      title="Ver disponibilidad"
-                                      className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
-                                    >
-                                      <CalendarDays size={14} />
-                                    </button>
+                                    {(() => {
+                                      const noAvail = tournamentHasSchedule && !reg.availability;
+                                      return (
+                                        <button
+                                          onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
+                                          title={noAvail ? "Sin disponibilidad — click para establecer" : "Ver / editar disponibilidad"}
+                                          className={`relative p-1.5 rounded-md transition-colors ${
+                                            noAvail
+                                              ? "text-orange-400 hover:bg-orange-400/10"
+                                              : "text-muted-foreground hover:bg-[rgba(212,175,55,0.1)] hover:text-[#D4AF37]"
+                                          }`}
+                                        >
+                                          <CalendarDays size={14} />
+                                          {noAvail && (
+                                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-400" />
+                                          )}
+                                        </button>
+                                      );
+                                    })()}
                                     {pair.status !== "CONFIRMED" && (
                                       <button
                                         onClick={() => handlePairStatus(pair, "CONFIRMED")}
@@ -543,6 +615,16 @@ export default function InscripcionesPage() {
                                     >
                                       <ArrowLeftRight size={14} />
                                     </button>
+                                    {reg.partnerId && (
+                                      <button
+                                        onClick={() => setReplaceReg(reg)}
+                                        disabled={isUpdating}
+                                        title="Cambiar pareja"
+                                        className="p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40 transition-colors"
+                                      >
+                                        <Users size={14} />
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handlePairStatus(pair, "CANCELLED")}
                                       disabled={isUpdating}

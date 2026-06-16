@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -9,14 +10,14 @@ import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
   TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
-  Edit2, Trash2, Send, ShieldCheck,
+  Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle, Activity,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender } from "@/types";
+import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry } from "@/types";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "1a": "1ª", "2a": "2ª", "3a": "3ª",
@@ -62,6 +63,16 @@ export default function JugadorDetailPage() {
   const { data: catHistory = [] } = useQuery({
     queryKey: ["player-cat-history", id],
     queryFn:  () => adminService.players.categoryHistory(id),
+  });
+
+  const { data: playerRegs = [] } = useQuery({
+    queryKey: ["player-registrations", id],
+    queryFn:  () => adminService.players.registrations(id),
+  });
+
+  const { data: playerAudit = [] } = useQuery({
+    queryKey: ["player-audit", id],
+    queryFn:  () => adminService.players.auditLog(id),
   });
 
   const catForm  = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
@@ -144,6 +155,8 @@ export default function JugadorDetailPage() {
                     player.trend === "down" ? TrendingDown : Minus;
   const trendColor = player.trend === "up" ? "text-green-400" :
                      player.trend === "down" ? "text-destructive" : "text-muted-foreground";
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const watchedLevel = catForm.watch("level") ?? "";
 
   return (
     <>
@@ -167,14 +180,31 @@ export default function JugadorDetailPage() {
               {/* Avatar */}
               <div className="relative shrink-0">
                 {player.photoUrl
-                  ? <img src={player.photoUrl} alt={player.name} className="w-20 h-20 rounded-full object-cover border-2 border-[#D4AF37]" />
+                  ? <Image src={player.photoUrl} alt={player.name} width={80} height={80} unoptimized className="rounded-full object-cover border-2 border-[#D4AF37]" />
                   : (
                     <div className="w-20 h-20 rounded-full bg-[rgba(212,175,55,0.1)] border-2 border-[#D4AF37] flex items-center justify-center">
                       <span className="font-heading text-2xl text-[#D4AF37]">{initials}</span>
                     </div>
                   )
                 }
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-card" />
+                {player.managedByAdmin ? (
+                  <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-card flex items-center justify-center ${
+                    player.activationStatus === "active"
+                      ? "bg-green-500"
+                      : player.activationStatus === "invited"
+                      ? "bg-yellow-500"
+                      : "bg-orange-500"
+                  }`}>
+                    {player.activationStatus === "active"
+                      ? null
+                      : player.activationStatus === "invited"
+                      ? <Clock size={10} className="text-black" />
+                      : <AlertCircle size={10} className="text-black" />
+                    }
+                  </div>
+                ) : (
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-card" />
+                )}
               </div>
 
               {/* Info */}
@@ -184,11 +214,19 @@ export default function JugadorDetailPage() {
                   <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
                     {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
                   </span>
-                  {player.managedByAdmin && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                      <ShieldCheck size={10} /> Cuenta gestionada
-                    </span>
-                  )}
+                  {player.managedByAdmin && (() => {
+                    const cfg = {
+                      pending_invite: { label: "Sin invitar",        cls: "bg-orange-500/10 text-orange-400 border-orange-500/30", Icon: AlertCircle },
+                      invited:        { label: "Invitado — pendiente", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30", Icon: Clock       },
+                      active:         { label: "Cuenta gestionada",    cls: "bg-blue-500/10 text-blue-400 border-blue-500/30",       Icon: ShieldCheck  },
+                    };
+                    const s = cfg[player.activationStatus ?? "active"];
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${s.cls}`}>
+                        <s.Icon size={10} /> {s.label}
+                      </span>
+                    );
+                  })()}
                   <div className={`flex items-center gap-1 ${trendColor}`}>
                     <TrendIcon size={14} />
                     <span className="text-xs font-medium capitalize">{player.trend}</span>
@@ -199,8 +237,15 @@ export default function JugadorDetailPage() {
                   {player.city && (
                     <span className="flex items-center gap-1.5"><MapPin size={13} className="text-[#D4AF37]" />{player.city}</span>
                   )}
-                  {player.email && (
+                  {player.email ? (
                     <span className="flex items-center gap-1.5"><Mail size={13} className="text-[#D4AF37]" />{player.email}</span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-400/10 border-amber-400/30 text-amber-400"
+                      title="Sin email: este jugador no puede activar su cuenta ni recibir notificaciones"
+                    >
+                      <AlertCircle size={10} /> Sin email
+                    </span>
                   )}
                   {player.phone && (
                     <span className="flex items-center gap-1.5"><Phone size={13} className="text-[#D4AF37]" />{player.phone}</span>
@@ -226,14 +271,14 @@ export default function JugadorDetailPage() {
                 >
                   <Edit2 size={13} /> Editar datos
                 </button>
-                {player.managedByAdmin && (
+                {player.managedByAdmin && player.activationStatus !== "active" && (
                   <button
                     onClick={() => resendMutation.mutate()}
                     disabled={resendMutation.isPending}
                     className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
                   >
                     {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    Reenviar invitación
+                    {player.activationStatus === "pending_invite" ? "Enviar invitación" : "Reenviar invitación"}
                   </button>
                 )}
                 <button
@@ -364,6 +409,64 @@ export default function JugadorDetailPage() {
             </div>
           )}
 
+          {/* Tournament registrations */}
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <Trophy size={15} className="text-[#D4AF37]" />
+              <h3 className="text-sm font-semibold text-foreground">Torneos</h3>
+              {playerRegs.length > 0 && (
+                <span className="ml-auto text-xs text-muted-foreground">{playerRegs.length} inscripción(es)</span>
+              )}
+            </div>
+            {playerRegs.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Sin inscripciones registradas</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/50">
+                      {["Torneo", "Fecha", "Categoría", "Estado", "Pago"].map((h) => (
+                        <th key={h} className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(playerRegs as PlayerRegistrationEntry[]).map((r) => {
+                      const STATUS_CFG: Record<string, { label: string; cls: string }> = {
+                        CONFIRMED: { label: "Confirmado", cls: "text-green-400 bg-green-400/10 border-green-400/30" },
+                        PENDING:   { label: "Pendiente",  cls: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+                        WAITLIST:  { label: "En espera",  cls: "text-blue-400 bg-blue-400/10 border-blue-400/30" },
+                        CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30" },
+                      };
+                      const scfg = STATUS_CFG[r.status] ?? STATUS_CFG.PENDING;
+                      return (
+                        <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                          <td className="px-5 py-3 text-xs text-foreground max-w-[180px] truncate">{r.tournament}</td>
+                          <td className="px-5 py-3 text-xs text-muted-foreground">
+                            {new Date(r.startDate).toLocaleDateString("es-ES")}
+                          </td>
+                          <td className="px-5 py-3 text-xs text-muted-foreground">
+                            {r.gender} {CATEGORY_LABEL[r.level] ?? r.level}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
+                              {scfg.label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`text-xs font-medium ${r.paid ? "text-green-400" : "text-yellow-400"}`}>
+                              {r.paid ? "Pagado" : "Pendiente"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Match history */}
           {player.matches && player.matches.length > 0 && (
             <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -416,6 +519,29 @@ export default function JugadorDetailPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Admin activity timeline */}
+          {playerAudit.length > 0 && (
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+                <Activity size={15} className="text-[#D4AF37]" />
+                <h3 className="text-sm font-semibold text-foreground">Actividad admin</h3>
+                <span className="ml-auto text-xs text-muted-foreground">{playerAudit.length} acciones</span>
+              </div>
+              <ul className="divide-y divide-border">
+                {(playerAudit as AuditLogEntry[]).map((entry) => (
+                  <li key={entry.id} className="flex gap-3 px-5 py-3">
+                    <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shrink-0 mt-1.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground">{entry.action.replace(/_/g, " ")}</p>
+                      <p className="text-[10px] text-muted-foreground">{entry.adminName} · {new Date(entry.createdAt).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{entry.resource}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -692,7 +818,7 @@ export default function JugadorDetailPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nueva categoría</label>
                 <CustomSelect
-                  value={catForm.watch("level") ?? ""}
+                  value={watchedLevel}
                   onChange={(v) => catForm.setValue("level", v, { shouldValidate: true })}
                   options={[
                     { value: "", label: "Seleccionar categoría..." },

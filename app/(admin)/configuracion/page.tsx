@@ -152,7 +152,8 @@ function TabGeneral() {
     queryFn:  () => adminService.config.getSection("general") as Promise<AppConfigGeneral>,
   });
   const [local, setLocal] = useState<AppConfigGeneral | null>(null);
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
 
   const cfg = local ?? data;
   const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
@@ -203,7 +204,7 @@ function TabGeneral() {
         <FieldRow label="Tipo">
           <select
             value={cfg.announcementBanner.type}
-            onChange={(e) => set("announcementBanner", { ...cfg.announcementBanner, type: e.target.value as any })}
+            onChange={(e) => set("announcementBanner", { ...cfg.announcementBanner, type: e.target.value as "info" | "warning" | "error" })}
             className="h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
           >
             <option value="info">Info</option>
@@ -249,7 +250,8 @@ function TabTemporada() {
     queryFn:  () => adminService.config.getSection("season") as Promise<AppConfigSeason>,
   });
   const [local, setLocal] = useState<AppConfigSeason | null>(null);
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
   const [showClose,   setShowClose]   = useState(false);
   const [showAdvance, setShowAdvance] = useState(false);
 
@@ -374,7 +376,8 @@ function TabCircuito() {
     queryFn:  () => adminService.config.getSection("circuit") as Promise<AppConfigCircuit>,
   });
   const [local, setLocal] = useState<AppConfigCircuit | null>(null);
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
 
   const cfg = local ?? data;
   const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
@@ -439,7 +442,8 @@ function TabComunicaciones() {
     queryFn:  () => adminService.config.getSection("email") as Promise<AppConfigEmail>,
   });
   const [local, setLocal] = useState<AppConfigEmail | null>(null);
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
 
   const cfg = local ?? data;
   const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
@@ -480,7 +484,7 @@ function TabComunicaciones() {
       <Section title="Tipos de email habilitados">
         {toggles.map(([key, label]) => (
           <FieldRow key={key} label={label}>
-            <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as any)} />
+            <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
           </FieldRow>
         ))}
       </Section>
@@ -497,7 +501,8 @@ function TabNotificaciones() {
     queryFn:  () => adminService.config.getSection("push") as Promise<AppConfigPush>,
   });
   const [local, setLocal] = useState<AppConfigPush | null>(null);
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
 
   const cfg = local ?? data;
   const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
@@ -529,7 +534,7 @@ function TabNotificaciones() {
       <Section title="Notificaciones push habilitadas" description="Los jugadores pueden desactivar individualmente en su app">
         {toggles.map(([key, label]) => (
           <FieldRow key={key} label={label}>
-            <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as any)} />
+            <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
           </FieldRow>
         ))}
       </Section>
@@ -546,7 +551,8 @@ function TabTorneos() {
     queryFn:  () => adminService.config.getSection("tournamentDefaults") as Promise<AppConfigTournamentDefaults>,
   });
   const [local, setLocal] = useState<AppConfigTournamentDefaults | null>(null);
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
 
   const cfg = local ?? data;
   const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
@@ -612,7 +618,8 @@ function TabSpa() {
   const [local, setLocal] = useState<SpaConfig | null>(null);
 
   const { data: config, isLoading } = useQuery({ queryKey: ["spa-config"], queryFn: adminService.spa.config });
-  useEffect(() => { if (config && !local) setLocal(structuredClone(config)); }, [config]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (config && !local) setLocal(structuredClone(config)); }, [config, local]);
 
   const cfg: SpaConfig | undefined = local ?? config;
   const isDirty = local && config && JSON.stringify(local) !== JSON.stringify(config);
@@ -897,7 +904,7 @@ function TabAdministradores() {
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Rol</label>
-                <select value={inviteForm.role} onChange={(e) => setInviteForm((p) => ({ ...p, role: e.target.value as any }))}
+                <select value={inviteForm.role} onChange={(e) => setInviteForm((p) => ({ ...p, role: e.target.value as "ADMIN" | "SUPERADMIN" }))}
                   className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 >
                   <option value="ADMIN">Admin</option>
@@ -950,6 +957,7 @@ function TabFaqs() {
 
   useEffect(() => {
     if (data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCats((data as AppConfigFaqs).categories ?? []);
       setDirty(false);
     }

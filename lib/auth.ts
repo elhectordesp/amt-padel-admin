@@ -19,9 +19,10 @@ export async function login(email: string, password: string): Promise<AdminUser>
   let res;
   try {
     res = await api.post("/auth/login", { email, password });
-  } catch (err: any) {
-    const status = err?.response?.status;
-    const serverMsg = err?.response?.data?.message;
+  } catch (err: unknown) {
+    const e = err as { response?: { status?: number; data?: { message?: string } } };
+    const status = e?.response?.status;
+    const serverMsg = e?.response?.data?.message;
     if (status === 401) throw new Error("Email o contraseña incorrectos.");
     if (status === 403) throw new Error("No tienes permisos para acceder.");
     throw new Error(serverMsg ?? "Error al conectar con el servidor. Inténtalo de nuevo.");

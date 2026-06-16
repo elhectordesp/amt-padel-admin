@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -36,7 +37,7 @@ describe('LoginForm', () => {
     vi.clearAllMocks();
     mockLogin.mockResolvedValue(undefined as any);
     mockUseRouter.mockReturnValue({ replace: mockReplace } as any);
-    mockUseSearchParams.mockReturnValue({ get: (_k: string) => null } as any);
+    mockUseSearchParams.mockReturnValue({ get: () => null } as any);
   });
 
   it('renderiza los campos de email y contraseña', () => {

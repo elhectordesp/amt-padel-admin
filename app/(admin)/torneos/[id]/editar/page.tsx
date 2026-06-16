@@ -140,6 +140,9 @@ export default function EditarTorneoPage() {
 
   if (!tournament) return null;
 
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const imageUrlValue = watch("imageUrl") ?? "";
+
   return (
     <div className="flex flex-col min-h-full">
       <Header title="Editar torneo" />
@@ -201,7 +204,7 @@ export default function EditarTorneoPage() {
               </Field>
               <Field label="Imagen del banner">
                 <TournamentImageUploader
-                  value={watch("imageUrl") ?? ""}
+                  value={imageUrlValue}
                   onChange={(url) => setValue("imageUrl", url, { shouldDirty: true })}
                 />
               </Field>

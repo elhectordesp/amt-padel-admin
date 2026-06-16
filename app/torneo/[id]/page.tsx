@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Trophy, Users, Calendar } from "lucide-react";
@@ -12,10 +13,6 @@ const CATEGORY_LABEL: Record<string, string> = {
 const TIER_COLOR: Record<string, string> = {
   PLATINUM: "#E5E4E2", GOLD: "#D4AF37", SILVER: "#C0C0C0", BRONZE: "#CD7F32",
 };
-const PHASE_LABEL: Record<string, string> = {
-  GROUPS: "Grupos", R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final",
-};
-
 async function getTournament(id: string) {
   const res = await fetch(`${API_URL}/tournaments/${id}/public`, { next: { revalidate: 60 } });
   if (!res.ok) return null;

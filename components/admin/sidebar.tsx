@@ -48,6 +48,7 @@ export function Sidebar() {
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
 
   // Cierra el drawer móvil al navegar
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   // Cierra el drawer móvil con ESC

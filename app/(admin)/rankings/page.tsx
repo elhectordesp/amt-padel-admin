@@ -82,12 +82,6 @@ export default function RankingsPage() {
   // Para el pódium usamos los top 3 de la vista actual
   const top3 = displayPlayers.slice(0, 3);
 
-  // Posición a mostrar como principal: categoryRank si hay filtro, globalRank si es global
-  const displayRank = (p: Player, idx: number) =>
-    catFilter !== "global"
-      ? (p.categoryRank ?? idx + 1)
-      : (p.globalRank ?? idx + 1);
-
   return (
     <div className="flex flex-col min-h-full">
       <Header title="Rankings" />
