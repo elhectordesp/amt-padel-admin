@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 import { ImageIcon, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminService } from "@/lib/services/admin";
@@ -52,10 +53,12 @@ export function TournamentImageUploader({ value, onChange }: Props) {
 
       {value ? (
         <div className="relative rounded-lg overflow-hidden border border-border aspect-[1200/630] bg-secondary">
-          <img
+          <Image
             src={value}
             alt="Banner del torneo"
-            className="w-full h-full object-cover"
+            fill
+            unoptimized
+            className="object-cover"
           />
           <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
             <button

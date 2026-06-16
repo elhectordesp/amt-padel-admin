@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 

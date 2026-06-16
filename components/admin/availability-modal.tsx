@@ -22,7 +22,12 @@ interface DayState {
   unavailableSlots: Set<string>;
 }
 
-function buildDayState(day: any): DayState {
+interface AvailabilityDay {
+  dayId: string; label: string; date: string;
+  allSlots: string[]; fullAvailability: boolean; unavailableSlots?: string[];
+}
+
+function buildDayState(day: AvailabilityDay): DayState {
   return {
     dayId:            day.dayId,
     label:            day.label,
@@ -44,7 +49,8 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
   });
 
   useEffect(() => {
-    if (data?.days) setDays(data.days.map(buildDayState));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (data?.days) setDays((data.days as AvailabilityDay[]).map(buildDayState));
   }, [data]);
 
   const saveMut = useMutation({
@@ -62,7 +68,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
       toast.success("Disponibilidad guardada");
       setEditing(false);
     },
-    onError: (err: any) => toast.error(err?.response?.data?.message ?? "Error al guardar"),
+    onError: (err: { response?: { data?: { message?: string } } }) => toast.error(err?.response?.data?.message ?? "Error al guardar"),
   });
 
   const toggleSlot = (dayIdx: number, slot: string) => {
@@ -70,7 +76,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
       prev.map((d, i) => {
         if (i !== dayIdx) return d;
         const next = new Set(d.unavailableSlots);
-        next.has(slot) ? next.delete(slot) : next.add(slot);
+        if (next.has(slot)) { next.delete(slot); } else { next.add(slot); }
         return { ...d, unavailableSlots: next };
       }),
     );
@@ -172,7 +178,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
             )
           ) : (
             /* ── Modo lectura ── */
-            data!.days.map((day: any) => {
+            (data!.days as AvailabilityDay[]).map((day) => {
               const unavailable   = new Set(day.unavailableSlots ?? []);
               const allUnavail    = !day.fullAvailability && day.allSlots.every((s: string) => unavailable.has(s));
               return (

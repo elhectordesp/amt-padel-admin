@@ -17,17 +17,18 @@ interface Props {
 }
 
 export default function PaymentModal({ registration, tournamentId, onClose }: Props) {
-  const [paid,          setPaid]          = useState(registration.paid);
-  const [method,        setMethod]        = useState<PaymentMethod | "">((registration as any).paymentMethod ?? "");
-  const [paidAt,        setPaidAt]        = useState<string>((registration as any).paidAt ? new Date((registration as any).paidAt).toISOString().slice(0, 10) : "");
-  const [note,          setNote]          = useState<string>((registration as any).paymentNote ?? "");
+  const [paid,   setPaid]   = useState(registration.paid);
+  const [method, setMethod] = useState<PaymentMethod | "">((registration.paymentMethod as PaymentMethod | undefined) ?? "");
+  const [paidAt, setPaidAt] = useState<string>(registration.paidAt ? new Date(registration.paidAt).toISOString().slice(0, 10) : "");
+  const [note,   setNote]   = useState<string>(registration.paymentNote ?? "");
   const qc = useQueryClient();
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPaid(registration.paid);
-    setMethod((registration as any).paymentMethod ?? "");
-    setPaidAt((registration as any).paidAt ? new Date((registration as any).paidAt).toISOString().slice(0, 10) : "");
-    setNote((registration as any).paymentNote ?? "");
+    setMethod((registration.paymentMethod as PaymentMethod | undefined) ?? "");
+    setPaidAt(registration.paidAt ? new Date(registration.paidAt).toISOString().slice(0, 10) : "");
+    setNote(registration.paymentNote ?? "");
   }, [registration]);
 
   const saveMut = useMutation({
@@ -43,7 +44,7 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
       toast.success("Pago actualizado");
       onClose();
     },
-    onError: (err: any) => {
+    onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err?.response?.data?.message ?? "Error al actualizar el pago");
     },
   });

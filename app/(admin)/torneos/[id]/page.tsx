@@ -954,7 +954,7 @@ function CourtBoard({
   const patchMut = useMutation({
     mutationFn: ({ matchId, court, force }: { matchId: string; court: string; force?: boolean }) =>
       adminService.schedule.patchMatch(matchId, { court, force }),
-    onSuccess: (res, _vars) => {
+    onSuccess: (res) => {
       const blocking = res.conflicts.filter(
         (c) => c.type === "COURT_OVERLAP" || c.type === "PLAYER_DOUBLE_BOOKED",
       );

@@ -39,6 +39,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
     }, 350);
   }, [categoryGender]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { search(query); }, [query, search]);
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
@@ -49,7 +50,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
       toast.success(`Pareja actualizada a ${selected!.name}`);
       onClose();
     },
-    onError: (err: any) => {
+    onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err?.response?.data?.message ?? "Error al cambiar la pareja");
     },
   });
