@@ -10,7 +10,7 @@ import {
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
-  Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck,
+  Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
+import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
@@ -1217,6 +1218,7 @@ export default function TorneoDetailPage() {
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
+  const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
@@ -1917,6 +1919,22 @@ export default function TorneoDetailPage() {
         {/* ── INSCRIPCIONES TAB ── */}
         {tab === "inscripciones" && (
           <div className="space-y-4">
+            {/* Section header */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {pairs.length} pareja{pairs.length !== 1 ? "s" : ""} inscrita{pairs.length !== 1 ? "s" : ""}
+              </p>
+              {(tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
+                <button
+                  onClick={() => setEnrollOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
+                >
+                  <UserPlus size={13} />
+                  Inscribir equipo
+                </button>
+              )}
+            </div>
+
             {/* Filters + search */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-1.5 bg-secondary rounded-lg p-1">
@@ -2978,6 +2996,17 @@ export default function TorneoDetailPage() {
 
     {availRegId && (
       <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+    )}
+
+    {enrollOpen && tournament && (
+      <EnrollTeamModal
+        tournament={tournament}
+        onEnrolled={(regId) => { setAvailRegId(regId); }}
+        onClose={() => {
+          setEnrollOpen(false);
+          qc.invalidateQueries({ queryKey: ["registrations", id] });
+        }}
+      />
     )}
 
     {resultMatch && (
