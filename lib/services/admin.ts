@@ -84,6 +84,8 @@ export const adminService = {
       api.post<AdminEnrollResult>(`/admin/tournaments/${tournamentId}/enrollments`, data).then((r) => r.data),
     replacePartner: (registrationId: string, newPartnerId: string) =>
       api.patch(`/admin/registrations/${registrationId}/partner`, { newPartnerId }).then((r) => r.data),
+    updatePayment: (registrationId: string, data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string }) =>
+      api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
   },
 
   categories: {

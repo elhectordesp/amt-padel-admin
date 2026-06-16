@@ -12,6 +12,7 @@ import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
+import PaymentModal from "@/components/admin/payment-modal";
 import { adminService } from "@/lib/services/admin";
 import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
 
@@ -92,6 +93,7 @@ export default function InscripcionesPage() {
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
   const [enrollOpen,       setEnrollOpen]       = useState(false);
   const [replaceReg,       setReplaceReg]       = useState<AdminRegistration | null>(null);
+  const [paymentReg,       setPaymentReg]       = useState<AdminRegistration | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -248,6 +250,14 @@ export default function InscripcionesPage() {
           registration={replaceReg}
           tournamentId={tournamentId}
           onClose={() => setReplaceReg(null)}
+        />
+      )}
+
+      {paymentReg && (
+        <PaymentModal
+          registration={paymentReg}
+          tournamentId={tournamentId}
+          onClose={() => setPaymentReg(null)}
         />
       )}
 
@@ -542,9 +552,13 @@ export default function InscripcionesPage() {
                                   </span>
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
+                                  <button
+                                    onClick={() => setPaymentReg(reg)}
+                                    title="Ver / editar pago"
+                                    className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
+                                  >
                                     {reg.paid ? "Pagado" : "Pendiente"}
-                                  </span>
+                                  </button>
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1">
