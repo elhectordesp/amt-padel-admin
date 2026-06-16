@@ -118,7 +118,7 @@ export default function InscripcionesPage() {
   const bulkStatus = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
-    onSuccess: (res: any, vars) => {
+    onSuccess: (res: { count?: number; updated?: number }, vars) => {
       qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
       const updated = res?.count ?? res?.updated ?? vars.ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
@@ -159,7 +159,7 @@ export default function InscripcionesPage() {
   const toggleSelect = (key: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) { next.delete(key); } else { next.add(key); }
       return next;
     });
 
