@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -154,6 +155,7 @@ export default function JugadorDetailPage() {
                     player.trend === "down" ? TrendingDown : Minus;
   const trendColor = player.trend === "up" ? "text-green-400" :
                      player.trend === "down" ? "text-destructive" : "text-muted-foreground";
+  const watchedLevel = catForm.watch("level") ?? "";
 
   return (
     <>
@@ -177,7 +179,7 @@ export default function JugadorDetailPage() {
               {/* Avatar */}
               <div className="relative shrink-0">
                 {player.photoUrl
-                  ? <img src={player.photoUrl} alt={player.name} className="w-20 h-20 rounded-full object-cover border-2 border-[#D4AF37]" />
+                  ? <Image src={player.photoUrl} alt={player.name} width={80} height={80} unoptimized className="rounded-full object-cover border-2 border-[#D4AF37]" />
                   : (
                     <div className="w-20 h-20 rounded-full bg-[rgba(212,175,55,0.1)] border-2 border-[#D4AF37] flex items-center justify-center">
                       <span className="font-heading text-2xl text-[#D4AF37]">{initials}</span>
@@ -815,7 +817,7 @@ export default function JugadorDetailPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nueva categoría</label>
                 <CustomSelect
-                  value={catForm.watch("level") ?? ""}
+                  value={watchedLevel}
                   onChange={(v) => catForm.setValue("level", v, { shouldValidate: true })}
                   options={[
                     { value: "", label: "Seleccionar categoría..." },

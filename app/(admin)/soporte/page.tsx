@@ -197,6 +197,7 @@ export default function Page() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (tab === "mensajes") loadMessages(filter);
   }, [tab, filter, loadMessages]);

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trophy, Search, CheckCircle, Clock, X, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Trophy, Search, CheckCircle, Clock, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";

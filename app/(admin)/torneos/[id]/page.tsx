@@ -30,7 +30,7 @@ import {
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, Gender, CategoryLevel, AuditLogEntry } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, Gender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ function CalendarTab({
   autoSchedule:     { mutate: (force?: boolean) => void; isPending: boolean };
   onMatchClick:     (m: MatchResult) => void;
   onCorrectClick:   (m: MatchResult) => void;
-  tournament:       any;
+  tournament:       Tournament | null | undefined;
   tournamentId:     string;
   scheduleWarnings: { pair: string; phase: string; category: string }[];
   onClearWarnings:  () => void;
@@ -228,7 +228,7 @@ function CalendarTab({
   const byCat = useMemo(() => {
     const map: Record<string, MatchResult[]> = {};
     for (const m of (Array.isArray(matches) ? matches : [])) {
-      const key = (m as any).categoryId ?? "unknown";
+      const key = m.categoryId ?? "unknown";
       (map[key] ??= []).push(m);
     }
     return map;
@@ -287,12 +287,12 @@ function CalendarTab({
 
   const startEdit = (m: MatchResult) => {
     setEditMatchId(m.id);
-    const d = (m as any).date ? new Date((m as any).date) : null;
+    const d = m.date ? new Date(m.date) : null;
     const pad = (n: number) => String(n).padStart(2, "0");
     setEditDate(d
       ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
       : "");
-    setEditCourt((m as any).court ?? "");
+    setEditCourt(m.court ?? "");
     setEditConflicts([]);
   };
 
@@ -303,7 +303,7 @@ function CalendarTab({
   };
 
   const catMap = Object.fromEntries(
-    (tournament?.categories ?? []).map((c: any) => [
+    (tournament?.categories ?? []).map((c) => [
       c.id,
       `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
     ]),
@@ -311,15 +311,15 @@ function CalendarTab({
 
   const exportCsv = () => {
     const rows = [...matches]
-      .filter((m) => !!(m as any).date)
-      .sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime())
+      .filter((m) => !!m.date)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((m) => {
-        const d = new Date((m as any).date);
+        const d = new Date(m.date);
         return {
           Fecha:      d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }),
           Hora:       d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
-          Pista:      (m as any).court ?? "—",
-          Categoría:  catMap[(m as any).categoryId ?? ""] ?? "—",
+          Pista:      m.court ?? "—",
+          Categoría:  catMap[m.categoryId ?? ""] ?? "—",
           Fase:       phaseLabel(m.phase),
           "Equipo 1": m.team1.join(" / "),
           "Equipo 2": m.team2.join(" / "),
@@ -375,7 +375,7 @@ function CalendarTab({
         <div className="flex items-center gap-2">
           <button
             onClick={exportCsv}
-            disabled={matches.filter((m) => !!(m as any).date).length === 0}
+            disabled={matches.filter((m) => !!m.date).length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Exportar horario como CSV"
           >
@@ -384,7 +384,7 @@ function CalendarTab({
           </button>
           <button
             onClick={printDoc}
-            disabled={matches.filter((m) => !!(m as any).date).length === 0}
+            disabled={matches.filter((m) => !!m.date).length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Imprimir horario o guardar como PDF"
           >
@@ -477,7 +477,7 @@ function CalendarTab({
         />
       ) : (
         // Per-category sections (lista)
-        tournament.categories.map((cat: any) => {
+        (tournament?.categories ?? []).map((cat) => {
           const catMatches = byCat[cat.id] ?? [];
           if (catMatches.length === 0) return null;
 
@@ -488,7 +488,7 @@ function CalendarTab({
           const isPublishing  = publishMut.isPending && publishCatId === cat.id;
 
           const byDate = catMatches.reduce<Record<string, MatchResult[]>>((acc, m) => {
-            const raw  = (m as any).date;
+            const raw  = m.date;
             const str  = raw ? (typeof raw === "string" ? raw : String(raw)) : null;
             const date = str ? (str.includes("T") ? str.split("T")[0] : str) : "sin-fecha";
             (acc[date] ??= []).push(m);
@@ -542,8 +542,8 @@ function CalendarTab({
                 const label    = date === "sin-fecha"
                   ? "Sin fecha asignada"
                   : new Date(date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
-                const pending  = dayMatches.filter((m) => !(m as any).isResult).length;
-                const finished = dayMatches.filter((m) =>  (m as any).isResult).length;
+                const pending  = dayMatches.filter((m) => !m.isResult).length;
+                const finished = dayMatches.filter((m) =>  m.isResult).length;
 
                 return (
                   <div key={date}>
@@ -557,8 +557,8 @@ function CalendarTab({
 
                     <div className="divide-y divide-border">
                       {dayMatches.map((m) => {
-                        const time      = (m as any).date
-                          ? new Date((m as any).date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+                        const time      = m.date
+                          ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
                           : "—";
                         const isEditing = editMatchId === m.id;
 
@@ -566,25 +566,25 @@ function CalendarTab({
                           <div key={m.id}>
                             {/* Match row */}
                             <div
-                              className={`flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors ${!(m as any).isResult && !isEditing ? "cursor-pointer" : ""}`}
-                              onClick={() => !(m as any).isResult && !isEditing && onMatchClick(m)}
+                              className={`flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
+                              onClick={() => !m.isResult && !isEditing && onMatchClick(m)}
                             >
                               <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
-                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{(m as any).court || "—"}</span>
+                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
                                 {phaseLabel(m.phase)}
                               </span>
                               <div className="flex-1 flex items-center gap-2 min-w-0">
-                                <span className="text-sm font-medium text-foreground truncate">{((m as any).team1 ?? []).join(" / ") || "Por definir"}</span>
+                                <span className="text-sm font-medium text-foreground truncate">{(m.team1 ?? []).join(" / ") || "Por definir"}</span>
                                 <span className="text-xs text-muted-foreground shrink-0">vs</span>
-                                <span className="text-sm font-medium text-foreground truncate">{((m as any).team2 ?? []).join(" / ") || "Por definir"}</span>
+                                <span className="text-sm font-medium text-foreground truncate">{(m.team2 ?? []).join(" / ") || "Por definir"}</span>
                               </div>
-                              {(m as any).isResult && (m as any).sets1 && (m as any).sets2 ? (
+                              {m.isResult && m.sets1 && m.sets2 ? (
                                 <div className="flex items-center gap-2 shrink-0">
                                   <div className="flex items-center gap-1.5">
                                     <CheckCircle size={13} className="text-green-400" />
                                     <span className="text-xs font-mono text-foreground">
-                                      {(m as any).sets1.map((s: number, i: number) => `${s}-${(m as any).sets2[i]}`).join(" / ")}
+                                      {m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")}
                                     </span>
                                   </div>
                                   <button

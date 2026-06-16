@@ -177,6 +177,7 @@ export default function InscripcionesPage() {
     setPage(0);
   };
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const pairs = useMemo(() => groupByPair(registrations), [registrations]);
 
   const availableCategories = useMemo(() => {

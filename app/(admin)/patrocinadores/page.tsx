@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useMemo, useEffect } from "react";
+import Image from "next/image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -60,8 +61,8 @@ function ImagePreview({ url, name }: { url?: string | null; name: string }) {
     );
   }
   return (
-    <div className="w-16 h-[22px] rounded bg-secondary border border-border overflow-hidden shrink-0">
-      <img src={url} alt={name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+    <div className="w-16 h-[22px] rounded bg-secondary border border-border overflow-hidden shrink-0 relative">
+      <Image src={url} alt={name} fill unoptimized className="object-cover" />
     </div>
   );
 }
@@ -121,8 +122,8 @@ function ImageUploader({
         />
       </div>
       {url && (
-        <div className="mt-2 rounded-md border border-border bg-secondary overflow-hidden" style={{ aspectRatio: "3/1", maxHeight: 120 }}>
-          <img src={url} alt="Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        <div className="mt-2 rounded-md border border-border bg-secondary overflow-hidden relative" style={{ aspectRatio: "3/1", maxHeight: 120 }}>
+          <Image src={url} alt="Preview" fill unoptimized className="object-cover" />
         </div>
       )}
       <p className="text-[10px] text-muted-foreground mt-1 opacity-70">
@@ -241,15 +242,16 @@ function CarouselPreview({
           {/* Banner slide */}
           <div className="mx-4 rounded-xl overflow-hidden relative" style={{ height: 86 }}>
             <div
-              className="w-full h-full"
+              className="w-full h-full relative"
               style={{ transition: "opacity 0.2s ease", opacity: fading ? 0 : 1 }}
             >
               {slide?.imageUrl ? (
-                <img
+                <Image
                   src={slide.imageUrl}
                   alt={slide.name}
-                  className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  fill
+                  unoptimized
+                  className="object-cover"
                 />
               ) : (
                 <div className="w-full h-full bg-[#141414] border border-[#1e1e1e] flex flex-col items-center justify-center gap-1">
@@ -365,7 +367,7 @@ function SponsorModal({
       };
       return isEditing
         ? adminService.sponsors.update(state.editing!.id, payload)
-        : adminService.sponsors.create(payload as any);
+        : adminService.sponsors.create(payload as Omit<Sponsor, "id" | "createdAt" | "tournament" | "clickCount">);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sponsors"] });

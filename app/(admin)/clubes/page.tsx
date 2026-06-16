@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
@@ -741,11 +742,13 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {club.logoUrl ? (
-            <img
+            <Image
               src={club.logoUrl}
               alt={club.name}
-              className="w-10 h-10 rounded-lg object-contain bg-secondary border border-border p-1 shrink-0"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              width={40}
+              height={40}
+              unoptimized
+              className="rounded-lg object-contain bg-secondary border border-border p-1 shrink-0"
             />
           ) : (
             <div className="w-10 h-10 rounded-lg bg-secondary border border-border flex items-center justify-center shrink-0">
