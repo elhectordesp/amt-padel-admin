@@ -9,14 +9,14 @@ import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
   TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
-  Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle,
+  Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle, Activity,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry } from "@/types";
+import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry } from "@/types";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "1a": "1ª", "2a": "2ª", "3a": "3ª",
@@ -67,6 +67,11 @@ export default function JugadorDetailPage() {
   const { data: playerRegs = [] } = useQuery({
     queryKey: ["player-registrations", id],
     queryFn:  () => adminService.players.registrations(id),
+  });
+
+  const { data: playerAudit = [] } = useQuery({
+    queryKey: ["player-audit", id],
+    queryFn:  () => adminService.players.auditLog(id),
   });
 
   const catForm  = useForm<ChangeCatForm>({ resolver: zodResolver(changeCatSchema) });
@@ -511,6 +516,29 @@ export default function JugadorDetailPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Admin activity timeline */}
+          {playerAudit.length > 0 && (
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+                <Activity size={15} className="text-[#D4AF37]" />
+                <h3 className="text-sm font-semibold text-foreground">Actividad admin</h3>
+                <span className="ml-auto text-xs text-muted-foreground">{playerAudit.length} acciones</span>
+              </div>
+              <ul className="divide-y divide-border">
+                {(playerAudit as AuditLogEntry[]).map((entry) => (
+                  <li key={entry.id} className="flex gap-3 px-5 py-3">
+                    <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shrink-0 mt-1.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground">{entry.action.replace(/_/g, " ")}</p>
+                      <p className="text-[10px] text-muted-foreground">{entry.adminName} · {new Date(entry.createdAt).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{entry.resource}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
