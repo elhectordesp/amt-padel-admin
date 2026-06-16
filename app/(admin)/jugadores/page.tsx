@@ -11,7 +11,7 @@ import {
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download, Loader2,
-  UserPlus, X, AlertTriangle,
+  UserPlus, X, AlertTriangle, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/utils/csv";
@@ -77,6 +77,16 @@ export default function JugadoresPage() {
   const [showCreate,   setShowCreate]   = useState(false);
   const [form,         setForm]         = useState<CreatePlayerPayload>(EMPTY_FORM);
 
+  const bulkInviteMut = useMutation({
+    mutationFn: () => adminService.players.bulkInvite(),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["admin-players"] });
+      qc.invalidateQueries({ queryKey: ["players-pending-count"] });
+      toast.success(`Invitaciones enviadas: ${res.sent} de ${res.total}`);
+    },
+    onError: (err: Error) => toast.error(err.message ?? "Error al enviar invitaciones"),
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: CreatePlayerPayload) => adminService.players.create(data),
     onSuccess: (res) => {
@@ -112,6 +122,13 @@ export default function JugadoresPage() {
     }),
     placeholderData: (prev) => prev,
   });
+
+  const { data: pendingResult } = useQuery({
+    queryKey: ["players-pending-count"],
+    queryFn:  () => adminService.players.list({ activationStatus: "unactivated", pageSize: 1 }),
+    staleTime: 60_000,
+  });
+  const pendingCount = pendingResult?.total ?? 0;
 
   const players    = result?.data     ?? [];
   const total      = result?.total    ?? 0;
@@ -307,6 +324,16 @@ export default function JugadoresPage() {
             <span className="text-xs text-muted-foreground">
               {total} jugadores
             </span>
+            {pendingCount > 0 && (
+              <button
+                onClick={() => bulkInviteMut.mutate()}
+                disabled={bulkInviteMut.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-blue-500/10 border border-blue-500/30 text-xs text-blue-400 font-medium hover:bg-blue-500/20 disabled:opacity-50 transition-colors"
+              >
+                {bulkInviteMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                Invitar pendientes ({pendingCount})
+              </button>
+            )}
             <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.25)] transition-colors"
