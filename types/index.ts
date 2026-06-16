@@ -35,11 +35,16 @@ export interface TournamentCategory {
 }
 
 export interface TournamentScheduleDay {
-  id:                 string;
-  label:              string;
-  slots:              string[];
-  maxUnavailableHours:number;
-  isFinal?:           boolean;
+  id:                      string;
+  label:                   string;
+  slots:                   string[];
+  maxUnavailableHours:     number;
+  isFinal?:                boolean;
+}
+
+export interface AvailabilityRestrictions {
+  maxUnavailableTotalHours: number;
+  days: { dayId: string; maxUnavailableHours: number }[];
 }
 
 export interface Club {
@@ -101,8 +106,9 @@ export interface Tournament {
   tier?:       TournamentTier;   // DB enum — usado por el admin
   spaTier?:    string;            // Clave SPA traducida — usado por la app móvil
   categories:  TournamentCategory[];
-  schedule?:   TournamentScheduleDay[];
-  hasShirts?:  boolean;
+  schedule?:                  TournamentScheduleDay[];
+  maxUnavailableTotalHours?:  number;
+  hasShirts?:                 boolean;
   useSeeding?: boolean;
   imageUrl?:   string;
   format?:     string;
@@ -398,6 +404,7 @@ export interface CreateTournamentPayload {
   useSeeding?: boolean;
   matchDuration?: number;
   maxMatchesPerPlayerPerDay?: number | null;
+  maxUnavailableTotalHours?:  number;
   categories:  {
     gender:          Gender;
     level:           CategoryLevel;
