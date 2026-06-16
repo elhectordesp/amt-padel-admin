@@ -44,7 +44,20 @@ function TrendIcon({ trend }: { trend: string }) {
   return <Minus size={12} className="text-zinc-600" />;
 }
 
-function RankingTable({ players }: { players: any[] }) {
+interface RankingPlayer {
+  id: string;
+  name: string;
+  level?: string;
+  categoryLevel?: string;
+  spaPoints?: number | string | null;
+  globalRank?: number;
+  partner?: string;
+  played?: number;
+  wins?: number;
+  trend?: string;
+}
+
+function RankingTable({ players }: { players: RankingPlayer[] }) {
   if (players.length === 0) {
     return <p className="text-center text-zinc-500 py-12 text-sm">Sin datos disponibles</p>;
   }
@@ -64,7 +77,7 @@ function RankingTable({ players }: { players: any[] }) {
         </thead>
         <tbody>
           {players.map((p, i) => {
-            const color = LEVEL_COLOR[p.level ?? p.categoryLevel] ?? "#D4AF37";
+            const color = LEVEL_COLOR[p.level ?? p.categoryLevel ?? ""] ?? "#D4AF37";
             const spa   = p.spaPoints != null ? Math.round(Number(p.spaPoints)) : null;
             const rank  = p.globalRank ?? i + 1;
             return (
@@ -93,7 +106,7 @@ function RankingTable({ players }: { players: any[] }) {
                     className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border"
                     style={{ color, borderColor: color + "66", backgroundColor: color + "22" }}
                   >
-                    {CATEGORY_LABEL[p.level ?? p.categoryLevel] ?? p.level}
+                    {CATEGORY_LABEL[p.level ?? p.categoryLevel ?? ""] ?? p.level}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center font-mono font-semibold text-[#D4AF37]">

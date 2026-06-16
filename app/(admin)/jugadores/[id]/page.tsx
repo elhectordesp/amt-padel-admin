@@ -155,6 +155,7 @@ export default function JugadorDetailPage() {
                     player.trend === "down" ? TrendingDown : Minus;
   const trendColor = player.trend === "up" ? "text-green-400" :
                      player.trend === "down" ? "text-destructive" : "text-muted-foreground";
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedLevel = catForm.watch("level") ?? "";
 
   return (

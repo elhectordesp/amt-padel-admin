@@ -140,6 +140,7 @@ export default function EditarTorneoPage() {
 
   if (!tournament) return null;
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const imageUrlValue = watch("imageUrl") ?? "";
 
   return (

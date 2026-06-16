@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import { Trophy, TrendingUp, TrendingDown, Minus, Star } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
@@ -41,7 +42,7 @@ export default async function PublicPlayerPage({ params }: { params: { id: strin
   const data = await getPlayer(params.id);
   if (!data) notFound();
 
-  const { player, tournaments, results } = data;
+  const { player, tournaments } = data;
   const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
   const spaLevel = player.spa?.spaLevel;
   const levelColor = spaLevel ? (LEVEL_COLOR[spaLevel] ?? "#D4AF37") : "#D4AF37";
@@ -63,7 +64,7 @@ export default async function PublicPlayerPage({ params }: { params: { id: strin
         {/* Perfil */}
         <div className="flex items-center gap-5">
           {player.photoUrl ? (
-            <img src={player.photoUrl} alt={player.name} className="w-20 h-20 rounded-full object-cover border-2 border-[#D4AF37]" />
+            <Image src={player.photoUrl} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full object-cover border-2 border-[#D4AF37]" />
           ) : (
             <div className="w-20 h-20 rounded-full bg-zinc-800 border-2 border-[#D4AF37] flex items-center justify-center">
               <span className="text-2xl font-bold text-[#D4AF37]">
@@ -127,7 +128,7 @@ export default async function PublicPlayerPage({ params }: { params: { id: strin
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">Torneos recientes</h2>
             <div className="space-y-2">
-              {tournaments.slice(0, 5).map((t: any, i: number) => (
+              {tournaments.slice(0, 5).map((t: { name: string; categoryDisplay: string; result: string }, i: number) => (
                 <div key={i} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3">
                   <div>
                     <p className="text-sm font-medium">{t.name}</p>

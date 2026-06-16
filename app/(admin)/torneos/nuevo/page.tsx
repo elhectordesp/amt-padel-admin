@@ -162,6 +162,7 @@ export default function NuevoTorneoPage() {
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
   const scheduleForm = useForm<ScheduleData>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver:      zodResolver(scheduleSchema) as any,
     defaultValues: scheduleData ?? { days: [] },
   });
@@ -358,6 +359,7 @@ export default function NuevoTorneoPage() {
                     type="date"
                   />
                   {(() => {
+                    // eslint-disable-next-line react-hooks/incompatible-library
                     const v = infoForm.watch("startDate");
                     return v && v < new Date().toISOString().slice(0, 10) ? (
                       <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">

@@ -955,9 +955,9 @@ function TabFaqs() {
   const [cats, setCats] = useState<FaqCategory[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCats((data as AppConfigFaqs).categories ?? []);
       setDirty(false);
     }

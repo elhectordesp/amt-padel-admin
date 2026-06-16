@@ -17,10 +17,6 @@ const STATUS_LABEL: Record<string, string> = {
   SCHEDULED: "PROGRAMADO", ONGOING: "EN CURSO", FINISHED: "FINALIZADO", CANCELLED: "CANCELADO",
 };
 
-const PHASE_ORDER: Record<string, number> = {
-  GROUPS: 0, R16: 1, QF: 2, SF: 3, FINAL: 4, CONSOLATION: 5,
-};
-
 // ── Types ─────────────────────────────────────────────────────────────────
 
 interface LiveMatch {
@@ -246,6 +242,7 @@ export default function LiveWidgetPage() {
   // Initial fetch + polling
   useEffect(() => {
     if (!id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
     const poll = setInterval(fetchData, POLL_INTERVAL_MS);
     return () => clearInterval(poll);
