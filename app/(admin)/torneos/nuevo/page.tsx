@@ -59,6 +59,7 @@ const DAY_TYPE_OPTIONS = [
 ] as const;
 
 const scheduleSchema = z.object({
+  maxUnavailableTotalHours: z.number().int().min(0).default(0),
   days: z.array(z.object({
     date:                z.string().min(1, "La fecha de la jornada es obligatoria"),
     type:                z.enum(["GRUPOS", "ELIMINATORIAS", "AMBOS"]).default("AMBOS"),
@@ -209,6 +210,7 @@ export default function NuevoTorneoPage() {
         prizeConsolation:c.hasConsolation ? (c.prizeConsolation || undefined) : undefined,
         hasConsolation:  c.hasConsolation  ?? false,
       })),
+      maxUnavailableTotalHours: scheduleData?.maxUnavailableTotalHours ?? 0,
       schedule: scheduleData?.days.map(d => ({
         date:                d.date,
         type:                d.type,
@@ -716,6 +718,21 @@ export default function NuevoTorneoPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Límite total de disponibilidad */}
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-xs text-muted-foreground shrink-0">Máx. franjas bloqueables en total:</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="0"
+                  value={scheduleForm.watch("maxUnavailableTotalHours") || ""}
+                  onChange={(e) => scheduleForm.setValue("maxUnavailableTotalHours", Number(e.target.value), { shouldDirty: true })}
+                  className="w-16 h-7 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                />
+                <span className="text-[10px] text-muted-foreground">(0 = sin límite · suma de todas las jornadas)</span>
               </div>
             </div>
           )}
