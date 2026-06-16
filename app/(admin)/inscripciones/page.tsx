@@ -510,7 +510,12 @@ export default function InscripcionesPage() {
                                   />
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
+                                    {reg.enrolledByAdmin && (
+                                      <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-400/10 text-purple-400 border border-purple-400/30 leading-none">Admin</span>
+                                    )}
+                                  </div>
                                   {reg.partner?.name
                                     ? <p className="text-xs text-muted-foreground">{reg.partner.name}</p>
                                     : <p className="text-xs text-muted-foreground italic">Sin pareja</p>

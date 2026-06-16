@@ -170,18 +170,22 @@ export interface AdminRegistrationUser {
 }
 
 export interface AdminRegistration {
-  id:           string;
-  tournamentId: string;
-  categoryId:   string;
-  userId:       string;
-  partnerId?:   string | null;
-  user:         AdminRegistrationUser;
-  partner?:     AdminRegistrationUser | null;
-  category:     { gender: string; level: string; price: number };
-  status:       RegistrationStatus;
-  paid:         boolean;
-  createdAt:    string;
-  availability?: { sat: string; sun: string };
+  id:             string;
+  tournamentId:   string;
+  categoryId:     string;
+  userId:         string;
+  partnerId?:     string | null;
+  user:           AdminRegistrationUser;
+  partner?:       AdminRegistrationUser | null;
+  category:       { gender: string; level: string; price: number };
+  status:         RegistrationStatus;
+  paid:           boolean;
+  paymentMethod?: string | null;
+  paidAt?:        string | null;
+  paymentNote?:   string | null;
+  enrolledByAdmin?: boolean;
+  createdAt:      string;
+  availability?:  { sat: string; sun: string };
 }
 
 export interface Player {
