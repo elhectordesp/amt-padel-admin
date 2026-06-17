@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -11,7 +11,9 @@ import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
   TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
   Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle, Activity,
+  Share2, MessageCircle, QrCode, Download,
 } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -54,6 +56,9 @@ export default function JugadorDetailPage() {
   const [showEdit,      setShowEdit]      = useState(false);
   const [showDelete,    setShowDelete]    = useState(false);
   const [editForm,      setEditForm]      = useState<UpdatePlayerPayload>({});
+  const [shareOpen,     setShareOpen]     = useState(false);
+  const [qrData,        setQrData]        = useState<{ url: string; name: string } | null>(null);
+  const shareRef = useRef<HTMLDivElement>(null);
 
   const { data: player, isLoading } = useQuery({
     queryKey: ["player", id],
@@ -103,6 +108,43 @@ export default function JugadorDetailPage() {
     onSuccess: () => toast.success("Invitación reenviada"),
     onError:   (err: Error) => toast.error(err.message ?? "Error al reenviar"),
   });
+
+  const inviteLinkMutation = useMutation({
+    mutationFn: (via: "whatsapp" | "qr") =>
+      adminService.players.getInviteLink(id).then((data) => ({ ...data, via })),
+    onSuccess: ({ url, name, via }) => {
+      setShareOpen(false);
+      if (via === "whatsapp") {
+        const text = encodeURIComponent(
+          `¡Hola ${name}! Te invitamos a unirte a la app AMT Pádel. Activa tu cuenta aquí: ${url}`,
+        );
+        window.open(`https://wa.me/?text=${text}`, "_blank");
+      } else {
+        setQrData({ url, name });
+      }
+    },
+    onError: (err: Error) => toast.error(err.message ?? "Error al generar el enlace"),
+  });
+
+  const closeShareOnOutsideClick = useCallback((e: MouseEvent) => {
+    if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+      setShareOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (shareOpen) document.addEventListener("mousedown", closeShareOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeShareOnOutsideClick);
+  }, [shareOpen, closeShareOnOutsideClick]);
+
+  function downloadQr() {
+    const canvas = document.getElementById("invite-qr") as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `invitacion-${qrData?.name ?? "jugador"}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
 
   function openEdit() {
     if (!player) return;
@@ -272,14 +314,44 @@ export default function JugadorDetailPage() {
                   <Edit2 size={13} /> Editar datos
                 </button>
                 {player.managedByAdmin && player.activationStatus !== "active" && (
-                  <button
-                    onClick={() => resendMutation.mutate()}
-                    disabled={resendMutation.isPending}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
-                  >
-                    {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    {player.activationStatus === "pending_invite" ? "Enviar invitación" : "Reenviar invitación"}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => resendMutation.mutate()}
+                      disabled={resendMutation.isPending}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
+                    >
+                      {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      {player.activationStatus === "pending_invite" ? "Enviar invitación" : "Reenviar invitación"}
+                    </button>
+
+                    {/* Share popover */}
+                    <div className="relative" ref={shareRef}>
+                      <button
+                        onClick={() => setShareOpen((o) => !o)}
+                        disabled={inviteLinkMutation.isPending}
+                        className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.5)] disabled:opacity-50 transition-colors w-full"
+                      >
+                        {inviteLinkMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}
+                        Compartir invitación
+                      </button>
+                      {shareOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-lg border border-border bg-card shadow-lg py-1 text-sm">
+                          <button
+                            onClick={() => inviteLinkMutation.mutate("whatsapp")}
+                            className="flex items-center gap-2.5 w-full px-3 py-2 text-muted-foreground hover:text-green-400 hover:bg-secondary transition-colors"
+                          >
+                            <MessageCircle size={14} /> WhatsApp
+                          </button>
+                          <button
+                            onClick={() => inviteLinkMutation.mutate("qr")}
+                            className="flex items-center gap-2.5 w-full px-3 py-2 text-muted-foreground hover:text-[#D4AF37] hover:bg-secondary transition-colors"
+                          >
+                            <QrCode size={14} /> Código QR
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
                 <button
                   onClick={() => setShowDelete(true)}
@@ -750,6 +822,42 @@ export default function JugadorDetailPage() {
                 Guardar cambios
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── QR Code Modal ── */}
+      {qrData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xs bg-card border border-border rounded-xl shadow-2xl p-6 space-y-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Código QR de activación</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{qrData.name}</p>
+              </div>
+              <button onClick={() => setQrData(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex justify-center p-4 bg-white rounded-lg">
+              <QRCodeCanvas
+                id="invite-qr"
+                value={qrData.url}
+                size={200}
+                level="M"
+                imageSettings={{ src: "/icon.png", height: 36, width: 36, excavate: true }}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+              El jugador escanea este código con la cámara del móvil para activar su cuenta.
+              Válido 7 días.
+            </p>
+            <button
+              onClick={downloadQr}
+              className="flex items-center justify-center gap-2 w-full py-2 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-sm text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
+            >
+              <Download size={14} /> Descargar PNG
+            </button>
           </div>
         </div>
       )}
