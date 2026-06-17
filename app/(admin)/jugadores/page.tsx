@@ -164,6 +164,12 @@ export default function JugadoresPage() {
             {row.original.partner && (
               <p className="text-xs text-muted-foreground">c/ {row.original.partner}</p>
             )}
+            {row.original.activationStatus === "pending_invite" && (
+              <p className="flex items-center gap-1 text-[10px] font-medium text-orange-400 mt-0.5">
+                <AlertTriangle size={10} />
+                Sin acceso a la app — añadir email
+              </p>
+            )}
           </div>
         </div>
       ),
