@@ -10,7 +10,7 @@ import { z } from "zod";
 import {
   ChevronLeft, MapPin, Mail, Phone, Trophy,
   TrendingUp, TrendingDown, Minus, X, Loader2, BarChart3, History, Zap,
-  Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle, Activity,
+  Edit2, Trash2, Send, ShieldCheck, Clock, AlertCircle, Activity, MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -102,6 +102,17 @@ export default function JugadorDetailPage() {
     mutationFn: () => adminService.players.resendInvite(id),
     onSuccess: () => toast.success("Invitación reenviada"),
     onError:   (err: Error) => toast.error(err.message ?? "Error al reenviar"),
+  });
+
+  const inviteLinkMutation = useMutation({
+    mutationFn: () => adminService.players.getInviteLink(id),
+    onSuccess: ({ url, name }) => {
+      const text = encodeURIComponent(
+        `¡Hola ${name}! Te invitamos a unirte a la app AMT Pádel. Activa tu cuenta aquí: ${url}`,
+      );
+      window.open(`https://wa.me/?text=${text}`, "_blank");
+    },
+    onError: (err: Error) => toast.error(err.message ?? "Error al generar el enlace"),
   });
 
   function openEdit() {
@@ -272,14 +283,24 @@ export default function JugadorDetailPage() {
                   <Edit2 size={13} /> Editar datos
                 </button>
                 {player.managedByAdmin && player.activationStatus !== "active" && (
-                  <button
-                    onClick={() => resendMutation.mutate()}
-                    disabled={resendMutation.isPending}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
-                  >
-                    {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    {player.activationStatus === "pending_invite" ? "Enviar invitación" : "Reenviar invitación"}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => resendMutation.mutate()}
+                      disabled={resendMutation.isPending}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 disabled:opacity-50 transition-colors"
+                    >
+                      {resendMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      {player.activationStatus === "pending_invite" ? "Enviar invitación" : "Reenviar invitación"}
+                    </button>
+                    <button
+                      onClick={() => inviteLinkMutation.mutate()}
+                      disabled={inviteLinkMutation.isPending}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-secondary border border-border text-sm text-muted-foreground hover:text-green-400 hover:border-green-400/50 disabled:opacity-50 transition-colors"
+                    >
+                      {inviteLinkMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />}
+                      Compartir por WhatsApp
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => setShowDelete(true)}

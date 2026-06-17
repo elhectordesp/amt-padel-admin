@@ -187,6 +187,7 @@ export const adminService = {
     update:       (id: string, data: UpdatePlayerPayload) => api.patch(`/admin/players/${id}/profile`, data).then((r) => r.data),
     delete:       (id: string)                            => api.delete(`/admin/players/${id}`).then((r) => r.data),
     resendInvite: (id: string)                            => api.post(`/admin/players/${id}/resend-invite`).then((r) => r.data),
+    getInviteLink: (id: string)                           => api.post<{ url: string; name: string }>(`/admin/players/${id}/invite-link`).then((r) => r.data),
     bulkInvite:   ()                                       => api.post<{ sent: number; skipped: number; total: number }>("/admin/players/bulk-invite").then((r) => r.data),
   },
 
