@@ -28,6 +28,20 @@ async function getPlayer(id: string) {
   }
 }
 
+async function loadInterFont(): Promise<ArrayBuffer | null> {
+  try {
+    const css = await fetch(
+      "https://fonts.googleapis.com/css2?family=Inter:wght@700&display=swap",
+      { headers: { "User-Agent": "Mozilla/4.0" } },
+    ).then((r) => r.text());
+    const url = css.match(/src: url\(([^)]+)\)/)?.[1];
+    if (!url) return null;
+    return fetch(url).then((r) => r.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
 async function toDataUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
@@ -43,9 +57,7 @@ async function toDataUrl(url: string): Promise<string | null> {
 export default async function Image({ params }: { params: { id: string } }) {
   const [data, fontData] = await Promise.all([
     getPlayer(params.id),
-    fetch("https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2")
-      .then((r) => r.arrayBuffer())
-      .catch(() => null),
+    loadInterFont(),
   ]);
 
   const player     = data?.player ?? null;

@@ -5,11 +5,20 @@ export const size        = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function Image() {
-  const fontData = await fetch(
-    "https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2",
-  )
-    .then((r) => r.arrayBuffer())
-    .catch(() => null);
+  async function loadInterFont(): Promise<ArrayBuffer | null> {
+    try {
+      const css = await fetch(
+        "https://fonts.googleapis.com/css2?family=Inter:wght@700&display=swap",
+        { headers: { "User-Agent": "Mozilla/4.0" } },
+      ).then((r) => r.text());
+      const url = css.match(/src: url\(([^)]+)\)/)?.[1];
+      if (!url) return null;
+      return fetch(url).then((r) => r.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+  const fontData = await loadInterFont();
 
   const fonts = fontData
     ? [{ name: "Inter", data: fontData, style: "normal" as const, weight: 400 as const }]
