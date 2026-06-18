@@ -1239,7 +1239,7 @@ export default function TorneoDetailPage() {
     data: tournament, isLoading, isError: isErrorTournament, refetch: refetchTournament,
   } = useQuery({
     queryKey: ["tournament", id],
-    queryFn:  () => adminService.tournaments.detail(id),
+    queryFn:  () => adminService.tournaments.adminDetail(id),
   });
 
   const {
