@@ -1701,7 +1701,7 @@ export default function TorneoDetailPage() {
             </div>
             <div className="text-center">
               <p className="text-2xl font-heading text-foreground">{totalSpots}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Plazas totales</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Plazas (parejas)</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-heading text-foreground">{tournament.categories.length}</p>
