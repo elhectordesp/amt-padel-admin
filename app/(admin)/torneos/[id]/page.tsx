@@ -2886,20 +2886,6 @@ export default function TorneoDetailPage() {
           </div>
         )}
 
-      </div>
-    </div>
-
-    {bracketPreview && (
-      <BracketEditor
-        groups={bracketPreview.groups}
-        totalMatches={bracketPreview.totalMatches}
-        isGroups={bracketPreview.isGroups}
-        saving={generateBracket.isPending}
-        onConfirm={(customGroups) => generateBracket.mutate(customGroups)}
-        onCancel={() => setBracketPreview(null)}
-      />
-    )}
-
         {/* ── ESTADO TAB ── */}
         {tab === "estado" && (
           <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
@@ -2982,6 +2968,20 @@ export default function TorneoDetailPage() {
             )}
           </div>
         )}
+
+      </div>
+    </div>
+
+    {bracketPreview && (
+      <BracketEditor
+        groups={bracketPreview.groups}
+        totalMatches={bracketPreview.totalMatches}
+        isGroups={bracketPreview.isGroups}
+        saving={generateBracket.isPending}
+        onConfirm={(customGroups) => generateBracket.mutate(customGroups)}
+        onCancel={() => setBracketPreview(null)}
+      />
+    )}
 
     <ConfirmModal
       open={showDeleteModal}
