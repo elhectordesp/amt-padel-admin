@@ -7,7 +7,7 @@ import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
   Star, Trash2, LayoutGrid, X, CalendarOff,
-  Navigation,
+  Navigation, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -24,11 +24,15 @@ const EMPTY_BLOCK = { startDate: "", endDate: "", startTime: "", endTime: "", re
 type BlockForm = typeof EMPTY_BLOCK;
 
 function CourtRow({
-  court, clubId, onEdited,
+  court, clubId, onEdited, canMoveUp, canMoveDown, onMoveUp, onMoveDown,
 }: {
   court: Court;
   clubId: string;
   onEdited: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const qc = useQueryClient();
   const [edit, setEdit]           = useState(false);
@@ -131,6 +135,22 @@ function CourtRow({
           {court.isIndoor && <p className="text-[10px] text-muted-foreground mt-0.5">Cubierta</p>}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+            title="Subir pista"
+          >
+            <ChevronUp size={12} />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+            title="Bajar pista"
+          >
+            <ChevronDown size={12} />
+          </button>
           <button
             onClick={() => { setShowBlocks((v) => !v); setShowAddBlock(false); }}
             className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
@@ -276,6 +296,19 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const move = useMutation({
+    mutationFn: async ({ courtId, direction }: { courtId: string; direction: "up" | "down" }) => {
+      const idx     = courts.findIndex((c) => c.id === courtId);
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (idx < 0 || swapIdx < 0 || swapIdx >= courts.length) return;
+      const reordered = [...courts];
+      [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+      await Promise.all(reordered.map((c, i) => adminService.courts.update(club.id, c.id, { order: i })));
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-courts", club.id] }),
+    onError:   (e: Error) => toast.error(e.message),
+  });
+
   const handleCreate = () => {
     if (!newForm.name.trim()) { toast.error("El nombre es obligatorio"); return; }
     create.mutate();
@@ -307,8 +340,17 @@ function CourtsPanel({ club, onClose }: { club: Club; onClose: () => void }) {
               <p className="text-sm text-muted-foreground">No hay pistas registradas.</p>
             </div>
           ) : (
-            courts.map((c) => (
-              <CourtRow key={c.id} court={c} clubId={club.id} onEdited={() => {}} />
+            courts.map((c, idx) => (
+              <CourtRow
+                key={c.id}
+                court={c}
+                clubId={club.id}
+                onEdited={() => {}}
+                canMoveUp={idx > 0}
+                canMoveDown={idx < courts.length - 1}
+                onMoveUp={() => move.mutate({ courtId: c.id, direction: "up" })}
+                onMoveDown={() => move.mutate({ courtId: c.id, direction: "down" })}
+              />
             ))
           )}
 
