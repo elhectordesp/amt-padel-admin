@@ -1955,21 +1955,23 @@ export default function TorneoDetailPage() {
                               className="mt-1 w-full h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                             />
                           </div>
-                          <div className="sm:col-span-2 flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              id={`hc-${cat.id}`}
-                              checked={prizesForm.hasConsolation}
-                              onChange={(e) => setPrizesForm((f) => ({ ...f, hasConsolation: e.target.checked }))}
-                              className="accent-[#D4AF37]"
-                            />
-                            <label htmlFor={`hc-${cat.id}`} className="text-xs text-muted-foreground">Hay partido de consolación</label>
+                          <div className="sm:col-span-2 space-y-2">
+                            <label htmlFor={`hc-${cat.id}`} className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                              <input
+                                type="checkbox"
+                                id={`hc-${cat.id}`}
+                                checked={prizesForm.hasConsolation}
+                                onChange={(e) => setPrizesForm((f) => ({ ...f, hasConsolation: e.target.checked }))}
+                                className="accent-[#D4AF37]"
+                              />
+                              Hay partido de consolación
+                            </label>
                             {prizesForm.hasConsolation && (
                               <input
                                 value={prizesForm.prizeConsolation}
                                 onChange={(e) => setPrizesForm((f) => ({ ...f, prizeConsolation: e.target.value }))}
                                 placeholder="🏅 Premio consolación"
-                                className="flex-1 h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                className="w-full h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                               />
                             )}
                           </div>
