@@ -1055,11 +1055,11 @@ function CourtBoard({
         <table className="min-w-full border-collapse text-xs">
           <thead>
             <tr className="bg-secondary/50 border-b border-border">
-              <th className="sticky left-0 z-10 bg-secondary/50 px-3 py-2.5 text-left font-semibold text-muted-foreground w-16 border-r border-border">
+              <th className="sticky left-0 z-10 bg-secondary/50 px-2 sm:px-3 py-2.5 text-left font-semibold text-muted-foreground w-12 sm:w-16 border-r border-border">
                 Hora
               </th>
               {courtNames.map((name) => (
-                <th key={name} className="px-3 py-2.5 text-center font-semibold text-muted-foreground min-w-[160px] border-l border-border">
+                <th key={name} className="px-2 sm:px-3 py-2.5 text-center font-semibold text-muted-foreground min-w-[120px] sm:min-w-[160px] border-l border-border">
                   {name}
                 </th>
               ))}
@@ -1068,7 +1068,7 @@ function CourtBoard({
           <tbody>
             {timeSlots.map((time) => (
               <tr key={time} className="border-t border-border">
-                <td className="sticky left-0 z-10 bg-card px-3 py-2 font-mono text-muted-foreground border-r border-border whitespace-nowrap">
+                <td className="sticky left-0 z-10 bg-card px-2 sm:px-3 py-2 font-mono text-muted-foreground border-r border-border whitespace-nowrap">
                   {time}
                 </td>
                 {courtNames.map((courtName) => {
@@ -1099,11 +1099,11 @@ function CourtBoard({
                             </span>
                           )}
                           {editingId === match.id && (
-                            <div className="mt-2 flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="mt-2 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
                               <select
                                 value={newCourt}
                                 onChange={(e) => setNewCourt(e.target.value)}
-                                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                className="w-full rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                               >
                                 <option value="">— Sin pista —</option>
                                 {courtNames.map((n) => (
@@ -1113,9 +1113,9 @@ function CourtBoard({
                               <button
                                 disabled={patchMut.isPending}
                                 onClick={() => patchMut.mutate({ matchId: match.id, court: newCourt })}
-                                className="px-2 py-1 rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold disabled:opacity-50"
+                                className="flex items-center justify-center gap-1 px-2 py-1 rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold disabled:opacity-50"
                               >
-                                {patchMut.isPending ? "…" : <Save size={11} />}
+                                {patchMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <><Save size={11} /> Guardar</>}
                               </button>
                             </div>
                           )}
