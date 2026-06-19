@@ -658,11 +658,20 @@ function TabTorneos() {
 // ── Tab: SPA ─────────────────────────────────────────────────────────────────
 
 function TabSpa() {
-  const router = useRouter();
   const qc = useQueryClient();
   const [showRecalcModal, setShowRecalcModal]  = useState(false);
   const [recalcStartedAt, setRecalcStartedAt]  = useState<number | null>(null);
+  const [recalcElapsed,   setRecalcElapsed]    = useState(0);
   const [local, setLocal] = useState<SpaConfig | null>(null);
+
+  // Re-render elapsed seconds reactively without calling Date.now() during render.
+  useEffect(() => {
+    if (recalcStartedAt == null) return;
+    const tick = () => setRecalcElapsed(Math.round((Date.now() - recalcStartedAt) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [recalcStartedAt]);
 
   const { data: config, isLoading } = useQuery({ queryKey: ["spa-config"], queryFn: adminService.spa.config });
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -784,7 +793,7 @@ function TabSpa() {
           <div className="flex-1 text-xs text-yellow-400">
             <p className="font-semibold">Recalculación SPA en marcha</p>
             <p className="text-yellow-400/80 mt-0.5">
-              Iniciada hace {Math.round((Date.now() - recalcStartedAt) / 1000)}s. Puede tardar varios minutos. Puedes cerrar esta página, el cálculo continúa en el servidor.
+              Iniciada hace {recalcElapsed}s. Puede tardar varios minutos. Puedes cerrar esta página, el cálculo continúa en el servidor.
             </p>
           </div>
           <button
