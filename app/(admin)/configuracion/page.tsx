@@ -661,6 +661,7 @@ function TabSpa() {
   const router = useRouter();
   const qc = useQueryClient();
   const [showRecalcModal, setShowRecalcModal]  = useState(false);
+  const [recalcStartedAt, setRecalcStartedAt]  = useState<number | null>(null);
   const [local, setLocal] = useState<SpaConfig | null>(null);
 
   const { data: config, isLoading } = useQuery({ queryKey: ["spa-config"], queryFn: adminService.spa.config });
@@ -677,7 +678,11 @@ function TabSpa() {
   });
   const recalculate = useMutation({
     mutationFn: adminService.spa.recalculate,
-    onSuccess: () => { toast.success("Recalculación iniciada — puede tardar varios minutos"); setShowRecalcModal(false); },
+    onSuccess: () => {
+      toast.success("Recalculación iniciada — puede tardar varios minutos");
+      setShowRecalcModal(false);
+      setRecalcStartedAt(Date.now());
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -763,12 +768,33 @@ function TabSpa() {
         </div>
         <button
           onClick={() => setShowRecalcModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-destructive/40 text-sm text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+          disabled={recalculate.isPending || recalcStartedAt !== null}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-destructive/40 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
-          <RefreshCw size={14} />
-          Recalcular todo
+          {recalculate.isPending
+            ? <Loader2 size={14} className="animate-spin" />
+            : <RefreshCw size={14} />}
+          {recalcStartedAt ? "Recalculando…" : "Recalcular todo"}
         </button>
       </div>
+
+      {recalcStartedAt && (
+        <div className="flex items-start gap-3 p-3 rounded-md bg-yellow-400/10 border border-yellow-400/30">
+          <Loader2 size={14} className="text-yellow-400 shrink-0 mt-0.5 animate-spin" />
+          <div className="flex-1 text-xs text-yellow-400">
+            <p className="font-semibold">Recalculación SPA en marcha</p>
+            <p className="text-yellow-400/80 mt-0.5">
+              Iniciada hace {Math.round((Date.now() - recalcStartedAt) / 1000)}s. Puede tardar varios minutos. Puedes cerrar esta página, el cálculo continúa en el servidor.
+            </p>
+          </div>
+          <button
+            onClick={() => setRecalcStartedAt(null)}
+            className="text-xs text-yellow-400/70 hover:text-yellow-400 underline shrink-0"
+          >
+            Ocultar
+          </button>
+        </div>
+      )}
 
       <ConfirmModal
         open={showRecalcModal}

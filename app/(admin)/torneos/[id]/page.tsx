@@ -1121,7 +1121,7 @@ function CourtBoard({
                           )}
                         </div>
                       ) : (
-                        <div className="h-8 rounded-md border border-dashed border-border/40" />
+                        <div className="h-8 flex items-center justify-center text-[10px] text-muted-foreground/40">—</div>
                       )}
                     </td>
                   );
@@ -1868,14 +1868,13 @@ export default function TorneoDetailPage() {
 
             <div className="bg-card border border-border rounded-lg p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Fase actual por categoría</h3>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {tournament.categories.map((cat) => (
-                  <div key={cat.id} className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-24 shrink-0">
+                  <div key={cat.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-secondary/40">
+                    <span className="text-xs text-muted-foreground truncate">
                       {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
                     </span>
-                    <div className="flex-1 h-1 bg-secondary rounded-full" />
-                    <span className="text-xs text-[#D4AF37] w-32 text-right shrink-0">
+                    <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[rgba(212,175,55,0.3)] bg-[rgba(212,175,55,0.08)] text-[#D4AF37]">
                       {cat.currentPhaseLabel ?? cat.currentPhase}
                     </span>
                   </div>
