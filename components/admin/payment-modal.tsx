@@ -52,27 +52,28 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
   const playerName = registration.user.name;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-card border border-border rounded-xl shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Estado de pago</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{playerName}</p>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="min-w-0">
+            <h2 className="font-heading text-lg text-foreground">Estado de pago</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{playerName}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
+            <X size={15} />
           </button>
         </div>
 
         <div className="p-5 flex flex-col gap-4">
           {/* Paid toggle */}
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700">Pagado</label>
+            <label className="text-sm font-medium text-foreground">Pagado</label>
             <button
               onClick={() => setPaid((v) => !v)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                paid ? "bg-green-500" : "bg-gray-200"
+                paid ? "bg-green-500" : "bg-secondary border border-border"
               }`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
@@ -85,16 +86,16 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
             <>
               {/* Payment method */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Método de pago</label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Método de pago</label>
                 <div className="grid grid-cols-2 gap-2">
                   {PAYMENT_METHODS.map((m) => (
                     <button
                       key={m}
                       onClick={() => setMethod(m === method ? "" : m)}
-                      className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
+                      className={`px-3 py-2 rounded-md text-sm border transition-colors ${
                         method === m
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-blue-300"
+                          ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border-[rgba(212,175,55,0.4)]"
+                          : "bg-secondary text-muted-foreground border-border hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
                       }`}
                     >
                       {m}
@@ -105,24 +106,24 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
 
               {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Fecha de pago</label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Fecha de pago</label>
                 <input
                   type="date"
                   value={paidAt}
                   onChange={(e) => setPaidAt(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
               </div>
 
               {/* Note */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nota</label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Nota</label>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
                   placeholder="Observaciones opcionales…"
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
               </div>
             </>
@@ -130,22 +131,22 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-5 pt-0">
+        <div className="flex gap-3 px-5 pb-5">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {saveMut.isPending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Guardando…</>
+              <><Loader2 size={14} className="animate-spin" /> Guardando…</>
             ) : (
-              <><CreditCard className="w-4 h-4" /> Guardar</>
+              <><CreditCard size={14} /> Guardar</>
             )}
           </button>
         </div>

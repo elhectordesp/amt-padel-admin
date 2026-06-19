@@ -58,52 +58,53 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const currentPartnerName = registration.partner?.name ?? "Sin pareja";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Cambiar pareja</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {registration.user.name} · Pareja actual: <span className="font-medium">{currentPartnerName}</span>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="min-w-0">
+            <h2 className="font-heading text-lg text-foreground">Cambiar pareja</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              {registration.user.name} · Pareja actual: <span className="font-medium text-foreground">{currentPartnerName}</span>
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
+            <X size={15} />
           </button>
         </div>
 
         <div className="p-5 flex flex-col gap-4">
           {/* Warning */}
           {registration.partner && (
-            <div className="flex gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex gap-2 p-3 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-xs text-yellow-400">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
               <span>La inscripción de <strong>{currentPartnerName}</strong> quedará cancelada.</span>
             </div>
           )}
 
           {/* Search */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Buscar nuevo compañero</label>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Buscar nuevo compañero</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 placeholder="Nombre o email…"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setSelected(null); }}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 autoFocus
               />
               {searching && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
               )}
             </div>
           </div>
 
           {/* Results */}
           {results.length > 0 && !selected && (
-            <ul className="border border-gray-200 rounded-xl divide-y divide-gray-100 max-h-48 overflow-y-auto">
+            <ul className="border border-border rounded-md divide-y divide-border max-h-48 overflow-y-auto bg-secondary/40">
               {results.map((p) => {
                 const isCurrentPlayer  = p.id === registration.userId;
                 const isCurrentPartner = p.id === registration.partnerId;
@@ -113,15 +114,15 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
                     <button
                       onClick={() => { if (!disabled) { setSelected(p); setQuery(p.name); setResults([]); } }}
                       disabled={disabled}
-                      className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between transition-colors ${
-                        disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-blue-50"
+                      className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 transition-colors ${
+                        disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-[rgba(212,175,55,0.08)]"
                       }`}
                     >
-                      <span>
-                        <span className="font-medium text-gray-900">{p.name}</span>
-                        {p.email && <span className="text-gray-400 ml-2">{p.email}</span>}
+                      <span className="min-w-0 truncate">
+                        <span className="font-medium text-foreground">{p.name}</span>
+                        {p.email && <span className="text-muted-foreground ml-2 text-xs">{p.email}</span>}
                       </span>
-                      <span className="text-xs text-gray-500 shrink-0 ml-2">
+                      <span className="text-[10px] text-muted-foreground shrink-0">
                         {p.level} · {p.gender === "M" ? "Masc" : "Fem"}
                         {isCurrentPartner && " · (pareja actual)"}
                         {isCurrentPlayer  && " · (jugador)"}
@@ -135,15 +136,15 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
 
           {/* Selected confirmation */}
           {selected && (
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 border border-blue-200">
-              <UserCheck className="w-5 h-5 text-blue-600 shrink-0" />
+            <div className="flex items-center gap-3 p-3 rounded-md bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)]">
+              <UserCheck size={16} className="text-[#D4AF37] shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-blue-900">{selected.name}</p>
-                <p className="text-xs text-blue-600">{selected.level} · {selected.gender === "M" ? "Masculino" : "Femenino"}</p>
+                <p className="text-sm font-medium text-foreground truncate">{selected.name}</p>
+                <p className="text-xs text-muted-foreground">{selected.level} · {selected.gender === "M" ? "Masculino" : "Femenino"}</p>
               </div>
               <button
                 onClick={() => { setSelected(null); setQuery(""); }}
-                className="text-xs text-blue-500 hover:text-blue-700 underline shrink-0"
+                className="text-xs text-[#D4AF37] hover:underline shrink-0"
               >
                 Cambiar
               </button>
@@ -152,20 +153,20 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-5 pt-0">
+        <div className="flex gap-3 px-5 pb-5">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={() => replaceMut.mutate()}
             disabled={!selected || replaceMut.isPending}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {replaceMut.isPending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Guardando…</>
+              <><Loader2 size={14} className="animate-spin" /> Guardando…</>
             ) : (
               "Confirmar cambio"
             )}
