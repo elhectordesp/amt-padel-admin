@@ -438,15 +438,15 @@ export default function InscripcionesPage() {
               </div>
             )}
 
-            {/* Table */}
+            {/* Table / Cards */}
             {(() => {
               const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
               const pageKeys  = pageItems.map((p) => p.pairKey);
               const allPageSelected = pageKeys.length > 0 && pageKeys.every((k) => selected.has(k));
 
-              return (
-                <div className="bg-card border border-border rounded-lg overflow-hidden">
-                  {isLoading ? (
+              if (isLoading) {
+                return (
+                  <div className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="space-y-0">
                       {[...Array(6)].map((_, i) => (
                         <div key={i} className="flex gap-4 px-5 py-4 border-b border-border">
@@ -456,11 +456,163 @@ export default function InscripcionesPage() {
                         </div>
                       ))}
                     </div>
-                  ) : filtered.length === 0 ? (
-                    <div className="py-12 text-center text-sm text-muted-foreground">
-                      No hay inscripciones para estos filtros
-                    </div>
-                  ) : (
+                  </div>
+                );
+              }
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="bg-card border border-border rounded-lg py-12 text-center text-sm text-muted-foreground">
+                    No hay inscripciones para estos filtros
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  {/* Mobile: cards */}
+                  <div className="sm:hidden space-y-2">
+                    {/* Select-all toggle */}
+                    <label className="flex items-center gap-2 px-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={() => toggleAll(pageKeys)}
+                        className="rounded border-border accent-[#D4AF37]"
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        {allPageSelected ? "Deseleccionar página" : "Seleccionar página"}
+                      </span>
+                    </label>
+                    {pageItems.map((pair) => {
+                      const reg        = pair.primary;
+                      const scfg       = STATUS_CFG[pair.status];
+                      const isSelected = selected.has(pair.pairKey);
+                      const isUpdating = pair.ids.some((id) => updatingIds.has(id));
+                      const noAvail    = tournamentHasSchedule && !reg.availability;
+                      return (
+                        <div
+                          key={pair.pairKey}
+                          className={`rounded-lg border p-3 transition-colors ${
+                            isSelected
+                              ? "bg-[rgba(212,175,55,0.06)] border-[rgba(212,175,55,0.3)]"
+                              : "bg-card border-border"
+                          }`}
+                        >
+                          {/* Top row: checkbox + names + status */}
+                          <div className="flex items-start gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(pair.pairKey)}
+                              className="mt-1 rounded border-border accent-[#D4AF37] cursor-pointer"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-sm font-medium text-foreground truncate">{reg.user.name}</p>
+                                {reg.enrolledByAdmin && (
+                                  <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-400/10 text-purple-400 border border-purple-400/30 leading-none">Admin</span>
+                                )}
+                              </div>
+                              {reg.partner?.name
+                                ? <p className="text-xs text-muted-foreground truncate">{reg.partner.name}</p>
+                                : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
+                              }
+                            </div>
+                            <span className={`inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
+                              {scfg.label}
+                            </span>
+                          </div>
+
+                          {/* Metadata row */}
+                          <div className="flex items-center gap-2 mt-2 text-[11px] text-muted-foreground flex-wrap">
+                            <span className="font-medium text-foreground">
+                              {reg.category.gender === "M" ? "Masc." : "Fem."} {reg.category.level}
+                            </span>
+                            <span>·</span>
+                            <span>
+                              {CATEGORY_LABEL[reg.user.categoryLevel as CategoryLevel] ?? reg.user.categoryLevel ?? "—"}
+                              {reg.user.spaPoints != null && ` (${Math.round(Number(reg.user.spaPoints))} SPA)`}
+                            </span>
+                            <span className="ml-auto">{new Date(reg.createdAt).toLocaleDateString("es-ES")}</span>
+                          </div>
+
+                          {/* Payment + actions row */}
+                          <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60">
+                            <button
+                              onClick={() => setPaymentReg(reg)}
+                              className={`text-xs font-medium underline decoration-dotted underline-offset-2 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
+                            >
+                              {reg.paid ? "Pagado" : "Pendiente"}
+                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
+                                title={noAvail ? "Sin disponibilidad" : "Disponibilidad"}
+                                className={`relative p-2 rounded-md ${
+                                  noAvail
+                                    ? "text-orange-400 hover:bg-orange-400/10"
+                                    : "text-muted-foreground hover:bg-[rgba(212,175,55,0.1)] hover:text-[#D4AF37]"
+                                }`}
+                              >
+                                <CalendarDays size={14} />
+                                {noAvail && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-400" />}
+                              </button>
+                              {pair.status !== "CONFIRMED" && (
+                                <button
+                                  onClick={() => handlePairStatus(pair, "CONFIRMED")}
+                                  disabled={isUpdating}
+                                  title="Confirmar"
+                                  className="p-2 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 disabled:opacity-40"
+                                >
+                                  <Check size={14} />
+                                </button>
+                              )}
+                              {pair.status !== "WAITLIST" && (
+                                <button
+                                  onClick={() => handlePairStatus(pair, "WAITLIST")}
+                                  disabled={isUpdating}
+                                  title="Mover a espera"
+                                  className="p-2 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 disabled:opacity-40"
+                                >
+                                  <Clock size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setMovePair(pair)}
+                                disabled={isUpdating}
+                                title="Cambiar categoría"
+                                className="p-2 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40"
+                              >
+                                <ArrowLeftRight size={14} />
+                              </button>
+                              {reg.partnerId && (
+                                <button
+                                  onClick={() => setReplaceReg(reg)}
+                                  disabled={isUpdating}
+                                  title="Cambiar pareja"
+                                  className="p-2 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40"
+                                >
+                                  <Users size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                disabled={isUpdating}
+                                title="Cancelar"
+                                className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop: table */}
+                  <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
                     <>
                       <div className="overflow-x-auto">
                       <table className="w-full">
@@ -631,33 +783,34 @@ export default function InscripcionesPage() {
                         </tbody>
                       </table>
                       </div>
-
-                      {filtered.length > PAGE_SIZE && (
-                        <div className="flex items-center justify-between px-5 py-3 border-t border-border">
-                          <span className="text-xs text-muted-foreground">
-                            Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => setPage((p) => p - 1)}
-                              disabled={page === 0}
-                              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                            >
-                              <ChevronLeft size={15} />
-                            </button>
-                            <button
-                              onClick={() => setPage((p) => p + 1)}
-                              disabled={(page + 1) * PAGE_SIZE >= filtered.length}
-                              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                            >
-                              <ChevronRight size={15} />
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </>
+                  </div>
+
+                  {/* Shared pagination */}
+                  {filtered.length > PAGE_SIZE && (
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-card border border-border">
+                      <span className="text-xs text-muted-foreground">
+                        Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setPage((p) => p - 1)}
+                          disabled={page === 0}
+                          className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <ChevronLeft size={15} />
+                        </button>
+                        <button
+                          onClick={() => setPage((p) => p + 1)}
+                          disabled={(page + 1) * PAGE_SIZE >= filtered.length}
+                          className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <ChevronRight size={15} />
+                        </button>
+                      </div>
+                    </div>
                   )}
-                </div>
+                </>
               );
             })()}
           </>

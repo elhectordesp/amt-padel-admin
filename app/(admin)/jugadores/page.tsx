@@ -369,8 +369,97 @@ export default function JugadoresPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {/* Mobile: skeleton */}
+        {isLoading && (
+          <div className="sm:hidden space-y-2">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 bg-card border border-border rounded-lg p-3">
+                <div className="w-9 h-9 rounded-full bg-secondary animate-pulse" />
+                <div className="h-4 flex-1 rounded bg-secondary animate-pulse" />
+                <div className="h-4 w-12 rounded bg-secondary animate-pulse" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile: cards */}
+        {!isLoading && (
+          <div className="sm:hidden space-y-2">
+            {isError ? (
+              <div className="bg-card border border-border rounded-lg py-12 flex flex-col items-center gap-2 text-sm text-destructive">
+                <AlertTriangle size={18} />
+                <span>Error al cargar los jugadores</span>
+                <button onClick={() => refetch()} className="text-xs text-muted-foreground underline hover:text-foreground transition-colors">
+                  Reintentar
+                </button>
+              </div>
+            ) : table.getRowModel().rows.length === 0 ? (
+              <div className="bg-card border border-border rounded-lg py-12 text-center text-sm text-muted-foreground">
+                No se encontraron jugadores
+              </div>
+            ) : (
+              table.getRowModel().rows.map((row, idx) => {
+                const p = row.original;
+                const spaColor = p.spa ? LEVEL_COLOR[p.spa.spaLevel] : null;
+                const winRate  = p.played > 0 ? Math.round((p.wins / p.played) * 100) : 0;
+                return (
+                  <Link
+                    key={row.id}
+                    href={`/jugadores/${p.id}`}
+                    className="block bg-card border border-border rounded-lg p-3 hover:border-[rgba(212,175,55,0.3)] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-muted-foreground shrink-0 w-7 text-center">
+                        #{(page - 1) * PAGE_SIZE + idx + 1}
+                      </span>
+                      <div className="w-9 h-9 rounded-full bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.2)] flex items-center justify-center shrink-0">
+                        <span className="text-[11px] font-bold text-[#D4AF37]">
+                          {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{p.gender === "M" ? "Masc." : "Fem."}</p>
+                      </div>
+                      <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
+                        {CATEGORY_LABEL[p.level]}
+                      </span>
+                    </div>
+                    {p.activationStatus === "pending_invite" && (
+                      <p className="flex items-center gap-1 text-[10px] font-medium text-orange-400 mt-1.5">
+                        <AlertTriangle size={10} /> Sin acceso a la app — añadir email
+                      </p>
+                    )}
+                    {p.partner && (
+                      <p className="text-[11px] text-muted-foreground mt-1.5 truncate">c/ {p.partner}</p>
+                    )}
+                    <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-foreground tabular-nums">{(p.points ?? 0).toLocaleString()}</span>
+                        <span className="text-muted-foreground">pts</span>
+                        {TREND_ICON[p.trend]}
+                      </div>
+                      {p.spa && spaColor && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border"
+                          style={{ color: spaColor, backgroundColor: spaColor + "22", borderColor: spaColor + "55" }}
+                        >
+                          SPA {p.spa.spaPoints.toFixed(0)}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground tabular-nums">
+                        {p.played}J · {winRate}%
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Desktop: table */}
+        <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
           {isLoading ? (
             <div className="space-y-0">
               {[...Array(8)].map((_, i) => (
@@ -430,33 +519,34 @@ export default function JugadoresPage() {
                   </tbody>
                 </table>
               </div>
-
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-5 py-3 border-t border-border">
-                  <span className="text-xs text-muted-foreground">
-                    Página {page} de {totalPages} · {total} jugadores
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page <= 1 || isFetching}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronLeft size={15} />
-                    </button>
-                    <button
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={page >= totalPages || isFetching}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
+
+        {/* Shared pagination */}
+        {!isLoading && totalPages > 1 && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-card border border-border">
+            <span className="text-xs text-muted-foreground">
+              Página {page} de {totalPages} · {total} jugadores
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || isFetching}
+                className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || isFetching}
+                className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Create player modal */}

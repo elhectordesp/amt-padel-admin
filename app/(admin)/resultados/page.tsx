@@ -153,8 +153,8 @@ export default function ResultadosPage() {
           {/* Matches table */}
           {tournamentId && (
             <div className="space-y-3">
-              <div className="bg-card border border-border rounded-lg overflow-hidden">
-                {isLoading ? (
+              {isLoading ? (
+                <div className="bg-card border border-border rounded-lg overflow-hidden">
                   <div className="space-y-0">
                     {[...Array(6)].map((_, i) => (
                       <div key={i} className="flex gap-4 px-5 py-4 border-b border-border">
@@ -164,72 +164,131 @@ export default function ResultadosPage() {
                       </div>
                     ))}
                   </div>
-                ) : isError ? (
+                </div>
+              ) : isError ? (
+                <div className="bg-card border border-border rounded-lg overflow-hidden">
                   <ErrorState message="No se pudieron cargar los partidos." onRetry={refetch} />
-                ) : filtered.length === 0 ? (
-                  <div className="py-12 text-center text-sm text-muted-foreground">
-                    No hay partidos registrados
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="bg-card border border-border rounded-lg py-12 text-center text-sm text-muted-foreground">
+                  No hay partidos registrados
+                </div>
+              ) : (
+                <>
+                  {/* Mobile: cards */}
+                  <div className="sm:hidden space-y-2">
+                    {paged.map((match: MatchResult) => (
+                      <div key={match.id} className="bg-card border border-border rounded-lg p-3">
+                        {/* Header: fase + court + status */}
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span className="font-semibold text-foreground">{phaseLabel(match.phase)}</span>
+                            {match.court && <span>· {match.court}</span>}
+                          </div>
+                          {match.isResult && match.sets1 && match.sets2 ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-green-400">
+                              <CheckCircle size={11} /> Completado
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-yellow-400">
+                              <Clock size={11} /> Pendiente
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Teams */}
+                        <div className="space-y-1">
+                          <p className="text-sm text-foreground truncate">{match.team1.join(" / ")}</p>
+                          <p className="text-[10px] text-muted-foreground text-center">vs</p>
+                          <p className="text-sm text-foreground truncate">{match.team2.join(" / ")}</p>
+                        </div>
+
+                        {/* Result + action */}
+                        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60">
+                          {match.isResult && match.sets1 && match.sets2 ? (
+                            <span className="text-xs text-foreground font-mono">
+                              {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground italic">Sin resultado</span>
+                          )}
+                          <button
+                            onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
+                              match.isResult
+                                ? "border border-border text-muted-foreground hover:text-foreground"
+                                : "bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]"
+                            }`}
+                          >
+                            {match.isResult ? "Editar" : "Introducir"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-secondary/50">
-                        {["Fase", "Pareja 1", "vs", "Pareja 2", "Pista", "Resultado", ""].map((h) => (
-                          <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paged.map((match: MatchResult) => (
-                        <tr key={match.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                          <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">{phaseLabel(match.phase)}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-sm font-medium text-foreground">{match.team1.join(" / ")}</span>
-                          </td>
-                          <td className="px-5 py-3.5 text-center text-xs text-muted-foreground">vs</td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-sm font-medium text-foreground">{match.team2.join(" / ")}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">{match.court || "—"}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            {match.isResult && match.sets1 && match.sets2 ? (
-                              <div className="flex items-center gap-1.5">
-                                <CheckCircle size={13} className="text-green-400" />
-                                <span className="text-xs text-foreground font-mono">
-                                  {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="flex items-center gap-1.5 text-xs text-yellow-400">
-                                <Clock size={13} />
-                                Pendiente
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <button
-                              onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
-                              className={`text-xs font-medium transition-colors hover:underline ${
-                                match.isResult ? "text-muted-foreground" : "text-[#D4AF37]"
-                              }`}
-                            >
-                              {match.isResult ? "Editar" : "Introducir"}
-                            </button>
-                          </td>
+
+                  {/* Desktop: table */}
+                  <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border bg-secondary/50">
+                          {["Fase", "Pareja 1", "vs", "Pareja 2", "Pista", "Resultado", ""].map((h) => (
+                            <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {h}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {paged.map((match: MatchResult) => (
+                          <tr key={match.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                            <td className="px-5 py-3.5">
+                              <span className="text-xs text-muted-foreground">{phaseLabel(match.phase)}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm font-medium text-foreground">{match.team1.join(" / ")}</span>
+                            </td>
+                            <td className="px-5 py-3.5 text-center text-xs text-muted-foreground">vs</td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm font-medium text-foreground">{match.team2.join(" / ")}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-xs text-muted-foreground">{match.court || "—"}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              {match.isResult && match.sets1 && match.sets2 ? (
+                                <div className="flex items-center gap-1.5">
+                                  <CheckCircle size={13} className="text-green-400" />
+                                  <span className="text-xs text-foreground font-mono">
+                                    {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-xs text-yellow-400">
+                                  <Clock size={13} />
+                                  Pendiente
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <button
+                                onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
+                                className={`text-xs font-medium transition-colors hover:underline ${
+                                  match.isResult ? "text-muted-foreground" : "text-[#D4AF37]"
+                                }`}
+                              >
+                                {match.isResult ? "Editar" : "Introducir"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    </div>
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
               {/* Pagination */}
               {totalPages > 1 && (
