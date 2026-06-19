@@ -255,6 +255,8 @@ export const adminService = {
   tournamentCourts: {
     list: (tournamentId: string) =>
       api.get<TournamentCourt[]>(`/admin/tournaments/${tournamentId}/courts`).then((r) => r.data ?? []),
+    sync: (tournamentId: string) =>
+      api.post<TournamentCourt[]>(`/admin/tournaments/${tournamentId}/courts/sync`).then((r) => r.data ?? []),
   },
 
   sponsors: {

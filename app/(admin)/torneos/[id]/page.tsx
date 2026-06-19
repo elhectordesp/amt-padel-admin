@@ -1148,9 +1148,20 @@ function PistasTab({
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
 }) {
+  const qc = useQueryClient();
+
   const { data: courts = [], isLoading } = useQuery({
     queryKey: ["tournament-courts", tournamentId],
     queryFn:  () => adminService.tournamentCourts.list(tournamentId),
+  });
+
+  const sync = useMutation({
+    mutationFn: () => adminService.tournamentCourts.sync(tournamentId),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ["tournament-courts", tournamentId] });
+      toast.success("Pistas sincronizadas con el club");
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   if (isLoading) {
@@ -1166,7 +1177,14 @@ function PistasTab({
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <LayoutGrid size={36} className="text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">No hay pistas asociadas a este torneo.</p>
-        <p className="text-xs text-muted-foreground/60">Las pistas se añaden automáticamente al crear el torneo desde el club.</p>
+        <button
+          onClick={() => sync.mutate()}
+          disabled={sync.isPending}
+          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+        >
+          {sync.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Sincronizar con club
+        </button>
       </div>
     );
   }
@@ -1181,9 +1199,19 @@ function PistasTab({
 
       {/* Court list */}
       <div>
-        <p className="text-xs text-muted-foreground mb-3">
-          {courts.length} pista{courts.length !== 1 ? "s" : ""} · Los bloqueos se gestionan desde el panel del club
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs text-muted-foreground">
+            {courts.length} pista{courts.length !== 1 ? "s" : ""} · Los bloqueos se gestionan desde el panel del club
+          </p>
+          <button
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 disabled:opacity-50 transition-colors"
+          >
+            {sync.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Sincronizar con club
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {courts.map((tc) => (
             <TournamentCourtCard key={tc.id} tc={tc} />
