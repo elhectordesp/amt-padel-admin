@@ -212,8 +212,8 @@ export default function JugadorDetailPage() {
           </div>
 
           {/* Hero card */}
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-start gap-6 flex-wrap">
+          <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
+            <div className="flex items-start gap-4 sm:gap-6 flex-wrap">
               {/* Avatar */}
               <div className="relative shrink-0">
                 {player.photoUrl
@@ -358,7 +358,7 @@ export default function JugadorDetailPage() {
             </div>
 
             {/* Stats strip */}
-            <div className="mt-5 pt-5 border-t border-border grid grid-cols-3 sm:grid-cols-6">
+            <div className="mt-5 pt-5 border-t border-border grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-y-3">
               <StatBox label="Puntos AMT"    value={player.points.toLocaleString()} />
               <StatBox label="Partidos"      value={player.played} />
               <StatBox label="% Victorias"   value={`${winRate}%`} sub={`${player.wins} ganados`} />
