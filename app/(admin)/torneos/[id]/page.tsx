@@ -1668,10 +1668,10 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Tournament header card */}
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 flex-wrap">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${TOURNAMENT_STATUS_COLOR[tournament.status as TournamentStatus]}`}>
                   {TOURNAMENT_STATUS_LABEL[tournament.status as TournamentStatus]}
@@ -1701,14 +1701,14 @@ export default function TorneoDetailPage() {
                   );
                 })()}
               </div>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+              <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5">
                   <Calendar size={14} className="text-[#D4AF37]" />
                   {formatDateRange(tournament.startDate, tournament.endDate)}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <MapPin size={14} className="text-[#D4AF37]" />
-                  {tournament.club?.name ?? ""}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <MapPin size={14} className="text-[#D4AF37] shrink-0" />
+                  <span className="truncate">{tournament.club?.name ?? ""}</span>
                 </span>
                 {tournament.prize && (
                   <span className="flex items-center gap-1.5">
@@ -1719,7 +1719,8 @@ export default function TorneoDetailPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Action group — sm: inline / mobile: full-width row */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
               <button
                 onClick={() => duplicate.mutate()}
                 disabled={duplicate.isPending}
@@ -1742,16 +1743,19 @@ export default function TorneoDetailPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Abrir widget de resultados en vivo (para TV o pantalla grande)"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
+                aria-label="Widget TV"
+                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
               >
                 <Tv2 size={14} />
-                Widget TV
+                <span className="hidden sm:inline">Widget TV</span>
               </Link>
               <Link
                 href={`/torneos/${id}/editar`}
-                className="px-4 py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors"
+                aria-label="Editar torneo"
+                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
               >
-                Editar
+                <Pencil size={14} className="sm:hidden" />
+                <span className="hidden sm:inline">Editar</span>
               </Link>
             </div>
           </div>
