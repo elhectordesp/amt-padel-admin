@@ -2638,12 +2638,14 @@ export default function TorneoDetailPage() {
                 };
                 return (
                   <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                      <h4 className="text-sm font-semibold text-foreground">
-                        {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
-                      </h4>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-[#D4AF37]">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 sm:px-5 border-b border-border">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <h4 className="text-sm font-semibold text-foreground truncate">
+                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                        </h4>
+                        <span className="text-xs text-[#D4AF37] truncate">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
                         {/* Validar conflictos de horario */}
                         <button
                           onClick={async () => {
@@ -2663,7 +2665,7 @@ export default function TorneoDetailPage() {
                               setValidatingCatId(null);
                             }
                           }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                          className={`flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border text-xs transition-colors ${
                             showConflictsCatId === cat.id
                               ? (conflictsByCat[cat.id]?.length ?? 0) > 0
                                 ? "border-red-400/40 text-red-400 bg-red-400/10"
@@ -2671,12 +2673,13 @@ export default function TorneoDetailPage() {
                               : "border-border text-muted-foreground hover:text-foreground hover:border-orange-400/40"
                           }`}
                           title="Validar conflictos de horario"
+                          aria-label="Validar conflictos"
                         >
                           {validatingCatId === cat.id
-                            ? <Loader2 size={11} className="animate-spin" />
-                            : <ShieldAlert size={11} />
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : <ShieldAlert size={13} />
                           }
-                          Validar
+                          <span className="hidden sm:inline">Validar</span>
                         </button>
 
                         {/* Formatos de puntuación por fase */}
@@ -2689,49 +2692,56 @@ export default function TorneoDetailPage() {
                               setEditRoundFormats({ ...(cat.roundFormats ?? {}) });
                             }
                           }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                          className={`flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border text-xs transition-colors ${
                             roundFmtOpen
                               ? "border-purple-400/40 text-purple-400 bg-purple-400/10"
                               : "border-border text-muted-foreground hover:text-foreground"
                           }`}
                           title="Configurar formato de puntuación por fase"
+                          aria-label="Formatos de puntuación"
                         >
-                          <Star size={11} />
-                          Formatos
+                          <Star size={13} />
+                          <span className="hidden sm:inline">Formatos</span>
                         </button>
                         {hasGroups && (
-                          <div className="flex items-center gap-2">
+                          <>
                             {/* En eliminatoria: botón para ver/ocultar clasificación de grupos */}
                             {cat.currentPhase !== "GROUPS" && (
                               <button
                                 onClick={() => setShowStandingsCatId((p) => p === cat.id ? null : cat.id)}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                                className={`flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border text-xs transition-colors ${
                                   showStandingsCatId === cat.id
                                     ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
                                     : "border-border text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.3)]"
                                 }`}
+                                title={showStandingsCatId === cat.id ? "Ocultar clasificación de grupos" : "Ver clasificación de grupos"}
+                                aria-label={showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}
                               >
-                                <Trophy size={11} />
-                                {showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}
+                                <Trophy size={13} />
+                                <span className="hidden sm:inline">{showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}</span>
                               </button>
                             )}
                             {cat.currentPhase !== "GROUPS" && (
                               <button
                                 onClick={() => setRegenElimCatId(cat.id)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-blue-400/50 transition-colors"
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-blue-400/50 transition-colors"
+                                title="Regenerar eliminatorias"
+                                aria-label="Regenerar eliminatorias"
                               >
-                                <RefreshCw size={11} />
-                                Regen. eliminatorias
+                                <RefreshCw size={13} />
+                                <span className="hidden sm:inline">Regen. eliminatorias</span>
                               </button>
                             )}
                             <button
                               onClick={() => setRegenCatId(cat.id)}
-                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
+                              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
+                              title="Regenerar cuadro completo"
+                              aria-label="Regenerar todo"
                             >
-                              <RefreshCw size={11} />
-                              Regenerar todo
+                              <RefreshCw size={13} />
+                              <span className="hidden sm:inline">Regenerar todo</span>
                             </button>
-                          </div>
+                          </>
                         )}
                       </div>
                     </div>
