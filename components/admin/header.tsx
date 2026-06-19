@@ -59,14 +59,22 @@ export function Header({ title }: HeaderProps) {
         <h1 className="font-heading text-xl text-foreground">{title}</h1>
 
         <div className="flex items-center gap-2">
-          {/* Cmd+K trigger */}
+          {/* Search trigger — full on desktop, icon-only on mobile */}
           <button
             onClick={toggle}
+            aria-label="Buscar"
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.3)] transition-colors"
           >
             <Search size={12} />
             <span>Buscar...</span>
             <kbd className="ml-1 px-1 py-0.5 rounded border border-border text-[9px]">⌘K</kbd>
+          </button>
+          <button
+            onClick={toggle}
+            aria-label="Buscar"
+            className="sm:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            <Search size={18} />
           </button>
 
           {/* Notification bell */}
