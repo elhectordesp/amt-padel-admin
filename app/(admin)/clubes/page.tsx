@@ -570,6 +570,11 @@ function ClubModal({
       toast.error("Nombre y ciudad son obligatorios");
       return;
     }
+    const email = form.contactEmail.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("El email de contacto no parece válido");
+      return;
+    }
     save.mutate();
   };
 
