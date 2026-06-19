@@ -377,50 +377,56 @@ function CalendarTab({
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
             onClick={exportCsv}
             disabled={matches.filter((m) => !!m.date).length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            aria-label="Exportar horario como CSV"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Exportar horario como CSV"
           >
-            <Download size={11} />
-            Exportar CSV
+            <Download size={13} />
+            <span className="hidden sm:inline">Exportar CSV</span>
           </button>
           <button
             onClick={printDoc}
             disabled={matches.filter((m) => !!m.date).length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            aria-label="Imprimir horario"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Imprimir horario o guardar como PDF"
           >
-            <Printer size={11} />
-            Imprimir
+            <Printer size={13} />
+            <span className="hidden sm:inline">Imprimir</span>
           </button>
           <button
             onClick={() => tournament && printTournamentReport(tournament, matches)}
             disabled={matches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-50"
+            aria-label="Generar informe post-torneo"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-50"
             title="Generar informe post-torneo (PDF)"
           >
-            <Trophy size={11} />
-            Informe PDF
+            <Trophy size={13} />
+            <span className="hidden sm:inline">Informe PDF</span>
           </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
             disabled={autoSchedule.isPending || matches.length === 0}
+            title="Asignar horarios automáticos"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
           >
             {autoSchedule.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
-            Asignar horarios
+            <span className="hidden sm:inline">Asignar horarios</span>
+            <span className="sm:hidden">Asignar</span>
           </button>
           <button
             onClick={() => setConfirmReschedule(true)}
             disabled={autoSchedule.isPending || matches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            aria-label="Reprogramar todo"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Borra todos los horarios no jugados y los recalcula desde cero"
           >
-            <RefreshCw size={11} />
-            Reprogramar todo
+            <RefreshCw size={13} />
+            <span className="hidden sm:inline">Reprogramar todo</span>
           </button>
         </div>
       </div>
