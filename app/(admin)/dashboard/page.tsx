@@ -51,11 +51,14 @@ const ALERT_ICON: Record<string, React.ElementType> = {
 };
 
 function AlertItem({ text, href, icon: Icon }: { text: string; href?: string; icon: React.ElementType }) {
+  const clickable = !!href;
   const inner = (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 hover:bg-secondary/50 px-1 rounded transition-colors cursor-pointer">
+    <div className={`flex items-center gap-3 py-2.5 border-b border-border last:border-0 px-1 rounded transition-colors ${
+      clickable ? "hover:bg-secondary/50 cursor-pointer" : "cursor-default"
+    }`}>
       <Icon size={14} className="text-[#D4AF37] shrink-0" />
       <span className="text-sm text-foreground flex-1">{text}</span>
-      <span className="text-muted-foreground text-xs">›</span>
+      {clickable && <span className="text-muted-foreground text-xs">›</span>}
     </div>
   );
   return href ? <a href={href}>{inner}</a> : inner;

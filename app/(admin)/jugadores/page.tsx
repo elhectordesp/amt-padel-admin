@@ -342,11 +342,11 @@ export default function JugadoresPage() {
             )}
             <button
               onClick={() => setShowCreate(true)}
-              title="Crear jugador"
+              title="Nuevo jugador"
               className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.25)] transition-colors"
             >
               <UserPlus size={13} />
-              <span className="hidden sm:inline">Crear jugador</span>
+              <span className="hidden sm:inline">Nuevo jugador</span>
             </button>
             <button
               onClick={() => downloadCsv(

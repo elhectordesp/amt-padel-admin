@@ -71,7 +71,14 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-foreground">Pagado</label>
             <button
-              onClick={() => setPaid((v) => !v)}
+              onClick={() => {
+                setPaid((v) => {
+                  const next = !v;
+                  // Auto-fill today as default when marking paid for the first time
+                  if (next && !paidAt) setPaidAt(new Date().toISOString().slice(0, 10));
+                  return next;
+                });
+              }}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 paid ? "bg-green-500" : "bg-secondary border border-border"
               }`}

@@ -91,7 +91,22 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
   };
 
   const hasDays  = (data?.days?.length ?? 0) > 0;
-  const hasEdits = editing && days.length > 0;
+  // True only when local state actually differs from server data —
+  // prevents enabling Save on a noop click.
+  const hasUnsavedChanges = (() => {
+    if (!editing || !data?.days || days.length === 0) return false;
+    const original = (data.days as AvailabilityDay[]);
+    if (original.length !== days.length) return true;
+    return days.some((d, i) => {
+      const o = original[i];
+      if (!o) return true;
+      if (!!o.fullAvailability !== !!d.fullAvailability) return true;
+      const oSlots = new Set(o.unavailableSlots ?? []);
+      if (oSlots.size !== d.unavailableSlots.size) return true;
+      for (const s of d.unavailableSlots) if (!oSlots.has(s)) return true;
+      return false;
+    });
+  })();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -247,7 +262,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
               </button>
               <button
                 onClick={() => saveMut.mutate()}
-                disabled={saveMut.isPending || !hasEdits}
+                disabled={saveMut.isPending || !hasUnsavedChanges}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] disabled:opacity-50 text-black text-xs font-semibold transition-colors"
               >
                 {saveMut.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}

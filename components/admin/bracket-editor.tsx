@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   DndContext, DragEndEvent, DragOverEvent, DragStartEvent,
-  PointerSensor, useSensor, useSensors, DragOverlay, closestCenter,
+  PointerSensor, TouchSensor, useSensor, useSensors, DragOverlay, closestCenter,
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -75,7 +75,12 @@ export function BracketEditor({ groups: initialGroups, isGroups, saving, onConfi
     ? groups.reduce((sum, g) => sum + (g.pairs.length * (g.pairs.length - 1)) / 2, 0)
     : Math.ceil(groups.reduce((s, g) => s + g.pairs.length, 0) / 2);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // PointerSensor handles mouse + pen; TouchSensor uses a long-press to start
+  // (delay 200ms) so it doesn't fight with vertical scrolling on phones.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   const findGroup = (registrationId: string) =>
     groups.findIndex((g) => g.pairs.some((p) => p.registrationId === registrationId));

@@ -58,6 +58,8 @@ const DAY_TYPE_OPTIONS = [
   { value: "ELIMINATORIAS", label: "Solo eliminatorias",     labelShort: "Elim." },
 ] as const;
 
+const TIME_RE = /^\d{2}:\d{2}$/;
+
 const scheduleSchema = z.object({
   maxUnavailableTotalHours: z.number().int().min(0).default(0),
   days: z.array(z.object({
@@ -66,9 +68,36 @@ const scheduleSchema = z.object({
     isFinal:             z.boolean().default(false),
     maxUnavailableSlots: z.number().int().min(0).default(0),
     blocks: z.array(z.object({
-      start: z.string(),
-      end:   z.string(),
-    })).min(1, "Añade al menos un bloque horario"),
+      start: z.string().regex(TIME_RE, "Formato HH:MM"),
+      end:   z.string().regex(TIME_RE, "Formato HH:MM"),
+    }))
+      .min(1, "Añade al menos un bloque horario")
+      .superRefine((blocks, ctx) => {
+        // 1) end > start per block
+        blocks.forEach((b, i) => {
+          if (b.start && b.end && b.start >= b.end) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i, "end"],
+              message: "La hora fin debe ser posterior a la hora inicio",
+            });
+          }
+        });
+        // 2) no overlap between blocks of the same day
+        const ordered = blocks
+          .map((b, i) => ({ ...b, i }))
+          .filter((b) => b.start && b.end && b.start < b.end)
+          .sort((a, b) => a.start.localeCompare(b.start));
+        for (let i = 1; i < ordered.length; i++) {
+          if (ordered[i].start < ordered[i - 1].end) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [ordered[i].i, "start"],
+              message: "Este bloque se solapa con otro de la misma jornada",
+            });
+          }
+        }
+      }),
   })).min(1, "Añade al menos una jornada"),
 });
 
@@ -300,7 +329,7 @@ export default function NuevoTorneoPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Crear torneo" />
+      <Header title="Nuevo torneo" />
 
       <div className="flex-1 p-6 max-w-3xl mx-auto w-full space-y-6">
 
