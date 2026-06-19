@@ -667,17 +667,17 @@ function SortableSponsorRow({
       </td>
       {/* Acciones */}
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
           <button
             onClick={() => onEdit(sponsor)}
-            className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
             title="Editar"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => onDelete(sponsor)}
-            className="p-1.5 rounded hover:bg-red-400/10 text-muted-foreground hover:text-red-400 transition-colors"
+            className="p-2 sm:p-1.5 rounded hover:bg-red-400/10 text-muted-foreground hover:text-red-400 transition-colors"
             title="Eliminar"
           >
             <Trash2 size={13} />
