@@ -98,6 +98,19 @@ export const adminService = {
       prizes: { prizeChampion?: string; prizeRunnerUp?: string; prizeConsolation?: string; hasConsolation?: boolean },
     ) =>
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}/prizes`, prizes).then(r => r.data),
+    add: (
+      tournamentId: string,
+      data: { gender: "M" | "F"; level: string; totalSpots: number; price?: number; scoringFormat?: string },
+    ) =>
+      api.post(`/admin/tournaments/${tournamentId}/categories`, data).then(r => r.data),
+    update: (
+      tournamentId: string,
+      categoryId:   string,
+      data: { totalSpots?: number; price?: number; scoringFormat?: string },
+    ) =>
+      api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}`, data).then(r => r.data),
+    remove: (tournamentId: string, categoryId: string) =>
+      api.delete(`/admin/tournaments/${tournamentId}/categories/${categoryId}`).then(r => r.data),
   },
 
   schedule: {
