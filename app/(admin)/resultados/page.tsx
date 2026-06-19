@@ -275,6 +275,7 @@ export default function ResultadosPage() {
           match={selectedMatch}
           onClose={() => setSelectedMatch(null)}
           saving={savingId === selectedMatch.id}
+          isCorrection={selectedMatch.isResult}
           onSave={(s1, s2) => {
             setSavingId(selectedMatch.id);
             saveResult.mutate({ id: selectedMatch.id, sets1: s1, sets2: s2 });
