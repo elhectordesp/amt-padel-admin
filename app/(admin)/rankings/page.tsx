@@ -224,8 +224,112 @@ export default function RankingsPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {/* Mobile: skeleton */}
+        {isLoading && (
+          <div className="sm:hidden space-y-2">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 bg-card border border-border rounded-lg p-3">
+                <div className="h-4 w-8 rounded bg-secondary animate-pulse" />
+                <div className="w-9 h-9 rounded-full bg-secondary animate-pulse" />
+                <div className="h-4 flex-1 rounded bg-secondary animate-pulse" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile: cards */}
+        {!isLoading && (
+          <div className="sm:hidden space-y-2">
+            {pagedPlayers.length === 0 ? (
+              <div className="bg-card border border-border rounded-lg py-12 text-center text-sm text-muted-foreground">
+                Sin jugadores en esta categoría
+              </div>
+            ) : (
+              pagedPlayers.map((player: Player, idx: number) => {
+                const absIdx     = page * PAGE_SIZE + idx;
+                const primRank   = catFilter !== "global" ? (player.categoryRank ?? absIdx + 1) : (player.globalRank ?? absIdx + 1);
+                const secRank    = catFilter !== "global" ? (player.globalRank ?? "—") : (player.categoryRank ?? "—");
+                const trend      = TREND[player.trend as keyof typeof TREND] ?? TREND.stable;
+                const TIcon      = trend.icon;
+                const levelColor = LEVEL_COLOR[player.level] ?? "#94A3B8";
+                return (
+                  <Link
+                    key={player.id}
+                    href={`/jugadores/${player.id}`}
+                    className="block bg-card border border-border rounded-lg p-3 hover:border-[rgba(212,175,55,0.3)] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-bold shrink-0 w-10 text-center ${absIdx < 3 && catFilter === "global" ? medalColors[absIdx] : "text-foreground"}`}>
+                        #{primRank}
+                      </span>
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold"
+                        style={{ backgroundColor: levelColor + "22", border: `1px solid ${levelColor}55`, color: levelColor }}
+                      >
+                        {player.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{player.name}</p>
+                        {player.partner && (
+                          <p className="text-[11px] text-muted-foreground truncate">c/ {player.partner}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">#{secRank}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60">
+                      {rankType === "spa" ? (
+                        <>
+                          {player.spa ? (
+                            <span
+                              className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border"
+                              style={{
+                                color: LEVEL_COLOR[player.spa.spaLevel],
+                                backgroundColor: LEVEL_COLOR[player.spa.spaLevel] + "22",
+                                borderColor: LEVEL_COLOR[player.spa.spaLevel] + "55",
+                              }}
+                            >
+                              {CATEGORY_LABEL[player.spa.spaLevel]}
+                            </span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                          <span className="text-sm font-bold text-foreground tabular-nums">
+                            {player.spa ? `${player.spa.spaPoints.toFixed(0)} SPA` : "—"}
+                          </span>
+                          {player.spa && (
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-12 h-1.5 bg-secondary rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${(player.spa.spaProgression / 10) * 100}%`, backgroundColor: LEVEL_COLOR[player.spa.spaLevel] }}
+                                />
+                              </div>
+                              <span className="text-[10px] text-muted-foreground">{player.spa.spaProgression.toFixed(1)}</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span
+                            className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border"
+                            style={{ color: levelColor, backgroundColor: levelColor + "18", borderColor: levelColor + "44" }}
+                          >
+                            {CATEGORY_LABEL[player.level]}
+                          </span>
+                          <span className="text-sm font-bold text-foreground tabular-nums">
+                            {(player.points ?? 0).toLocaleString()} pts
+                          </span>
+                          <TIcon size={15} className={trend.color} />
+                        </>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Desktop: table */}
+        <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
           {isLoading ? (
             <div className="space-y-0">
               {[...Array(10)].map((_, i) => (
