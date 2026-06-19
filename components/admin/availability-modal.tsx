@@ -161,7 +161,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
                             key={slot}
                             onClick={() => toggleSlot(idx, slot)}
                             title={unavail ? "No disponible — click para marcar disponible" : "Disponible — click para bloquear"}
-                            className={`text-[11px] font-mono px-2 py-1 rounded border transition-colors ${
+                            className={`text-xs sm:text-[11px] font-mono min-w-[52px] px-2.5 py-2 sm:px-2 sm:py-1 rounded border transition-colors ${
                               unavail
                                 ? "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
                                 : "bg-green-400/10 border-green-400/20 text-green-400 hover:bg-green-400/20"
