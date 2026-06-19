@@ -557,14 +557,14 @@ export default function InscripcionesPage() {
                                   </button>
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1.5 sm:gap-1">
                                     {(() => {
                                       const noAvail = tournamentHasSchedule && !reg.availability;
                                       return (
                                         <button
                                           onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
                                           title={noAvail ? "Sin disponibilidad — click para establecer" : "Ver / editar disponibilidad"}
-                                          className={`relative p-1.5 rounded-md transition-colors ${
+                                          className={`relative p-2 sm:p-1.5 rounded-md transition-colors ${
                                             noAvail
                                               ? "text-orange-400 hover:bg-orange-400/10"
                                               : "text-muted-foreground hover:bg-[rgba(212,175,55,0.1)] hover:text-[#D4AF37]"
@@ -582,7 +582,7 @@ export default function InscripcionesPage() {
                                         onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                         disabled={isUpdating}
                                         title={confirmTitle(pair.status)}
-                                        className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 disabled:opacity-40 transition-colors"
+                                        className="p-2 sm:p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 disabled:opacity-40 transition-colors"
                                       >
                                         <Check size={14} />
                                       </button>
@@ -592,7 +592,7 @@ export default function InscripcionesPage() {
                                         onClick={() => handlePairStatus(pair, "WAITLIST")}
                                         disabled={isUpdating}
                                         title="Mover a espera"
-                                        className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 disabled:opacity-40 transition-colors"
+                                        className="p-2 sm:p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 disabled:opacity-40 transition-colors"
                                       >
                                         <Clock size={14} />
                                       </button>
@@ -601,7 +601,7 @@ export default function InscripcionesPage() {
                                       onClick={() => setMovePair(pair)}
                                       disabled={isUpdating}
                                       title="Cambiar categoría"
-                                      className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40 transition-colors"
+                                      className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40 transition-colors"
                                     >
                                       <ArrowLeftRight size={14} />
                                     </button>
@@ -610,7 +610,7 @@ export default function InscripcionesPage() {
                                         onClick={() => setReplaceReg(reg)}
                                         disabled={isUpdating}
                                         title="Cambiar pareja"
-                                        className="p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40 transition-colors"
+                                        className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40 transition-colors"
                                       >
                                         <Users size={14} />
                                       </button>
@@ -619,7 +619,7 @@ export default function InscripcionesPage() {
                                       onClick={() => handlePairStatus(pair, "CANCELLED")}
                                       disabled={isUpdating}
                                       title="Cancelar pareja"
-                                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                                      className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
                                     >
                                       <X size={14} />
                                     </button>

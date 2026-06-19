@@ -137,39 +137,49 @@ function CourtRow({
           </div>
           {court.isIndoor && <p className="text-[10px] text-muted-foreground mt-0.5">Cubierta</p>}
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
           <button
             onClick={onMoveUp}
             disabled={!canMoveUp}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
             title="Subir pista"
           >
-            <ChevronUp size={12} />
+            <ChevronUp size={14} className="sm:hidden" />
+            <ChevronUp size={12} className="hidden sm:block" />
           </button>
           <button
             onClick={onMoveDown}
             disabled={!canMoveDown}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
             title="Bajar pista"
           >
-            <ChevronDown size={12} />
+            <ChevronDown size={14} className="sm:hidden" />
+            <ChevronDown size={12} className="hidden sm:block" />
           </button>
           <button
             onClick={() => { setShowBlocks((v) => !v); setShowAddBlock(false); }}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
             title="Gestionar bloqueos"
           >
-            <CalendarOff size={12} />
+            <CalendarOff size={14} className="sm:hidden" />
+            <CalendarOff size={12} className="hidden sm:block" />
           </button>
-          <button onClick={() => setEdit(true)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
-            <Pencil size={12} />
+          <button onClick={() => setEdit(true)} className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Editar pista">
+            <Pencil size={14} className="sm:hidden" />
+            <Pencil size={12} className="hidden sm:block" />
           </button>
           <button
             onClick={() => setConfirmDelete(true)}
             disabled={remove.isPending}
-            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+            className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+            title="Eliminar pista"
           >
-            {remove.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+            {remove.isPending
+              ? <Loader2 size={14} className="animate-spin sm:hidden" />
+              : <Trash2 size={14} className="sm:hidden" />}
+            {remove.isPending
+              ? <Loader2 size={12} className="animate-spin hidden sm:block" />
+              : <Trash2 size={12} className="hidden sm:block" />}
           </button>
         </div>
       </div>
@@ -196,9 +206,10 @@ function CourtRow({
                   <button
                     onClick={() => setConfirmDeleteBlock(b)}
                     disabled={removeBlock.isPending}
-                    className="opacity-0 group-hover/block:opacity-100 p-0.5 rounded hover:bg-destructive/15 text-destructive transition-opacity"
+                    className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
+                    title="Eliminar bloqueo"
                   >
-                    {removeBlock.isPending ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                    {removeBlock.isPending ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
                   </button>
                 </div>
               ))}

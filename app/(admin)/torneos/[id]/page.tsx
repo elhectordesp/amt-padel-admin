@@ -2215,11 +2215,11 @@ export default function TorneoDetailPage() {
                             </button>
                           </td>
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5 sm:gap-1">
                               <button
                                 onClick={() => setAvailRegId(pair.primary.id)}
                                 title="Ver disponibilidad"
-                                className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
                               >
                                 <CalendarDays size={14} />
                               </button>
@@ -2227,7 +2227,7 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                   disabled={isUpdating}
-                                  className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
                                   title="Confirmar pareja"
                                 >
                                   <Check size={14} />
@@ -2237,7 +2237,7 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => handlePairStatus(pair, "WAITLIST")}
                                   disabled={isUpdating}
-                                  className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
                                   title="Mover a espera"
                                 >
                                   <Clock size={14} />
@@ -2247,7 +2247,7 @@ export default function TorneoDetailPage() {
                                 onClick={() => setMovePair(pair)}
                                 disabled={isUpdating}
                                 title="Cambiar categoría"
-                                className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
+                                className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
                               >
                                 <ArrowLeftRight size={14} />
                               </button>
@@ -2256,7 +2256,7 @@ export default function TorneoDetailPage() {
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
                                   title="Cambiar pareja"
-                                  className="p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-50"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-50"
                                 >
                                   <Users size={14} />
                                 </button>
@@ -2264,7 +2264,7 @@ export default function TorneoDetailPage() {
                               <button
                                 onClick={() => handlePairStatus(pair, "CANCELLED")}
                                 disabled={isUpdating}
-                                className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                                className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                                 title="Cancelar pareja"
                               >
                                 <X size={14} />
