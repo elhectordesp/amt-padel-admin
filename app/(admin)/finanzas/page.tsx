@@ -202,15 +202,15 @@ export default function FinanzasPage() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
           {/* Area chart */}
-          <div className="xl:col-span-2 bg-card border border-border rounded-lg p-5">
-            <div className="flex items-center justify-between mb-5">
+          <div className="xl:col-span-2 bg-card border border-border rounded-lg p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-4 sm:mb-5">
               <h3 className="text-sm font-semibold text-foreground">Evolución mensual</h3>
             </div>
             {isLoading ? (
-              <div className="h-48 bg-secondary/50 rounded animate-pulse" />
+              <div className="h-56 sm:h-48 bg-secondary/50 rounded animate-pulse" />
             ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={data?.chart ?? []} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={data?.chart ?? []} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                   <defs>
                     <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#D4AF37" stopOpacity={0.3} />
@@ -224,15 +224,18 @@ export default function FinanzasPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 11, fill: "#888880" }}
+                    tick={{ fontSize: 12, fill: "#888880" }}
                     axisLine={false}
                     tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={20}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#888880" }}
+                    tick={{ fontSize: 12, fill: "#888880" }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `${v}€`}
+                    width={60}
                   />
                   <Tooltip content={<ChartTooltip />} />
                   <Area

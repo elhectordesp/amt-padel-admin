@@ -855,22 +855,26 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
           )}
           <button
             onClick={() => onCourts(club)}
-            className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
             title="Gestionar pistas"
+            aria-label="Gestionar pistas"
           >
             <LayoutGrid size={13} />
           </button>
           <button
             onClick={() => onEdit(club)}
-            className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            title="Editar club"
+            aria-label="Editar club"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => toggle.mutate()}
             disabled={toggle.isPending}
-            className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
             title={club.active ? "Desactivar" : "Activar"}
+            aria-label={club.active ? "Desactivar club" : "Activar club"}
           >
             {toggle.isPending
               ? <Loader2 size={13} className="animate-spin" />
@@ -965,9 +969,9 @@ export default function ClubesPage() {
 
       <Header title="Clubes" />
 
-      <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 max-w-5xl mx-auto">
         {/* Toolbar */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <p className="text-sm text-muted-foreground">
               {active.length} club{active.length !== 1 ? "s" : ""} activo{active.length !== 1 ? "s" : ""}

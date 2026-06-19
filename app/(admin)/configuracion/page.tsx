@@ -1149,7 +1149,7 @@ function ConfiguracionContent() {
 
       {/* Tab bar */}
       <div className="border-b border-border bg-card/40 sticky top-0 z-10">
-        <div className="flex gap-0 overflow-x-auto px-6">
+        <div className="flex gap-0 overflow-x-auto no-scrollbar scroll-mask-x px-6">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}

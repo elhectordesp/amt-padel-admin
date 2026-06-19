@@ -259,8 +259,8 @@ export default function JugadoresPage() {
 
       <div className="flex-1 p-6 space-y-5">
 
-        {/* Filters bar */}
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* Filters bar — search top on mobile, inline on sm+ */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
           <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
             {([
               { key: "all", label: "Todos"  },
@@ -312,7 +312,7 @@ export default function JugadoresPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border flex-1 max-w-xs">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border w-full sm:flex-1 sm:max-w-xs">
             <Search size={14} className="text-muted-foreground shrink-0" />
             <input
               value={searchInput}
@@ -323,25 +323,30 @@ export default function JugadoresPage() {
             {isFetching && <Loader2 size={12} className="animate-spin text-muted-foreground shrink-0" />}
           </div>
 
-          <div className="flex items-center gap-3 ml-auto">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto flex-wrap">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
               {total} jugadores
             </span>
             {pendingCount > 0 && (
               <button
                 onClick={() => bulkInviteMut.mutate()}
                 disabled={bulkInviteMut.isPending}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-blue-500/10 border border-blue-500/30 text-xs text-blue-400 font-medium hover:bg-blue-500/20 disabled:opacity-50 transition-colors"
+                title="Invitar a todos los jugadores pendientes"
+                aria-label="Invitar pendientes"
+                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md bg-blue-500/10 border border-blue-500/30 text-xs text-blue-400 font-medium hover:bg-blue-500/20 disabled:opacity-50 transition-colors"
               >
                 {bulkInviteMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                Invitar pendientes ({pendingCount})
+                <span className="hidden sm:inline">Invitar pendientes ({pendingCount})</span>
+                <span className="sm:hidden">({pendingCount})</span>
               </button>
             )}
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.25)] transition-colors"
+              title="Crear jugador"
+              className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.25)] transition-colors"
             >
-              <UserPlus size={13} /> Crear jugador
+              <UserPlus size={13} />
+              <span className="hidden sm:inline">Crear jugador</span>
             </button>
             <button
               onClick={() => downloadCsv(
@@ -362,9 +367,12 @@ export default function JugadoresPage() {
                     : "0%",
                 }))
               )}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors"
+              title="Exportar CSV"
+              aria-label="Exportar CSV"
+              className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors"
             >
-              <Download size={13} /> Exportar CSV
+              <Download size={13} />
+              <span className="hidden sm:inline">Exportar CSV</span>
             </button>
           </div>
         </div>

@@ -377,50 +377,56 @@ function CalendarTab({
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
             onClick={exportCsv}
             disabled={matches.filter((m) => !!m.date).length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            aria-label="Exportar horario como CSV"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Exportar horario como CSV"
           >
-            <Download size={11} />
-            Exportar CSV
+            <Download size={13} />
+            <span className="hidden sm:inline">Exportar CSV</span>
           </button>
           <button
             onClick={printDoc}
             disabled={matches.filter((m) => !!m.date).length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            aria-label="Imprimir horario"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Imprimir horario o guardar como PDF"
           >
-            <Printer size={11} />
-            Imprimir
+            <Printer size={13} />
+            <span className="hidden sm:inline">Imprimir</span>
           </button>
           <button
             onClick={() => tournament && printTournamentReport(tournament, matches)}
             disabled={matches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-50"
+            aria-label="Generar informe post-torneo"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors disabled:opacity-50"
             title="Generar informe post-torneo (PDF)"
           >
-            <Trophy size={11} />
-            Informe PDF
+            <Trophy size={13} />
+            <span className="hidden sm:inline">Informe PDF</span>
           </button>
           <button
             onClick={() => autoSchedule.mutate(false)}
             disabled={autoSchedule.isPending || matches.length === 0}
+            title="Asignar horarios automáticos"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
           >
             {autoSchedule.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
-            Asignar horarios
+            <span className="hidden sm:inline">Asignar horarios</span>
+            <span className="sm:hidden">Asignar</span>
           </button>
           <button
             onClick={() => setConfirmReschedule(true)}
             disabled={autoSchedule.isPending || matches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            aria-label="Reprogramar todo"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Borra todos los horarios no jugados y los recalcula desde cero"
           >
-            <RefreshCw size={11} />
-            Reprogramar todo
+            <RefreshCw size={13} />
+            <span className="hidden sm:inline">Reprogramar todo</span>
           </button>
         </div>
       </div>
@@ -569,23 +575,24 @@ function CalendarTab({
 
                         return (
                           <div key={m.id}>
-                            {/* Match row */}
+                            {/* Match row — mobile: stacked card, desktop: single horizontal row */}
                             <div
-                              className={`flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
+                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
                               onClick={() => !m.isResult && !isEditing && onMatchClick(m)}
                             >
-                              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
-                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
+                              <span className="text-xs font-mono text-muted-foreground sm:w-12 shrink-0">{time}</span>
+                              <span className="text-xs text-muted-foreground sm:w-16 shrink-0 truncate">{m.court || "—"}</span>
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
                                 {phaseLabel(m.phase)}
                               </span>
-                              <div className="flex-1 flex items-center gap-2 min-w-0">
+                              {/* Teams: full row on mobile (basis-full), inline on desktop */}
+                              <div className="basis-full sm:basis-auto sm:flex-1 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 min-w-0 order-last sm:order-none">
                                 <span className="text-sm font-medium text-foreground truncate">{(m.team1 ?? []).join(" / ") || "Por definir"}</span>
-                                <span className="text-xs text-muted-foreground shrink-0">vs</span>
+                                <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0">vs</span>
                                 <span className="text-sm font-medium text-foreground truncate">{(m.team2 ?? []).join(" / ") || "Por definir"}</span>
                               </div>
                               {m.isResult && m.sets1 && m.sets2 ? (
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
                                   <div className="flex items-center gap-1.5">
                                     <CheckCircle size={13} className="text-green-400" />
                                     <span className="text-xs font-mono text-foreground">
@@ -594,27 +601,28 @@ function CalendarTab({
                                   </div>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
-                                    className="p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
+                                    className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
                                     title="Corregir resultado"
                                   >
-                                    <RotateCcw size={10} />
+                                    <RotateCcw size={11} />
                                   </button>
                                 </div>
                               ) : (
-                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
+                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0 ml-auto sm:ml-0">
                                   <Clock size={12} /> Pendiente
                                 </span>
                               )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); if (isEditing) { cancelEdit(); } else { startEdit(m); } }}
-                                className={`p-1.5 rounded-md border transition-colors shrink-0 ${
+                                className={`p-2 sm:p-1.5 rounded-md border transition-colors shrink-0 ${
                                   isEditing
                                     ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.1)]"
                                     : "border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)]"
                                 }`}
                                 title="Editar fecha y pista"
+                                aria-label="Editar fecha y pista"
                               >
-                                <Pencil size={11} />
+                                <Pencil size={12} />
                               </button>
                             </div>
 
@@ -1047,11 +1055,11 @@ function CourtBoard({
         <table className="min-w-full border-collapse text-xs">
           <thead>
             <tr className="bg-secondary/50 border-b border-border">
-              <th className="sticky left-0 z-10 bg-secondary/50 px-3 py-2.5 text-left font-semibold text-muted-foreground w-16 border-r border-border">
+              <th className="sticky left-0 z-10 bg-secondary/50 px-2 sm:px-3 py-2.5 text-left font-semibold text-muted-foreground w-12 sm:w-16 border-r border-border">
                 Hora
               </th>
               {courtNames.map((name) => (
-                <th key={name} className="px-3 py-2.5 text-center font-semibold text-muted-foreground min-w-[160px] border-l border-border">
+                <th key={name} className="px-2 sm:px-3 py-2.5 text-center font-semibold text-muted-foreground min-w-[120px] sm:min-w-[160px] border-l border-border">
                   {name}
                 </th>
               ))}
@@ -1060,7 +1068,7 @@ function CourtBoard({
           <tbody>
             {timeSlots.map((time) => (
               <tr key={time} className="border-t border-border">
-                <td className="sticky left-0 z-10 bg-card px-3 py-2 font-mono text-muted-foreground border-r border-border whitespace-nowrap">
+                <td className="sticky left-0 z-10 bg-card px-2 sm:px-3 py-2 font-mono text-muted-foreground border-r border-border whitespace-nowrap">
                   {time}
                 </td>
                 {courtNames.map((courtName) => {
@@ -1091,11 +1099,11 @@ function CourtBoard({
                             </span>
                           )}
                           {editingId === match.id && (
-                            <div className="mt-2 flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="mt-2 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
                               <select
                                 value={newCourt}
                                 onChange={(e) => setNewCourt(e.target.value)}
-                                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                className="w-full rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                               >
                                 <option value="">— Sin pista —</option>
                                 {courtNames.map((n) => (
@@ -1105,9 +1113,9 @@ function CourtBoard({
                               <button
                                 disabled={patchMut.isPending}
                                 onClick={() => patchMut.mutate({ matchId: match.id, court: newCourt })}
-                                className="px-2 py-1 rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold disabled:opacity-50"
+                                className="flex items-center justify-center gap-1 px-2 py-1 rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold disabled:opacity-50"
                               >
-                                {patchMut.isPending ? "…" : <Save size={11} />}
+                                {patchMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <><Save size={11} /> Guardar</>}
                               </button>
                             </div>
                           )}
@@ -1668,10 +1676,10 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Tournament header card */}
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 flex-wrap">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${TOURNAMENT_STATUS_COLOR[tournament.status as TournamentStatus]}`}>
                   {TOURNAMENT_STATUS_LABEL[tournament.status as TournamentStatus]}
@@ -1701,14 +1709,14 @@ export default function TorneoDetailPage() {
                   );
                 })()}
               </div>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+              <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5">
                   <Calendar size={14} className="text-[#D4AF37]" />
                   {formatDateRange(tournament.startDate, tournament.endDate)}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <MapPin size={14} className="text-[#D4AF37]" />
-                  {tournament.club?.name ?? ""}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <MapPin size={14} className="text-[#D4AF37] shrink-0" />
+                  <span className="truncate">{tournament.club?.name ?? ""}</span>
                 </span>
                 {tournament.prize && (
                   <span className="flex items-center gap-1.5">
@@ -1719,7 +1727,8 @@ export default function TorneoDetailPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Action group — sm: inline / mobile: full-width row */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
               <button
                 onClick={() => duplicate.mutate()}
                 disabled={duplicate.isPending}
@@ -1742,16 +1751,19 @@ export default function TorneoDetailPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Abrir widget de resultados en vivo (para TV o pantalla grande)"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
+                aria-label="Widget TV"
+                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
               >
                 <Tv2 size={14} />
-                Widget TV
+                <span className="hidden sm:inline">Widget TV</span>
               </Link>
               <Link
                 href={`/torneos/${id}/editar`}
-                className="px-4 py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors"
+                aria-label="Editar torneo"
+                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
               >
-                Editar
+                <Pencil size={14} className="sm:hidden" />
+                <span className="hidden sm:inline">Editar</span>
               </Link>
             </div>
           </div>
@@ -1781,7 +1793,7 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="overflow-x-auto no-scrollbar border-b border-border">
+        <div className="overflow-x-auto no-scrollbar scroll-mask-x border-b border-border">
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
@@ -1943,21 +1955,23 @@ export default function TorneoDetailPage() {
                               className="mt-1 w-full h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                             />
                           </div>
-                          <div className="sm:col-span-2 flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              id={`hc-${cat.id}`}
-                              checked={prizesForm.hasConsolation}
-                              onChange={(e) => setPrizesForm((f) => ({ ...f, hasConsolation: e.target.checked }))}
-                              className="accent-[#D4AF37]"
-                            />
-                            <label htmlFor={`hc-${cat.id}`} className="text-xs text-muted-foreground">Hay partido de consolación</label>
+                          <div className="sm:col-span-2 space-y-2">
+                            <label htmlFor={`hc-${cat.id}`} className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                              <input
+                                type="checkbox"
+                                id={`hc-${cat.id}`}
+                                checked={prizesForm.hasConsolation}
+                                onChange={(e) => setPrizesForm((f) => ({ ...f, hasConsolation: e.target.checked }))}
+                                className="accent-[#D4AF37]"
+                              />
+                              Hay partido de consolación
+                            </label>
                             {prizesForm.hasConsolation && (
                               <input
                                 value={prizesForm.prizeConsolation}
                                 onChange={(e) => setPrizesForm((f) => ({ ...f, prizeConsolation: e.target.value }))}
                                 placeholder="🏅 Premio consolación"
-                                className="flex-1 h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                className="w-full h-8 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                               />
                             )}
                           </div>
@@ -2626,12 +2640,14 @@ export default function TorneoDetailPage() {
                 };
                 return (
                   <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                      <h4 className="text-sm font-semibold text-foreground">
-                        {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
-                      </h4>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-[#D4AF37]">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 sm:px-5 border-b border-border">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <h4 className="text-sm font-semibold text-foreground truncate">
+                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                        </h4>
+                        <span className="text-xs text-[#D4AF37] truncate">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
                         {/* Validar conflictos de horario */}
                         <button
                           onClick={async () => {
@@ -2651,7 +2667,7 @@ export default function TorneoDetailPage() {
                               setValidatingCatId(null);
                             }
                           }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                          className={`flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border text-xs transition-colors ${
                             showConflictsCatId === cat.id
                               ? (conflictsByCat[cat.id]?.length ?? 0) > 0
                                 ? "border-red-400/40 text-red-400 bg-red-400/10"
@@ -2659,12 +2675,13 @@ export default function TorneoDetailPage() {
                               : "border-border text-muted-foreground hover:text-foreground hover:border-orange-400/40"
                           }`}
                           title="Validar conflictos de horario"
+                          aria-label="Validar conflictos"
                         >
                           {validatingCatId === cat.id
-                            ? <Loader2 size={11} className="animate-spin" />
-                            : <ShieldAlert size={11} />
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : <ShieldAlert size={13} />
                           }
-                          Validar
+                          <span className="hidden sm:inline">Validar</span>
                         </button>
 
                         {/* Formatos de puntuación por fase */}
@@ -2677,49 +2694,56 @@ export default function TorneoDetailPage() {
                               setEditRoundFormats({ ...(cat.roundFormats ?? {}) });
                             }
                           }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                          className={`flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border text-xs transition-colors ${
                             roundFmtOpen
                               ? "border-purple-400/40 text-purple-400 bg-purple-400/10"
                               : "border-border text-muted-foreground hover:text-foreground"
                           }`}
                           title="Configurar formato de puntuación por fase"
+                          aria-label="Formatos de puntuación"
                         >
-                          <Star size={11} />
-                          Formatos
+                          <Star size={13} />
+                          <span className="hidden sm:inline">Formatos</span>
                         </button>
                         {hasGroups && (
-                          <div className="flex items-center gap-2">
+                          <>
                             {/* En eliminatoria: botón para ver/ocultar clasificación de grupos */}
                             {cat.currentPhase !== "GROUPS" && (
                               <button
                                 onClick={() => setShowStandingsCatId((p) => p === cat.id ? null : cat.id)}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                                className={`flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border text-xs transition-colors ${
                                   showStandingsCatId === cat.id
                                     ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
                                     : "border-border text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.3)]"
                                 }`}
+                                title={showStandingsCatId === cat.id ? "Ocultar clasificación de grupos" : "Ver clasificación de grupos"}
+                                aria-label={showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}
                               >
-                                <Trophy size={11} />
-                                {showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}
+                                <Trophy size={13} />
+                                <span className="hidden sm:inline">{showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}</span>
                               </button>
                             )}
                             {cat.currentPhase !== "GROUPS" && (
                               <button
                                 onClick={() => setRegenElimCatId(cat.id)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-blue-400/50 transition-colors"
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-blue-400/50 transition-colors"
+                                title="Regenerar eliminatorias"
+                                aria-label="Regenerar eliminatorias"
                               >
-                                <RefreshCw size={11} />
-                                Regen. eliminatorias
+                                <RefreshCw size={13} />
+                                <span className="hidden sm:inline">Regen. eliminatorias</span>
                               </button>
                             )}
                             <button
                               onClick={() => setRegenCatId(cat.id)}
-                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
+                              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
+                              title="Regenerar cuadro completo"
+                              aria-label="Regenerar todo"
                             >
-                              <RefreshCw size={11} />
-                              Regenerar todo
+                              <RefreshCw size={13} />
+                              <span className="hidden sm:inline">Regenerar todo</span>
                             </button>
-                          </div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -2877,16 +2901,16 @@ export default function TorneoDetailPage() {
                                   const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
                                   return (
                                     <div key={m.id} className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${m.isResult ? "border-[rgba(212,175,55,0.3)]" : "border-border"}`}>
-                                      <div className="grid text-xs items-center gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
-                                        <span className={`truncate ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
+                                      <div className="flex flex-col sm:grid text-xs sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+                                        <span className={`truncate sm:text-left ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team1?.join(" / ") || "Por definir"}
                                         </span>
-                                        <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap px-1">
+                                        <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
                                           {m.isResult && m.sets1 && m.sets2
                                             ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                             : "vs"}
                                         </span>
-                                        <span className={`truncate text-right ${m.winner === "team2" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
+                                        <span className={`truncate sm:text-right ${m.winner === "team2" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team2?.join(" / ") || "Por definir"}
                                         </span>
                                       </div>
@@ -2930,14 +2954,14 @@ export default function TorneoDetailPage() {
                                 const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
                                 return (
                                   <div key={m.id} className="space-y-0.5">
-                                    <div className="grid text-xs text-muted-foreground items-center gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
-                                      <span className="truncate">{m.team1?.join(" / ") ?? "—"}</span>
-                                      <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap px-1">
+                                    <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+                                      <span className="truncate sm:text-left">{m.team1?.join(" / ") ?? "—"}</span>
+                                      <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
                                         {m.isResult && m.sets1 && m.sets2
                                           ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                           : "vs"}
                                       </span>
-                                      <span className="truncate text-right">{m.team2?.join(" / ") ?? "—"}</span>
+                                      <span className="truncate sm:text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
                                     <div className="flex items-center justify-between pl-0.5">
                                       {(matchTime || m.court) ? (

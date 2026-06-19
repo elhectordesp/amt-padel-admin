@@ -334,7 +334,7 @@ export default function InscripcionesPage() {
         ) : (
           <>
             {/* Stats row */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {([
                 { key: "all",        label: "Total",       value: counts.all,       cls: "text-foreground"  },
                 { key: "CONFIRMED",  label: "Confirmadas", value: counts.confirmed, cls: "text-green-400"   },
@@ -403,10 +403,12 @@ export default function InscripcionesPage() {
 
             {/* Bulk action bar */}
             {selected.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
-                <Users size={14} className="text-[#D4AF37]" />
-                <span className="text-sm font-medium text-[#D4AF37]">{selected.size} pareja(s) seleccionada(s)</span>
-                <div className="flex items-center gap-2 ml-auto">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center px-3 py-2.5 sm:px-4 sm:py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Users size={14} className="text-[#D4AF37] shrink-0" />
+                  <span className="text-sm font-medium text-[#D4AF37]">{selected.size} pareja(s) seleccionada(s)</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
                   <button
                     onClick={() => handleBulkAction("CONFIRMED")}
                     disabled={bulkStatus.isPending}
@@ -430,7 +432,7 @@ export default function InscripcionesPage() {
                   </button>
                   <button
                     onClick={() => setSelected(new Set())}
-                    className="text-xs text-muted-foreground hover:text-foreground ml-1 transition-colors"
+                    className="text-xs text-muted-foreground hover:text-foreground ml-auto sm:ml-1 transition-colors"
                   >
                     Limpiar
                   </button>
