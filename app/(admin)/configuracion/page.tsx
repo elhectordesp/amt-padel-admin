@@ -100,30 +100,78 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
+// Used by every tab — prevents losing unsaved changes via tab close,
+// reload, address bar typing, or clicking any anchor outside /configuracion.
+// Returns the JSX of the leave-confirm modal so the tab can render it.
+function useUnsavedChangesGuard(isDirty: boolean) {
+  const router = useRouter();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [isDirty]);
+
+  const handleLinkClick = useCallback((e: MouseEvent) => {
+    const anchor = (e.target as HTMLElement).closest("a");
+    if (!anchor || !isDirty) return;
+    const href = anchor.getAttribute("href");
+    if (!href || href.includes("/configuracion")) return;
+    e.preventDefault();
+    setPendingHref(href);
+  }, [isDirty]);
+
+  useEffect(() => {
+    document.addEventListener("click", handleLinkClick, true);
+    return () => document.removeEventListener("click", handleLinkClick, true);
+  }, [handleLinkClick]);
+
+  return (
+    <ConfirmModal
+      open={!!pendingHref}
+      title="¿Salir sin guardar?"
+      description="Tienes cambios sin guardar en esta sección de la configuración."
+      confirmLabel="Salir sin guardar"
+      danger
+      onClose={() => setPendingHref(null)}
+      onConfirm={() => { const h = pendingHref; setPendingHref(null); if (h) router.push(h); }}
+    />
+  );
+}
+
 function SaveBar({ isDirty, saving, onSave, onDiscard }: {
   isDirty: boolean; saving: boolean; onSave: () => void; onDiscard: () => void;
 }) {
-  if (!isDirty) return null;
+  // Wraps the unsaved-changes guard so every tab using SaveBar gets it for free
+  // (replaces the per-tab beforeunload + link interceptor that only TabSpa had).
+  const leaveGuard = useUnsavedChangesGuard(isDirty);
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
-      <span className="text-sm text-[#D4AF37] font-medium">Hay cambios sin guardar</span>
-      <div className="flex gap-2">
-        <button
-          onClick={onDiscard}
-          className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary transition-colors"
-        >
-          Descartar
-        </button>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-          Guardar
-        </button>
-      </div>
-    </div>
+    <>
+      {isDirty && (
+        <div className="flex items-center justify-between gap-4 px-4 py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
+          <span className="text-sm text-[#D4AF37] font-medium">Hay cambios sin guardar</span>
+          <div className="flex gap-2">
+            <button
+              onClick={onDiscard}
+              className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary transition-colors"
+            >
+              Descartar
+            </button>
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
+            >
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              Guardar
+            </button>
+          </div>
+        </div>
+      )}
+      {leaveGuard}
+    </>
   );
 }
 
@@ -613,8 +661,6 @@ function TabSpa() {
   const router = useRouter();
   const qc = useQueryClient();
   const [showRecalcModal, setShowRecalcModal]  = useState(false);
-  const [showLeaveModal,  setShowLeaveModal]   = useState(false);
-  const [pendingHref,     setPendingHref]      = useState<string | null>(null);
   const [local, setLocal] = useState<SpaConfig | null>(null);
 
   const { data: config, isLoading } = useQuery({ queryKey: ["spa-config"], queryFn: adminService.spa.config });
@@ -637,28 +683,6 @@ function TabSpa() {
 
   const setNested = (key: keyof SpaConfig, subKey: string, val: number) =>
     setLocal((p) => p ? { ...p, [key]: { ...(p[key] as Record<string, number>), [subKey]: val } } : p);
-
-  useEffect(() => {
-    if (!isDirty) return;
-    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", h);
-    return () => window.removeEventListener("beforeunload", h);
-  }, [isDirty]);
-
-  const handleLinkClick = useCallback((e: MouseEvent) => {
-    const anchor = (e.target as HTMLElement).closest("a");
-    if (!anchor || !isDirty) return;
-    const href = anchor.getAttribute("href");
-    if (!href || href.includes("/configuracion")) return;
-    e.preventDefault();
-    setPendingHref(href);
-    setShowLeaveModal(true);
-  }, [isDirty]);
-
-  useEffect(() => {
-    document.addEventListener("click", handleLinkClick, true);
-    return () => document.removeEventListener("click", handleLinkClick, true);
-  }, [handleLinkClick]);
 
   if (isLoading || !cfg || !cfg.k_factors) return <TabSkeleton />;
 
@@ -755,15 +779,6 @@ function TabSpa() {
         loading={recalculate.isPending}
         onClose={() => setShowRecalcModal(false)}
         onConfirm={() => recalculate.mutate()}
-      />
-      <ConfirmModal
-        open={showLeaveModal}
-        title="¿Salir sin guardar?"
-        description="Tienes cambios en la configuración SPA que no se han guardado."
-        confirmLabel="Salir sin guardar"
-        danger
-        onClose={() => setShowLeaveModal(false)}
-        onConfirm={() => { setShowLeaveModal(false); if (pendingHref) router.push(pendingHref); }}
       />
     </div>
   );
