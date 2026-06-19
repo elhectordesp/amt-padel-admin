@@ -324,7 +324,7 @@ export default function TorneosPage() {
               className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors shrink-0"
             >
               <Plus size={15} />
-              <span className="hidden sm:inline">Crear torneo</span>
+              <span className="hidden sm:inline">Nuevo torneo</span>
               <span className="sm:hidden">Nuevo</span>
             </Link>
           </div>

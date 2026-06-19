@@ -300,7 +300,7 @@ export default function NuevoTorneoPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Crear torneo" />
+      <Header title="Nuevo torneo" />
 
       <div className="flex-1 p-6 max-w-3xl mx-auto w-full space-y-6">
 
