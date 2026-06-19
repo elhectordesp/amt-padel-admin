@@ -11,6 +11,7 @@ import {
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
   Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
+  ArrowLeftRight, Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,9 @@ import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
+import { MoveCategoryModal } from "@/components/admin/move-category-modal";
+import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
+import PaymentModal from "@/components/admin/payment-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
@@ -29,6 +33,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
+  REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
@@ -38,19 +43,16 @@ import { formatDateRange } from "@/lib/utils/formatDateRange";
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
 
-const STATUS_CONFIG: Record<RegistrationStatus, { label: string; color: string; icon: React.ElementType }> = {
-  CONFIRMED: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",    icon: Check },
-  PENDING:   { label: "Pendiente",  color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30", icon: Clock },
-  WAITLIST:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",       icon: Clock },
-  CANCELLED: { label: "Cancelado",  color: "text-red-400 bg-red-400/10 border-red-400/30",          icon: Clock },
+const STATUS_ICON: Record<RegistrationStatus, React.ElementType> = {
+  CONFIRMED: Check, PENDING: Clock, WAITLIST: Clock, CANCELLED: X,
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: RegistrationStatus }) {
-  const cfg = STATUS_CONFIG[status];
-  const Icon = cfg.icon;
+  const cfg = REGISTRATION_STATUS_CONFIG[status];
+  const Icon = STATUS_ICON[status];
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.cls}`}>
       <Icon size={9} />
       {cfg.label}
     </span>
@@ -213,6 +215,7 @@ function CalendarTab({
   const [pendingConflicts, setPendingConflicts] = useState<ScheduleConflict[]>([]);
   const [showConflicts,   setShowConflicts]   = useState(false);
   const [unpublishCatId,  setUnpublishCatId]  = useState<string | null>(null);
+  const [confirmReschedule, setConfirmReschedule] = useState(false);
 
   // Inline match edit state
   const [editMatchId,  setEditMatchId]  = useState<string | null>(null);
@@ -411,7 +414,7 @@ function CalendarTab({
             Asignar horarios
           </button>
           <button
-            onClick={() => autoSchedule.mutate(true)}
+            onClick={() => setConfirmReschedule(true)}
             disabled={autoSchedule.isPending || matches.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Borra todos los horarios no jugados y los recalcula desde cero"
@@ -704,6 +707,17 @@ function CalendarTab({
         loading={unpublishMut.isPending}
         onClose={() => setUnpublishCatId(null)}
         onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
+      />
+
+      <ConfirmModal
+        open={confirmReschedule}
+        title="Reprogramar todo el calendario"
+        description="Se borrarán todos los horarios de los partidos NO jugados y se recalcularán desde cero. Los resultados ya registrados no se tocan. Esta acción no se puede deshacer."
+        confirmLabel="Sí, reprogramar"
+        danger
+        loading={autoSchedule.isPending}
+        onClose={() => setConfirmReschedule(false)}
+        onConfirm={() => { autoSchedule.mutate(true); setConfirmReschedule(false); }}
       />
     </div>
   );
@@ -1247,6 +1261,11 @@ export default function TorneoDetailPage() {
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
+  const [movePair,           setMovePair]           = useState<PairReg | null>(null);
+  const [replaceReg,         setReplaceReg]         = useState<AdminRegistration | null>(null);
+  const [paymentReg,         setPaymentReg]         = useState<AdminRegistration | null>(null);
+  const [confirmCancel,      setConfirmCancel]      = useState<{ ids: string[]; name: string } | null>(null);
+  const [confirmBulk,        setConfirmBulk]        = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
@@ -1461,9 +1480,24 @@ export default function TorneoDetailPage() {
   });
 
   const handlePairStatus = (pair: PairReg, status: string) => {
+    if (status === "CANCELLED") {
+      setConfirmCancel({ ids: pair.ids, name: pair.primary.user.name });
+      return;
+    }
     setUpdatingIds(new Set(pair.ids));
     bulkStatus.mutate({ ids: pair.ids, status });
   };
+
+  const moveCategory = useMutation({
+    mutationFn: ({ registrationId, newCategoryId }: { registrationId: string; newCategoryId: string }) =>
+      adminService.registrations.moveCategory(registrationId, newCategoryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations", id] });
+      toast.success("Inscripción movida a la nueva categoría");
+      setMovePair(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   const saveRoundFormats = useMutation({
     mutationFn: ({ catId, formats }: { catId: string; formats: Record<string, string> | null }) =>
@@ -1562,7 +1596,8 @@ export default function TorneoDetailPage() {
 
   const handleBulkAction = (status: string) => {
     const allIds = pairs.filter((p) => selectedKeys.has(p.pairKey)).flatMap((p) => p.ids);
-    bulkStatus.mutate({ ids: allIds, status });
+    if (allIds.length === 0) return;
+    setConfirmBulk({ ids: allIds, status, count: selectedKeys.size });
   };
 
   // Reset page when filter/search changes
@@ -2171,16 +2206,20 @@ export default function TorneoDetailPage() {
                             <StatusBadge status={pair.status} />
                           </td>
                           <td className="px-5 py-3.5">
-                            <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
+                            <button
+                              onClick={() => setPaymentReg(reg)}
+                              title="Ver / editar pago"
+                              className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
+                            >
                               {reg.paid ? "Pagado" : "Pendiente"}
-                            </span>
+                            </button>
                           </td>
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5 sm:gap-1">
                               <button
                                 onClick={() => setAvailRegId(pair.primary.id)}
                                 title="Ver disponibilidad"
-                                className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors"
                               >
                                 <CalendarDays size={14} />
                               </button>
@@ -2188,7 +2227,7 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                   disabled={isUpdating}
-                                  className="p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
                                   title="Confirmar pareja"
                                 >
                                   <Check size={14} />
@@ -2198,16 +2237,34 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => handlePairStatus(pair, "WAITLIST")}
                                   disabled={isUpdating}
-                                  className="p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-blue-400/10 text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
                                   title="Mover a espera"
                                 >
                                   <Clock size={14} />
                                 </button>
                               )}
                               <button
+                                onClick={() => setMovePair(pair)}
+                                disabled={isUpdating}
+                                title="Cambiar categoría"
+                                className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
+                              >
+                                <ArrowLeftRight size={14} />
+                              </button>
+                              {reg.partnerId && (
+                                <button
+                                  onClick={() => setReplaceReg(reg)}
+                                  disabled={isUpdating}
+                                  title="Cambiar pareja"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-50"
+                                >
+                                  <Users size={14} />
+                                </button>
+                              )}
+                              <button
                                 onClick={() => handlePairStatus(pair, "CANCELLED")}
                                 disabled={isUpdating}
-                                className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                                className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                                 title="Cancelar pareja"
                               >
                                 <X size={14} />
@@ -3037,6 +3094,34 @@ export default function TorneoDetailPage() {
       />
     )}
 
+    {movePair && tournament && (
+      <MoveCategoryModal
+        pair={movePair}
+        categories={tournament.categories}
+        saving={moveCategory.isPending}
+        onSave={(newCategoryId) =>
+          moveCategory.mutate({ registrationId: movePair.primary.id, newCategoryId })
+        }
+        onClose={() => setMovePair(null)}
+      />
+    )}
+
+    {replaceReg && (
+      <ReplacePartnerModal
+        registration={replaceReg}
+        tournamentId={id}
+        onClose={() => setReplaceReg(null)}
+      />
+    )}
+
+    {paymentReg && (
+      <PaymentModal
+        registration={paymentReg}
+        tournamentId={id}
+        onClose={() => setPaymentReg(null)}
+      />
+    )}
+
     {resultMatch && (
       <ResultModal
         match={resultMatch}
@@ -3065,6 +3150,37 @@ export default function TorneoDetailPage() {
       loading={regenerateElimination.isPending}
       onClose={() => setRegenElimCatId(null)}
       onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
+    />
+
+    <ConfirmModal
+      open={!!confirmCancel}
+      title="Cancelar inscripción"
+      description={`¿Cancelar la inscripción de ${confirmCancel?.name ?? ""}? Esta acción notificará al siguiente en lista de espera.`}
+      confirmLabel="Sí, cancelar"
+      danger
+      onConfirm={() => {
+        if (confirmCancel) {
+          setUpdatingIds(new Set(confirmCancel.ids));
+          bulkStatus.mutate({ ids: confirmCancel.ids, status: "CANCELLED" });
+        }
+        setConfirmCancel(null);
+      }}
+      onClose={() => setConfirmCancel(null)}
+    />
+
+    <ConfirmModal
+      open={!!confirmBulk}
+      title={`Cambiar estado en bloque (${confirmBulk?.count ?? 0} parejas)`}
+      description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a "${confirmBulk?.status ?? ""}"? Esta acción no se puede deshacer.`}
+      confirmLabel="Sí, confirmar"
+      danger={confirmBulk?.status === "CANCELLED" || confirmBulk?.status === "REJECTED"}
+      onConfirm={() => {
+        if (confirmBulk) {
+          bulkStatus.mutate({ ids: confirmBulk.ids, status: confirmBulk.status });
+        }
+        setConfirmBulk(null);
+      }}
+      onClose={() => setConfirmBulk(null)}
     />
 
 

@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import { Loader2, X, ArrowRight } from "lucide-react";
-import type { AdminRegistration } from "@/types";
-
-const GENDER_LABEL: Record<string, string> = { M: "Masc.", F: "Fem." };
-const LEVEL_LABEL:  Record<string, string>  = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª", "4a": "4ª",
-  "5a": "5ª", "6a": "6ª", "iniciacion": "Inic.",
-};
+import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import type { AdminRegistration, CategoryLevel, Gender } from "@/types";
 
 interface Category {
   id:     string;
@@ -69,7 +64,7 @@ export function MoveCategoryModal({
         {/* Current → destination */}
         <div className="flex items-center gap-3">
           <div className="flex-1 px-3 py-2 rounded-md bg-secondary/50 border border-border text-xs text-muted-foreground text-center">
-            {GENDER_LABEL[current.gender] ?? current.gender} {LEVEL_LABEL[current.level] ?? current.level}
+            {GENDER_LABEL[current.gender as Gender]?.short ?? current.gender} {CATEGORY_LABEL_SHORT[current.level as CategoryLevel] ?? current.level}
           </div>
           <ArrowRight size={14} className="text-muted-foreground shrink-0" />
           <div className="flex-1">
@@ -81,7 +76,7 @@ export function MoveCategoryModal({
               <option value="">Seleccionar...</option>
               {options.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {GENDER_LABEL[c.gender] ?? c.gender} {LEVEL_LABEL[c.level] ?? c.level}
+                  {GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} {CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}
                 </option>
               ))}
             </select>

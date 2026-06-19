@@ -3,7 +3,7 @@
 // migrar a Turborepo con packages/shared-types y packages/design-tokens.
 // Bloqueante conocido: Metro bundler de React Native tiene soporte experimental de monorepos
 // — configurar watchFolders + extraNodeModules en metro.config.js antes de migrar.
-import type { CategoryLevel, Gender, TournamentStatus, TournamentTier } from "@/types";
+import type { CategoryLevel, Gender, RegistrationStatus, TournamentStatus, TournamentTier } from "@/types";
 
 export const CATEGORY_LABEL: Record<CategoryLevel, string> = {
   "1a":        "1ª",
@@ -33,6 +33,16 @@ export const GENDER_LABEL: Record<Gender, { full: string; short: string }> = {
 export const LEVELS: CategoryLevel[] = [
   "1a","2a","3a","4a","5a","6a","iniciacion",
 ];
+
+// Registration status — single source of truth for label + Tailwind class.
+// Consumers that need an icon component pick one locally (UI concern,
+// kept out of constants to avoid an icon-lib dependency here).
+export const REGISTRATION_STATUS_CONFIG: Record<RegistrationStatus, { label: string; cls: string }> = {
+  CONFIRMED: { label: "Confirmado", cls: "text-green-400 bg-green-400/10 border-green-400/30"    },
+  PENDING:   { label: "Pendiente",  cls: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  WAITLIST:  { label: "En espera",  cls: "text-blue-400 bg-blue-400/10 border-blue-400/30"       },
+  CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30"          },
+};
 
 // Tournament status — keys match TournamentStatus (uppercase, from DB)
 export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {

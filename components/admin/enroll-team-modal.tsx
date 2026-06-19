@@ -5,12 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService } from "@/lib/services/admin";
-import type { Player, Tournament, AdminEnrollTeamPayload, CreatePlayerPayload } from "@/types";
-
-const LEVELS = ["1a", "2a", "3a", "4a", "5a", "6a", "iniciacion"] as const;
-const LEVEL_LABEL: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª", "4a": "4ª", "5a": "5ª", "6a": "6ª", iniciacion: "Inic.",
-};
+import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS } from "@/lib/constants";
+import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 interface Props {
   tournament: Tournament;
@@ -121,23 +117,23 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
 
       {!slot.creating ? (
         <div className="relative">
           <div className="relative flex items-center">
-            <Search size={14} className="absolute left-3 text-gray-400 pointer-events-none" />
+            <Search size={14} className="absolute left-3 text-muted-foreground pointer-events-none" />
             <input
               type="text"
               value={slot.query}
               onChange={(e) => handleQueryChange(e.target.value, setSlot, debounceRef)}
               placeholder="Buscar por nombre, email o teléfono…"
-              className="w-full pl-9 pr-10 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
             {slot.player && (
               <button
                 onClick={() => setSlot((s) => ({ ...s, player: null, query: "", results: [] }))}
-                className="absolute right-2 text-gray-400 hover:text-white"
+                className="absolute right-2 text-muted-foreground hover:text-foreground"
               >
                 <X size={14} />
               </button>
@@ -146,9 +142,9 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
 
           {/* Search results dropdown */}
           {!slot.player && (slot.results.length > 0 || slot.searching) && (
-            <div className="absolute z-10 mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg shadow-xl overflow-hidden">
+            <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-md shadow-xl overflow-hidden">
               {slot.searching && (
-                <div className="flex items-center gap-2 px-3 py-2 text-gray-400 text-sm">
+                <div className="flex items-center gap-2 px-3 py-2 text-muted-foreground text-sm">
                   <Loader2 size={12} className="animate-spin" /> Buscando…
                 </div>
               )}
@@ -158,14 +154,14 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
                   <button
                     key={p.id}
                     onClick={() => selectPlayer(p, setSlot)}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-3 transition-colors"
+                    className="w-full text-left px-3 py-2 hover:bg-secondary flex items-center gap-3 transition-colors"
                   >
-                    <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] flex items-center justify-center text-xs font-bold text-[#D4AF37] shrink-0">
                       {p.name[0]?.toUpperCase()}
                     </div>
-                    <div>
-                      <p className="text-sm text-white font-medium">{p.name}</p>
-                      <p className="text-xs text-gray-400">
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground font-medium truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
                         {p.gender} · {LEVEL_LABEL[p.level] ?? p.level}
                         {p.email ? ` · ${p.email}` : ""}
                       </p>
@@ -173,18 +169,18 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
                   </button>
                 ))}
               {!slot.searching && slot.results.filter((p) => p.id !== otherPlayerId).length === 0 && slot.query.length >= 2 && (
-                <div className="px-3 py-2 text-gray-400 text-sm">Sin resultados</div>
+                <div className="px-3 py-2 text-muted-foreground text-sm">Sin resultados</div>
               )}
             </div>
           )}
 
           {/* Selected player badge */}
           {slot.player && (
-            <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-blue-900/30 border border-blue-500/30 rounded-lg">
-              <Check size={14} className="text-blue-400 shrink-0" />
-              <div>
-                <p className="text-sm text-white font-medium">{slot.player.name}</p>
-                <p className="text-xs text-gray-400">
+            <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-md bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)]">
+              <Check size={14} className="text-[#D4AF37] shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm text-foreground font-medium truncate">{slot.player.name}</p>
+                <p className="text-xs text-muted-foreground truncate">
                   {slot.player.gender} · {LEVEL_LABEL[slot.player.level] ?? slot.player.level}
                   {slot.player.email ? ` · ${slot.player.email}` : ""}
                   {slot.player.managedByAdmin && " · creado por admin"}
@@ -197,7 +193,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
           {!slot.player && (
             <button
               onClick={() => setSlot((s) => ({ ...s, creating: true, query: "", results: [], createForm: emptyCreateForm(), createErrors: {} }))}
-              className="mt-2 flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+              className="mt-2 flex items-center gap-1.5 text-xs text-[#D4AF37] hover:underline"
             >
               <Plus size={12} /> Crear nuevo jugador
             </button>
@@ -205,12 +201,12 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
         </div>
       ) : (
         /* ── Inline create form ── */
-        <div className="bg-gray-800/60 border border-gray-600 rounded-lg p-4 space-y-3">
+        <div className="bg-secondary/60 border border-border rounded-md p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-[#D4AF37] flex items-center gap-1.5 uppercase tracking-wide">
               <UserPlus size={12} /> Nuevo jugador
             </p>
-            <button onClick={() => setSlot((s) => ({ ...s, creating: false, createErrors: {} }))} className="text-gray-500 hover:text-white">
+            <button onClick={() => setSlot((s) => ({ ...s, creating: false, createErrors: {} }))} className="text-muted-foreground hover:text-foreground">
               <X size={14} />
             </button>
           </div>
@@ -223,9 +219,9 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
                   placeholder={field === "firstName" ? "Nombre *" : "Apellidos *"}
                   value={(slot.createForm[field] as string) ?? ""}
                   onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, [field]: e.target.value }, createErrors: { ...s.createErrors, [field]: "" } }))}
-                  className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  className="w-full h-8 px-3 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
-                {slot.createErrors[field] && <p className="text-red-400 text-xs mt-0.5">{slot.createErrors[field]}</p>}
+                {slot.createErrors[field] && <p className="text-destructive text-xs mt-0.5">{slot.createErrors[field]}</p>}
               </div>
             ))}
           </div>
@@ -235,18 +231,18 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
               <select
                 value={slot.createForm.gender ?? ""}
                 onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, gender: e.target.value as "M" | "F" }, createErrors: { ...s.createErrors, gender: "" } }))}
-                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-white focus:outline-none focus:border-blue-500"
+                className="w-full h-8 px-2 rounded-md bg-card border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
               >
                 <option value="">Género *</option>
                 <option value="M">Masculino</option>
                 <option value="F">Femenino</option>
               </select>
-              {slot.createErrors.gender && <p className="text-red-400 text-xs mt-0.5">{slot.createErrors.gender}</p>}
+              {slot.createErrors.gender && <p className="text-destructive text-xs mt-0.5">{slot.createErrors.gender}</p>}
             </div>
             <select
               value={slot.createForm.categoryLevel ?? ""}
-              onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, categoryLevel: (e.target.value || undefined) as import("@/types").CategoryLevel | undefined } }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-white focus:outline-none focus:border-blue-500"
+              onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, categoryLevel: (e.target.value || undefined) as CategoryLevel | undefined } }))}
+              className="w-full h-8 px-2 rounded-md bg-card border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             >
               <option value="">Nivel (opc.)</option>
               {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
@@ -256,7 +252,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
               placeholder="Teléfono"
               value={slot.createForm.phone ?? ""}
               onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, phone: e.target.value } }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full h-8 px-2 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
           </div>
 
@@ -265,13 +261,13 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
             placeholder="Email (opcional — se enviará invitación para activar cuenta)"
             value={slot.createForm.email ?? ""}
             onChange={(e) => setSlot((s) => ({ ...s, createForm: { ...s.createForm, email: e.target.value } }))}
-            className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="w-full h-8 px-3 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
           />
 
           <button
             onClick={handleCreatePlayer}
             disabled={createMut.isPending}
-            className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded flex items-center justify-center gap-2"
+            className="w-full py-1.5 bg-[#D4AF37] hover:bg-[#C49F2A] disabled:opacity-50 text-[#0C0C0C] text-sm font-semibold rounded-md flex items-center justify-center gap-2 transition-colors"
           >
             {createMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
             Crear y seleccionar
@@ -342,25 +338,26 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-700">
-          <div>
-            <h2 className="text-base font-bold text-white">Inscribir pareja</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{tournament.name}</p>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="min-w-0">
+            <h2 className="font-heading text-lg text-foreground">Inscribir pareja</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{tournament.name}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
-            <X size={20} />
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
+            <X size={15} />
           </button>
         </div>
 
         <div className="p-5 space-y-5">
           {/* Warning if tournament not open */}
           {isNotOpen && (
-            <div className="flex items-start gap-2 bg-yellow-900/30 border border-yellow-500/30 rounded-lg px-3 py-2.5">
+            <div className="flex items-start gap-2 bg-yellow-400/10 border border-yellow-400/30 rounded-md px-3 py-2.5">
               <AlertTriangle size={14} className="text-yellow-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-yellow-300">
+              <p className="text-xs text-yellow-400">
                 El torneo está en estado <strong>{tournament.status}</strong> (no OPEN). La inscripción se creará igualmente.
               </p>
             </div>
@@ -368,13 +365,13 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
 
           {/* Category selector */}
           <div>
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block mb-1.5">
               Categoría
             </label>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             >
               <option value="">Selecciona categoría…</option>
               {(tournament.categories ?? []).map((c) => (
@@ -401,9 +398,9 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               type="checkbox"
               checked={noPartner}
               onChange={(e) => { setNoPartner(e.target.checked); if (e.target.checked) setSlot2(emptySlot()); }}
-              className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0"
+              className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]"
             />
-            <span className="text-sm text-gray-300">Sin pareja (inscripción individual)</span>
+            <span className="text-sm text-foreground">Sin pareja (inscripción individual)</span>
           </label>
 
           {/* Player 2 */}
@@ -420,10 +417,10 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
           {/* Options */}
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block mb-1.5">
                 Estado inicial
               </label>
-              <div className="flex rounded-lg overflow-hidden border border-gray-600">
+              <div className="flex rounded-md overflow-hidden border border-border">
                 {(["PENDING", "CONFIRMED"] as const).map((s) => (
                   <button
                     key={s}
@@ -431,9 +428,9 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
                     className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
                       status === s
                         ? s === "CONFIRMED"
-                          ? "bg-green-600 text-white"
-                          : "bg-yellow-600 text-white"
-                        : "bg-gray-800 text-gray-400 hover:text-white"
+                          ? "bg-green-400/20 text-green-400"
+                          : "bg-yellow-400/20 text-yellow-400"
+                        : "bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {s === "PENDING" ? "Pendiente" : "Confirmada"}
@@ -444,20 +441,20 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
             <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer select-none mt-5">
                 <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0" />
-                <span className="text-sm text-gray-300">Pago recibido</span>
+                  className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
+                <span className="text-sm text-foreground">Pago recibido</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={forceEnroll} onChange={(e) => setForceEnroll(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0" />
-                <span className="text-sm text-gray-300">Forzar (ignorar límite de plazas)</span>
+                  className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
+                <span className="text-sm text-foreground">Forzar (ignorar límite de plazas)</span>
               </label>
             </div>
           </div>
 
           {/* Spot indicator */}
           {selectedCategory && (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Plazas ocupadas: {selectedCategory.registeredCount ?? "?"} / {selectedCategory.totalSpots}
               {(selectedCategory.registeredCount ?? 0) >= selectedCategory.totalSpots && !forceEnroll
                 ? " — la inscripción irá a lista de espera"
@@ -467,14 +464,14 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-700">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={enrollMut.isPending}
-            className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] hover:bg-[#C49F2A] disabled:opacity-50 text-[#0C0C0C] text-sm font-semibold transition-colors"
           >
             {enrollMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
             Inscribir pareja

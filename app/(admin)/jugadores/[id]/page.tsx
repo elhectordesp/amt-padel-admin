@@ -19,13 +19,8 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry } from "@/types";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª",
-  "4a": "4ª", "5a": "5ª", "6a": "6ª", "iniciacion": "Iniciación",
-};
-const LEVELS: CategoryLevel[] = ["1a","2a","3a","4a","5a","6a","iniciacion"];
+import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG } from "@/lib/constants";
+import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 const LEVEL_COLOR: Record<string, string> = {
   "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
@@ -504,13 +499,7 @@ export default function JugadorDetailPage() {
                   </thead>
                   <tbody>
                     {(playerRegs as PlayerRegistrationEntry[]).map((r) => {
-                      const STATUS_CFG: Record<string, { label: string; cls: string }> = {
-                        CONFIRMED: { label: "Confirmado", cls: "text-green-400 bg-green-400/10 border-green-400/30" },
-                        PENDING:   { label: "Pendiente",  cls: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
-                        WAITLIST:  { label: "En espera",  cls: "text-blue-400 bg-blue-400/10 border-blue-400/30" },
-                        CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30" },
-                      };
-                      const scfg = STATUS_CFG[r.status] ?? STATUS_CFG.PENDING;
+                      const scfg = REGISTRATION_STATUS_CONFIG[r.status as RegistrationStatus] ?? REGISTRATION_STATUS_CONFIG.PENDING;
                       return (
                         <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                           <td className="px-5 py-3 text-xs text-foreground max-w-[180px] truncate">{r.tournament}</td>
@@ -518,7 +507,7 @@ export default function JugadorDetailPage() {
                             {new Date(r.startDate).toLocaleDateString("es-ES")}
                           </td>
                           <td className="px-5 py-3 text-xs text-muted-foreground">
-                            {r.gender} {CATEGORY_LABEL[r.level] ?? r.level}
+                            {r.gender} {CATEGORY_LABEL[r.level as CategoryLevel] ?? r.level}
                           </td>
                           <td className="px-5 py-3">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>

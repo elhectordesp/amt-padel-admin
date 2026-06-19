@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
 import type { Club, Court, CourtBlock } from "@/types";
@@ -39,6 +40,8 @@ function CourtRow({
   const [showBlocks, setShowBlocks] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [blockForm, setBlockForm]  = useState<BlockForm>({ ...EMPTY_BLOCK });
+  const [confirmDelete,      setConfirmDelete]      = useState(false);
+  const [confirmDeleteBlock, setConfirmDeleteBlock] = useState<CourtBlock | null>(null);
   const [form, setForm] = useState<CourtForm>({
     name:      court.name,
     isIndoor:  court.isIndoor,
@@ -134,39 +137,49 @@ function CourtRow({
           </div>
           {court.isIndoor && <p className="text-[10px] text-muted-foreground mt-0.5">Cubierta</p>}
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
           <button
             onClick={onMoveUp}
             disabled={!canMoveUp}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
             title="Subir pista"
           >
-            <ChevronUp size={12} />
+            <ChevronUp size={14} className="sm:hidden" />
+            <ChevronUp size={12} className="hidden sm:block" />
           </button>
           <button
             onClick={onMoveDown}
             disabled={!canMoveDown}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
             title="Bajar pista"
           >
-            <ChevronDown size={12} />
+            <ChevronDown size={14} className="sm:hidden" />
+            <ChevronDown size={12} className="hidden sm:block" />
           </button>
           <button
             onClick={() => { setShowBlocks((v) => !v); setShowAddBlock(false); }}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
             title="Gestionar bloqueos"
           >
-            <CalendarOff size={12} />
+            <CalendarOff size={14} className="sm:hidden" />
+            <CalendarOff size={12} className="hidden sm:block" />
           </button>
-          <button onClick={() => setEdit(true)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
-            <Pencil size={12} />
+          <button onClick={() => setEdit(true)} className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Editar pista">
+            <Pencil size={14} className="sm:hidden" />
+            <Pencil size={12} className="hidden sm:block" />
           </button>
           <button
-            onClick={() => { if (confirm(`¿Eliminar "${court.name}"?`)) remove.mutate(); }}
+            onClick={() => setConfirmDelete(true)}
             disabled={remove.isPending}
-            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+            className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+            title="Eliminar pista"
           >
-            {remove.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+            {remove.isPending
+              ? <Loader2 size={14} className="animate-spin sm:hidden" />
+              : <Trash2 size={14} className="sm:hidden" />}
+            {remove.isPending
+              ? <Loader2 size={12} className="animate-spin hidden sm:block" />
+              : <Trash2 size={12} className="hidden sm:block" />}
           </button>
         </div>
       </div>
@@ -191,11 +204,12 @@ function CourtRow({
                     {b.reason && ` · ${b.reason}`}
                   </span>
                   <button
-                    onClick={() => removeBlock.mutate(b.id)}
+                    onClick={() => setConfirmDeleteBlock(b)}
                     disabled={removeBlock.isPending}
-                    className="opacity-0 group-hover/block:opacity-100 p-0.5 rounded hover:bg-destructive/15 text-destructive transition-opacity"
+                    className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
+                    title="Eliminar bloqueo"
                   >
-                    {removeBlock.isPending ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                    {removeBlock.isPending ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
                   </button>
                 </div>
               ))}
@@ -267,6 +281,35 @@ function CourtRow({
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDelete}
+        title={`Eliminar pista "${court.name}"`}
+        description="La pista se desactivará. Si tiene partidos programados en torneos activos no se podrá eliminar."
+        confirmLabel="Sí, eliminar"
+        danger
+        loading={remove.isPending}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => { remove.mutate(); setConfirmDelete(false); }}
+      />
+
+      <ConfirmModal
+        open={!!confirmDeleteBlock}
+        title="Eliminar bloqueo"
+        description={confirmDeleteBlock
+          ? `Se eliminará el bloqueo del ${confirmDeleteBlock.startDate === confirmDeleteBlock.endDate
+              ? confirmDeleteBlock.startDate
+              : `${confirmDeleteBlock.startDate} a ${confirmDeleteBlock.endDate}`}${confirmDeleteBlock.reason ? ` (${confirmDeleteBlock.reason})` : ""}.`
+          : ""}
+        confirmLabel="Sí, eliminar"
+        danger
+        loading={removeBlock.isPending}
+        onClose={() => setConfirmDeleteBlock(null)}
+        onConfirm={() => {
+          if (confirmDeleteBlock) removeBlock.mutate(confirmDeleteBlock.id);
+          setConfirmDeleteBlock(null);
+        }}
+      />
     </div>
   );
 }

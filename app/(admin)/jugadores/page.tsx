@@ -18,14 +18,10 @@ import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL } from "@/lib/constants";
 import type { Player, Gender, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 const PAGE_SIZE = 50;
-
-const CATEGORY_LABEL: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª",
-  "4a": "4ª", "5a": "5ª", "6a": "6ª", "iniciacion": "Inic.",
-};
 
 const LEVEL_COLOR: Record<string, string> = {
   "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
@@ -186,7 +182,7 @@ export default function JugadoresPage() {
       header: ({ column }) => <SortBtn column={column} label="Categoría" />,
       cell:   ({ getValue }) => (
         <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
-          {CATEGORY_LABEL[getValue() as string]}
+          {CATEGORY_LABEL[getValue() as CategoryLevel]}
         </span>
       ),
     },
