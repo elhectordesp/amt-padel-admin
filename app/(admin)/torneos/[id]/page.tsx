@@ -215,6 +215,7 @@ function CalendarTab({
   const [pendingConflicts, setPendingConflicts] = useState<ScheduleConflict[]>([]);
   const [showConflicts,   setShowConflicts]   = useState(false);
   const [unpublishCatId,  setUnpublishCatId]  = useState<string | null>(null);
+  const [confirmReschedule, setConfirmReschedule] = useState(false);
 
   // Inline match edit state
   const [editMatchId,  setEditMatchId]  = useState<string | null>(null);
@@ -413,7 +414,7 @@ function CalendarTab({
             Asignar horarios
           </button>
           <button
-            onClick={() => autoSchedule.mutate(true)}
+            onClick={() => setConfirmReschedule(true)}
             disabled={autoSchedule.isPending || matches.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors disabled:opacity-50"
             title="Borra todos los horarios no jugados y los recalcula desde cero"
@@ -706,6 +707,17 @@ function CalendarTab({
         loading={unpublishMut.isPending}
         onClose={() => setUnpublishCatId(null)}
         onConfirm={() => unpublishCatId && unpublishMut.mutate(unpublishCatId)}
+      />
+
+      <ConfirmModal
+        open={confirmReschedule}
+        title="Reprogramar todo el calendario"
+        description="Se borrarán todos los horarios de los partidos NO jugados y se recalcularán desde cero. Los resultados ya registrados no se tocan. Esta acción no se puede deshacer."
+        confirmLabel="Sí, reprogramar"
+        danger
+        loading={autoSchedule.isPending}
+        onClose={() => setConfirmReschedule(false)}
+        onConfirm={() => { autoSchedule.mutate(true); setConfirmReschedule(false); }}
       />
     </div>
   );

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
 import type { Club, Court, CourtBlock } from "@/types";
@@ -39,6 +40,8 @@ function CourtRow({
   const [showBlocks, setShowBlocks] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [blockForm, setBlockForm]  = useState<BlockForm>({ ...EMPTY_BLOCK });
+  const [confirmDelete,      setConfirmDelete]      = useState(false);
+  const [confirmDeleteBlock, setConfirmDeleteBlock] = useState<CourtBlock | null>(null);
   const [form, setForm] = useState<CourtForm>({
     name:      court.name,
     isIndoor:  court.isIndoor,
@@ -162,7 +165,7 @@ function CourtRow({
             <Pencil size={12} />
           </button>
           <button
-            onClick={() => { if (confirm(`¿Eliminar "${court.name}"?`)) remove.mutate(); }}
+            onClick={() => setConfirmDelete(true)}
             disabled={remove.isPending}
             className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
           >
@@ -191,7 +194,7 @@ function CourtRow({
                     {b.reason && ` · ${b.reason}`}
                   </span>
                   <button
-                    onClick={() => removeBlock.mutate(b.id)}
+                    onClick={() => setConfirmDeleteBlock(b)}
                     disabled={removeBlock.isPending}
                     className="opacity-0 group-hover/block:opacity-100 p-0.5 rounded hover:bg-destructive/15 text-destructive transition-opacity"
                   >
@@ -267,6 +270,35 @@ function CourtRow({
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDelete}
+        title={`Eliminar pista "${court.name}"`}
+        description="La pista se desactivará. Si tiene partidos programados en torneos activos no se podrá eliminar."
+        confirmLabel="Sí, eliminar"
+        danger
+        loading={remove.isPending}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => { remove.mutate(); setConfirmDelete(false); }}
+      />
+
+      <ConfirmModal
+        open={!!confirmDeleteBlock}
+        title="Eliminar bloqueo"
+        description={confirmDeleteBlock
+          ? `Se eliminará el bloqueo del ${confirmDeleteBlock.startDate === confirmDeleteBlock.endDate
+              ? confirmDeleteBlock.startDate
+              : `${confirmDeleteBlock.startDate} a ${confirmDeleteBlock.endDate}`}${confirmDeleteBlock.reason ? ` (${confirmDeleteBlock.reason})` : ""}.`
+          : ""}
+        confirmLabel="Sí, eliminar"
+        danger
+        loading={removeBlock.isPending}
+        onClose={() => setConfirmDeleteBlock(null)}
+        onConfirm={() => {
+          if (confirmDeleteBlock) removeBlock.mutate(confirmDeleteBlock.id);
+          setConfirmDeleteBlock(null);
+        }}
+      />
     </div>
   );
 }
