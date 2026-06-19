@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Trophy, Users, BarChart3,
+  LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare,
 } from "lucide-react";
@@ -32,6 +32,7 @@ const NAV = [
   { href: "/torneos",       icon: Trophy,           label: "Torneos"       },
   { href: "/jugadores",     icon: Users,            label: "Jugadores"     },  // ❌ ocultar para CLUB
   { href: "/rankings",      icon: BarChart3,        label: "Rankings"      },  // ❌ ocultar para CLUB
+  { href: "/estadisticas",  icon: LineChart,        label: "Estadísticas"  },  // ❌ ocultar para CLUB
   { href: "/inscripciones", icon: Building2,        label: "Inscripciones" },
   { href: "/resultados",    icon: Calendar,         label: "Resultados"    },
   { href: "/finanzas",        icon: DollarSign,       label: "Finanzas"       },  // ❌ ocultar para CLUB
