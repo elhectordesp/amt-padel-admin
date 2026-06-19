@@ -391,10 +391,10 @@ function SponsorModal({
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none">×</button>
         </div>
 
-        {/* Body: 2-column */}
-        <div className="grid grid-cols-[280px_1fr] flex-1 overflow-hidden">
-          {/* Left: live preview */}
-          <div className="bg-secondary/20 border-r border-border px-5 py-5 overflow-y-auto">
+        {/* Body: 2-column on desktop, stacked on mobile */}
+        <div className="flex flex-col md:grid md:grid-cols-[280px_1fr] flex-1 overflow-hidden">
+          {/* Live preview: top on mobile, left on desktop */}
+          <div className="bg-secondary/20 md:border-r border-b md:border-b-0 border-border px-4 sm:px-5 py-4 sm:py-5 overflow-y-auto">
             <CarouselPreview
               peers={previewPeers}
               editingId={state.editing?.id}
@@ -405,7 +405,7 @@ function SponsorModal({
           </div>
 
           {/* Right: form */}
-          <div className="p-6 space-y-4 overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
           {/* Scope selector */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-2">Alcance</label>
