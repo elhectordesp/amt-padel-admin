@@ -1785,7 +1785,7 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="overflow-x-auto no-scrollbar border-b border-border">
+        <div className="overflow-x-auto no-scrollbar scroll-mask-x border-b border-border">
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
