@@ -11,6 +11,7 @@ import {
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
   Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
+  ArrowLeftRight, Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,9 @@ import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
 import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
+import { MoveCategoryModal } from "@/components/admin/move-category-modal";
+import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
+import PaymentModal from "@/components/admin/payment-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
@@ -1247,6 +1251,9 @@ export default function TorneoDetailPage() {
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
+  const [movePair,           setMovePair]           = useState<PairReg | null>(null);
+  const [replaceReg,         setReplaceReg]         = useState<AdminRegistration | null>(null);
+  const [paymentReg,         setPaymentReg]         = useState<AdminRegistration | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
@@ -1464,6 +1471,17 @@ export default function TorneoDetailPage() {
     setUpdatingIds(new Set(pair.ids));
     bulkStatus.mutate({ ids: pair.ids, status });
   };
+
+  const moveCategory = useMutation({
+    mutationFn: ({ registrationId, newCategoryId }: { registrationId: string; newCategoryId: string }) =>
+      adminService.registrations.moveCategory(registrationId, newCategoryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations", id] });
+      toast.success("Inscripción movida a la nueva categoría");
+      setMovePair(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   const saveRoundFormats = useMutation({
     mutationFn: ({ catId, formats }: { catId: string; formats: Record<string, string> | null }) =>
@@ -2171,9 +2189,13 @@ export default function TorneoDetailPage() {
                             <StatusBadge status={pair.status} />
                           </td>
                           <td className="px-5 py-3.5">
-                            <span className={`text-xs font-medium ${reg.paid ? "text-green-400" : "text-yellow-400"}`}>
+                            <button
+                              onClick={() => setPaymentReg(reg)}
+                              title="Ver / editar pago"
+                              className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
+                            >
                               {reg.paid ? "Pagado" : "Pendiente"}
-                            </span>
+                            </button>
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-1">
@@ -2202,6 +2224,24 @@ export default function TorneoDetailPage() {
                                   title="Mover a espera"
                                 >
                                   <Clock size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setMovePair(pair)}
+                                disabled={isUpdating}
+                                title="Cambiar categoría"
+                                className="p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
+                              >
+                                <ArrowLeftRight size={14} />
+                              </button>
+                              {reg.partnerId && (
+                                <button
+                                  onClick={() => setReplaceReg(reg)}
+                                  disabled={isUpdating}
+                                  title="Cambiar pareja"
+                                  className="p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-50"
+                                >
+                                  <Users size={14} />
                                 </button>
                               )}
                               <button
@@ -3034,6 +3074,34 @@ export default function TorneoDetailPage() {
           setEnrollOpen(false);
           qc.invalidateQueries({ queryKey: ["registrations", id] });
         }}
+      />
+    )}
+
+    {movePair && tournament && (
+      <MoveCategoryModal
+        pair={movePair}
+        categories={tournament.categories}
+        saving={moveCategory.isPending}
+        onSave={(newCategoryId) =>
+          moveCategory.mutate({ registrationId: movePair.primary.id, newCategoryId })
+        }
+        onClose={() => setMovePair(null)}
+      />
+    )}
+
+    {replaceReg && (
+      <ReplacePartnerModal
+        registration={replaceReg}
+        tournamentId={id}
+        onClose={() => setReplaceReg(null)}
+      />
+    )}
+
+    {paymentReg && (
+      <PaymentModal
+        registration={paymentReg}
+        tournamentId={id}
+        onClose={() => setPaymentReg(null)}
       />
     )}
 
