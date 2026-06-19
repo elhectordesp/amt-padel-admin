@@ -575,23 +575,24 @@ function CalendarTab({
 
                         return (
                           <div key={m.id}>
-                            {/* Match row */}
+                            {/* Match row — mobile: stacked card, desktop: single horizontal row */}
                             <div
-                              className={`flex items-center gap-4 px-5 py-3 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
+                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
                               onClick={() => !m.isResult && !isEditing && onMatchClick(m)}
                             >
-                              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{time}</span>
-                              <span className="text-xs text-muted-foreground w-16 shrink-0 truncate">{m.court || "—"}</span>
+                              <span className="text-xs font-mono text-muted-foreground sm:w-12 shrink-0">{time}</span>
+                              <span className="text-xs text-muted-foreground sm:w-16 shrink-0 truncate">{m.court || "—"}</span>
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)] shrink-0">
                                 {phaseLabel(m.phase)}
                               </span>
-                              <div className="flex-1 flex items-center gap-2 min-w-0">
+                              {/* Teams: full row on mobile (basis-full), inline on desktop */}
+                              <div className="basis-full sm:basis-auto sm:flex-1 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 min-w-0 order-last sm:order-none">
                                 <span className="text-sm font-medium text-foreground truncate">{(m.team1 ?? []).join(" / ") || "Por definir"}</span>
-                                <span className="text-xs text-muted-foreground shrink-0">vs</span>
+                                <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0">vs</span>
                                 <span className="text-sm font-medium text-foreground truncate">{(m.team2 ?? []).join(" / ") || "Por definir"}</span>
                               </div>
                               {m.isResult && m.sets1 && m.sets2 ? (
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
                                   <div className="flex items-center gap-1.5">
                                     <CheckCircle size={13} className="text-green-400" />
                                     <span className="text-xs font-mono text-foreground">
@@ -600,27 +601,28 @@ function CalendarTab({
                                   </div>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
-                                    className="p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
+                                    className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
                                     title="Corregir resultado"
                                   >
-                                    <RotateCcw size={10} />
+                                    <RotateCcw size={11} />
                                   </button>
                                 </div>
                               ) : (
-                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0">
+                                <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0 ml-auto sm:ml-0">
                                   <Clock size={12} /> Pendiente
                                 </span>
                               )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); if (isEditing) { cancelEdit(); } else { startEdit(m); } }}
-                                className={`p-1.5 rounded-md border transition-colors shrink-0 ${
+                                className={`p-2 sm:p-1.5 rounded-md border transition-colors shrink-0 ${
                                   isEditing
                                     ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.1)]"
                                     : "border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)]"
                                 }`}
                                 title="Editar fecha y pista"
+                                aria-label="Editar fecha y pista"
                               >
-                                <Pencil size={11} />
+                                <Pencil size={12} />
                               </button>
                             </div>
 
