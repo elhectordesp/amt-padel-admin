@@ -1254,6 +1254,8 @@ export default function TorneoDetailPage() {
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
   const [replaceReg,         setReplaceReg]         = useState<AdminRegistration | null>(null);
   const [paymentReg,         setPaymentReg]         = useState<AdminRegistration | null>(null);
+  const [confirmCancel,      setConfirmCancel]      = useState<{ ids: string[]; name: string } | null>(null);
+  const [confirmBulk,        setConfirmBulk]        = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
@@ -1468,6 +1470,10 @@ export default function TorneoDetailPage() {
   });
 
   const handlePairStatus = (pair: PairReg, status: string) => {
+    if (status === "CANCELLED") {
+      setConfirmCancel({ ids: pair.ids, name: pair.primary.user.name });
+      return;
+    }
     setUpdatingIds(new Set(pair.ids));
     bulkStatus.mutate({ ids: pair.ids, status });
   };
@@ -1580,7 +1586,8 @@ export default function TorneoDetailPage() {
 
   const handleBulkAction = (status: string) => {
     const allIds = pairs.filter((p) => selectedKeys.has(p.pairKey)).flatMap((p) => p.ids);
-    bulkStatus.mutate({ ids: allIds, status });
+    if (allIds.length === 0) return;
+    setConfirmBulk({ ids: allIds, status, count: selectedKeys.size });
   };
 
   // Reset page when filter/search changes
@@ -3133,6 +3140,37 @@ export default function TorneoDetailPage() {
       loading={regenerateElimination.isPending}
       onClose={() => setRegenElimCatId(null)}
       onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
+    />
+
+    <ConfirmModal
+      open={!!confirmCancel}
+      title="Cancelar inscripción"
+      description={`¿Cancelar la inscripción de ${confirmCancel?.name ?? ""}? Esta acción notificará al siguiente en lista de espera.`}
+      confirmLabel="Sí, cancelar"
+      danger
+      onConfirm={() => {
+        if (confirmCancel) {
+          setUpdatingIds(new Set(confirmCancel.ids));
+          bulkStatus.mutate({ ids: confirmCancel.ids, status: "CANCELLED" });
+        }
+        setConfirmCancel(null);
+      }}
+      onClose={() => setConfirmCancel(null)}
+    />
+
+    <ConfirmModal
+      open={!!confirmBulk}
+      title={`Cambiar estado en bloque (${confirmBulk?.count ?? 0} parejas)`}
+      description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a "${confirmBulk?.status ?? ""}"? Esta acción no se puede deshacer.`}
+      confirmLabel="Sí, confirmar"
+      danger={confirmBulk?.status === "CANCELLED" || confirmBulk?.status === "REJECTED"}
+      onConfirm={() => {
+        if (confirmBulk) {
+          bulkStatus.mutate({ ids: confirmBulk.ids, status: confirmBulk.status });
+        }
+        setConfirmBulk(null);
+      }}
+      onClose={() => setConfirmBulk(null)}
     />
 
 
