@@ -5,12 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService } from "@/lib/services/admin";
-import type { Player, Tournament, AdminEnrollTeamPayload, CreatePlayerPayload } from "@/types";
-
-const LEVELS = ["1a", "2a", "3a", "4a", "5a", "6a", "iniciacion"] as const;
-const LEVEL_LABEL: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª", "4a": "4ª", "5a": "5ª", "6a": "6ª", iniciacion: "Inic.",
-};
+import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS } from "@/lib/constants";
+import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 interface Props {
   tournament: Tournament;

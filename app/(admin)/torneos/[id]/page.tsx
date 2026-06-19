@@ -33,6 +33,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL,
+  REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
 } from "@/lib/constants";
@@ -42,19 +43,16 @@ import { formatDateRange } from "@/lib/utils/formatDateRange";
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
 
-const STATUS_CONFIG: Record<RegistrationStatus, { label: string; color: string; icon: React.ElementType }> = {
-  CONFIRMED: { label: "Confirmado", color: "text-green-400 bg-green-400/10 border-green-400/30",    icon: Check },
-  PENDING:   { label: "Pendiente",  color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30", icon: Clock },
-  WAITLIST:  { label: "En espera",  color: "text-blue-400 bg-blue-400/10 border-blue-400/30",       icon: Clock },
-  CANCELLED: { label: "Cancelado",  color: "text-red-400 bg-red-400/10 border-red-400/30",          icon: Clock },
+const STATUS_ICON: Record<RegistrationStatus, React.ElementType> = {
+  CONFIRMED: Check, PENDING: Clock, WAITLIST: Clock, CANCELLED: X,
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: RegistrationStatus }) {
-  const cfg = STATUS_CONFIG[status];
-  const Icon = cfg.icon;
+  const cfg = REGISTRATION_STATUS_CONFIG[status];
+  const Icon = STATUS_ICON[status];
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.cls}`}>
       <Icon size={9} />
       {cfg.label}
     </span>

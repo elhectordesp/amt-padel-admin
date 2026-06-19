@@ -14,18 +14,8 @@ import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { adminService } from "@/lib/services/admin";
-import type { AdminRegistration, RegistrationStatus, Tournament } from "@/types";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  "1a": "1ª","2a": "2ª","3a": "3ª","4a": "4ª","5a": "5ª","6a": "6ª","iniciacion": "Inic.",
-};
-
-const STATUS_CFG: Record<RegistrationStatus, { label: string; cls: string }> = {
-  CONFIRMED: { label: "Confirmado", cls: "text-green-400 bg-green-400/10 border-green-400/30"   },
-  PENDING:   { label: "Pendiente",  cls: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
-  WAITLIST:  { label: "En espera",  cls: "text-blue-400 bg-blue-400/10 border-blue-400/30"       },
-  CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30"          },
-};
+import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG } from "@/lib/constants";
+import type { AdminRegistration, CategoryLevel, RegistrationStatus, Tournament } from "@/types";
 
 // Tooltip del botón confirmar según el estado actual de la inscripción
 function confirmTitle(status: RegistrationStatus): string {
@@ -526,7 +516,7 @@ export default function InscripcionesPage() {
                                   <div className="space-y-0.5">
                                     <div className="flex items-center gap-1.5">
                                       <span className="text-xs font-semibold text-foreground">
-                                        {CATEGORY_LABEL[reg.user.categoryLevel ?? ""] ?? reg.user.categoryLevel ?? "—"}
+                                        {CATEGORY_LABEL[reg.user.categoryLevel as CategoryLevel] ?? reg.user.categoryLevel ?? "—"}
                                       </span>
                                       {reg.user.spaPoints != null && (
                                         <span className="text-[10px] text-muted-foreground">({Math.round(Number(reg.user.spaPoints))} SPA)</span>
@@ -535,7 +525,7 @@ export default function InscripcionesPage() {
                                     {reg.partner && (
                                       <div className="flex items-center gap-1.5">
                                         <span className="text-xs text-muted-foreground">
-                                          {CATEGORY_LABEL[reg.partner.categoryLevel ?? ""] ?? reg.partner.categoryLevel ?? "—"}
+                                          {CATEGORY_LABEL[reg.partner.categoryLevel as CategoryLevel] ?? reg.partner.categoryLevel ?? "—"}
                                         </span>
                                         {reg.partner.spaPoints != null && (
                                           <span className="text-[10px] text-muted-foreground">({Math.round(Number(reg.partner.spaPoints))} SPA)</span>
