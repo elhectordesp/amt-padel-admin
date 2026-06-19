@@ -2899,16 +2899,16 @@ export default function TorneoDetailPage() {
                                   const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
                                   return (
                                     <div key={m.id} className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${m.isResult ? "border-[rgba(212,175,55,0.3)]" : "border-border"}`}>
-                                      <div className="grid text-xs items-center gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
-                                        <span className={`truncate ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
+                                      <div className="flex flex-col sm:grid text-xs sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+                                        <span className={`truncate sm:text-left ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team1?.join(" / ") || "Por definir"}
                                         </span>
-                                        <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap px-1">
+                                        <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
                                           {m.isResult && m.sets1 && m.sets2
                                             ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                             : "vs"}
                                         </span>
-                                        <span className={`truncate text-right ${m.winner === "team2" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
+                                        <span className={`truncate sm:text-right ${m.winner === "team2" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team2?.join(" / ") || "Por definir"}
                                         </span>
                                       </div>
@@ -2952,14 +2952,14 @@ export default function TorneoDetailPage() {
                                 const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
                                 return (
                                   <div key={m.id} className="space-y-0.5">
-                                    <div className="grid text-xs text-muted-foreground items-center gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
-                                      <span className="truncate">{m.team1?.join(" / ") ?? "—"}</span>
-                                      <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap px-1">
+                                    <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+                                      <span className="truncate sm:text-left">{m.team1?.join(" / ") ?? "—"}</span>
+                                      <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
                                         {m.isResult && m.sets1 && m.sets2
                                           ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                           : "vs"}
                                       </span>
-                                      <span className="truncate text-right">{m.team2?.join(" / ") ?? "—"}</span>
+                                      <span className="truncate sm:text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
                                     <div className="flex items-center justify-between pl-0.5">
                                       {(matchTime || m.court) ? (
