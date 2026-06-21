@@ -328,6 +328,8 @@ export const adminService = {
     updateFaqs:       (data: AppConfigFaqs)                               => api.put("/admin/config/faqs", data).then((r) => r.data),
     closeSeason:      ()                                                  => api.post<{ previousSeason: number; newSeason: number }>("/admin/config/season/close").then((r) => r.data),
     advanceSeason:    ()                                                  => api.post<{ newSeason: number }>("/admin/config/season/advance").then((r) => r.data),
+    testEmail:        (to?: string)                                       => api.post<{ sent: boolean; to: string }>("/admin/config/test-email", { to }).then((r) => r.data),
+    testPush:         ()                                                  => api.post<{ sent: boolean }>("/admin/config/test-push").then((r) => r.data),
   },
 
   admins: {
