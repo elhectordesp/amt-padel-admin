@@ -490,6 +490,7 @@ function TabComunicaciones() {
     queryFn:  () => adminService.config.getSection("email") as Promise<AppConfigEmail>,
   });
   const [local, setLocal] = useState<AppConfigEmail | null>(null);
+  const [testTo, setTestTo] = useState("");
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
 
@@ -500,6 +501,12 @@ function TabComunicaciones() {
     mutationFn: () => adminService.config.updateEmail(local!),
     onSuccess: (updated) => { qc.setQueryData(["config", "email"], updated); setLocal(null); toast.success("Config de email guardada"); },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const testEmail = useMutation({
+    mutationFn: () => adminService.config.testEmail(testTo.trim() || undefined),
+    onSuccess:  (res) => toast.success(`Email de prueba enviado a ${res.to}`),
+    onError:    (e: Error) => toast.error(e.message),
   });
 
   const set = <K extends keyof AppConfigEmail>(k: K, v: AppConfigEmail[K]) =>
@@ -536,6 +543,26 @@ function TabComunicaciones() {
           </FieldRow>
         ))}
       </Section>
+
+      <Section title="Prueba de envío" description="Verifica que el SMTP funciona antes de mandar comunicaciones reales. Si dejas el destino vacío se envía al email de tu cuenta.">
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="email"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="Email destino (opcional)"
+            className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37] w-64"
+          />
+          <button
+            onClick={() => testEmail.mutate()}
+            disabled={testEmail.isPending}
+            className="flex items-center gap-1.5 h-9 px-4 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.25)] disabled:opacity-50 transition-colors"
+          >
+            {testEmail.isPending ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+            Enviar email de prueba
+          </button>
+        </div>
+      </Section>
     </div>
   );
 }
@@ -559,6 +586,12 @@ function TabNotificaciones() {
     mutationFn: () => adminService.config.updatePush(local!),
     onSuccess: (updated) => { qc.setQueryData(["config", "push"], updated); setLocal(null); toast.success("Config de notificaciones guardada"); },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const testPush = useMutation({
+    mutationFn: () => adminService.config.testPush(),
+    onSuccess:  () => toast.success("Push de prueba enviado a tu dispositivo"),
+    onError:    (e: Error) => toast.error(e.message),
   });
 
   const set = <K extends keyof AppConfigPush>(k: K, v: AppConfigPush[K]) =>
@@ -585,6 +618,17 @@ function TabNotificaciones() {
             <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
           </FieldRow>
         ))}
+      </Section>
+
+      <Section title="Prueba de envío" description="Lanza una notificación push de prueba a tu dispositivo. Necesitas haber abierto la app móvil con esta cuenta y aceptado notificaciones.">
+        <button
+          onClick={() => testPush.mutate()}
+          disabled={testPush.isPending}
+          className="flex items-center gap-1.5 h-9 px-4 rounded-md bg-[rgba(212,175,55,0.15)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.25)] disabled:opacity-50 transition-colors"
+        >
+          {testPush.isPending ? <Loader2 size={12} className="animate-spin" /> : <Bell size={12} />}
+          Enviar push de prueba
+        </button>
       </Section>
     </div>
   );
