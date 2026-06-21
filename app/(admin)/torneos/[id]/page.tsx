@@ -11,7 +11,7 @@ import {
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
   Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
-  ArrowLeftRight, Users,
+  ArrowLeftRight, Users, Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,7 +32,7 @@ import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/se
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import {
-  CATEGORY_LABEL_SHORT, GENDER_LABEL,
+  CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
   REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel,
@@ -1285,6 +1285,11 @@ export default function TorneoDetailPage() {
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
+  const [editCatId,           setEditCatId]            = useState<string | null>(null);
+  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number }>({ totalSpots: 0, price: 0 });
+  const [addCatOpen,          setAddCatOpen]           = useState(false);
+  const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number }>({ gender: "M", level: "3a", totalSpots: 16, price: 25 });
+  const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
   const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
   const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
   const [showConflictsCatId, setShowConflictsCatId] = useState<string | null>(null);
@@ -1547,6 +1552,39 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Premios actualizados");
       setEditPrizesCatId(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updateCatMut = useMutation({
+    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number } }) =>
+      adminService.categories.update(id, catId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+      toast.success("Categoría actualizada");
+      setEditCatId(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const addCatMut = useMutation({
+    mutationFn: (data: typeof addCatForm) =>
+      adminService.categories.add(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+      toast.success("Categoría añadida");
+      setAddCatOpen(false);
+      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25 });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteCatMut = useMutation({
+    mutationFn: (catId: string) => adminService.categories.remove(id, catId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournament", id] });
+      toast.success("Categoría eliminada");
+      setDeleteCatId(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -1823,14 +1861,73 @@ export default function TorneoDetailPage() {
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">Categorías</h3>
+                {!addCatOpen && (
+                  <button
+                    onClick={() => setAddCatOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors"
+                  >
+                    <Plus size={12} /> Añadir
+                  </button>
+                )}
               </div>
+
+              {addCatOpen && (
+                <div className="px-4 py-3 border-b border-border bg-[rgba(212,175,55,0.04)] space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#D4AF37]">Nueva categoría</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <select
+                      value={addCatForm.gender}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, gender: e.target.value as "M" | "F" }))}
+                      className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    >
+                      <option value="M">Masculino</option>
+                      <option value="F">Femenino</option>
+                    </select>
+                    <select
+                      value={addCatForm.level}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, level: e.target.value as CategoryLevel }))}
+                      className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    >
+                      {LEVELS.map((l) => <option key={l} value={l}>{CATEGORY_LABEL_SHORT[l]}</option>)}
+                    </select>
+                    <input
+                      type="number" min={1} placeholder="Plazas"
+                      value={addCatForm.totalSpots}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, totalSpots: Number(e.target.value) }))}
+                      className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    />
+                    <input
+                      type="number" min={0} placeholder="Precio €"
+                      value={addCatForm.price}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
+                      className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setAddCatOpen(false)}
+                      className="px-3 py-1 text-xs rounded-md border border-border text-muted-foreground hover:text-foreground"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => addCatMut.mutate(addCatForm)}
+                      disabled={addCatMut.isPending || addCatForm.totalSpots < 1}
+                      className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+                    >
+                      {addCatMut.isPending && <Loader2 size={11} className="animate-spin" />} Crear
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-secondary/50">
-                    {["Categoría", "Plazas (parejas)", "Parejas inscritas", "Ocupación"].map((h) => (
+                    {["Categoría", "Plazas", "Precio", "Inscritas", "Ocupación", ""].map((h) => (
                       <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                     ))}
                   </tr>
@@ -1840,22 +1937,88 @@ export default function TorneoDetailPage() {
                     const pairSpots = cat.totalSpots;
                     const pairCount = cat.registeredCount;
                     const pct = pairSpots > 0 ? Math.round((pairCount / pairSpots) * 100) : 0;
+                    const isEditing = editCatId === cat.id;
                     return (
                       <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-foreground">
                           {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">{pairSpots}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {isEditing ? (
+                            <input
+                              type="number" min={pairCount}
+                              value={editCatForm.totalSpots}
+                              onChange={(e) => setEditCatForm((f) => ({ ...f, totalSpots: Number(e.target.value) }))}
+                              className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                            />
+                          ) : <span className="text-muted-foreground">{pairSpots}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {isEditing ? (
+                            <input
+                              type="number" min={0}
+                              value={editCatForm.price}
+                              onChange={(e) => setEditCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
+                              className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                            />
+                          ) : <span className="text-muted-foreground">{cat.price ?? 0}€</span>}
+                        </td>
                         <td className="px-4 py-3 text-sm text-foreground">{pairCount}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+                            <div className="flex-1 min-w-[60px] h-1.5 bg-secondary rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${pct >= 90 ? "bg-destructive" : "bg-[#D4AF37]"}`}
                                 style={{ width: `${pct}%` }}
                               />
                             </div>
                             <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 justify-end">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  onClick={() => updateCatMut.mutate({ catId: cat.id, data: editCatForm })}
+                                  disabled={updateCatMut.isPending}
+                                  className="p-1.5 rounded hover:bg-[rgba(212,175,55,0.15)] text-[#D4AF37] disabled:opacity-50"
+                                  title="Guardar"
+                                >
+                                  {updateCatMut.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => setEditCatId(null)}
+                                  className="p-1.5 rounded hover:bg-secondary text-muted-foreground"
+                                  title="Cancelar"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditCatId(cat.id);
+                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0 });
+                                  }}
+                                  className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                                  title="Editar plazas y precio"
+                                  aria-label="Editar categoría"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  onClick={() => setDeleteCatId(cat.id)}
+                                  disabled={pairCount > 0}
+                                  className="p-2 sm:p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title={pairCount > 0 ? "No se puede eliminar: hay inscripciones" : "Eliminar categoría"}
+                                  aria-label="Eliminar categoría"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -3204,6 +3367,17 @@ export default function TorneoDetailPage() {
         setConfirmBulk(null);
       }}
       onClose={() => setConfirmBulk(null)}
+    />
+
+    <ConfirmModal
+      open={!!deleteCatId}
+      title="Eliminar categoría"
+      description="Esta acción no se puede deshacer. Solo es posible si la categoría no tiene inscripciones ni partidos generados."
+      confirmLabel="Sí, eliminar"
+      danger
+      loading={deleteCatMut.isPending}
+      onClose={() => setDeleteCatId(null)}
+      onConfirm={() => { if (deleteCatId) deleteCatMut.mutate(deleteCatId); }}
     />
 
 
