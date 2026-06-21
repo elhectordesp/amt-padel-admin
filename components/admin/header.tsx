@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, Search, LogOut, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { Bell, Calendar, Search, LogOut, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { adminService } from "@/lib/services/admin";
 import { useSearch } from "@/components/admin/search-context";
@@ -22,23 +23,28 @@ export function Header({ title }: HeaderProps) {
   const { toggle }         = useSearch();
   const [showLogout, setShowLogout] = useState(false);
   const [menuOpen,   setMenuOpen]   = useState(false);
+  const [bellOpen,   setBellOpen]   = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !bellOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (bellOpen && bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
+  }, [menuOpen, bellOpen]);
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    if (!menuOpen && !bellOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setMenuOpen(false); setBellOpen(false); }
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [menuOpen]);
+  }, [menuOpen, bellOpen]);
 
   const { data: stats } = useQuery({
     queryKey:       ["admin-stats"],
@@ -77,13 +83,58 @@ export function Header({ title }: HeaderProps) {
             <Search size={18} />
           </button>
 
-          {/* Notification bell */}
-          <button className="relative p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-            <Bell size={18} />
-            {(stats?.scheduledMatches ?? 0) > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#D4AF37]" />
+          {/* Notification bell dropdown */}
+          <div ref={bellRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setBellOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={bellOpen}
+              aria-label="Notificaciones"
+              className="relative p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            >
+              <Bell size={18} />
+              {(stats?.scheduledMatches ?? 0) > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#D4AF37]" />
+              )}
+            </button>
+
+            {bellOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 w-64 rounded-md bg-card border border-border shadow-lg overflow-hidden z-20"
+              >
+                <div className="px-3 py-2.5 border-b border-border">
+                  <p className="text-xs font-semibold text-foreground">Hoy</p>
+                </div>
+                {(stats?.scheduledMatches ?? 0) > 0 ? (
+                  <Link
+                    href="/torneos"
+                    role="menuitem"
+                    onClick={() => setBellOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-foreground hover:bg-[rgba(212,175,55,0.08)] transition-colors"
+                  >
+                    <Calendar size={14} className="text-[#D4AF37] shrink-0" />
+                    <span className="flex-1">
+                      <span className="font-semibold text-[#D4AF37]">{stats?.scheduledMatches}</span> partido{stats?.scheduledMatches !== 1 ? "s" : ""} programado{stats?.scheduledMatches !== 1 ? "s" : ""}
+                    </span>
+                  </Link>
+                ) : (
+                  <div className="px-3 py-3 text-xs text-muted-foreground italic">
+                    Sin partidos programados hoy
+                  </div>
+                )}
+                <Link
+                  href="/dashboard"
+                  role="menuitem"
+                  onClick={() => setBellOpen(false)}
+                  className="flex items-center justify-center px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground border-t border-border hover:bg-secondary/50 transition-colors"
+                >
+                  Ir al dashboard
+                </Link>
+              </div>
             )}
-          </button>
+          </div>
 
           {/* Admin profile dropdown */}
           <div ref={menuRef} className="relative">
