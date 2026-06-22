@@ -244,6 +244,13 @@ export const adminService = {
       api.delete(`/admin/clubs/${id}`).then((r) => r.data),
     geocodeBatch: () =>
       api.post<{ updated: number; skipped: number; errors: string[] }>('/admin/clubs/geocode-batch').then((r) => r.data),
+    // Crea un club stub + invita a su admin en un solo paso. El propio
+    // admin del club completa los datos al entrar por primera vez.
+    quickInvite: (email: string) =>
+      api.post<{ clubId: string; invitationId: string; expiresAt: string }>(
+        "/admin/clubs/quick-invite",
+        { email },
+      ).then((r) => r.data),
   },
 
   courts: {
