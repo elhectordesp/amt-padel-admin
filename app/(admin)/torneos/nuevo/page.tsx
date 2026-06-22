@@ -253,6 +253,9 @@ export default function NuevoTorneoPage() {
   const create = useMutation({
     mutationFn: () => adminService.tournaments.create({
       ...infoData!,
+      // Sanitiza imageUrl: backend valida con @IsUrl() y "" lo rechaza.
+      // Si no hay banner, omitimos el campo del payload.
+      imageUrl: infoData!.imageUrl?.trim() ? infoData!.imageUrl : undefined,
       tier:        configData!.tier,
       format:      configData!.format,
       scoringSystem: configData!.scoringSystem,
