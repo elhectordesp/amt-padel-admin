@@ -31,6 +31,7 @@ const NAV = [
 // El backend ya enforce el aislamiento — esto es UX para no enseñar
 // botones que devolverían 403.
 const CLUB_ALLOWED_PATHS = new Set([
+  "/dashboard",
   "/torneos",
   "/inscripciones",
   "/resultados",

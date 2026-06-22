@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activity, Clock } from "lucide-react";
 import Link from "next/link";
@@ -76,14 +74,8 @@ function useAdminUser() {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { role } = useRole();
-
-  // Un CLUB no tiene acceso al dashboard global (stats/finanzas son AMT-only).
-  // Lo mandamos a su listado de torneos, su pantalla por defecto.
-  useEffect(() => {
-    if (isClub(role)) router.replace("/torneos");
-  }, [role, router]);
+  const isClubUser = isClub(role);
 
   const { data: adminUser } = useAdminUser();
 
@@ -128,7 +120,11 @@ export default function DashboardPage() {
           <h2 className="font-heading text-2xl text-foreground">
             ¡Bienvenido{adminUser?.name ? `, ${adminUser.name.split(" ")[0]}` : ""}! 👋
           </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Aquí tienes el resumen de la plataforma.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isClubUser
+              ? "Aquí tienes el resumen de tu club."
+              : "Aquí tienes el resumen de la plataforma."}
+          </p>
         </div>
 
         {/* Stats */}
@@ -137,14 +133,17 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <StatCard
-              label="Torneos activos"
+              label={isClubUser ? "Mis torneos activos" : "Torneos activos"}
               value={stats?.activeTournaments ?? "—"}
               icon={Trophy}
               loading={isLoading}
             />
             <StatCard
-              label="Jugadores inscritos"
+              label={
+                isClubUser ? "Jugadores en mis torneos" : "Jugadores inscritos"
+              }
               value={stats?.registeredPlayers ?? "—"}
+              sub={isClubUser ? "Únicos" : undefined}
               icon={Users}
               loading={isLoading}
             />
@@ -229,7 +228,11 @@ export default function DashboardPage() {
           {/* Col 2-3: Torneos próximos */}
           <div className="xl:col-span-2 bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground text-sm">Torneos activos y próximos</h3>
+              <h3 className="font-semibold text-foreground text-sm">
+                {isClubUser
+                  ? "Mis torneos activos y próximos"
+                  : "Torneos activos y próximos"}
+              </h3>
               <Link href="/torneos" className="text-xs text-[#D4AF37] hover:underline">Ver todos</Link>
             </div>
             {tournamentsError ? (
