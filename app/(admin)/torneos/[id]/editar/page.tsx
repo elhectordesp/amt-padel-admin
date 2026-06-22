@@ -5,6 +5,7 @@ import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form"
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
+import { useRole, isClub } from "@/lib/use-role";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -57,9 +58,21 @@ export default function EditarTorneoPage() {
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
 
+  // ADMIN ve el listado completo; CLUB solo carga su propio club (el listado
+  // 403earía igualmente). El campo Club es read-only para CLUB.
+  const { role, clubId: myClubId } = useRole();
+  const isClubUser = isClub(role);
+
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
     queryFn:  () => adminService.clubs.list(),
+    enabled:  !isClubUser,
+  });
+
+  const { data: myClub } = useQuery({
+    queryKey: ["my-club", myClubId],
+    queryFn:  () => adminService.clubs.findOne(myClubId!),
+    enabled:  isClubUser && !!myClubId,
   });
 
   const { data: activeRegistrations = 0 } = useQuery({
@@ -208,16 +221,31 @@ export default function EditarTorneoPage() {
                   onChange={(url) => setValue("imageUrl", url, { shouldDirty: true })}
                 />
               </Field>
-              <Field label="Club" error={errors.clubId?.message}>
-                <CustomSelect
-                  value={watch("clubId") ?? ""}
-                  onChange={(v) => setValue("clubId", v, { shouldValidate: true, shouldDirty: true })}
-                  options={[
-                    { value: "", label: "Selecciona un club…" },
-                    ...clubs.map((c) => ({ value: c.id, label: `${c.name} — ${c.city}` })),
-                  ]}
-                />
-              </Field>
+              {isClubUser ? (
+                <Field label="Club">
+                  <Input
+                    value={
+                      myClub
+                        ? `${myClub.name} — ${myClub.city}`
+                        : (tournament?.club?.name ?? "Cargando...")
+                    }
+                    readOnly
+                    disabled
+                    className="cursor-not-allowed opacity-80"
+                  />
+                </Field>
+              ) : (
+                <Field label="Club" error={errors.clubId?.message}>
+                  <CustomSelect
+                    value={watch("clubId") ?? ""}
+                    onChange={(v) => setValue("clubId", v, { shouldValidate: true, shouldDirty: true })}
+                    options={[
+                      { value: "", label: "Selecciona un club…" },
+                      ...clubs.map((c) => ({ value: c.id, label: `${c.name} — ${c.city}` })),
+                    ]}
+                  />
+                </Field>
+              )}
               <Field label="Premio (descripción)" error={errors.prize?.message}>
                 <Input {...register("prize")} placeholder="5.000 € + trofeo" />
               </Field>
