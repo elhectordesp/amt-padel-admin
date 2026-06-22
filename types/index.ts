@@ -393,6 +393,7 @@ export interface Sponsor {
 export interface CreateTournamentPayload {
   name:        string;
   clubId:      string;
+  imageUrl?:   string;
   startDate:   string;
   endDate:     string;
   prize?:      string;
