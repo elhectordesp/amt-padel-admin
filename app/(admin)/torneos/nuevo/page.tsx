@@ -6,6 +6,7 @@ import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form"
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
+import { useRole, isClub } from "@/lib/use-role";
 import type { CategoryLevel, Gender } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -152,9 +153,22 @@ export default function NuevoTorneoPage() {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null);
 
   // ── Clubs list for selector ───────────────────────────────────────────
+  // ADMIN ve el listado completo de clubes y elige; CLUB solo puede crear
+  // torneos para su propio club, así que cargamos solo ese (el listado le
+  // 403earía igualmente).
+  const { role, clubId: myClubId } = useRole();
+  const isClubUser = isClub(role);
+
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
     queryFn:  () => adminService.clubs.list(),
+    enabled:  !isClubUser,
+  });
+
+  const { data: myClub } = useQuery({
+    queryKey: ["my-club", myClubId],
+    queryFn:  () => adminService.clubs.findOne(myClubId!),
+    enabled:  isClubUser && !!myClubId,
   });
 
   // ── Step 1: Info ───────────────────────────────────────────────────────
@@ -162,6 +176,14 @@ export default function NuevoTorneoPage() {
     resolver:      zodResolver(infoSchema),
     defaultValues: infoData ?? undefined,
   });
+
+  // Pre-fill clubId con el propio club del CLUB user (no podrá cambiarlo).
+  // El backend lo fuerza de todas formas — esto es UX.
+  useEffect(() => {
+    if (isClubUser && myClubId && !infoForm.getValues("clubId")) {
+      infoForm.setValue("clubId", myClubId, { shouldValidate: true });
+    }
+  }, [isClubUser, myClubId, infoForm]);
 
   // Warn on accidental navigation away (must be after infoForm declaration)
   useEffect(() => {
@@ -377,16 +399,29 @@ export default function NuevoTorneoPage() {
                     placeholder="AMT GOLD MADRID"
                   />
                 </Field>
-                <Field label="Club" error={infoForm.formState.errors.clubId?.message}>
-                  <CustomSelect
-                    value={infoForm.watch("clubId") ?? ""}
-                    onChange={(v) => infoForm.setValue("clubId", v, { shouldValidate: true })}
-                    options={[
-                      { value: "", label: "Selecciona un club…" },
-                      ...clubs.map((c) => ({ value: c.id, label: `${c.name} — ${c.city}` })),
-                    ]}
-                  />
-                </Field>
+                {isClubUser ? (
+                  <Field label="Club">
+                    <Input
+                      value={
+                        myClub ? `${myClub.name} — ${myClub.city}` : "Cargando..."
+                      }
+                      readOnly
+                      disabled
+                      className="cursor-not-allowed opacity-80"
+                    />
+                  </Field>
+                ) : (
+                  <Field label="Club" error={infoForm.formState.errors.clubId?.message}>
+                    <CustomSelect
+                      value={infoForm.watch("clubId") ?? ""}
+                      onChange={(v) => infoForm.setValue("clubId", v, { shouldValidate: true })}
+                      options={[
+                        { value: "", label: "Selecciona un club…" },
+                        ...clubs.map((c) => ({ value: c.id, label: `${c.name} — ${c.city}` })),
+                      ]}
+                    />
+                  </Field>
+                )}
                 <Field label="Premio (descripción)" error={infoForm.formState.errors.prize?.message}>
                   <Input
                     {...infoForm.register("prize")}
@@ -789,7 +824,7 @@ export default function NuevoTorneoPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Información básica</p>
                   {[
                     ["Nombre",   infoData.name],
-                    ["Club",     clubs.find(c => c.id === infoData.clubId)?.name ?? infoData.clubId],
+                    ["Club",     (isClubUser ? myClub?.name : clubs.find(c => c.id === infoData.clubId)?.name) ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
                     ["Premio",   infoData.prize || "—"],
                   ].map(([k, v]) => (
