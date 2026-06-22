@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Users, Calendar, DollarSign, TrendingUp, AlertTriangle, Activity, Clock } from "lucide-react";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import { useRole, isClub } from "@/lib/use-role";
 
 function StatCard({
   label, value, sub, icon: Icon, loading,
@@ -73,6 +76,15 @@ function useAdminUser() {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { role } = useRole();
+
+  // Un CLUB no tiene acceso al dashboard global (stats/finanzas son AMT-only).
+  // Lo mandamos a su listado de torneos, su pantalla por defecto.
+  useEffect(() => {
+    if (isClub(role)) router.replace("/torneos");
+  }, [role, router]);
+
   const { data: adminUser } = useAdminUser();
 
   const { data: stats, isLoading, isError: statsError } = useQuery({

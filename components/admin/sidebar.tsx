@@ -10,43 +10,42 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
+import { useRole, isClub } from "@/lib/use-role";
 
-// TODO (ROL CLUB — futuro):
-// Cuando exista el rol CLUB, filtrar NAV según el rol del usuario logueado.
-// Un usuario CLUB solo debe ver y acceder a:
-//   ✅ Torneos, Inscripciones, Resultados
-// Un usuario CLUB NO debe ver:
-//   ❌ Dashboard global (o mostrar un dashboard acotado solo con sus torneos)
-//   ❌ Jugadores (no puede cambiar categorías ni ver datos privados)
-//   ❌ Rankings (no puede recalcular el SPA global)
-//   ❌ Finanzas (estadísticas globales del circuito)
-//   ❌ Configuración (ajustes del sistema SPA)
-//
-// Implementación sugerida:
-//   const { user } = useAuth();
-//   const isClub = user?.role === 'club';
-//   const visibleNav = NAV.filter(item => !isClub || CLUB_ALLOWED.includes(item.href));
-//   const CLUB_ALLOWED = ['/torneos', '/inscripciones', '/resultados'];
 const NAV = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard"     },
   { href: "/torneos",       icon: Trophy,           label: "Torneos"       },
-  { href: "/jugadores",     icon: Users,            label: "Jugadores"     },  // ❌ ocultar para CLUB
-  { href: "/rankings",      icon: BarChart3,        label: "Rankings"      },  // ❌ ocultar para CLUB
-  { href: "/estadisticas",  icon: LineChart,        label: "Estadísticas"  },  // ❌ ocultar para CLUB
+  { href: "/jugadores",     icon: Users,            label: "Jugadores"     },
+  { href: "/rankings",      icon: BarChart3,        label: "Rankings"      },
+  { href: "/estadisticas",  icon: LineChart,        label: "Estadísticas"  },
   { href: "/inscripciones", icon: Building2,        label: "Inscripciones" },
   { href: "/resultados",    icon: Calendar,         label: "Resultados"    },
-  { href: "/finanzas",        icon: DollarSign,       label: "Finanzas"       },  // ❌ ocultar para CLUB
-  { href: "/clubes",           icon: Landmark,         label: "Clubes"         },  // ❌ ocultar para CLUB
-  { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },  // ❌ ocultar para CLUB
-  { href: "/soporte",          icon: MessageSquare,    label: "Soporte"        },  // ❌ ocultar para CLUB
-  { href: "/configuracion",   icon: Settings,         label: "Configuración"  },  // ❌ ocultar para CLUB
+  { href: "/finanzas",        icon: DollarSign,       label: "Finanzas"       },
+  { href: "/clubes",           icon: Landmark,         label: "Clubes"         },
+  { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },
+  { href: "/soporte",          icon: MessageSquare,    label: "Soporte"        },
+  { href: "/configuracion",   icon: Settings,         label: "Configuración"  },
 ];
+
+// Rutas que un user CLUB sí puede ver. El resto se ocultan del sidebar.
+// El backend ya enforce el aislamiento — esto es UX para no enseñar
+// botones que devolverían 403.
+const CLUB_ALLOWED_PATHS = new Set([
+  "/torneos",
+  "/inscripciones",
+  "/resultados",
+]);
 
 export function Sidebar() {
   const pathname    = usePathname();
+  const { role }    = useRole();
   const [showLogout,  setShowLogout]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(false); // desktop collapse
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
+
+  const visibleNav = isClub(role)
+    ? NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href))
+    : NAV;
 
   // Cierra el drawer móvil al navegar
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -95,7 +94,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {visibleNav.map(({ href, icon: Icon, label }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link

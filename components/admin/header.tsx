@@ -8,6 +8,7 @@ import { adminService } from "@/lib/services/admin";
 import { useSearch } from "@/components/admin/search-context";
 import { LogoutModal } from "@/components/admin/logout-modal";
 import { api } from "@/lib/api";
+import { useRole, isClub } from "@/lib/use-role";
 
 function useAdminUser() {
   return useQuery({
@@ -54,6 +55,8 @@ export function Header({ title }: HeaderProps) {
   });
 
   const { data: me } = useAdminUser();
+  const { role } = useRole();
+  const isClubRole = isClub(role);
 
   const initials = me?.name
     ? me.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -149,9 +152,16 @@ export function Header({ title }: HeaderProps) {
                 <span className="text-[10px] font-bold text-[#D4AF37]">{initials}</span>
               </div>
               <div className="text-left hidden sm:block">
-                <p className="text-xs font-semibold text-foreground leading-none truncate max-w-[120px]">
-                  {me?.name ?? "Admin AMT"}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-foreground leading-none truncate max-w-[120px]">
+                    {me?.name ?? "Admin AMT"}
+                  </p>
+                  {isClubRole && (
+                    <span className="text-[9px] font-bold tracking-wider text-[#D4AF37] bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] rounded px-1 py-0.5 leading-none">
+                      CLUB
+                    </span>
+                  )}
+                </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{me?.email ?? "Super Admin"}</p>
               </div>
               <ChevronDown size={12} className={`text-muted-foreground transition-transform ${menuOpen ? "rotate-180" : ""}`} />
@@ -163,7 +173,14 @@ export function Header({ title }: HeaderProps) {
                 className="absolute right-0 top-full mt-1 w-56 rounded-md bg-card border border-border shadow-lg overflow-hidden z-20"
               >
                 <div className="px-3 py-2.5 border-b border-border">
-                  <p className="text-xs font-semibold text-foreground truncate">{me?.name ?? "Admin AMT"}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-foreground truncate">{me?.name ?? "Admin AMT"}</p>
+                    {isClubRole && (
+                      <span className="text-[9px] font-bold tracking-wider text-[#D4AF37] bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] rounded px-1 py-0.5 leading-none">
+                        CLUB
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-muted-foreground truncate">{me?.email ?? "Super Admin"}</p>
                 </div>
                 <button
