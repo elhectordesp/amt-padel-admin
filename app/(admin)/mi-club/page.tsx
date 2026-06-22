@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, AlertCircle, CheckCircle2, Save } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Save, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { CourtsManager } from "@/components/admin/courts-manager";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { PROVINCES } from "@/lib/constants/spain";
@@ -313,6 +314,23 @@ export default function MiClubPage() {
               </button>
             </div>
           </form>
+        )}
+
+        {/* Pistas del club. Solo aparece cuando el club ya tiene id cargado;
+            la sección se gestiona inline igual que en /clubes para AMT. */}
+        {clubId && (
+          <section className="bg-card border border-border rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-border">
+              <LayoutGrid size={18} className="text-[#D4AF37]" />
+              <h2 className="font-heading text-lg text-foreground">Pistas</h2>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Gestiona las pistas de tu club y sus bloqueos puntuales. Al
+              crear un torneo, las pistas activas estarán disponibles para
+              programar partidos.
+            </p>
+            <CourtsManager clubId={clubId} />
+          </section>
         )}
       </div>
     </>
