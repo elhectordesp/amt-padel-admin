@@ -20,7 +20,7 @@ import { z } from "zod";
 const schema = z.object({
   name:                 z.string().min(3, "Nombre requerido"),
   clubId:               z.string().min(1, "Club requerido"),
-  imageUrl:             z.string().optional(),
+  imageUrl:             z.string().nullable().optional(),
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
   prize:                z.string().optional(),
@@ -195,12 +195,19 @@ export default function EditarTorneoPage() {
 
         <form
           onSubmit={handleSubmit((data) => {
+            // Backend valida imageUrl con @IsUrl() — "" lo rechaza con 400.
+            // Convertimos a null para que el endpoint la limpie correctamente
+            // (semántica de "quitar imagen" del uploader).
+            const sanitized: FormData = {
+              ...data,
+              imageUrl: data.imageUrl?.trim() ? data.imageUrl : null,
+            };
             const DESTRUCTIVE = ["DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"];
-            const statusChanged = tournament && data.status !== tournament.status?.toUpperCase();
-            if (statusChanged && DESTRUCTIVE.includes(data.status)) {
-              setPendingData(data);
+            const statusChanged = tournament && sanitized.status !== tournament.status?.toUpperCase();
+            if (statusChanged && DESTRUCTIVE.includes(sanitized.status)) {
+              setPendingData(sanitized);
             } else {
-              save.mutate(data);
+              save.mutate(sanitized);
             }
           })}
           className="space-y-6"

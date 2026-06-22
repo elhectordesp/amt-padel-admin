@@ -24,7 +24,7 @@ const infoSchema = z.object({
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:       z.string().optional(),
-  imageUrl:    z.string().optional(),
+  imageUrl:    z.string().nullable().optional(),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
