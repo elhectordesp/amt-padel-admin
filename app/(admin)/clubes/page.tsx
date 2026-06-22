@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { adminService } from "@/lib/services/admin";
 import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
 import type { Club, Court, CourtBlock } from "@/types";
@@ -934,6 +935,7 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
 export default function ClubesPage() {
   const qc = useQueryClient();
   const [modal,        setModal]        = useState<{ open: boolean; club?: Club }>({ open: false });
+  const [quickInvite,  setQuickInvite]  = useState(false);
   const [courtsClub,   setCourtsClub]   = useState<Club | null>(null);
   const [showInactive, setShowInactive] = useState(false);
 
@@ -965,6 +967,10 @@ export default function ClubesPage() {
           onClose={() => setModal({ open: false })}
         />
       )}
+      <QuickInviteClubModal
+        open={quickInvite}
+        onClose={() => setQuickInvite(false)}
+      />
       {courtsClub && (
         <CourtsPanel
           club={courtsClub}
@@ -1004,6 +1010,13 @@ export default function ClubesPage() {
                 <span className="hidden sm:inline">GPS ({noCoords.length})</span>
               </button>
             )}
+            <button
+              onClick={() => setQuickInvite(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm rounded-md border border-[rgba(212,175,55,0.4)] text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.08)]"
+              title="Crea un club stub + envía invitación al admin en un solo paso"
+            >
+              <Plus size={15} /> Invitar admin
+            </button>
             <button
               onClick={() => setModal({ open: true })}
               className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227]"
