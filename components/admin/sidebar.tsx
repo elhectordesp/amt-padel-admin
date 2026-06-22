@@ -36,6 +36,14 @@ const CLUB_ALLOWED_PATHS = new Set([
   "/resultados",
 ]);
 
+// Item que se inserta SOLO para CLUB users — link a la página de
+// configuración de su propio club.
+const CLUB_MY_CLUB_ITEM = {
+  href: "/mi-club",
+  icon: Landmark,
+  label: "Mi club",
+};
+
 export function Sidebar() {
   const pathname    = usePathname();
   const { role }    = useRole();
@@ -44,7 +52,10 @@ export function Sidebar() {
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
 
   const visibleNav = isClub(role)
-    ? NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href))
+    ? [
+        ...NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href)),
+        CLUB_MY_CLUB_ITEM,
+      ]
     : NAV;
 
   // Cierra el drawer móvil al navegar
