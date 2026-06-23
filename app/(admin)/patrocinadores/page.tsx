@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { useRole, isClub } from "@/lib/use-role";
 import { AUTONOMOUS_COMMUNITIES } from "@/lib/constants/spain";
 import type { Sponsor, SponsorScope } from "@/types";
 
@@ -321,11 +322,12 @@ const EMPTY_FORM = {
 type FormState = typeof EMPTY_FORM;
 
 function SponsorModal({
-  state, onClose, tournaments,
+  state, onClose, tournaments, isClubUser,
 }: {
   state:       ModalState;
   onClose:     () => void;
   tournaments: { id: string; name: string }[];
+  isClubUser:  boolean;
 }) {
   const qc        = useQueryClient();
   const isEditing = !!state.editing;
@@ -352,14 +354,20 @@ function SponsorModal({
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      // CLUB siempre fuerza scope='TOURNAMENT' y necesita tournamentId
+      // (el backend lo enforce; aquí evitamos el roundtrip que daría 404).
+      const scope: SponsorScope = isClubUser ? "TOURNAMENT" : form.scope;
+      if (isClubUser && !form.tournamentId) {
+        throw new Error("Selecciona el torneo al que asociar el patrocinador");
+      }
       const payload = {
         name:         form.name.trim(),
         imageUrl:     form.imageUrl.trim()   || undefined,
         websiteUrl:   form.websiteUrl.trim() || undefined,
         tagline:             form.tagline.trim()            || undefined,
-        scope:               form.scope,
-        tournamentId:        form.scope === "TOURNAMENT" ? (form.tournamentId || undefined)        : undefined,
-        autonomousCommunity: form.scope === "REGIONAL"   ? (form.autonomousCommunity || undefined) : undefined,
+        scope,
+        tournamentId:        scope === "TOURNAMENT" ? (form.tournamentId || undefined)        : undefined,
+        autonomousCommunity: scope === "REGIONAL"   ? (form.autonomousCommunity || undefined) : undefined,
         displayOrder:        Number(form.displayOrder),
         active:       form.active,
         validFrom:    form.validFrom  || undefined,
@@ -374,7 +382,7 @@ function SponsorModal({
       toast.success(isEditing ? "Patrocinador actualizado" : "Patrocinador creado");
       onClose();
     },
-    onError: () => toast.error("Error al guardar el patrocinador"),
+    onError: (e: Error) => toast.error(e.message || "Error al guardar el patrocinador"),
   });
 
   const allSponsors  = (qc.getQueryData<Sponsor[]>(["sponsors"]) ?? []).filter((s) => s.active);
@@ -406,32 +414,34 @@ function SponsorModal({
 
           {/* Right: form */}
           <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
-          {/* Scope selector */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-2">Alcance</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["CIRCUIT", "TOURNAMENT", "REGIONAL"] as SponsorScope[]).map((s) => {
-                const cfg  = SCOPE_CONFIG[s];
-                const Icon = cfg.icon;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => set("scope", s)}
-                    className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-center transition-all ${
-                      form.scope === s
-                        ? `${cfg.color} border-current`
-                        : "border-border text-muted-foreground hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    <span className="text-[11px] font-semibold">{cfg.label}</span>
-                    <span className="text-[9px] opacity-70 leading-tight">{cfg.description}</span>
-                  </button>
-                );
-              })}
+          {/* Scope selector — oculto para CLUB (siempre TOURNAMENT) */}
+          {!isClubUser && (
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-2">Alcance</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["CIRCUIT", "TOURNAMENT", "REGIONAL"] as SponsorScope[]).map((s) => {
+                  const cfg  = SCOPE_CONFIG[s];
+                  const Icon = cfg.icon;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => set("scope", s)}
+                      className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-center transition-all ${
+                        form.scope === s
+                          ? `${cfg.color} border-current`
+                          : "border-border text-muted-foreground hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
+                      }`}
+                    >
+                      <Icon size={16} />
+                      <span className="text-[11px] font-semibold">{cfg.label}</span>
+                      <span className="text-[9px] opacity-70 leading-tight">{cfg.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Nombre */}
           <div>
@@ -475,13 +485,27 @@ function SponsorModal({
           {/* Torneo (solo TOURNAMENT) */}
           {form.scope === "TOURNAMENT" && (
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Torneo <span className="opacity-60">(opcional)</span></label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
+                Torneo{" "}
+                {isClubUser ? (
+                  <span className="text-destructive">*</span>
+                ) : (
+                  <span className="opacity-60">(opcional)</span>
+                )}
+              </label>
               <select
                 value={form.tournamentId}
                 onChange={(e) => set("tournamentId", e.target.value)}
                 className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:border-[rgba(212,175,55,0.5)] transition-colors"
               >
-                <option value="">Sin torneo específico</option>
+                {/* CLUB necesita asociar el sponsor a uno de SUS torneos
+                    (el backend rechaza scope TOURNAMENT sin tournamentId). */}
+                {!isClubUser && (
+                  <option value="">Sin torneo específico</option>
+                )}
+                {isClubUser && (
+                  <option value="">— Selecciona un torneo —</option>
+                )}
                 {tournaments.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
@@ -692,6 +716,15 @@ function SortableSponsorRow({
 
 export default function PatrocinadoresPage() {
   const qc = useQueryClient();
+  const { role } = useRole();
+  const isClubUser = isClub(role);
+
+  // CLUB solo gestiona sponsors TOURNAMENT; las tabs CIRCUIT y REGIONAL
+  // se ocultan + el tab por defecto deja de ser ALL.
+  const visibleTabs = isClubUser
+    ? TABS.filter((t) => t.key === "ALL" || t.key === "TOURNAMENT")
+    : TABS;
+
   const [activeTab, setActiveTab] = useState<SponsorScope | "ALL">("ALL");
   const [modal, setModal]         = useState<ModalState>({ open: false });
   const [deleting, setDeleting]   = useState<Sponsor | null>(null);
@@ -764,13 +797,13 @@ export default function PatrocinadoresPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Patrocinadores" />
+      <Header title={isClubUser ? "Mis patrocinadores" : "Patrocinadores"} />
 
       <div className="flex-1 p-4 sm:p-6 space-y-4">
         {/* Top bar */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-1 bg-secondary/60 rounded-lg p-1 border border-border overflow-x-auto no-scrollbar">
-            {TABS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
@@ -878,6 +911,7 @@ export default function PatrocinadoresPage() {
         <SponsorModal
           state={modal}
           tournaments={tournaments}
+          isClubUser={isClubUser}
           onClose={() => setModal({ open: false })}
         />
       )}
