@@ -35,6 +35,7 @@ const CLUB_ALLOWED_PATHS = new Set([
   "/torneos",
   "/inscripciones",
   "/resultados",
+  "/patrocinadores",
 ]);
 
 // Item que se inserta SOLO para CLUB users — link a la página de
