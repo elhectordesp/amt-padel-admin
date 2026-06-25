@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
-  ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare,
+  ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -38,12 +38,16 @@ const CLUB_ALLOWED_PATHS = new Set([
   "/patrocinadores",
 ]);
 
-// Item que se inserta SOLO para CLUB users — link a la página de
-// configuración de su propio club.
+// Items que se insertan SOLO para CLUB users.
 const CLUB_MY_CLUB_ITEM = {
   href: "/mi-club",
   icon: Landmark,
   label: "Mi club",
+};
+const CLUB_RESERVAS_ITEM = {
+  href: "/mi-club/reservas",
+  icon: CalendarRange,
+  label: "Reservas",
 };
 
 export function Sidebar() {
@@ -57,6 +61,7 @@ export function Sidebar() {
     ? [
         ...NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href)),
         CLUB_MY_CLUB_ITEM,
+        CLUB_RESERVAS_ITEM,
       ]
     : NAV;
 
