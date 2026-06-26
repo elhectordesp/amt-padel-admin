@@ -65,6 +65,8 @@ export function Sidebar() {
       ]
     : NAV;
 
+  const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
+
   // Cierra el drawer móvil al navegar
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMobileOpen(false); }, [pathname]);
@@ -113,7 +115,7 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
         {visibleNav.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+          const active = href === activeHref;
           return (
             <Link
               key={href}
@@ -211,4 +213,25 @@ export function Sidebar() {
       <LogoutModal open={showLogout} onClose={() => setShowLogout(false)} />
     </>
   );
+}
+
+/**
+ * Dado el listado de hrefs visibles en el sidebar y el pathname actual,
+ * devuelve el href que debe marcarse activo (el match MÁS LARGO).
+ *
+ * Necesario porque dos hrefs pueden matchear el mismo path por prefijo
+ * (p. ej. /mi-club y /mi-club/reservas) — sin esto, ambos se marcarían.
+ *
+ * Exportado para poder testarse sin montar el componente entero.
+ */
+export function computeActiveHref(
+  hrefs: string[],
+  pathname: string,
+): string | null {
+  return hrefs.reduce<string | null>((best, href) => {
+    const matches = pathname === href || pathname.startsWith(href + "/");
+    if (!matches) return best;
+    if (best === null || href.length > best.length) return href;
+    return best;
+  }, null);
 }

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { localDayKey } from "@/lib/utils/date-keys";
 import type { Booking } from "@/types/bookings";
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -66,6 +67,24 @@ export default function CalendarioPage() {
     enabled: !!clubId && isClub(role),
   });
 
+  const courts = (courtsQuery.data ?? []).filter((c) => c.active);
+  const bookings = bookingsQuery.data?.items ?? [];
+
+  // Map court → date → bookings (debe estar antes de cualquier early return)
+  const grid = useMemo(() => {
+    const map: Record<string, Record<string, Booking[]>> = {};
+    for (const c of courts) map[c.id] = {};
+    for (const b of bookings) {
+      // Convertir UTC → YYYY-MM-DD en hora LOCAL del navegador,
+      // para que case con localDayKey() de las columnas weekDates.
+      const dayKey = localDayKey(new Date(b.startsAt));
+      if (!map[b.courtId]) map[b.courtId] = {};
+      if (!map[b.courtId][dayKey]) map[b.courtId][dayKey] = [];
+      map[b.courtId][dayKey].push(b);
+    }
+    return map;
+  }, [courts, bookings]);
+
   if (role === null) {
     return (
       <div className="flex h-full items-center justify-center p-12">
@@ -84,22 +103,6 @@ export default function CalendarioPage() {
       </div>
     );
   }
-
-  const courts = (courtsQuery.data ?? []).filter((c) => c.active);
-  const bookings = bookingsQuery.data?.items ?? [];
-
-  // Map court → date → bookings
-  const grid = useMemo(() => {
-    const map: Record<string, Record<string, Booking[]>> = {};
-    for (const c of courts) map[c.id] = {};
-    for (const b of bookings) {
-      const dayKey = b.startsAt.slice(0, 10); // YYYY-MM-DD
-      if (!map[b.courtId]) map[b.courtId] = {};
-      if (!map[b.courtId][dayKey]) map[b.courtId][dayKey] = [];
-      map[b.courtId][dayKey].push(b);
-    }
-    return map;
-  }, [courts, bookings]);
 
   return (
     <div className="p-6">
@@ -182,7 +185,7 @@ export default function CalendarioPage() {
                     {c.name}
                   </td>
                   {weekDates.map((d, i) => {
-                    const key = d.toISOString().slice(0, 10);
+                    const key = localDayKey(d);
                     const dayBookings = grid[c.id]?.[key] ?? [];
                     return (
                       <td
@@ -228,16 +231,18 @@ function BookingBlock({ booking: b }: { booking: Booking }) {
       ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
       : "bg-blue-500/15 text-blue-600 dark:text-blue-400";
   return (
-    <div
-      className={`rounded px-2 py-1 text-xs ${bg}`}
+    <Link
+      href={`/mi-club/reservas/bookings/${b.id}`}
+      className={`block rounded px-2 py-1 text-xs transition-opacity hover:opacity-80 ${bg}`}
       title={`${b.shortCode} · ${b.matchMode} · ${b.status}`}
     >
       <div className="font-medium">{time}</div>
       <div className="truncate opacity-70">
-        {b.participants?.length ?? 0}/{b.matchMode === "OPEN" ? "4" : ""} ·
-        {" "}{b.shortCode}
+        {isOpen
+          ? `${b.participants?.length ?? 0}/4`
+          : `${b.participants?.length ?? 0} jug.`}{" "}· {b.shortCode}
       </div>
-    </div>
+    </Link>
   );
 }
 

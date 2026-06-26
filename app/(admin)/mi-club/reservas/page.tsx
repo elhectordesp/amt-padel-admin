@@ -142,10 +142,10 @@ export default function MiClubReservasPage() {
           description="Reglamento que aceptan los jugadores al reservar"
         />
         <NavCard
-          href="/mi-club/reservas/testers"
+          href="/mi-club/reservas/activacion"
           icon={<Users className="h-5 w-5" />}
-          title="Testers"
-          description="Usuarios que pueden probar el módulo antes de la apertura pública"
+          title="Activación + Testers"
+          description="Estado del módulo + usuarios que pueden probar antes de la apertura pública"
         />
         <NavCard
           href="/mi-club/reservas/bookings"

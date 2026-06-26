@@ -88,42 +88,41 @@ export default function NormasPage() {
   return (
     <div className="p-6">
       <BackLink />
-      <div className="flex items-center justify-between">
-        <Header title="Normas del club" />
-        <div className="flex gap-2">
-          <div className="flex rounded-md border border-border p-0.5">
-            <button
-              type="button"
-              onClick={() => setMode("edit")}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
-                mode === "edit"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Pencil className="h-3 w-3" /> Editar
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("preview")}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
-                mode === "preview"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Eye className="h-3 w-3" /> Preview
-            </button>
-          </div>
-          <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
-            {save.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            Guardar
-          </Button>
+      <Header title="Normas del club" />
+
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <div className="flex rounded-md border border-border p-0.5">
+          <button
+            type="button"
+            onClick={() => setMode("edit")}
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+              mode === "edit"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Pencil className="h-3 w-3" /> Editar
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("preview")}
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+              mode === "preview"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Eye className="h-3 w-3" /> Preview
+          </button>
         </div>
+        <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
+          {save.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
+          Guardar
+        </Button>
       </div>
 
       <p className="mt-2 text-sm text-muted-foreground">

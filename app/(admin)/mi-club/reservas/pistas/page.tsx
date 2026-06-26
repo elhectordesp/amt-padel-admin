@@ -104,6 +104,7 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
     type: (court.type ?? "DOUBLES") as "SINGLES" | "DOUBLES",
     wallType: (court.wallType ?? null) as "GLASS" | "WALL" | null,
     allowOpenMatches: court.allowOpenMatches ?? true,
+    isIndoor: court.isIndoor ?? false,
   });
 
   const saveAttrs = useMutation({
@@ -112,6 +113,7 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
         type: form.type,
         wallType: form.wallType,
         allowOpenMatches: form.allowOpenMatches,
+        isIndoor: form.isIndoor,
       }),
     onSuccess: () => {
       toast.success("Atributos guardados");
@@ -155,7 +157,19 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
           {/* Atributos booking-specific */}
           <section>
             <h3 className="mb-3 text-sm font-medium">Atributos de reserva</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Ubicación">
+                <select
+                  value={form.isIndoor ? "indoor" : "outdoor"}
+                  onChange={(e) =>
+                    setForm({ ...form, isIndoor: e.target.value === "indoor" })
+                  }
+                  className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="outdoor">Outdoor (al aire libre)</option>
+                  <option value="indoor">Indoor (cubierta)</option>
+                </select>
+              </Field>
               <Field label="Tipo">
                 <select
                   value={form.type}

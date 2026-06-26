@@ -193,9 +193,12 @@ function BookingRow({ booking: b }: { booking: Booking }) {
   });
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-card/70">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <Link
+          href={`/mi-club/reservas/bookings/${b.id}`}
+          className="min-w-0 flex-1 cursor-pointer"
+        >
           <div className="flex items-center gap-2 flex-wrap">
             <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {b.shortCode}
@@ -212,7 +215,7 @@ function BookingRow({ booking: b }: { booking: Booking }) {
             {b.participants?.length ?? 0} jugadores · {(b.priceCents / 100).toFixed(2)} €
             {b.paidAt && <span> · pagada</span>}
           </div>
-        </div>
+        </Link>
         {b.status !== "CANCELLED" && b.status !== "COMPLETED" && b.status !== "WITHOUT_RESULT" && (
           <Button
             variant="ghost"

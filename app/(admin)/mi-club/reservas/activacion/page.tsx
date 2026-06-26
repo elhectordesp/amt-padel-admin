@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -18,16 +18,20 @@ import {
   CheckCircle2,
   Loader2,
   Plus,
+  Search,
   Send,
   Sparkles,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
+import type { Player } from "@/types";
 
 export default function ActivacionPage() {
   const { role, clubId } = useRole();
@@ -176,7 +180,8 @@ function LifecycleSection({ clubId }: { clubId: string }) {
 function TestersSection({ clubId }: { clubId: string }) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ userId: "", validUntil: "" });
+  const [selected, setSelected] = useState<Player | null>(null);
+  const [validUntil, setValidUntil] = useState("");
 
   const query = useQuery({
     queryKey: bookingsQK.testers(clubId, false),
@@ -186,12 +191,13 @@ function TestersSection({ clubId }: { clubId: string }) {
   const add = useMutation({
     mutationFn: () =>
       bookingsService.testers.add(clubId, {
-        userId: form.userId.trim(),
-        validUntil: form.validUntil || undefined,
+        userId: selected!.id,
+        validUntil: validUntil || undefined,
       }),
     onSuccess: () => {
       toast.success("Tester añadido");
-      setForm({ userId: "", validUntil: "" });
+      setSelected(null);
+      setValidUntil("");
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["bookings", "testers", clubId] });
     },
@@ -227,34 +233,48 @@ function TestersSection({ clubId }: { clubId: string }) {
       </p>
 
       {showForm && (
-        <div className="mb-4 rounded-md border border-border bg-background p-3 space-y-2">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr]">
-            <input
-              type="text"
-              placeholder="userId del jugador"
-              value={form.userId}
-              onChange={(e) => setForm({ ...form, userId: e.target.value })}
-              className="rounded border border-border bg-background px-2 py-1.5 text-sm"
-            />
+        <div className="mb-4 rounded-md border border-border bg-background p-3 space-y-3">
+          {selected ? (
+            <div className="flex items-center justify-between rounded border border-primary/30 bg-primary/5 px-3 py-2">
+              <div className="text-sm">
+                <div className="font-medium">{selected.name}</div>
+                {selected.email && (
+                  <div className="text-xs text-muted-foreground">{selected.email}</div>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelected(null)}
+                aria-label="Cambiar jugador"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <PlayerSearch onPick={setSelected} />
+          )}
+
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">
+              Válido hasta (opcional, por defecto 7 días)
+            </label>
             <input
               type="datetime-local"
-              value={form.validUntil}
-              onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
-              className="rounded border border-border bg-background px-2 py-1.5 text-sm"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+              className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            TODO: aquí debería haber un buscador de jugadores AMT en lugar de
-            pedir el userId crudo.
-          </p>
+
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>
+            <Button variant="outline" size="sm" onClick={() => { setShowForm(false); setSelected(null); }}>
               Cancelar
             </Button>
             <Button
               size="sm"
               onClick={() => add.mutate()}
-              disabled={add.isPending || !form.userId.trim()}
+              disabled={add.isPending || !selected}
             >
               {add.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Añadir"}
             </Button>
@@ -306,6 +326,69 @@ function showErr(err: unknown) {
     (err as Error)?.message ??
     "Error";
   toast.error(msg);
+}
+
+/** Buscador de jugadores AMT por nombre/email con debounce. */
+function PlayerSearch({ onPick }: { onPick: (p: Player) => void }) {
+  const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(q.trim()), 250);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  const query = useQuery({
+    queryKey: ["players-search", debounced],
+    queryFn: () => adminService.players.search(debounced),
+    enabled: debounced.length >= 2,
+    staleTime: 30_000,
+  });
+
+  return (
+    <div className="space-y-1">
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Buscar jugador AMT por nombre o email…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="w-full rounded border border-border bg-background py-1.5 pl-7 pr-2 text-sm"
+        />
+      </div>
+      {debounced.length >= 2 && (
+        <div className="max-h-48 overflow-y-auto rounded border border-border bg-background">
+          {query.isLoading ? (
+            <div className="flex items-center justify-center p-3">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : (query.data ?? []).length === 0 ? (
+            <p className="p-3 text-xs text-muted-foreground">Sin resultados.</p>
+          ) : (
+            <ul>
+              {(query.data ?? []).slice(0, 8).map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => { onPick(p); setQ(""); setDebounced(""); }}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted"
+                  >
+                    <span>
+                      <span className="font-medium">{p.name}</span>
+                      {p.email && (
+                        <span className="ml-2 text-xs text-muted-foreground">{p.email}</span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function BackLink() {
