@@ -31,6 +31,7 @@ type Format = "grupos+eliminatoria" | "solo-eliminatoria";
 type DistMode = "byCount" | "bySize";
 type AutoOrNumber = "auto" | number;
 type AutoOrRound = "auto" | "R16" | "QF" | "SF" | "F";
+type GenerationMode = "auto" | "manual";
 
 interface PreviewResp {
   isGroups: boolean;
@@ -81,6 +82,8 @@ export function GenerateBracketDialog({
   registrationsOpenReason = null,
   onGenerated,
 }: Props) {
+  const [genMode, setGenMode] = useState<GenerationMode>("auto"); // Bloque 3
+  const [manualNumGroups, setManualNumGroups] = useState<number>(2);
   const [format, setFormat] = useState<Format>("grupos+eliminatoria");
   const [distMode, setDistMode] = useState<DistMode>("byCount");
   const [numGroups, setNumGroups] = useState<AutoOrNumber>("auto");
@@ -145,6 +148,15 @@ export function GenerateBracketDialog({
 
   const generateMutation = useMutation({
     mutationFn: () => {
+      // Bloque 3: modo manual → crea grupos vacíos y deja al admin asignar
+      if (genMode === "manual") {
+        return adminService.tournaments.initBracketManual(
+          tournamentId,
+          categoryId,
+          manualNumGroups,
+        );
+      }
+      // Modo auto: igual que antes (Bloques 1+2)
       const opts: BracketGenerationOptions = {
         numGroups: effectiveNumGroups,
         topNPerGroup: topN,
@@ -163,7 +175,11 @@ export function GenerateBracketDialog({
           );
     },
     onSuccess: () => {
-      toast.success("Cuadro generado correctamente");
+      toast.success(
+        genMode === "manual"
+          ? `${manualNumGroups} grupos vacíos creados. Asigna las parejas debajo.`
+          : "Cuadro generado correctamente",
+      );
       setSubmitError(null);
       onClose();
       onGenerated?.();
@@ -315,6 +331,48 @@ export function GenerateBracketDialog({
             ))}
 
           {!hasZeroPairs && !tooFewPairs && (
+          <>
+          {/* ── Modo de generación (Bloque 3) ────────────────────── */}
+          <Field label="Modo de generación">
+            <div className="space-y-1.5">
+              <Radio
+                checked={genMode === "auto"}
+                onChange={() => setGenMode("auto")}
+                label="Automático con opciones"
+              />
+              <Radio
+                checked={genMode === "manual"}
+                onChange={() => setGenMode("manual")}
+                label="Crear grupos vacíos y asignar a mano"
+              />
+            </div>
+          </Field>
+
+          {genMode === "manual" && (
+            <>
+              <Field label="Nº de grupos vacíos">
+                <input
+                  type="number"
+                  min={2}
+                  max={16}
+                  value={manualNumGroups}
+                  onChange={(e) =>
+                    setManualNumGroups(
+                      Math.max(2, Math.min(16, Number(e.target.value) || 2)),
+                    )
+                  }
+                  className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                />
+              </Field>
+              <div className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
+                Se crearán <span className="font-medium text-foreground">{manualNumGroups} grupos vacíos</span>.
+                Asignarás las parejas manualmente desde el editor de grupos
+                que aparecerá tras crear.
+              </div>
+            </>
+          )}
+
+          {genMode === "auto" && (
           <>
           {/* ── Formato ──────────────────────────────────────────── */}
           <Field label="Formato">
@@ -471,6 +529,9 @@ export function GenerateBracketDialog({
             ) : null}
           </div>
 
+          </>
+          )}
+
           {/* Inline error de submit (no cierra el modal) */}
           {submitError && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">
@@ -495,10 +556,10 @@ export function GenerateBracketDialog({
               }}
               disabled={
                 generateMutation.isPending ||
-                !!previewError ||
+                (genMode === "auto" && !!previewError) ||
                 isReadOnly ||
                 !regenerateConfirmOk ||
-                !!groupSizeError
+                (genMode === "auto" && !!groupSizeError)
               }
               title={
                 isReadOnly
@@ -513,7 +574,7 @@ export function GenerateBracketDialog({
               ) : (
                 <GitBranch size={14} />
               )}
-              Generar cuadro
+              {genMode === "manual" ? "Crear grupos vacíos" : "Generar cuadro"}
             </Button>
           )}
         </div>

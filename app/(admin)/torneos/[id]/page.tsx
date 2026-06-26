@@ -1282,7 +1282,7 @@ export default function TorneoDetailPage() {
   const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
   const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
   const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
-  const [manualMode,          setManualMode]           = useState(false);
+  const [manualMode,          setManualMode]           = useState(true); // Bloque 3: editor de grupos siempre visible
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
@@ -2580,26 +2580,16 @@ export default function TorneoDetailPage() {
               );
             })()}
 
-            {/* ── CUADRO MANUAL ── */}
+            {/* ── EDITOR DE GRUPOS (Bloque 3 — siempre visible) ── */}
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Asignación de grupos manual</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Editor de grupos</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Crea grupos y asigna las parejas sin usar el algoritmo automático.
+                    Reorganiza las parejas en cada grupo. Para cambiar el nº
+                    de grupos o regenerar todo, usa el botón "Generar cuadro…" de arriba.
                   </p>
                 </div>
-                <button
-                  onClick={() => setManualMode((m) => !m)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                    manualMode
-                      ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <List size={12} />
-                  {manualMode ? "Cerrar modo manual" : "Modo manual"}
-                </button>
               </div>
 
               {manualMode && (
@@ -2620,31 +2610,12 @@ export default function TorneoDetailPage() {
 
                     if (catGroups.length === 0) {
                       return (
-                        <div className="space-y-4">
+                        <div className="rounded-md border border-dashed border-border bg-background/50 p-6 text-center">
                           <p className="text-xs text-muted-foreground">
-                            No hay grupos creados todavía. Define cuántos grupos quieres y crea la estructura vacía.
+                            Sin grupos creados todavía. Usa el botón{" "}
+                            <span className="text-[#D4AF37] font-semibold">"Generar cuadro…"</span>
+                            {" "}de arriba — elige <span className="text-foreground">"Crear grupos vacíos y asignar a mano"</span> para empezar a configurar manualmente.
                           </p>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs font-medium text-muted-foreground">Nº de grupos</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={16}
-                                value={manualNumGroups}
-                                onChange={(e) => setManualNumGroups(Math.max(1, Math.min(16, Number(e.target.value))))}
-                                className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                              />
-                            </div>
-                            <button
-                              onClick={() => initManualBracket.mutate({ catId: bracketCatId, numGroups: manualNumGroups })}
-                              disabled={initManualBracket.isPending}
-                              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
-                            >
-                              {initManualBracket.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
-                              Crear grupos
-                            </button>
-                          </div>
                         </div>
                       );
                     }

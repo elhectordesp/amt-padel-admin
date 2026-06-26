@@ -10,6 +10,7 @@ vi.mock("@/lib/services/admin", () => ({
       previewBracket: vi.fn(),
       generateBracket: vi.fn(),
       regenerateBracket: vi.fn(),
+      initBracketManual: vi.fn(),
       getBracketStats: vi.fn().mockResolvedValue({
         exists: false,
         totalMatches: 0,
@@ -233,6 +234,57 @@ describe("GenerateBracketDialog", () => {
       const btn = screen.getByRole("button", { name: /Generar cuadro$/ });
       fireEvent.change(input, { target: { value: "  regenerar  " } });
       expect(btn).not.toBeDisabled();
+    });
+  });
+
+  // ── Bloque 3 ─────────────────────────────────────────────────────────────
+
+  describe("Bloque 3 — modo manual (crear grupos vacíos)", () => {
+    it("aparece toggle Modo de generación con Automático seleccionado por defecto", () => {
+      wrap(<GenerateBracketDialog {...baseProps()} />);
+      expect(screen.getByText("Modo de generación")).toBeInTheDocument();
+      expect(screen.getByText("Automático con opciones")).toBeInTheDocument();
+      expect(screen.getByText("Crear grupos vacíos y asignar a mano")).toBeInTheDocument();
+    });
+
+    it("al cambiar a Manual: oculta opciones de auto, muestra solo nº grupos", () => {
+      wrap(<GenerateBracketDialog {...baseProps()} />);
+      fireEvent.click(screen.getByText("Crear grupos vacíos y asignar a mano"));
+
+      // Manual visible
+      expect(screen.getByText("Nº de grupos vacíos")).toBeInTheDocument();
+      // Texto con span anidado — busco el "2 grupos vacíos" exacto del span
+      expect(screen.getByText("2 grupos vacíos")).toBeInTheDocument();
+
+      // Auto ocultos
+      expect(screen.queryByText("Formato")).not.toBeInTheDocument();
+      expect(screen.queryByText("Pasan de cada grupo")).not.toBeInTheDocument();
+      expect(screen.queryByText("Ronda inicial eliminatoria")).not.toBeInTheDocument();
+    });
+
+    it("botón cambia a 'Crear grupos vacíos' en modo manual", () => {
+      wrap(<GenerateBracketDialog {...baseProps()} />);
+      fireEvent.click(screen.getByText("Crear grupos vacíos y asignar a mano"));
+      expect(screen.getByRole("button", { name: /Crear grupos vacíos/ })).toBeInTheDocument();
+    });
+
+    it("al pulsar 'Crear grupos vacíos' llama a initBracketManual con el nº elegido", async () => {
+      (adminService.tournaments.initBracketManual as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+      });
+      wrap(<GenerateBracketDialog {...baseProps()} />);
+      fireEvent.click(screen.getByText("Crear grupos vacíos y asignar a mano"));
+      // Cambia a 5 grupos
+      const input = screen.getByDisplayValue("2");
+      fireEvent.change(input, { target: { value: "5" } });
+      fireEvent.click(screen.getByRole("button", { name: /Crear grupos vacíos/ }));
+      await waitFor(() => {
+        expect(adminService.tournaments.initBracketManual).toHaveBeenCalledWith(
+          "tour-1",
+          "cat-1",
+          5,
+        );
+      });
     });
   });
 });
