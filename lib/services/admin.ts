@@ -24,6 +24,19 @@ export interface ScheduleConflict {
 
 export interface AdminUser { name: string; email: string }
 
+/**
+ * Opciones avanzadas para generación/preview del cuadro (Bloque 1).
+ *
+ * Cuando se omiten, el backend usa el comportamiento histórico (auto-cálculo).
+ * Cuando se pasan, el backend respeta los valores siempre que sean coherentes
+ * entre sí (numGroups × topNPerGroup ≥ plazas de eliminationStartRound).
+ */
+export interface BracketGenerationOptions {
+  numGroups?: number;
+  topNPerGroup?: number;
+  eliminationStartRound?: 'R16' | 'QF' | 'SF' | 'F';
+}
+
 export const adminService = {
   me: () =>
     api.get<AdminUser>("/auth/me").then((r) => r.data),
@@ -58,8 +71,44 @@ export const adminService = {
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
-    previewBracket:  (id: string, categoryId: string, format?: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId, ...(format ? { format } : {}) } }).then((r) => r.data),
-    generateBracket: (id: string, categoryId: string, customGroups?: string[][], format?: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups, ...(format !== undefined ? { format } : {}) }).then((r) => r.data),
+    previewBracket: (
+      id: string,
+      categoryId: string,
+      format?: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .get(`/admin/tournaments/${id}/bracket/preview`, {
+          params: {
+            categoryId,
+            ...(format ? { format } : {}),
+            ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+            ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+            ...(options?.eliminationStartRound
+              ? { eliminationStartRound: options.eliminationStartRound }
+              : {}),
+          },
+        })
+        .then((r) => r.data),
+    generateBracket: (
+      id: string,
+      categoryId: string,
+      customGroups?: string[][],
+      format?: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .post(`/admin/tournaments/${id}/bracket/generate`, {
+          categoryId,
+          customGroups,
+          ...(format !== undefined ? { format } : {}),
+          ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+          ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.eliminationStartRound
+            ? { eliminationStartRound: options.eliminationStartRound }
+            : {}),
+        })
+        .then((r) => r.data),
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
       api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),

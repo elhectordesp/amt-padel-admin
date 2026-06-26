@@ -25,6 +25,7 @@ import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
+import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -1265,6 +1266,7 @@ export default function TorneoDetailPage() {
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false); // Bloque 1
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
@@ -2562,25 +2564,14 @@ export default function TorneoDetailPage() {
                           onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
-                      {bracketCatId && (
-                        <select
-                          value={bracketFormat || defaultFormat}
-                          onChange={(e) => setBracketFormat(e.target.value)}
-                          className="h-9 rounded-md border border-border bg-background text-foreground text-sm px-2 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                        >
-                          {FORMAT_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      )}
                       <button
-                        onClick={handlePreviewBracket}
-                        disabled={!bracketCatId || loadingPreview || generateBracket.isPending || !!blockedReason}
+                        onClick={() => setShowGenerateDialog(true)}
+                        disabled={!bracketCatId || !!blockedReason}
                         title={blockedReason ?? undefined}
                         className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
-                        {loadingPreview ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
-                        Vista previa
+                        <GitBranch size={14} />
+                        Generar cuadro…
                       </button>
                     </div>
                   </div>
@@ -3251,6 +3242,26 @@ export default function TorneoDetailPage() {
         saving={generateBracket.isPending}
         onConfirm={(customGroups) => generateBracket.mutate(customGroups)}
         onCancel={() => setBracketPreview(null)}
+      />
+    )}
+
+    {showGenerateDialog && bracketCatId && tournament && (
+      <GenerateBracketDialog
+        open={showGenerateDialog}
+        onClose={() => setShowGenerateDialog(false)}
+        tournamentId={id}
+        categoryId={bracketCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === bracketCatId)?.label) ?? "Categoría"
+        }
+        totalConfirmedPairs={
+          groupByPair(
+            registrations.filter(
+              (r) => r.categoryId === bracketCatId && r.status === "CONFIRMED",
+            ),
+          ).length
+        }
+        onGenerated={() => invalidateBracket()}
       />
     )}
 
