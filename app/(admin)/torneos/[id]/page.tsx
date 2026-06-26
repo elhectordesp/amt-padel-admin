@@ -2536,10 +2536,12 @@ export default function TorneoDetailPage() {
                 { value: "eliminatoria+consolacion",label: "Eliminatoria + Consolación" },
               ];
 
+              // El dialog (Bloque 2) maneja todos los casos internamente:
+              // - "ya generado": banner ámbar o rojo según resultados
+              // - "inscripciones abiertas": modo read-only con motivo
+              // El botón siempre se puede pulsar para abrir el dialog.
               const blockedReason = !deadlinePassed
                 ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Cambia el estado a "Sorteo" para generar el cuadro.`
-                : alreadyGenerated
-                ? "El cuadro ya ha sido generado para esta categoría."
                 : null;
 
               return (
@@ -2566,8 +2568,7 @@ export default function TorneoDetailPage() {
                       </div>
                       <button
                         onClick={() => setShowGenerateDialog(true)}
-                        disabled={!bracketCatId || !!blockedReason}
-                        title={blockedReason ?? undefined}
+                        disabled={!bracketCatId}
                         className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         <GitBranch size={14} />
@@ -3261,6 +3262,13 @@ export default function TorneoDetailPage() {
         alreadyHasBracket={bracketMatches.some(
           (m: any) => m.categoryId === bracketCatId,
         )}
+        registrationsOpenReason={
+          tournament.status === "OPEN" &&
+          (!tournament.registrationDeadline ||
+            new Date() <= new Date(tournament.registrationDeadline))
+            ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${new Date(tournament.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
+            : null
+        }
         onGenerated={() => invalidateBracket()}
       />
     )}

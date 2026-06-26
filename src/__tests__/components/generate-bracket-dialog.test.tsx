@@ -9,6 +9,14 @@ vi.mock("@/lib/services/admin", () => ({
     tournaments: {
       previewBracket: vi.fn(),
       generateBracket: vi.fn(),
+      regenerateBracket: vi.fn(),
+      getBracketStats: vi.fn().mockResolvedValue({
+        exists: false,
+        totalMatches: 0,
+        finishedMatches: 0,
+        hasGroupResults: false,
+        hasElimResults: false,
+      }),
     },
   },
 }));
@@ -139,5 +147,92 @@ describe("GenerateBracketDialog", () => {
       expect(screen.getByText(/no permite empezar en QF/)).toBeInTheDocument();
     });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ── Bloque 2 ─────────────────────────────────────────────────────────────
+
+  describe("Bloque 2 — empty states + read-only + REGENERAR", () => {
+    it("0 parejas confirmadas → empty state sin botón Generar", () => {
+      wrap(<GenerateBracketDialog {...baseProps({ totalConfirmedPairs: 0 })} />);
+      expect(screen.getByText(/No hay parejas inscritas/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Generar cuadro$/ })).not.toBeInTheDocument();
+    });
+
+    it("<3 parejas → empty state explica el mínimo", () => {
+      wrap(<GenerateBracketDialog {...baseProps({ totalConfirmedPairs: 2 })} />);
+      expect(screen.getByText(/Solo tienes 2 parejas confirmadas/)).toBeInTheDocument();
+      expect(screen.getByText(/mínimo de 3/)).toBeInTheDocument();
+    });
+
+    it("registrationsOpenReason → modo read-only, botón disabled", () => {
+      wrap(
+        <GenerateBracketDialog
+          {...baseProps({
+            registrationsOpenReason: "Las inscripciones siguen abiertas hasta 30 jun 18:00.",
+          })}
+        />,
+      );
+      expect(screen.getByText(/inscripciones siguen abiertas/i)).toBeInTheDocument();
+      const btn = screen.getByRole("button", { name: /Generar cuadro$/ });
+      expect(btn).toBeDisabled();
+    });
+
+    it("alreadyHasBracket + sin resultados → banner ámbar, botón habilitado", async () => {
+      (adminService.tournaments.getBracketStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+        exists: true,
+        totalMatches: 12,
+        finishedMatches: 0,
+        hasGroupResults: false,
+        hasElimResults: false,
+      });
+      wrap(<GenerateBracketDialog {...baseProps({ alreadyHasBracket: true })} />);
+      await waitFor(() => {
+        expect(screen.getByText(/borrará 12 partidos \(ninguno con resultado\)/)).toBeInTheDocument();
+      });
+      const btn = screen.getByRole("button", { name: /Generar cuadro$/ });
+      expect(btn).not.toBeDisabled();
+    });
+
+    it("alreadyHasBracket + con resultados → banner rojo + REGENERAR input + botón disabled hasta match", async () => {
+      (adminService.tournaments.getBracketStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+        exists: true,
+        totalMatches: 18,
+        finishedMatches: 5,
+        hasGroupResults: true,
+        hasElimResults: false,
+      });
+      wrap(<GenerateBracketDialog {...baseProps({ alreadyHasBracket: true })} />);
+      await waitFor(() => {
+        expect(screen.getByText(/ya tiene partidos jugados/)).toBeInTheDocument();
+      });
+      const input = screen.getByPlaceholderText("REGENERAR");
+      const btn = screen.getByRole("button", { name: /Generar cuadro$/ });
+      // Empieza disabled
+      expect(btn).toBeDisabled();
+      // Escribe algo distinto → sigue disabled
+      fireEvent.change(input, { target: { value: "OTRA COSA" } });
+      expect(btn).toBeDisabled();
+      // Escribe REGENERAR exacto → se habilita
+      fireEvent.change(input, { target: { value: "REGENERAR" } });
+      expect(btn).not.toBeDisabled();
+    });
+
+    it("REGENERAR es case-insensitive y permite espacios alrededor", async () => {
+      (adminService.tournaments.getBracketStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+        exists: true,
+        totalMatches: 5,
+        finishedMatches: 2,
+        hasGroupResults: true,
+        hasElimResults: false,
+      });
+      wrap(<GenerateBracketDialog {...baseProps({ alreadyHasBracket: true })} />);
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText("REGENERAR")).toBeInTheDocument();
+      });
+      const input = screen.getByPlaceholderText("REGENERAR");
+      const btn = screen.getByRole("button", { name: /Generar cuadro$/ });
+      fireEvent.change(input, { target: { value: "  regenerar  " } });
+      expect(btn).not.toBeDisabled();
+    });
   });
 });

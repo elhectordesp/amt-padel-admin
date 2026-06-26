@@ -48,6 +48,12 @@ interface Props {
   totalConfirmedPairs: number;
   /** True si la categoría ya tiene cuadro generado → usaremos regenerateBracket */
   alreadyHasBracket?: boolean;
+  /**
+   * Bloque 2: si las inscripciones siguen abiertas, el dialog entra en
+   * modo read-only. Permite explorar opciones pero el botón Generar queda
+   * deshabilitado con motivo claro.
+   */
+  registrationsOpenReason?: string | null;
   onGenerated?: () => void;
 }
 
@@ -72,6 +78,7 @@ export function GenerateBracketDialog({
   categoryLabel,
   totalConfirmedPairs,
   alreadyHasBracket = false,
+  registrationsOpenReason = null,
   onGenerated,
 }: Props) {
   const [format, setFormat] = useState<Format>("grupos+eliminatoria");
@@ -82,6 +89,8 @@ export function GenerateBracketDialog({
   const [elimRound, setElimRound] = useState<AutoOrRound>("auto");
   const [useSeeding, setUseSeeding] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Bloque 2: input de confirmación REGENERAR cuando hay resultados
+  const [regenerateConfirm, setRegenerateConfirm] = useState("");
 
   // ── Convertir distMode → numGroups efectivo para enviar al backend ───
   const effectiveNumGroups: number | undefined = useMemo(() => {
@@ -101,6 +110,16 @@ export function GenerateBracketDialog({
     const t = setTimeout(() => setDebouncedKey((k) => k + 1), 400);
     return () => clearTimeout(t);
   }, [format, distMode, numGroups, groupSize, topN, elimRound]);
+
+  // Bloque 2: fetch de stats del cuadro existente (si lo hay) para decidir
+  // si mostrar banner ámbar (sin resultados) o rojo (con resultados →
+  // input REGENERAR obligatorio).
+  const statsQuery = useQuery({
+    queryKey: ["bracket-stats", tournamentId, categoryId],
+    queryFn: () => adminService.tournaments.getBracketStats(tournamentId, categoryId),
+    enabled: open && alreadyHasBracket,
+    staleTime: 0,
+  });
 
   const previewQuery = useQuery<PreviewResp>({
     queryKey: [
@@ -162,6 +181,29 @@ export function GenerateBracketDialog({
 
   if (!open) return null;
 
+  // ── Bloque 2: empty states + read-only ────────────────────────────────
+  const hasZeroPairs = totalConfirmedPairs === 0;
+  const tooFewPairs = totalConfirmedPairs > 0 && totalConfirmedPairs < 3;
+  const isReadOnly = !!registrationsOpenReason;
+
+  const stats = statsQuery.data;
+  const needsRegenerateConfirm =
+    alreadyHasBracket && (stats?.finishedMatches ?? 0) > 0;
+  const regenerateConfirmOk =
+    !needsRegenerateConfirm || regenerateConfirm.trim().toUpperCase() === "REGENERAR";
+
+  // Validación inline tamaño grupo
+  const groupSizeError =
+    distMode === "bySize" && format === "grupos+eliminatoria"
+      ? typeof groupSize !== "number"
+        ? null
+        : groupSize < 3
+        ? "Mínimo 3 parejas por grupo"
+        : groupSize > totalConfirmedPairs
+        ? `Máximo ${totalConfirmedPairs} (total parejas)`
+        : null
+      : null;
+
   // ── Opciones disabled por coherencia ──────────────────────────────────
   // Si el admin tiene "Automático" en nº de grupos, usamos el preview actual
   // (el backend ya lo calculó). Si tiene nº de grupos manual, usamos ese.
@@ -208,16 +250,72 @@ export function GenerateBracketDialog({
         </div>
 
         <div className="p-5 space-y-5">
-          {alreadyHasBracket && (
+          {/* Empty state: 0 parejas confirmadas */}
+          {hasZeroPairs && (
+            <EmptyState
+              icon="🚫"
+              title="No hay parejas inscritas todavía"
+              body="Cierra inscripciones cuando estés listo y entonces podrás generar el cuadro."
+            />
+          )}
+
+          {/* Empty state: menos de 3 parejas */}
+          {tooFewPairs && (
+            <EmptyState
+              icon="🚫"
+              title={`Solo tienes ${totalConfirmedPairs} pareja${totalConfirmedPairs === 1 ? "" : "s"} confirmada${totalConfirmedPairs === 1 ? "" : "s"}`}
+              body="Se necesita un mínimo de 3 parejas para generar cualquier formato."
+            />
+          )}
+
+          {/* Read-only por inscripciones abiertas */}
+          {isReadOnly && !hasZeroPairs && !tooFewPairs && (
             <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-500">
-              ⚠️ Ya hay un cuadro generado en esta categoría. Generar de nuevo
-              borrará todos los grupos, partidos y resultados.
+              ⚠️ {registrationsOpenReason}
               <span className="block mt-1 text-yellow-500/70">
-                (Bloque 2 añadirá una confirmación más estricta.)
+                Puedes explorar opciones aquí pero el botón Generar queda
+                deshabilitado hasta que cierres inscripciones.
               </span>
             </div>
           )}
 
+          {/* Banner regenerar (solo si ya hay cuadro y hay parejas) */}
+          {alreadyHasBracket &&
+            !hasZeroPairs &&
+            !tooFewPairs &&
+            (stats === undefined ? (
+              <div className="h-10 rounded-md bg-muted animate-pulse" />
+            ) : needsRegenerateConfirm ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+                <p className="text-xs font-medium text-destructive">
+                  🛑 Esta categoría ya tiene partidos jugados
+                </p>
+                <p className="text-xs text-destructive/90">
+                  Regenerar borrará {stats.totalMatches} partidos
+                  ({stats.finishedMatches} con resultados registrados). Los
+                  resultados se perderán y el ranking SPA NO se revierte
+                  automáticamente.
+                </p>
+                <label className="block text-xs text-destructive/80">
+                  Escribe REGENERAR para confirmar:
+                </label>
+                <input
+                  type="text"
+                  value={regenerateConfirm}
+                  onChange={(e) => setRegenerateConfirm(e.target.value)}
+                  placeholder="REGENERAR"
+                  className="w-full rounded border border-destructive/30 bg-background px-2 py-1.5 text-xs text-foreground font-mono uppercase"
+                />
+              </div>
+            ) : (
+              <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-500">
+                ⚠️ Ya hay un cuadro generado en esta categoría. Regenerarlo
+                borrará {stats.totalMatches} partidos (ninguno con resultado).
+              </div>
+            ))}
+
+          {!hasZeroPairs && !tooFewPairs && (
+          <>
           {/* ── Formato ──────────────────────────────────────────── */}
           <Field label="Formato">
             <div className="space-y-1.5">
@@ -277,9 +375,18 @@ export function GenerateBracketDialog({
                         setGroupSize(e.target.value === "" ? "" : Number(e.target.value))
                       }
                       placeholder="parejas"
-                      className="w-24 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-40"
+                      className={`w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-40 ${
+                        groupSizeError
+                          ? "border-destructive"
+                          : "border-border"
+                      }`}
                     />
                   </div>
+                  {groupSizeError && (
+                    <p className="text-xs text-destructive mt-1">
+                      {groupSizeError}
+                    </p>
+                  )}
                 </div>
               </Field>
 
@@ -370,6 +477,8 @@ export function GenerateBracketDialog({
               {submitError}
             </div>
           )}
+          </>
+          )}
         </div>
 
         {/* Footer */}
@@ -377,21 +486,36 @@ export function GenerateBracketDialog({
           <Button variant="outline" size="sm" onClick={onClose} disabled={generateMutation.isPending}>
             Cancelar
           </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              setSubmitError(null);
-              generateMutation.mutate();
-            }}
-            disabled={generateMutation.isPending || !!previewError}
-          >
-            {generateMutation.isPending ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <GitBranch size={14} />
-            )}
-            Generar cuadro
-          </Button>
+          {!hasZeroPairs && !tooFewPairs && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setSubmitError(null);
+                generateMutation.mutate();
+              }}
+              disabled={
+                generateMutation.isPending ||
+                !!previewError ||
+                isReadOnly ||
+                !regenerateConfirmOk ||
+                !!groupSizeError
+              }
+              title={
+                isReadOnly
+                  ? "Inscripciones aún abiertas"
+                  : !regenerateConfirmOk
+                  ? "Escribe REGENERAR para confirmar"
+                  : undefined
+              }
+            >
+              {generateMutation.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <GitBranch size={14} />
+              )}
+              Generar cuadro
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -399,6 +523,18 @@ export function GenerateBracketDialog({
 }
 
 // ── Sub-componentes ────────────────────────────────────────────────────────
+
+function EmptyState({
+  icon, title, body,
+}: { icon: string; title: string; body: string }) {
+  return (
+    <div className="rounded-md border border-border bg-background p-4 text-center">
+      <div className="text-2xl mb-1">{icon}</div>
+      <p className="text-sm font-medium text-foreground mb-1">{title}</p>
+      <p className="text-xs text-muted-foreground">{body}</p>
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

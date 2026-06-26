@@ -112,6 +112,23 @@ export const adminService = {
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
       api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),
+    /**
+     * Estado del cuadro de una categoría (Bloque 2). Usado por el dialog
+     * para decidir nivel de confirmación al regenerar.
+     */
+    getBracketStats: (
+      id: string,
+      categoryId: string,
+    ): Promise<{
+      exists: boolean;
+      totalMatches: number;
+      finishedMatches: number;
+      hasGroupResults: boolean;
+      hasElimResults: boolean;
+    }> =>
+      api
+        .get(`/admin/tournaments/${id}/categories/${categoryId}/bracket/stats`)
+        .then((r) => r.data),
     regenerateBracket: (
       id: string,
       categoryId: string,
