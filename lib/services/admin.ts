@@ -112,7 +112,21 @@ export const adminService = {
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
       api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),
-    regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
+    regenerateBracket: (
+      id: string,
+      categoryId: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .post(`/admin/tournaments/${id}/bracket/regenerate`, {
+          categoryId,
+          ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+          ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.eliminationStartRound
+            ? { eliminationStartRound: options.eliminationStartRound }
+            : {}),
+        })
+        .then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
     autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),

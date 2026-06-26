@@ -3255,12 +3255,12 @@ export default function TorneoDetailPage() {
           (catOptions.find((c) => c.value === bracketCatId)?.label) ?? "Categoría"
         }
         totalConfirmedPairs={
-          groupByPair(
-            registrations.filter(
-              (r) => r.categoryId === bracketCatId && r.status === "CONFIRMED",
-            ),
-          ).length
+          tournament.categories.find((c) => c.id === bracketCatId)
+            ?.registeredCount ?? 0
         }
+        alreadyHasBracket={bracketMatches.some(
+          (m: any) => m.categoryId === bracketCatId,
+        )}
         onGenerated={() => invalidateBracket()}
       />
     )}

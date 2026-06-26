@@ -46,6 +46,8 @@ interface Props {
   categoryId: string;
   categoryLabel: string;
   totalConfirmedPairs: number;
+  /** True si la categoría ya tiene cuadro generado → usaremos regenerateBracket */
+  alreadyHasBracket?: boolean;
   onGenerated?: () => void;
 }
 
@@ -69,6 +71,7 @@ export function GenerateBracketDialog({
   categoryId,
   categoryLabel,
   totalConfirmedPairs,
+  alreadyHasBracket = false,
   onGenerated,
 }: Props) {
   const [format, setFormat] = useState<Format>("grupos+eliminatoria");
@@ -86,8 +89,9 @@ export function GenerateBracketDialog({
     if (distMode === "byCount") {
       return numGroups === "auto" ? undefined : numGroups;
     }
-    // bySize
+    // bySize: solo enviamos si tenemos datos válidos (evita numGroups=0)
     if (typeof groupSize !== "number" || groupSize < 3) return undefined;
+    if (totalConfirmedPairs < 3) return undefined;
     return Math.ceil(totalConfirmedPairs / groupSize);
   }, [format, distMode, numGroups, groupSize, totalConfirmedPairs]);
 
@@ -121,18 +125,24 @@ export function GenerateBracketDialog({
   });
 
   const generateMutation = useMutation({
-    mutationFn: () =>
-      adminService.tournaments.generateBracket(
-        tournamentId,
-        categoryId,
-        undefined,
-        format,
-        {
-          numGroups: effectiveNumGroups,
-          topNPerGroup: topN,
-          eliminationStartRound: elimRound === "auto" ? undefined : elimRound,
-        },
-      ),
+    mutationFn: () => {
+      const opts: BracketGenerationOptions = {
+        numGroups: effectiveNumGroups,
+        topNPerGroup: topN,
+        eliminationStartRound: elimRound === "auto" ? undefined : elimRound,
+      };
+      // Si ya hay cuadro generado, usamos regenerateBracket (que pasa force=true
+      // en el backend). Si no, generateBracket normal.
+      return alreadyHasBracket
+        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts)
+        : adminService.tournaments.generateBracket(
+            tournamentId,
+            categoryId,
+            undefined,
+            format,
+            opts,
+          );
+    },
     onSuccess: () => {
       toast.success("Cuadro generado correctamente");
       setSubmitError(null);
@@ -153,11 +163,16 @@ export function GenerateBracketDialog({
   if (!open) return null;
 
   // ── Opciones disabled por coherencia ──────────────────────────────────
+  // Si el admin tiene "Automático" en nº de grupos, usamos el preview actual
+  // (el backend ya lo calculó). Si tiene nº de grupos manual, usamos ese.
+  const effectiveGroupCount: number | undefined =
+    effectiveNumGroups ?? previewQuery.data?.groups.length;
+
   const elimRoundDisabled = (round: Exclude<AutoOrRound, "auto">): string | null => {
     if (format !== "grupos+eliminatoria") return null;
-    if (effectiveNumGroups === undefined) return null;
+    if (effectiveGroupCount === undefined) return null;
     const requiredSlots = ROUND_SIZES[round];
-    const availableSlots = effectiveNumGroups * topN;
+    const availableSlots = effectiveGroupCount * topN;
     if (availableSlots < requiredSlots) {
       return `${round} requiere ${requiredSlots} plazas (tienes ${availableSlots})`;
     }
@@ -193,6 +208,16 @@ export function GenerateBracketDialog({
         </div>
 
         <div className="p-5 space-y-5">
+          {alreadyHasBracket && (
+            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-500">
+              ⚠️ Ya hay un cuadro generado en esta categoría. Generar de nuevo
+              borrará todos los grupos, partidos y resultados.
+              <span className="block mt-1 text-yellow-500/70">
+                (Bloque 2 añadirá una confirmación más estricta.)
+              </span>
+            </div>
+          )}
+
           {/* ── Formato ──────────────────────────────────────────── */}
           <Field label="Formato">
             <div className="space-y-1.5">
