@@ -1544,6 +1544,32 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Mini-Bloque 5: añadir/borrar grupos individuales
+  const addEmptyGroupMut = useMutation({
+    mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId),
+    onSuccess: () => {
+      toast.success("Grupo vacío añadido");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteGroupMut = useMutation({
+    mutationFn: ({ catId, groupId }: { catId: string; groupId: string }) =>
+      adminService.tournaments.deleteGroup(id, catId, groupId),
+    onSuccess: (_data, variables) => {
+      toast.success("Grupo borrado");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      setManualGroupEdits((prev) => {
+        const next = { ...prev };
+        delete next[variables.groupId];
+        return next;
+      });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const saveGroupMembers = useMutation({
     mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
       adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
@@ -2683,7 +2709,21 @@ export default function TorneoDetailPage() {
 
                             return (
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
-                                <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm(`¿Borrar "${grp.label}"? Solo se puede si no tiene partidos jugados.`)) {
+                                        deleteGroupMut.mutate({ catId: bracketCatId, groupId: grp.id });
+                                      }
+                                    }}
+                                    disabled={deleteGroupMut.isPending}
+                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                    title="Borrar este grupo"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
 
                                 {groupEdit.length === 0 && (
                                   <p className="text-[10px] text-muted-foreground/60 italic">Sin parejas asignadas aún</p>
@@ -2762,6 +2802,23 @@ export default function TorneoDetailPage() {
                               </div>
                             );
                           })}
+
+                          {/* Botón "+ Nuevo grupo" — mini-Bloque 5 */}
+                          <button
+                            onClick={() => addEmptyGroupMut.mutate(bracketCatId)}
+                            disabled={addEmptyGroupMut.isPending || catGroups.length >= 16}
+                            className="flex flex-col items-center justify-center gap-2 min-h-[120px] rounded-md border-2 border-dashed border-border bg-background/30 text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={catGroups.length >= 16 ? "Máximo 16 grupos" : "Añadir un grupo vacío"}
+                          >
+                            {addEmptyGroupMut.isPending ? (
+                              <Loader2 size={20} className="animate-spin" />
+                            ) : (
+                              <>
+                                <span className="text-2xl leading-none">+</span>
+                                <span className="text-xs">Nuevo grupo</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     );

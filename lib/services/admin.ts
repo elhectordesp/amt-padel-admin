@@ -149,6 +149,22 @@ export const adminService = {
     autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
     status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
     auditLog:        (id: string, limit = 100)      => api.get<AuditLogEntry[]>(`/admin/tournaments/${id}/audit`, { params: { limit } }).then((r) => r.data),
+    /** Añade un grupo vacío al cuadro existente (mini-Bloque 5). */
+    addEmptyGroup: (id: string, catId: string) =>
+      api
+        .post<{ id: string; name: string; members: never[] }>(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/groups`,
+        )
+        .then((r) => r.data),
+
+    /** Borra un grupo vacío (mini-Bloque 5). */
+    deleteGroup: (id: string, catId: string, groupId: string) =>
+      api
+        .delete(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/groups/${groupId}`,
+        )
+        .then((r) => r.data),
+
     initBracketManual: (id: string, catId: string, numGroups?: number) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
     updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[]) =>
