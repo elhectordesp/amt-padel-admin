@@ -2688,7 +2688,10 @@ export default function TorneoDetailPage() {
                                 partnerId: r.partnerId ?? null,
                               }));
                             const groupEdit = manualGroupEdits[grp.id] ?? hydratedMembers;
-                            // Excluye parejas asignadas a OTROS grupos (estado local o BD)
+                            // Excluye parejas asignadas a OTROS grupos (estado local o BD).
+                            // Acumulamos AMBOS userId + partnerId de cada miembro para
+                            // poder comparar contra cualquier lado de la pareja en
+                            // confirmedPairs (que viene con orden distinto de groupByPair).
                             const assignedToOtherGroups = new Set<string>();
                             for (const otherGrp of catGroups) {
                               if (otherGrp.id === grp.id) continue;
@@ -2696,16 +2699,28 @@ export default function TorneoDetailPage() {
                                 manualGroupEdits[otherGrp.id] ??
                                 (otherGrp.rows ?? [])
                                   .filter((r: any) => r.userId)
-                                  .map((r: any) => ({ userId: r.userId }));
-                              for (const m of otherMembers) assignedToOtherGroups.add(m.userId);
+                                  .map((r: any) => ({ userId: r.userId, partnerId: r.partnerId ?? null }));
+                              for (const m of otherMembers) {
+                                assignedToOtherGroups.add(m.userId);
+                                if (m.partnerId) assignedToOtherGroups.add(m.partnerId);
+                              }
                             }
                             // También excluye parejas ya en ESTE grupo (evita duplicados)
-                            const inThisGroup = new Set(groupEdit.map((m) => m.userId));
-                            const availablePairs = confirmedPairs.filter(
-                              (p) =>
-                                !assignedToOtherGroups.has(p.primary.userId) &&
-                                !inThisGroup.has(p.primary.userId),
-                            );
+                            const inThisGroup = new Set<string>();
+                            for (const m of groupEdit) {
+                              inThisGroup.add(m.userId);
+                              if (m.partnerId) inThisGroup.add(m.partnerId);
+                            }
+                            const availablePairs = confirmedPairs.filter((p) => {
+                              const a = p.primary.userId;
+                              const b = p.primary.partnerId ?? "";
+                              return (
+                                !assignedToOtherGroups.has(a) &&
+                                !assignedToOtherGroups.has(b) &&
+                                !inThisGroup.has(a) &&
+                                !inThisGroup.has(b)
+                              );
+                            });
 
                             return (
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
@@ -2730,7 +2745,15 @@ export default function TorneoDetailPage() {
                                 )}
 
                                 {groupEdit.map((member) => {
-                                  const pair = confirmedPairs.find((p) => p.primary.userId === member.userId);
+                                  // Match contra userId Y partnerId (cualquiera de los 2 lados)
+                                  // porque tras guardar el backend normaliza el orden
+                                  // (userId siempre menor), que puede no coincidir con
+                                  // pair.primary.userId del groupByPair.
+                                  const pair = confirmedPairs.find(
+                                    (p) =>
+                                      p.primary.userId === member.userId ||
+                                      p.primary.partnerId === member.userId,
+                                  );
                                   return (
                                     <div key={member.userId} className="flex items-center gap-1.5">
                                       <span className="flex-1 text-xs text-foreground truncate">
