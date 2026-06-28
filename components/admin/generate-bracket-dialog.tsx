@@ -30,7 +30,7 @@ import {
 type Format = "grupos+eliminatoria" | "solo-eliminatoria";
 type DistMode = "byCount" | "bySize";
 type AutoOrNumber = "auto" | number;
-type AutoOrRound = "auto" | "R16" | "QF" | "SF" | "F";
+type AutoOrRound = "auto" | "R32" | "R16" | "QF" | "SF" | "F";
 type GenerationMode = "auto" | "manual";
 
 interface PreviewResp {
@@ -59,12 +59,14 @@ interface Props {
 }
 
 const ROUND_LABELS: Record<Exclude<AutoOrRound, "auto">, string> = {
+  R32: "Dieciseisavos de final",
   R16: "Octavos de final",
   QF: "Cuartos de final",
   SF: "Semifinales",
   F: "Final",
 };
 const ROUND_SIZES: Record<Exclude<AutoOrRound, "auto">, number> = {
+  R32: 32,
   R16: 16,
   QF: 8,
   SF: 4,
@@ -476,7 +478,7 @@ export function GenerateBracketDialog({
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                 >
                   <option value="auto">Automático</option>
-                  {(["R16", "QF", "SF", "F"] as const).map((r) => {
+                  {(["R32", "R16", "QF", "SF", "F"] as const).map((r) => {
                     const reason = elimRoundDisabled(r);
                     return (
                       <option key={r} value={r} disabled={!!reason} title={reason ?? ""}>

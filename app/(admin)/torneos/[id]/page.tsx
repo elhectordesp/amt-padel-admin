@@ -2880,20 +2880,21 @@ export default function TorneoDetailPage() {
                 const hasElim       = elimMatches.length > 0;
 
                 // Agrupar eliminatoria por fase
-                const PHASE_LABEL: Record<string, string> = { R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final" };
+                const PHASE_LABEL: Record<string, string> = { R32: "Dieciseisavos", R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final", CONSOLATION: "Consolación" };
                 const elimPhases = [...new Set(elimMatches.map((m: any) => m.phase))]
                   .sort((a, b) => {
-                    const order: Record<string, number> = { R16: 0, QF: 1, SF: 2, FINAL: 3 };
-                    return (order[a] ?? 0) - (order[b] ?? 0);
+                    const order: Record<string, number> = { R32: 0, R16: 1, QF: 2, SF: 3, FINAL: 4, CONSOLATION: 5 };
+                    return (order[a] ?? 99) - (order[b] ?? 99);
                   });
                 const roundFmtOpen = showRoundFmtCatId === cat.id;
                 const ROUND_PHASES = [
-                  { key: "GROUPS",      label: "Grupos"      },
-                  { key: "R16",         label: "Octavos"     },
-                  { key: "QF",          label: "Cuartos"     },
-                  { key: "SF",          label: "Semifinales" },
-                  { key: "FINAL",       label: "Final"       },
-                  { key: "CONSOLATION", label: "Consolación" },
+                  { key: "GROUPS",      label: "Grupos"        },
+                  { key: "R32",         label: "Dieciseisavos" },
+                  { key: "R16",         label: "Octavos"       },
+                  { key: "QF",          label: "Cuartos"       },
+                  { key: "SF",          label: "Semifinales"   },
+                  { key: "FINAL",       label: "Final"         },
+                  { key: "CONSOLATION", label: "Consolación"   },
                 ] as const;
                 const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
                 const FORMAT_LABEL: Record<string, string> = {
@@ -3151,6 +3152,20 @@ export default function TorneoDetailPage() {
                     {/* Partidos de eliminatoria */}
                     {hasElim && (
                       <div className="border-b border-border p-4 space-y-4">
+                        {swapSourceMatchId && elimMatches.some((m: any) => m.id === swapSourceMatchId) && (
+                          <div className="flex items-center justify-between gap-3 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-2">
+                            <p className="text-xs text-[#D4AF37]">
+                              <span className="font-semibold">Modo intercambio activo.</span>{" "}
+                              Selecciona otro partido de la misma fase para mover la pareja.
+                            </p>
+                            <button
+                              onClick={() => setSwapSourceMatchId(null)}
+                              className="text-[10px] text-[#D4AF37] hover:text-foreground underline whitespace-nowrap"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
                         {elimPhases.map((phase) => {
                           const phaseMatches = elimMatches.filter((m: any) => m.phase === phase);
                           return (
@@ -3175,11 +3190,11 @@ export default function TorneoDetailPage() {
                                   return (
                                     <div
                                       key={m.id}
-                                      className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${
+                                      className={`relative bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 transition-all ${
                                         isSwapSource
-                                          ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/30"
+                                          ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-[0_0_12px_rgba(212,175,55,0.25)]"
                                           : canBeSwapTarget
-                                            ? "border-[#D4AF37]/40 cursor-pointer hover:bg-[#D4AF37]/5"
+                                            ? "border-[#D4AF37]/60 cursor-pointer bg-[#D4AF37]/5 hover:bg-[#D4AF37]/15 hover:border-[#D4AF37] hover:scale-[1.01]"
                                             : m.isResult
                                               ? "border-[rgba(212,175,55,0.3)]"
                                               : "border-border"
@@ -3195,6 +3210,13 @@ export default function TorneoDetailPage() {
                                         }
                                       }}
                                     >
+                                      {canBeSwapTarget && (
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none rounded-md bg-[#D4AF37]/0 hover:bg-[#D4AF37]/10">
+                                          <span className="text-[10px] font-semibold text-[#D4AF37] bg-background/90 px-2 py-0.5 rounded shadow-sm border border-[#D4AF37]/40">
+                                            Click para intercambiar
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex flex-col sm:grid text-xs sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                         <span className={`truncate sm:text-left ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team1?.join(" / ") || "Por definir"}
@@ -3216,29 +3238,29 @@ export default function TorneoDetailPage() {
                                           </div>
                                         ) : <span />}
                                         <div className="flex items-center gap-2">
-                                          {/* Bloque 4 — botón swap */}
+                                          {/* Bloque 4 — chip swap */}
                                           {canInitSwap && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(m.id); }}
-                                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
-                                              title="Intercambiar esta pareja con otra"
+                                              className="inline-flex items-center gap-1 text-[10px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-full px-2 py-0.5 transition-colors"
+                                              title="Selecciona otro partido de la misma fase para intercambiar parejas"
                                             >
-                                              ⇄ Mover
+                                              <span aria-hidden>⇄</span> Mover pareja
                                             </button>
                                           )}
                                           {isSwapSource && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(null); }}
-                                              className="flex items-center gap-1 text-[10px] text-[#D4AF37] hover:text-foreground transition-colors"
+                                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-background bg-[#D4AF37] hover:bg-[#D4AF37]/80 rounded-full px-2 py-0.5 transition-colors"
                                               title="Cancelar swap"
                                             >
-                                              ✕ Cancelar swap
+                                              <span aria-hidden>✕</span> Cancelar swap
                                             </button>
                                           )}
                                           {m.isResult && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
-                                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
                                               title="Corregir resultado"
                                             >
                                               <RotateCcw size={9} /> Corregir

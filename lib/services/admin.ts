@@ -34,7 +34,7 @@ export interface AdminUser { name: string; email: string }
 export interface BracketGenerationOptions {
   numGroups?: number;
   topNPerGroup?: number;
-  eliminationStartRound?: 'R16' | 'QF' | 'SF' | 'F';
+  eliminationStartRound?: 'R32' | 'R16' | 'QF' | 'SF' | 'F';
 }
 
 export const adminService = {
