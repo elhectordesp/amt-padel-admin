@@ -1304,6 +1304,14 @@ export default function TorneoDetailPage() {
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
 
+  // Auto-seleccionar categoría si el torneo tiene solo una (UX: evita
+  // un click innecesario al admin)
+  useEffect(() => {
+    if (!bracketCatId && tournament && tournament.categories.length === 1) {
+      setBracketCatId(tournament.categories[0].id);
+    }
+  }, [tournament, bracketCatId]);
+
   const {
     data: registrations = [], isLoading: loadingRegs, isError: isErrorRegs, refetch: refetchRegs,
   } = useQuery({
@@ -1539,10 +1547,18 @@ export default function TorneoDetailPage() {
   const saveGroupMembers = useMutation({
     mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
       adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       toast.success("Grupo guardado correctamente");
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
+      // Limpia el estado local del grupo guardado para que el siguiente
+      // render se re-hidrate desde el backend actualizado (sin
+      // mantener edits stale del save anterior).
+      setManualGroupEdits((prev) => {
+        const next = { ...prev };
+        delete next[variables.groupId];
+        return next;
+      });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2636,13 +2652,34 @@ export default function TorneoDetailPage() {
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {catGroups.map((grp: any) => {
-                            const groupEdit = manualGroupEdits[grp.id] ?? [];
-                            const assignedToOtherGroups = new Set(
-                              Object.entries(manualGroupEdits)
-                                .filter(([gId]) => gId !== grp.id)
-                                .flatMap(([, members]) => members.map((m) => m.userId))
+                            // Hidratamos desde el backend si no hay edits locales aún:
+                            // grp.rows contiene los miembros actuales del grupo
+                            // (cada row = 1 pareja, con userId/partnerId).
+                            const hydratedMembers = (grp.rows ?? [])
+                              .filter((r: any) => r.userId)
+                              .map((r: any) => ({
+                                userId: r.userId,
+                                partnerId: r.partnerId ?? null,
+                              }));
+                            const groupEdit = manualGroupEdits[grp.id] ?? hydratedMembers;
+                            // Excluye parejas asignadas a OTROS grupos (estado local o BD)
+                            const assignedToOtherGroups = new Set<string>();
+                            for (const otherGrp of catGroups) {
+                              if (otherGrp.id === grp.id) continue;
+                              const otherMembers =
+                                manualGroupEdits[otherGrp.id] ??
+                                (otherGrp.rows ?? [])
+                                  .filter((r: any) => r.userId)
+                                  .map((r: any) => ({ userId: r.userId }));
+                              for (const m of otherMembers) assignedToOtherGroups.add(m.userId);
+                            }
+                            // También excluye parejas ya en ESTE grupo (evita duplicados)
+                            const inThisGroup = new Set(groupEdit.map((m) => m.userId));
+                            const availablePairs = confirmedPairs.filter(
+                              (p) =>
+                                !assignedToOtherGroups.has(p.primary.userId) &&
+                                !inThisGroup.has(p.primary.userId),
                             );
-                            const availablePairs = confirmedPairs.filter((p) => !assignedToOtherGroups.has(p.primary.userId));
 
                             return (
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
@@ -2670,7 +2707,7 @@ export default function TorneoDetailPage() {
                                         onClick={() =>
                                           setManualGroupEdits((prev) => ({
                                             ...prev,
-                                            [grp.id]: (prev[grp.id] ?? []).filter((m) => m.userId !== member.userId),
+                                            [grp.id]: (prev[grp.id] ?? hydratedMembers).filter((m) => m.userId !== member.userId),
                                           }))
                                         }
                                         className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
@@ -2690,7 +2727,7 @@ export default function TorneoDetailPage() {
                                       setManualGroupEdits((prev) => ({
                                         ...prev,
                                         [grp.id]: [
-                                          ...(prev[grp.id] ?? []),
+                                          ...(prev[grp.id] ?? hydratedMembers),
                                           { userId: pair.primary.userId, partnerId: pair.primary.partnerId ?? null },
                                         ],
                                       }));
