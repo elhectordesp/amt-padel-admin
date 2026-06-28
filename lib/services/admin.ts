@@ -149,6 +149,15 @@ export const adminService = {
     autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
     status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
     auditLog:        (id: string, limit = 100)      => api.get<AuditLogEntry[]>(`/admin/tournaments/${id}/audit`, { params: { limit } }).then((r) => r.data),
+    /**
+     * Swap parejas entre 2 matches del bracket elim (Bloque 4).
+     * Backend valida que sean misma cat + phase + ninguno FINISHED.
+     */
+    swapMatchPair: (matchAId: string, matchBId: string) =>
+      api
+        .post(`/admin/matches/${matchAId}/swap-pair`, { withMatchId: matchBId })
+        .then((r) => r.data),
+
     /** Añade un grupo vacío al cuadro existente (mini-Bloque 5). */
     addEmptyGroup: (id: string, catId: string) =>
       api

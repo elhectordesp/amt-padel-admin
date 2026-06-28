@@ -1267,6 +1267,8 @@ export default function TorneoDetailPage() {
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false); // Bloque 1
+  // Bloque 4 — swap de parejas en bracket elim
+  const [swapSourceMatchId, setSwapSourceMatchId] = useState<string | null>(null);
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
@@ -1542,6 +1544,24 @@ export default function TorneoDetailPage() {
       setManualGroupEdits({});
     },
     onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Bloque 4 — swap parejas en bracket elim
+  const swapMatchPairMut = useMutation({
+    mutationFn: ({ matchAId, matchBId }: { matchAId: string; matchBId: string }) =>
+      adminService.tournaments.swapMatchPair(matchAId, matchBId),
+    onSuccess: () => {
+      toast.success("Parejas intercambiadas");
+      setSwapSourceMatchId(null);
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ?? "Error al hacer swap";
+      toast.error(msg);
+    },
   });
 
   // Mini-Bloque 5: añadir/borrar grupos individuales
@@ -3141,8 +3161,40 @@ export default function TorneoDetailPage() {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {phaseMatches.map((m: any) => {
                                   const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
+                                  // Bloque 4 — swap states
+                                  const isSwapSource = swapSourceMatchId === m.id;
+                                  const canBeSwapTarget =
+                                    !!swapSourceMatchId &&
+                                    swapSourceMatchId !== m.id &&
+                                    !m.isResult &&
+                                    (m.team1?.length ?? 0) > 0;
+                                  const canInitSwap =
+                                    !swapSourceMatchId &&
+                                    !m.isResult &&
+                                    (m.team1?.length ?? 0) > 0;
                                   return (
-                                    <div key={m.id} className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${m.isResult ? "border-[rgba(212,175,55,0.3)]" : "border-border"}`}>
+                                    <div
+                                      key={m.id}
+                                      className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${
+                                        isSwapSource
+                                          ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/30"
+                                          : canBeSwapTarget
+                                            ? "border-[#D4AF37]/40 cursor-pointer hover:bg-[#D4AF37]/5"
+                                            : m.isResult
+                                              ? "border-[rgba(212,175,55,0.3)]"
+                                              : "border-border"
+                                      }`}
+                                      onClick={() => {
+                                        if (canBeSwapTarget) {
+                                          if (window.confirm(`¿Intercambiar pareja entre estos 2 partidos?`)) {
+                                            swapMatchPairMut.mutate({
+                                              matchAId: swapSourceMatchId!,
+                                              matchBId: m.id,
+                                            });
+                                          }
+                                        }
+                                      }}
+                                    >
                                       <div className="flex flex-col sm:grid text-xs sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                         <span className={`truncate sm:text-left ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team1?.join(" / ") || "Por definir"}
@@ -3163,15 +3215,36 @@ export default function TorneoDetailPage() {
                                             {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                           </div>
                                         ) : <span />}
-                                        {m.isResult && (
-                                          <button
-                                            onClick={() => { setResultMatch(m); setResultCorrection(true); }}
-                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
-                                            title="Corregir resultado"
-                                          >
-                                            <RotateCcw size={9} /> Corregir
-                                          </button>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {/* Bloque 4 — botón swap */}
+                                          {canInitSwap && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(m.id); }}
+                                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                              title="Intercambiar esta pareja con otra"
+                                            >
+                                              ⇄ Mover
+                                            </button>
+                                          )}
+                                          {isSwapSource && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(null); }}
+                                              className="flex items-center gap-1 text-[10px] text-[#D4AF37] hover:text-foreground transition-colors"
+                                              title="Cancelar swap"
+                                            >
+                                              ✕ Cancelar swap
+                                            </button>
+                                          )}
+                                          {m.isResult && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
+                                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                              title="Corregir resultado"
+                                            >
+                                              <RotateCcw size={9} /> Corregir
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   );
