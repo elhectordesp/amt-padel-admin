@@ -1297,6 +1297,10 @@ export default function TorneoDetailPage() {
   const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
   const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
   const [showConflictsCatId, setShowConflictsCatId] = useState<string | null>(null);
+  // Bloque 5: dialog de reestructuración de grupos
+  const [restructureOpen, setRestructureOpen] = useState(false);
+  const [restructureNumGroups, setRestructureNumGroups] = useState<number>(3);
+  const [restructureConfirm, setRestructureConfirm] = useState("");
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -1588,6 +1592,37 @@ export default function TorneoDetailPage() {
       });
     },
     onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Bloque 5 completo: reestructurar grupos (cambiar nº y redistribuir)
+  const restructureGroupsMut = useMutation({
+    mutationFn: ({
+      catId,
+      numGroups,
+      force,
+    }: {
+      catId: string;
+      numGroups: number;
+      force: boolean;
+    }) =>
+      adminService.tournaments.restructureGroups(id, catId, {
+        numGroups,
+        force,
+      }),
+    onSuccess: (data) => {
+      toast.success(
+        `Grupos reestructurados: ${data.fromNumGroups} → ${data.toNumGroups} (${data.matchesCreated} partidos)`,
+      );
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      setManualGroupEdits({});
+    },
+    onError: (err: Error) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        err?.message ?? "Error al reestructurar grupos";
+      toast.error(msg);
+    },
   });
 
   const saveGroupMembers = useMutation({
@@ -2648,10 +2683,24 @@ export default function TorneoDetailPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">Editor de grupos</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Reorganiza las parejas en cada grupo. Para cambiar el nº
-                    de grupos o regenerar todo, usa el botón "Generar cuadro…" de arriba.
+                    Reorganiza las parejas en cada grupo. Para regenerar todo
+                    desde cero usa "Generar cuadro…" de arriba.
                   </p>
                 </div>
+                {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => {
+                      const current = ((allStandings as any)[bracketCatId]?.length ?? 3);
+                      setRestructureNumGroups(current);
+                      setRestructureConfirm("");
+                      setRestructureOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
+                    title="Cambiar nº de grupos y redistribuir parejas"
+                  >
+                    ⇄ Reestructurar grupos…
+                  </button>
+                )}
               </div>
 
               {manualMode && (
@@ -3455,6 +3504,115 @@ export default function TorneoDetailPage() {
         onGenerated={() => invalidateBracket()}
       />
     )}
+
+    {/* Bloque 5 — Dialog Reestructurar grupos */}
+    {restructureOpen && bracketCatId && tournament && (() => {
+      const cat = tournament.categories.find((c) => c.id === bracketCatId);
+      const totalPairs = cat?.registeredCount ?? 0;
+      const currentGroups = ((allStandings as any)[bracketCatId]?.length ?? 0);
+      const finishedInGroups = bracketMatches.filter(
+        (m: any) => m.categoryId === bracketCatId && m.phase === "GROUPS" && m.isResult,
+      ).length;
+      const requiresForce = finishedInGroups > 0;
+      const confirmOk = !requiresForce || restructureConfirm === "REESTRUCTURAR";
+      const groupSizesValid = restructureNumGroups >= 1 && restructureNumGroups <= 16 && totalPairs >= restructureNumGroups * 3;
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setRestructureOpen(false)}>
+          <div className="bg-card border border-border rounded-lg max-w-md w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Reestructurar grupos</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {cat?.gender === "M" ? "Masculino" : "Femenino"} {cat?.level} — {totalPairs} parejas confirmadas
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Nuevo nº de grupos</label>
+              <div className="grid grid-cols-6 gap-2">
+                {[3, 4, 5, 6, 7, 8].map((n) => {
+                  const disabled = totalPairs < n * 3;
+                  const isActive = restructureNumGroups === n;
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => setRestructureNumGroups(n)}
+                      disabled={disabled}
+                      className={`py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-[#D4AF37] text-background"
+                          : "bg-secondary/50 text-foreground hover:bg-secondary"
+                      } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
+                      title={disabled ? `Necesitas ≥ ${n * 3} parejas` : ""}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Actual: {currentGroups} grupos. Reparto: serpentine por SPA si el torneo usa semillas, aleatorio si no.
+              </p>
+            </div>
+
+            {requiresForce && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-2">
+                <p className="text-xs text-red-400">
+                  <span className="font-semibold">⚠️ Acción destructiva.</span> Hay {finishedInGroups} partido{finishedInGroups > 1 ? "s" : ""} con resultado en la fase de grupos. Reestructurar los borrará permanentemente.
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  La fase eliminatoria NO se toca. Escribe <code className="font-mono text-red-400">REESTRUCTURAR</code> para confirmar:
+                </p>
+                <input
+                  type="text"
+                  value={restructureConfirm}
+                  onChange={(e) => setRestructureConfirm(e.target.value)}
+                  className="w-full rounded-md border border-red-500/40 bg-background px-2 py-1 text-xs text-foreground"
+                  placeholder="REESTRUCTURAR"
+                />
+              </div>
+            )}
+
+            {!groupSizesValid && (
+              <p className="text-xs text-amber-400">
+                No es posible distribuir {totalPairs} parejas en {restructureNumGroups} grupos (mínimo 3 parejas/grupo).
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setRestructureOpen(false)}
+                className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                disabled={restructureGroupsMut.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  restructureGroupsMut.mutate(
+                    {
+                      catId: bracketCatId,
+                      numGroups: restructureNumGroups,
+                      force: requiresForce,
+                    },
+                    { onSuccess: () => setRestructureOpen(false) },
+                  );
+                }}
+                disabled={
+                  !confirmOk ||
+                  !groupSizesValid ||
+                  restructureNumGroups === currentGroups ||
+                  restructureGroupsMut.isPending
+                }
+                className="px-3 py-1.5 text-xs font-semibold text-background bg-[#D4AF37] hover:bg-[#D4AF37]/80 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition-colors"
+              >
+                {restructureGroupsMut.isPending ? "Reestructurando…" : "Reestructurar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
 
     <ConfirmModal
       open={showDeleteModal}

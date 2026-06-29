@@ -174,6 +174,35 @@ export const adminService = {
         )
         .then((r) => r.data),
 
+    /**
+     * Reestructura grupos: cambia nº de grupos y redistribuye parejas (Bloque 5).
+     * - assignments: opcional, mapeo "Grupo X" → registrationId[]. Si null,
+     *   distribución automática (serpentine si useSeeding, random si no).
+     * - force: requerido si hay partidos de grupos con resultado FINISHED.
+     */
+    restructureGroups: (
+      id: string,
+      catId: string,
+      payload: {
+        numGroups: number;
+        assignments?: Record<string, string[]> | null;
+        force?: boolean;
+      },
+    ) =>
+      api
+        .post<{
+          success: boolean;
+          fromNumGroups: number;
+          toNumGroups: number;
+          matchesCreated: number;
+          hadResults: boolean;
+          force: boolean;
+        }>(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/restructure-groups`,
+          payload,
+        )
+        .then((r) => r.data),
+
     initBracketManual: (id: string, catId: string, numGroups?: number) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
     updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[]) =>
