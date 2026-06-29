@@ -53,6 +53,45 @@ export const adminService = {
   activity: () =>
     api.get<ActivityItem[]>("/admin/activity").then((r) => r.data).catch((e) => { console.error("[admin] activity:", e); return [] as ActivityItem[]; }),
 
+  /** P3 — Historial de auditoría con filtros y paginación. */
+  auditLogs: (filters: {
+    tournamentId?: string;
+    action?: string;
+    adminId?: string;
+    from?: string;  // ISO date
+    to?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return api
+      .get<{
+        items: {
+          id: string;
+          adminId: string;
+          adminName: string;
+          action: string;
+          actionLabel: string;
+          resource: string;
+          resourceId: string | null;
+          entityName: string | null;
+          href: string | null;
+          details: unknown;
+          createdAt: string;
+        }[];
+        total: number;
+        page: number;
+        pageSize: number;
+        distinctActions: { value: string; label: string; count: number }[];
+      }>(`/admin/audit-logs${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
+
   tournaments: {
     list: () =>
       api.get<Tournament[]>("/admin/tournaments").then((r) =>

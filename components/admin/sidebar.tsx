@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/clubes",           icon: Landmark,         label: "Clubes"         },
   { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },
   { href: "/soporte",          icon: MessageSquare,    label: "Soporte"        },
+  { href: "/historial",        icon: History,          label: "Historial"      },
   { href: "/configuracion",   icon: Settings,         label: "Configuración"  },
 ];
 
