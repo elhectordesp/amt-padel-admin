@@ -1459,12 +1459,22 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => { toast.error(err.message); setRegenElimCatId(null); },
   });
 
-  const saveResult = async (sets1: number[], sets2: number[]) => {
+  const saveResult = async (
+    sets1: number[],
+    sets2: number[],
+    opts?: { walkover?: boolean; walkoverWinnerTeam?: 1 | 2 },
+  ) => {
     if (!resultMatch) return;
     setSavingResultId(resultMatch.id);
     try {
-      await adminService.matches.setResult(resultMatch.id, sets1, sets2);
-      toast.success("Resultado guardado");
+      await adminService.matches.setResult(
+        resultMatch.id,
+        sets1,
+        sets2,
+        opts?.walkover,
+        opts?.walkoverWinnerTeam,
+      );
+      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
       setResultMatch(null);
       setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
@@ -3271,7 +3281,9 @@ export default function TorneoDetailPage() {
                                           {m.team1?.join(" / ") || "Por definir"}
                                         </span>
                                         <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
-                                          {m.isResult && m.sets1 && m.sets2
+                                          {m.isWalkover
+                                            ? "W.O."
+                                            : m.isResult && m.sets1 && m.sets2
                                             ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                             : "vs"}
                                         </span>
@@ -3280,8 +3292,13 @@ export default function TorneoDetailPage() {
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between">
-                                        {(matchTime || m.court) ? (
+                                        {(matchTime || m.court || m.isWalkover) ? (
                                           <div className="flex items-center gap-2">
+                                            {m.isWalkover && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0">
+                                                WO
+                                              </span>
+                                            )}
                                             {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
                                             {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                           </div>
@@ -3343,15 +3360,22 @@ export default function TorneoDetailPage() {
                                     <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                       <span className="truncate sm:text-left">{m.team1?.join(" / ") ?? "—"}</span>
                                       <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
-                                        {m.isResult && m.sets1 && m.sets2
+                                        {m.isWalkover
+                                          ? "W.O."
+                                          : m.isResult && m.sets1 && m.sets2
                                           ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                           : "vs"}
                                       </span>
                                       <span className="truncate sm:text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
                                     <div className="flex items-center justify-between pl-0.5">
-                                      {(matchTime || m.court) ? (
+                                      {(matchTime || m.court || m.isWalkover) ? (
                                         <div className="flex items-center gap-2">
+                                          {m.isWalkover && (
+                                            <span className="inline-flex items-center text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0">
+                                              WO
+                                            </span>
+                                          )}
                                           {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
