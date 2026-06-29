@@ -1620,11 +1620,24 @@ export default function TorneoDetailPage() {
         force,
       }),
     onSuccess: (data) => {
-      toast.success(
-        `Grupos reestructurados: ${data.fromNumGroups} → ${data.toNumGroups} (${data.matchesCreated} partidos)`,
-      );
+      // H3 — feedback detallado sobre preservación de horarios
+      const baseMsg = `Grupos reestructurados: ${data.fromNumGroups} → ${data.toNumGroups} (${data.matchesCreated} partidos)`;
+      const slotsLine = (data.slotsPreserved ?? 0) > 0
+        ? ` · ${data.slotsPreserved} horarios preservados`
+        : "";
+      toast.success(baseMsg + slotsLine);
+
+      // Aviso secundario si quedaron matches sin hora
+      if ((data.slotsNeeded ?? 0) > 0) {
+        if (data.autoScheduled) {
+          toast.success(`${data.slotsNeeded} partidos nuevos programados automáticamente`);
+        } else if (data.scheduleWarning) {
+          toast(data.scheduleWarning, { icon: "⚠️" });
+        }
+      }
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
       setManualGroupEdits({});
     },
     onError: (err: Error) => {

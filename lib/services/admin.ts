@@ -197,6 +197,12 @@ export const adminService = {
           matchesCreated: number;
           hadResults: boolean;
           force: boolean;
+          // H3 — schedule preservation
+          slotsAvailable?: number;
+          slotsPreserved?: number;
+          slotsNeeded?: number;
+          autoScheduled?: boolean;
+          scheduleWarning?: string;
         }>(
           `/admin/tournaments/${id}/categories/${catId}/bracket/restructure-groups`,
           payload,
