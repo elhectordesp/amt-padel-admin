@@ -293,6 +293,24 @@ function CalendarTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Frente 2 — borrar partido a mano
+  const deleteMatchMut = useMutation({
+    mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
+      adminService.tournaments.deleteMatch(matchId, force),
+    onSuccess: () => {
+      toast.success("Partido borrado");
+      qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
+    },
+    onError: (e: unknown) => {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (e as Error)?.message ?? "No se pudo borrar el partido";
+      toast.error(msg);
+    },
+  });
+
   const startEdit = (m: MatchResult) => {
     setEditMatchId(m.id);
     const d = m.date ? new Date(m.date) : null;
@@ -626,6 +644,24 @@ function CalendarTab({
                                 aria-label="Editar fecha y pista"
                               >
                                 <Pencil size={12} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const finished = !!m.isResult;
+                                  const msg = finished
+                                    ? "Este partido tiene resultado. ¿Borrarlo? Se eliminará también su resultado."
+                                    : "¿Borrar este partido?";
+                                  if (window.confirm(msg)) {
+                                    deleteMatchMut.mutate({ matchId: m.id, force: finished });
+                                  }
+                                }}
+                                disabled={deleteMatchMut.isPending}
+                                className="p-2 sm:p-1.5 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors shrink-0"
+                                title="Borrar partido"
+                                aria-label="Borrar partido"
+                              >
+                                <Trash2 size={12} />
                               </button>
                             </div>
 
