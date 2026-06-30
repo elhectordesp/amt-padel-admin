@@ -26,6 +26,7 @@ import PaymentModal from "@/components/admin/payment-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
+import { ManualCrossDialog } from "@/components/admin/manual-cross-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -1271,6 +1272,7 @@ export default function TorneoDetailPage() {
   const [swapSourceMatchId, setSwapSourceMatchId] = useState<string | null>(null);
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
+  const [manualCrossCatId,   setManualCrossCatId]   = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
@@ -3069,6 +3071,17 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Regen. eliminatorias</span>
                               </button>
                             )}
+                            {((allStandings as any)[cat.id]?.length ?? 0) > 0 && (
+                              <button
+                                onClick={() => setManualCrossCatId(cat.id)}
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.5)] transition-colors"
+                                title="Definir el cruce de eliminatoria a mano (1ºA vs 2ºC…)"
+                                aria-label="Cruce manual"
+                              >
+                                <GitBranch size={13} />
+                                <span className="hidden sm:inline">Cruce manual</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => setRegenCatId(cat.id)}
                               className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
@@ -3538,6 +3551,24 @@ export default function TorneoDetailPage() {
             ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${new Date(tournament.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
             : null
         }
+        onGenerated={() => invalidateBracket()}
+      />
+    )}
+
+    {/* Frente 3 — Dialog Cruce manual de eliminatoria */}
+    {manualCrossCatId && tournament && (
+      <ManualCrossDialog
+        open={!!manualCrossCatId}
+        onClose={() => setManualCrossCatId(null)}
+        tournamentId={id}
+        categoryId={manualCrossCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === manualCrossCatId)?.label) ?? "Categoría"
+        }
+        groups={((allStandings as any)[manualCrossCatId] ?? []).map((grp: any) => ({
+          label: grp.label,
+          size: grp.rows?.length ?? 0,
+        }))}
         onGenerated={() => invalidateBracket()}
       />
     )}
