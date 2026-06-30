@@ -190,6 +190,9 @@ export const adminService = {
         })
         .then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
+    /** Cruce MANUAL de eliminatoria (Frente 3): cada cruce = un partido de 1ª ronda; lado = {groupIdx, pos} o null=bye. */
+    generateEliminationManual: (id: string, catId: string, crosses: { a: { groupIdx: number; pos: number } | null; b: { groupIdx: number; pos: number } | null }[]) =>
+      api.post(`/admin/tournaments/${id}/categories/${catId}/elimination/manual`, { crosses }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
     autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
     status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
