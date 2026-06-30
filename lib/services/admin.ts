@@ -258,6 +258,15 @@ export const adminService = {
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
     updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[], force?: boolean) =>
       api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, force ? { members, force } : { members }).then((r) => r.data),
+    /** Edición manual de partidos (Frente 2). */
+    editMatchPlayers: (matchId: string, team1: { userId: string; partnerId?: string | null }, team2: { userId: string; partnerId?: string | null }) =>
+      api.patch(`/admin/matches/${matchId}/players`, { team1, team2 }).then((r) => r.data),
+    createManualMatch: (
+      tournamentId: string,
+      payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string },
+    ) => api.post(`/admin/tournaments/${tournamentId}/matches`, payload).then((r) => r.data),
+    deleteMatch: (matchId: string, force?: boolean) =>
+      api.delete(`/admin/matches/${matchId}`, { params: force ? { force: true } : {} }).then((r) => r.data),
   },
 
   registrations: {
