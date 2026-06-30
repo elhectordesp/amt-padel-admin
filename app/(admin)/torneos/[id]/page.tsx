@@ -27,6 +27,7 @@ import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
 import { ManualCrossDialog } from "@/components/admin/manual-cross-dialog";
+import { MatchCreateDialog } from "@/components/admin/match-create-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -1273,6 +1274,7 @@ export default function TorneoDetailPage() {
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [manualCrossCatId,   setManualCrossCatId]   = useState<string | null>(null);
+  const [createMatchCatId,   setCreateMatchCatId]   = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
@@ -1585,6 +1587,16 @@ export default function TorneoDetailPage() {
     mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId),
     onSuccess: () => {
       toast.success("Grupo vacío añadido");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const renameGroupMut = useMutation({
+    mutationFn: ({ catId, groupId, name }: { catId: string; groupId: string; name: string }) =>
+      adminService.tournaments.renameGroup(id, catId, groupId, name),
+    onSuccess: () => {
+      toast.success("Grupo renombrado");
       qc.invalidateQueries({ queryKey: ["standings", id] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -2820,18 +2832,33 @@ export default function TorneoDetailPage() {
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm(`¿Borrar "${grp.label}"? Solo se puede si no tiene partidos jugados.`)) {
-                                        deleteGroupMut.mutate({ catId: bracketCatId, groupId: grp.id });
-                                      }
-                                    }}
-                                    disabled={deleteGroupMut.isPending}
-                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                    title="Borrar este grupo"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => {
+                                        const name = window.prompt("Nuevo nombre del grupo:", grp.label);
+                                        if (name && name.trim() && name.trim() !== grp.label) {
+                                          renameGroupMut.mutate({ catId: bracketCatId, groupId: grp.id, name: name.trim() });
+                                        }
+                                      }}
+                                      disabled={renameGroupMut.isPending}
+                                      className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                                      title="Renombrar este grupo"
+                                    >
+                                      <Pencil size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm(`¿Borrar "${grp.label}"? Solo se puede si no tiene partidos jugados.`)) {
+                                          deleteGroupMut.mutate({ catId: bracketCatId, groupId: grp.id });
+                                        }
+                                      }}
+                                      disabled={deleteGroupMut.isPending}
+                                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                      title="Borrar este grupo"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {groupEdit.length === 0 && (
@@ -3082,6 +3109,15 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Cruce manual</span>
                               </button>
                             )}
+                            <button
+                              onClick={() => setCreateMatchCatId(cat.id)}
+                              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-green-400/50 transition-colors"
+                              title="Crear un partido a mano"
+                              aria-label="Crear partido"
+                            >
+                              <Plus size={13} />
+                              <span className="hidden sm:inline">Crear partido</span>
+                            </button>
                             <button
                               onClick={() => setRegenCatId(cat.id)}
                               className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
@@ -3570,6 +3606,35 @@ export default function TorneoDetailPage() {
           size: grp.rows?.length ?? 0,
         }))}
         onGenerated={() => invalidateBracket()}
+      />
+    )}
+
+    {/* Frente 2 — Dialog Crear partido a mano */}
+    {createMatchCatId && tournament && (
+      <MatchCreateDialog
+        open={!!createMatchCatId}
+        onClose={() => setCreateMatchCatId(null)}
+        tournamentId={id}
+        categoryId={createMatchCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === createMatchCatId)?.label) ?? "Categoría"
+        }
+        groups={((allStandings as any)[createMatchCatId] ?? []).map((grp: any) => ({
+          id: grp.id,
+          label: grp.label,
+        }))}
+        pairs={groupByPair(
+          registrations.filter(
+            (r: any) => r.categoryId === createMatchCatId && r.status === "CONFIRMED",
+          ),
+        ).map((p) => ({
+          userId: p.primary.userId,
+          partnerId: p.primary.partnerId ?? null,
+          label: p.primary.partner
+            ? `${p.primary.user.name} / ${p.primary.partner.name}`
+            : p.primary.user.name,
+        }))}
+        onCreated={() => invalidateBracket()}
       />
     )}
 
