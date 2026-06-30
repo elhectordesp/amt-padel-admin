@@ -90,7 +90,8 @@ export function GenerateBracketDialog({
   const [distMode, setDistMode] = useState<DistMode>("byCount");
   const [numGroups, setNumGroups] = useState<AutoOrNumber>("auto");
   const [groupSize, setGroupSize] = useState<number | "">("");
-  const [topN, setTopN] = useState<1 | 2>(2);
+  const [topN, setTopN] = useState<number>(2); // base que clasifica por grupo (1-4)
+  const [extraN, setExtraN] = useState<number>(0); // comodines (mejores base+1)
   const [elimRound, setElimRound] = useState<AutoOrRound>("auto");
   const [useSeeding, setUseSeeding] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -114,7 +115,7 @@ export function GenerateBracketDialog({
   useEffect(() => {
     const t = setTimeout(() => setDebouncedKey((k) => k + 1), 400);
     return () => clearTimeout(t);
-  }, [format, distMode, numGroups, groupSize, topN, elimRound]);
+  }, [format, distMode, numGroups, groupSize, topN, extraN, elimRound]);
 
   // Bloque 2: fetch de stats del cuadro existente (si lo hay) para decidir
   // si mostrar banner ámbar (sin resultados) o rojo (con resultados →
@@ -141,6 +142,7 @@ export function GenerateBracketDialog({
       adminService.tournaments.previewBracket(tournamentId, categoryId, format, {
         numGroups: effectiveNumGroups,
         topNPerGroup: topN,
+        extraQualifiers: extraN,
         eliminationStartRound: elimRound === "auto" ? undefined : elimRound,
       }) as Promise<PreviewResp>,
     enabled: open && !!categoryId,
@@ -162,6 +164,7 @@ export function GenerateBracketDialog({
       const opts: BracketGenerationOptions = {
         numGroups: effectiveNumGroups,
         topNPerGroup: topN,
+        extraQualifiers: extraN,
         eliminationStartRound: elimRound === "auto" ? undefined : elimRound,
       };
       // Si ya hay cuadro generado, usamos regenerateBracket (que pasa force=true
@@ -450,10 +453,10 @@ export function GenerateBracketDialog({
                 </div>
               </Field>
 
-              {/* ── Top N ─────────────────────────────────────── */}
+              {/* ── Top N (base por grupo) ────────────────────── */}
               <Field label="Pasan de cada grupo">
                 <div className="flex gap-3">
-                  {([1, 2] as const).map((n) => (
+                  {([1, 2, 3, 4] as const).map((n) => (
                     <button
                       key={n}
                       type="button"
@@ -467,6 +470,26 @@ export function GenerateBracketDialog({
                       Top {n}
                     </button>
                   ))}
+                </div>
+              </Field>
+
+              {/* ── Comodines (mejores base+1) ────────────────── */}
+              <Field label="Comodines (mejores siguientes)">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={previewQuery.data?.groups?.length ?? 16}
+                    value={extraN}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setExtraN(Number.isNaN(v) || v < 0 ? 0 : v);
+                    }}
+                    className="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    además del Top {topN} fijo (salen de los {ordinalNext(topN)} mejores)
+                  </span>
                 </div>
               </Field>
 
@@ -526,6 +549,7 @@ export function GenerateBracketDialog({
               <PreviewSummary
                 preview={previewQuery.data}
                 topN={topN}
+                extraN={extraN}
                 elimRound={elimRound}
               />
             ) : null}
@@ -627,8 +651,8 @@ function Radio({
 }
 
 function PreviewSummary({
-  preview, topN, elimRound,
-}: { preview: PreviewResp; topN: 1 | 2; elimRound: AutoOrRound }) {
+  preview, topN, extraN, elimRound,
+}: { preview: PreviewResp; topN: number; extraN: number; elimRound: AutoOrRound }) {
   if (!preview.isGroups) {
     return (
       <div className="space-y-1 text-xs">
@@ -649,11 +673,17 @@ function PreviewSummary({
     .map(([size, count]) => `${count} de ${size}`)
     .join(" + ");
 
-  const elimPlaces = G * topN;
-  const elimLabel =
+  const qualifiers = G * topN + extraN;
+  const bracketSize =
     elimRound === "auto"
-      ? autoElimRoundLabel(elimPlaces)
-      : ROUND_LABELS[elimRound];
+      ? Math.max(4, nextPow2Client(qualifiers))
+      : ROUND_SIZES[elimRound];
+  const byes = Math.max(0, bracketSize - qualifiers);
+  const elimLabel = bracketRoundLabel(bracketSize);
+  const breakdown =
+    extraN > 0
+      ? `Top ${topN} × ${G} + ${extraN} comodines`
+      : `Top ${topN} × ${G}`;
 
   return (
     <div className="space-y-1 text-xs">
@@ -666,9 +696,32 @@ function PreviewSummary({
       </p>
       <p className="flex items-center gap-1.5 text-foreground">
         <Trophy size={11} className="text-primary" />
-        Top {topN} × {G} = {elimPlaces} plazas → {elimLabel}
+        {qualifiers} clasificados ({breakdown}) → {elimLabel}
+        {byes > 0 ? ` · ${byes} ${byes === 1 ? "bye" : "byes"}` : ""}
       </p>
     </div>
+  );
+}
+
+function nextPow2Client(n: number): number {
+  if (n <= 1) return 1;
+  let p = 1;
+  while (p < n) p *= 2;
+  return p;
+}
+
+function bracketRoundLabel(size: number): string {
+  if (size >= 32) return "Dieciseisavos";
+  if (size >= 16) return "Octavos de final";
+  if (size >= 8) return "Cuartos de final";
+  if (size >= 4) return "Semifinales";
+  return "Final";
+}
+
+function ordinalNext(base: number): string {
+  return (
+    { 1: "segundos", 2: "terceros", 3: "cuartos", 4: "quintos" }[base] ??
+    "siguientes"
   );
 }
 
@@ -678,9 +731,3 @@ function countBy(arr: number[]): [number, number][] {
   return Array.from(map.entries()).sort((a, b) => b[0] - a[0]);
 }
 
-function autoElimRoundLabel(plazas: number): string {
-  if (plazas >= 16) return "Octavos de final";
-  if (plazas >= 8) return "Cuartos de final";
-  if (plazas >= 4) return "Semifinales";
-  return "Final";
-}

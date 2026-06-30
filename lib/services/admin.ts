@@ -33,7 +33,10 @@ export interface AdminUser { name: string; email: string }
  */
 export interface BracketGenerationOptions {
   numGroups?: number;
+  /** Clasifican FIJO por grupo (base): 1-4. */
   topNPerGroup?: number;
+  /** Comodines extra: nº de "mejores (base+1)os" que clasifican además de la base. */
+  extraQualifiers?: number;
   eliminationStartRound?: 'R32' | 'R16' | 'QF' | 'SF' | 'F';
 }
 
@@ -123,6 +126,7 @@ export const adminService = {
             ...(format ? { format } : {}),
             ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
             ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+            ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
             ...(options?.eliminationStartRound
               ? { eliminationStartRound: options.eliminationStartRound }
               : {}),
@@ -143,6 +147,7 @@ export const adminService = {
           ...(format !== undefined ? { format } : {}),
           ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
           ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
           ...(options?.eliminationStartRound
             ? { eliminationStartRound: options.eliminationStartRound }
             : {}),
@@ -178,6 +183,7 @@ export const adminService = {
           categoryId,
           ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
           ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
           ...(options?.eliminationStartRound
             ? { eliminationStartRound: options.eliminationStartRound }
             : {}),
