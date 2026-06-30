@@ -30,6 +30,9 @@ const schema = z.object({
   matchDuration:             z.number().optional(),
   elimMatchDuration:         z.number().min(15).max(180).nullable().optional(),
   maxMatchesPerPlayerPerDay: z.number().min(1).max(10).nullable().optional(),
+  maxUnavailableTotalHours:  z.number().min(0).optional(),
+  hasShirts:                 z.boolean().optional(),
+  useSeeding:                z.boolean().optional(),
   registrationDeadline:      z.string().optional(),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 }).superRefine((data, ctx) => {
@@ -120,6 +123,9 @@ export default function EditarTorneoPage() {
       matchDuration:             tournament.matchDuration ?? 60,
       elimMatchDuration:         tournament.elimMatchDuration ?? null,
       maxMatchesPerPlayerPerDay: tournament.maxMatchesPerPlayerPerDay ?? null,
+      maxUnavailableTotalHours:  tournament.maxUnavailableTotalHours ?? 0,
+      hasShirts:                 tournament.hasShirts ?? false,
+      useSeeding:                tournament.useSeeding ?? false,
       registrationDeadline:      regDeadline,
       status:               tournament.status as FormData["status"],
       tier:                 tournament.tier ?? "BRONZE",
@@ -359,6 +365,35 @@ export default function EditarTorneoPage() {
               </Field>
               <Field label="Cierre de inscripciones">
                 <Input {...register("registrationDeadline")} type="datetime-local" />
+              </Field>
+              <Field label="Máx. horas no disponibles (total)">
+                <Input
+                  type="number"
+                  min={0}
+                  {...register("maxUnavailableTotalHours", { valueAsNumber: true })}
+                />
+              </Field>
+              <Field label="Camisetas">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer h-10">
+                  <input
+                    type="checkbox"
+                    checked={watch("hasShirts") ?? false}
+                    onChange={(e) => setValue("hasShirts", e.target.checked, { shouldDirty: true })}
+                    className="accent-[#D4AF37] h-4 w-4"
+                  />
+                  El torneo incluye camisetas
+                </label>
+              </Field>
+              <Field label="Cabezas de serie">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer h-10">
+                  <input
+                    type="checkbox"
+                    checked={watch("useSeeding") ?? false}
+                    onChange={(e) => setValue("useSeeding", e.target.checked, { shouldDirty: true })}
+                    className="accent-[#D4AF37] h-4 w-4"
+                  />
+                  Usar cabezas de serie en el cuadro
+                </label>
               </Field>
             </div>
           </div>
