@@ -4,6 +4,7 @@ import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,6 +56,7 @@ export default function EditarTorneoPage() {
   const router = useRouter();
   const qc     = useQueryClient();
   const [pendingData, setPendingData] = useState<FormData | null>(null);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
@@ -398,6 +400,28 @@ export default function EditarTorneoPage() {
             </div>
           </div>
 
+          {/* Jornadas y horarios (editar = crear, solo durante el montaje) */}
+          <div className="rounded-lg border border-border bg-card/40 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Jornadas y horarios</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {tournament?.status === "ONGOING" || tournament?.status === "FINISHED"
+                    ? "El torneo ya ha empezado: las jornadas no se pueden editar."
+                    : "Edita los días y tramos horarios del torneo."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSchedule(true)}
+                disabled={tournament?.status === "ONGOING" || tournament?.status === "FINISHED"}
+                className="px-3 py-1.5 rounded-md border border-border text-sm text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+              >
+                Editar jornadas
+              </button>
+            </div>
+          </div>
+
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">
             <Link
@@ -417,6 +441,22 @@ export default function EditarTorneoPage() {
           </div>
         </form>
       </div>
+
+      {showSchedule && tournament && (
+        <ScheduleEditorDialog
+          open={showSchedule}
+          onClose={() => setShowSchedule(false)}
+          tournamentId={id}
+          initialDays={((tournament as any).schedule ?? []).map((d: any) => ({
+            date: d.date,
+            type: d.type,
+            isFinal: d.isFinal,
+            slots: d.slots,
+            maxUnavailableHours: d.maxUnavailableHours,
+          }))}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["admin-tournament", id] })}
+        />
+      )}
     </div>
   );
 }
