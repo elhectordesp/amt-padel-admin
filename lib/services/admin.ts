@@ -256,8 +256,8 @@ export const adminService = {
 
     initBracketManual: (id: string, catId: string, numGroups?: number) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
-    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[]) =>
-      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, { members }).then((r) => r.data),
+    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[], force?: boolean) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, force ? { members, force } : { members }).then((r) => r.data),
   },
 
   registrations: {
