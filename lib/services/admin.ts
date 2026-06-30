@@ -110,6 +110,9 @@ export const adminService = {
       ),
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
+    /** Editar jornadas/tramos horarios (solo durante el montaje). Reemplaza todas las jornadas. */
+    updateSchedule:  (id: string, schedule: { date: string; type?: string; isFinal?: boolean; maxUnavailableSlots?: number; blocks: { start: string; end: string }[] }[]) =>
+      api.put(`/admin/tournaments/${id}/schedule`, { schedule }).then((r) => r.data),
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
