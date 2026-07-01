@@ -254,7 +254,7 @@ export default function TournamentViewer({
             {catMatches.length > 0 && (
               <section className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Calendar size={14} /> Partidos, horarios y pistas</h3>
-                <div className="space-y-5">
+                <div className="space-y-5 max-w-2xl">
                   {byPhase.map((ph) => (
                     <div key={ph.label} className="space-y-1.5">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">{ph.label}</p>
@@ -263,21 +263,21 @@ export default function TournamentViewer({
                           const finished = m.status === "FINISHED";
                           const when = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
                           return (
-                            <div key={m.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                              <span className={`flex-1 truncate text-right ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-400"}`}>{pairLabel(m.team1)}</span>
-                              <span className="shrink-0 text-center min-w-[110px]">
+                            <div key={m.id} className="px-4 py-2.5 grid items-center gap-2 text-sm" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
+                              <span className={`truncate text-right ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
+                              <span className="text-center">
                                 {finished ? (
                                   <span className="font-mono text-zinc-300">{scoreOf(m) || "—"}</span>
                                 ) : when ? (
-                                  <span className="text-[11px] text-[#D4AF37] flex flex-col items-center leading-tight">
+                                  <span className="text-[11px] text-[#D4AF37] flex flex-col items-center leading-tight gap-0.5">
                                     <span className="flex items-center gap-1"><Clock size={10} /> {when}</span>
                                     {m.court && <span className="text-zinc-500 flex items-center gap-1"><MapPin size={10} /> {m.court}</span>}
                                   </span>
                                 ) : (
-                                  <span className="text-[11px] text-zinc-600">por programar</span>
+                                  <span className="text-[11px] text-zinc-600 italic">sin horario</span>
                                 )}
                               </span>
-                              <span className={`flex-1 truncate ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-400"}`}>{pairLabel(m.team2)}</span>
+                              <span className={`truncate text-left ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
                             </div>
                           );
                         })}
