@@ -80,8 +80,9 @@ async function getBracket(tournamentId: string, categoryId: string) {
   return json.data ?? json;
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const t = await getTournament(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const t = await getTournament(id);
   if (!t) return { title: "Torneo · AMT Pádel" };
   return {
     title: `${t.name} · AMT Pádel`,
@@ -90,8 +91,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function TorneoPublicoPage({ params }: { params: { id: string } }) {
-  const tournament = await getTournament(params.id);
+export default async function TorneoPublicoPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const tournament = await getTournament(id);
   if (!tournament) notFound();
 
   const tierColor = TIER_COLOR[tournament.tier] ?? "#D4AF37";
@@ -101,8 +103,8 @@ export default async function TorneoPublicoPage({ params }: { params: { id: stri
   const dataByCategory = await Promise.all(
     categories.map(async (cat: any) => {
       const [groups, bracket] = await Promise.all([
-        getGroups(params.id, cat.id),
-        getBracket(params.id, cat.id),
+        getGroups(id, cat.id),
+        getBracket(id, cat.id),
       ]);
       return { cat, groups, bracket };
     })
