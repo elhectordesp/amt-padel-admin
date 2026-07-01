@@ -264,6 +264,9 @@ export const adminService = {
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
     updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[], force?: boolean) =>
       api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, force ? { members, force } : { members }).then((r) => r.data),
+    /** Reparto global de grupos (modo edición, atómico): reemplaza todos los grupos de una vez. */
+    updateAllGroupMembers: (id: string, catId: string, groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[], force?: boolean) =>
+      api.put(`/admin/tournaments/${id}/categories/${catId}/groups/members`, force ? { groups, force } : { groups }).then((r) => r.data),
     renameGroup: (id: string, catId: string, groupId: string, name: string) =>
       api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/name`, { name }).then((r) => r.data),
     /** Edición manual de partidos (Frente 2). */
