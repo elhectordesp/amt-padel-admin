@@ -153,6 +153,11 @@ export default function TournamentViewer({
     return [...map.values()].sort((a, b) => a.order - b.order);
   })();
 
+  // Próximo partido de la categoría (el no jugado con fecha más próxima).
+  const nextMatch = catMatches
+    .filter((m: any) => m.status !== "FINISHED" && m.date)
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+
   // Partidos de la fase de grupos, agrupados por su grupo (emparejando por nombres de pareja).
   const namesKey = (arr?: string[]) => (arr ?? []).map((s) => String(s).trim()).sort().join("|");
   const groupBlocks = (() => {
@@ -218,6 +223,20 @@ export default function TournamentViewer({
               </h2>
             )}
 
+            {/* Próximo partido */}
+            {nextMatch && (
+              <div className="rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/[0.06] px-4 py-3 flex items-center gap-4">
+                <div className="shrink-0 w-9 h-9 rounded-full bg-[#D4AF37]/15 flex items-center justify-center">
+                  <Clock size={16} className="text-[#D4AF37]" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">Próximo partido · {nextMatch.phaseLabel ?? nextMatch.phase}</p>
+                  <p className="text-sm text-white truncate">{pairLabel(nextMatch.team1)} <span className="text-zinc-500">vs</span> {pairLabel(nextMatch.team2)}</p>
+                  <div className="mt-0.5"><WhenWhere m={nextMatch} className="justify-start" /></div>
+                </div>
+              </div>
+            )}
+
             {/* ── GRUPOS / CLASIFICACIÓN ── */}
             {(active.groups?.length ?? 0) > 0 && (
               <section className="space-y-4">
@@ -276,13 +295,17 @@ export default function TournamentViewer({
                 {(() => {
                   const shown = BRACKET_ROUNDS.filter((r) => (bracket[r.key]?.length ?? 0) > 0);
                   return (
-                    <div className="flex gap-5 overflow-x-auto pb-2">
+                    <div className="flex gap-6 overflow-x-auto pb-2 items-stretch">
                       {shown.map((r, ri) => (
-                        <div key={r.key} className="space-y-3 flex flex-col justify-around">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500 text-center">{r.label}</p>
-                          {bracket[r.key].map((m: any) => (
-                            <BracketCard key={m.id} m={m} connectLeft={ri > 0} connectRight={ri < shown.length - 1} />
-                          ))}
+                        <div key={r.key} className="flex flex-col min-w-[230px]">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500 text-center mb-3">{r.label}</p>
+                          <div className="flex-1 flex flex-col">
+                            {bracket[r.key].map((m: any) => (
+                              <div key={m.id} className="flex-1 flex items-center justify-center">
+                                <BracketCard m={m} connectLeft={ri > 0} connectRight={ri < shown.length - 1} />
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>

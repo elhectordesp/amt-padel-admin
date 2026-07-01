@@ -1795,6 +1795,22 @@ export default function TorneoDetailPage() {
                 <Tv2 size={14} />
                 <span className="hidden sm:inline">Widget TV</span>
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/torneo/${id}`;
+                  navigator.clipboard?.writeText(url).then(
+                    () => toast.success("Enlace del visor público copiado"),
+                    () => window.open(url, "_blank"),
+                  );
+                }}
+                title="Copiar el enlace del visor público (para jugadores y espectadores, sin login)"
+                aria-label="Compartir visor público"
+                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
+              >
+                <Copy size={14} />
+                <span className="hidden sm:inline">Visor público</span>
+              </button>
               <Link
                 href={`/torneos/${id}/editar`}
                 aria-label="Editar torneo"
