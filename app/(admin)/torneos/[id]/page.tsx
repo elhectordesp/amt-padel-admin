@@ -26,6 +26,7 @@ import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
+import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -1267,6 +1268,9 @@ export default function TorneoDetailPage() {
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false); // Bloque 1
+  // Bloque 4 — swap de parejas en bracket elim
+  const [swapSourceMatchId, setSwapSourceMatchId] = useState<string | null>(null);
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
@@ -1282,7 +1286,7 @@ export default function TorneoDetailPage() {
   const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
   const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
   const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
-  const [manualMode,          setManualMode]           = useState(false);
+  const [manualMode,          setManualMode]           = useState(true); // Bloque 3: editor de grupos siempre visible
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
@@ -1295,6 +1299,10 @@ export default function TorneoDetailPage() {
   const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
   const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
   const [showConflictsCatId, setShowConflictsCatId] = useState<string | null>(null);
+  // Bloque 5: dialog de reestructuración de grupos
+  const [restructureOpen, setRestructureOpen] = useState(false);
+  const [restructureNumGroups, setRestructureNumGroups] = useState<number>(3);
+  const [restructureConfirm, setRestructureConfirm] = useState("");
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -1303,6 +1311,14 @@ export default function TorneoDetailPage() {
     queryKey: ["tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
+
+  // Auto-seleccionar categoría si el torneo tiene solo una (UX: evita
+  // un click innecesario al admin)
+  useEffect(() => {
+    if (!bracketCatId && tournament && tournament.categories.length === 1) {
+      setBracketCatId(tournament.categories[0].id);
+    }
+  }, [tournament, bracketCatId]);
 
   const {
     data: registrations = [], isLoading: loadingRegs, isError: isErrorRegs, refetch: refetchRegs,
@@ -1445,12 +1461,22 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => { toast.error(err.message); setRegenElimCatId(null); },
   });
 
-  const saveResult = async (sets1: number[], sets2: number[]) => {
+  const saveResult = async (
+    sets1: number[],
+    sets2: number[],
+    opts?: { walkover?: boolean; walkoverWinnerTeam?: 1 | 2 },
+  ) => {
     if (!resultMatch) return;
     setSavingResultId(resultMatch.id);
     try {
-      await adminService.matches.setResult(resultMatch.id, sets1, sets2);
-      toast.success("Resultado guardado");
+      await adminService.matches.setResult(
+        resultMatch.id,
+        sets1,
+        sets2,
+        opts?.walkover,
+        opts?.walkoverWinnerTeam,
+      );
+      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
       setResultMatch(null);
       setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
@@ -1536,13 +1562,109 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Bloque 4 — swap parejas en bracket elim
+  const swapMatchPairMut = useMutation({
+    mutationFn: ({ matchAId, matchBId }: { matchAId: string; matchBId: string }) =>
+      adminService.tournaments.swapMatchPair(matchAId, matchBId),
+    onSuccess: () => {
+      toast.success("Parejas intercambiadas");
+      setSwapSourceMatchId(null);
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ?? "Error al hacer swap";
+      toast.error(msg);
+    },
+  });
+
+  // Mini-Bloque 5: añadir/borrar grupos individuales
+  const addEmptyGroupMut = useMutation({
+    mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId),
+    onSuccess: () => {
+      toast.success("Grupo vacío añadido");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteGroupMut = useMutation({
+    mutationFn: ({ catId, groupId }: { catId: string; groupId: string }) =>
+      adminService.tournaments.deleteGroup(id, catId, groupId),
+    onSuccess: (_data, variables) => {
+      toast.success("Grupo borrado");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      setManualGroupEdits((prev) => {
+        const next = { ...prev };
+        delete next[variables.groupId];
+        return next;
+      });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Bloque 5 completo: reestructurar grupos (cambiar nº y redistribuir)
+  const restructureGroupsMut = useMutation({
+    mutationFn: ({
+      catId,
+      numGroups,
+      force,
+    }: {
+      catId: string;
+      numGroups: number;
+      force: boolean;
+    }) =>
+      adminService.tournaments.restructureGroups(id, catId, {
+        numGroups,
+        force,
+      }),
+    onSuccess: (data) => {
+      // H3 — feedback detallado sobre preservación de horarios
+      const baseMsg = `Grupos reestructurados: ${data.fromNumGroups} → ${data.toNumGroups} (${data.matchesCreated} partidos)`;
+      const slotsLine = (data.slotsPreserved ?? 0) > 0
+        ? ` · ${data.slotsPreserved} horarios preservados`
+        : "";
+      toast.success(baseMsg + slotsLine);
+
+      // Aviso secundario si quedaron matches sin hora
+      if ((data.slotsNeeded ?? 0) > 0) {
+        if (data.autoScheduled) {
+          toast.success(`${data.slotsNeeded} partidos nuevos programados automáticamente`);
+        } else if (data.scheduleWarning) {
+          toast(data.scheduleWarning, { icon: "⚠️" });
+        }
+      }
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+      setManualGroupEdits({});
+    },
+    onError: (err: Error) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        err?.message ?? "Error al reestructurar grupos";
+      toast.error(msg);
+    },
+  });
+
   const saveGroupMembers = useMutation({
     mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
       adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       toast.success("Grupo guardado correctamente");
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
+      // Limpia el estado local del grupo guardado para que el siguiente
+      // render se re-hidrate desde el backend actualizado (sin
+      // mantener edits stale del save anterior).
+      setManualGroupEdits((prev) => {
+        const next = { ...prev };
+        delete next[variables.groupId];
+        return next;
+      });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2546,10 +2668,12 @@ export default function TorneoDetailPage() {
                 { value: "eliminatoria+consolacion",label: "Eliminatoria + Consolación" },
               ];
 
+              // El dialog (Bloque 2) maneja todos los casos internamente:
+              // - "ya generado": banner ámbar o rojo según resultados
+              // - "inscripciones abiertas": modo read-only con motivo
+              // El botón siempre se puede pulsar para abrir el dialog.
               const blockedReason = !deadlinePassed
                 ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Cambia el estado a "Sorteo" para generar el cuadro.`
-                : alreadyGenerated
-                ? "El cuadro ya ha sido generado para esta categoría."
                 : null;
 
               return (
@@ -2574,25 +2698,13 @@ export default function TorneoDetailPage() {
                           onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
-                      {bracketCatId && (
-                        <select
-                          value={bracketFormat || defaultFormat}
-                          onChange={(e) => setBracketFormat(e.target.value)}
-                          className="h-9 rounded-md border border-border bg-background text-foreground text-sm px-2 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                        >
-                          {FORMAT_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      )}
                       <button
-                        onClick={handlePreviewBracket}
-                        disabled={!bracketCatId || loadingPreview || generateBracket.isPending || !!blockedReason}
-                        title={blockedReason ?? undefined}
+                        onClick={() => setShowGenerateDialog(true)}
+                        disabled={!bracketCatId}
                         className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
-                        {loadingPreview ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
-                        Vista previa
+                        <GitBranch size={14} />
+                        Generar cuadro…
                       </button>
                     </div>
                   </div>
@@ -2600,26 +2712,30 @@ export default function TorneoDetailPage() {
               );
             })()}
 
-            {/* ── CUADRO MANUAL ── */}
+            {/* ── EDITOR DE GRUPOS (Bloque 3 — siempre visible) ── */}
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Asignación de grupos manual</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Editor de grupos</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Crea grupos y asigna las parejas sin usar el algoritmo automático.
+                    Reorganiza las parejas en cada grupo. Para regenerar todo
+                    desde cero usa "Generar cuadro…" de arriba.
                   </p>
                 </div>
-                <button
-                  onClick={() => setManualMode((m) => !m)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                    manualMode
-                      ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <List size={12} />
-                  {manualMode ? "Cerrar modo manual" : "Modo manual"}
-                </button>
+                {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => {
+                      const current = ((allStandings as any)[bracketCatId]?.length ?? 3);
+                      setRestructureNumGroups(current);
+                      setRestructureConfirm("");
+                      setRestructureOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
+                    title="Cambiar nº de grupos y redistribuir parejas"
+                  >
+                    ⇄ Reestructurar grupos…
+                  </button>
+                )}
               </div>
 
               {manualMode && (
@@ -2640,31 +2756,12 @@ export default function TorneoDetailPage() {
 
                     if (catGroups.length === 0) {
                       return (
-                        <div className="space-y-4">
+                        <div className="rounded-md border border-dashed border-border bg-background/50 p-6 text-center">
                           <p className="text-xs text-muted-foreground">
-                            No hay grupos creados todavía. Define cuántos grupos quieres y crea la estructura vacía.
+                            Sin grupos creados todavía. Usa el botón{" "}
+                            <span className="text-[#D4AF37] font-semibold">"Generar cuadro…"</span>
+                            {" "}de arriba — elige <span className="text-foreground">"Crear grupos vacíos y asignar a mano"</span> para empezar a configurar manualmente.
                           </p>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs font-medium text-muted-foreground">Nº de grupos</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={16}
-                                value={manualNumGroups}
-                                onChange={(e) => setManualNumGroups(Math.max(1, Math.min(16, Number(e.target.value))))}
-                                className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                              />
-                            </div>
-                            <button
-                              onClick={() => initManualBracket.mutate({ catId: bracketCatId, numGroups: manualNumGroups })}
-                              disabled={initManualBracket.isPending}
-                              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
-                            >
-                              {initManualBracket.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
-                              Crear grupos
-                            </button>
-                          </div>
                         </div>
                       );
                     }
@@ -2685,24 +2782,82 @@ export default function TorneoDetailPage() {
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {catGroups.map((grp: any) => {
-                            const groupEdit = manualGroupEdits[grp.id] ?? [];
-                            const assignedToOtherGroups = new Set(
-                              Object.entries(manualGroupEdits)
-                                .filter(([gId]) => gId !== grp.id)
-                                .flatMap(([, members]) => members.map((m) => m.userId))
-                            );
-                            const availablePairs = confirmedPairs.filter((p) => !assignedToOtherGroups.has(p.primary.userId));
+                            // Hidratamos desde el backend si no hay edits locales aún:
+                            // grp.rows contiene los miembros actuales del grupo
+                            // (cada row = 1 pareja, con userId/partnerId).
+                            const hydratedMembers = (grp.rows ?? [])
+                              .filter((r: any) => r.userId)
+                              .map((r: any) => ({
+                                userId: r.userId,
+                                partnerId: r.partnerId ?? null,
+                              }));
+                            const groupEdit = manualGroupEdits[grp.id] ?? hydratedMembers;
+                            // Excluye parejas asignadas a OTROS grupos (estado local o BD).
+                            // Acumulamos AMBOS userId + partnerId de cada miembro para
+                            // poder comparar contra cualquier lado de la pareja en
+                            // confirmedPairs (que viene con orden distinto de groupByPair).
+                            const assignedToOtherGroups = new Set<string>();
+                            for (const otherGrp of catGroups) {
+                              if (otherGrp.id === grp.id) continue;
+                              const otherMembers =
+                                manualGroupEdits[otherGrp.id] ??
+                                (otherGrp.rows ?? [])
+                                  .filter((r: any) => r.userId)
+                                  .map((r: any) => ({ userId: r.userId, partnerId: r.partnerId ?? null }));
+                              for (const m of otherMembers) {
+                                assignedToOtherGroups.add(m.userId);
+                                if (m.partnerId) assignedToOtherGroups.add(m.partnerId);
+                              }
+                            }
+                            // También excluye parejas ya en ESTE grupo (evita duplicados)
+                            const inThisGroup = new Set<string>();
+                            for (const m of groupEdit) {
+                              inThisGroup.add(m.userId);
+                              if (m.partnerId) inThisGroup.add(m.partnerId);
+                            }
+                            const availablePairs = confirmedPairs.filter((p) => {
+                              const a = p.primary.userId;
+                              const b = p.primary.partnerId ?? "";
+                              return (
+                                !assignedToOtherGroups.has(a) &&
+                                !assignedToOtherGroups.has(b) &&
+                                !inThisGroup.has(a) &&
+                                !inThisGroup.has(b)
+                              );
+                            });
 
                             return (
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
-                                <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm(`¿Borrar "${grp.label}"? Solo se puede si no tiene partidos jugados.`)) {
+                                        deleteGroupMut.mutate({ catId: bracketCatId, groupId: grp.id });
+                                      }
+                                    }}
+                                    disabled={deleteGroupMut.isPending}
+                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                    title="Borrar este grupo"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
 
                                 {groupEdit.length === 0 && (
                                   <p className="text-[10px] text-muted-foreground/60 italic">Sin parejas asignadas aún</p>
                                 )}
 
                                 {groupEdit.map((member) => {
-                                  const pair = confirmedPairs.find((p) => p.primary.userId === member.userId);
+                                  // Match contra userId Y partnerId (cualquiera de los 2 lados)
+                                  // porque tras guardar el backend normaliza el orden
+                                  // (userId siempre menor), que puede no coincidir con
+                                  // pair.primary.userId del groupByPair.
+                                  const pair = confirmedPairs.find(
+                                    (p) =>
+                                      p.primary.userId === member.userId ||
+                                      p.primary.partnerId === member.userId,
+                                  );
                                   return (
                                     <div key={member.userId} className="flex items-center gap-1.5">
                                       <span className="flex-1 text-xs text-foreground truncate">
@@ -2719,7 +2874,7 @@ export default function TorneoDetailPage() {
                                         onClick={() =>
                                           setManualGroupEdits((prev) => ({
                                             ...prev,
-                                            [grp.id]: (prev[grp.id] ?? []).filter((m) => m.userId !== member.userId),
+                                            [grp.id]: (prev[grp.id] ?? hydratedMembers).filter((m) => m.userId !== member.userId),
                                           }))
                                         }
                                         className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
@@ -2739,7 +2894,7 @@ export default function TorneoDetailPage() {
                                       setManualGroupEdits((prev) => ({
                                         ...prev,
                                         [grp.id]: [
-                                          ...(prev[grp.id] ?? []),
+                                          ...(prev[grp.id] ?? hydratedMembers),
                                           { userId: pair.primary.userId, partnerId: pair.primary.partnerId ?? null },
                                         ],
                                       }));
@@ -2774,6 +2929,23 @@ export default function TorneoDetailPage() {
                               </div>
                             );
                           })}
+
+                          {/* Botón "+ Nuevo grupo" — mini-Bloque 5 */}
+                          <button
+                            onClick={() => addEmptyGroupMut.mutate(bracketCatId)}
+                            disabled={addEmptyGroupMut.isPending || catGroups.length >= 16}
+                            className="flex flex-col items-center justify-center gap-2 min-h-[120px] rounded-md border-2 border-dashed border-border bg-background/30 text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={catGroups.length >= 16 ? "Máximo 16 grupos" : "Añadir un grupo vacío"}
+                          >
+                            {addEmptyGroupMut.isPending ? (
+                              <Loader2 size={20} className="animate-spin" />
+                            ) : (
+                              <>
+                                <span className="text-2xl leading-none">+</span>
+                                <span className="text-xs">Nuevo grupo</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     );
@@ -2792,20 +2964,21 @@ export default function TorneoDetailPage() {
                 const hasElim       = elimMatches.length > 0;
 
                 // Agrupar eliminatoria por fase
-                const PHASE_LABEL: Record<string, string> = { R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final" };
+                const PHASE_LABEL: Record<string, string> = { R32: "Dieciseisavos", R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final", CONSOLATION: "Consolación" };
                 const elimPhases = [...new Set(elimMatches.map((m: any) => m.phase))]
                   .sort((a, b) => {
-                    const order: Record<string, number> = { R16: 0, QF: 1, SF: 2, FINAL: 3 };
-                    return (order[a] ?? 0) - (order[b] ?? 0);
+                    const order: Record<string, number> = { R32: 0, R16: 1, QF: 2, SF: 3, FINAL: 4, CONSOLATION: 5 };
+                    return (order[a] ?? 99) - (order[b] ?? 99);
                   });
                 const roundFmtOpen = showRoundFmtCatId === cat.id;
                 const ROUND_PHASES = [
-                  { key: "GROUPS",      label: "Grupos"      },
-                  { key: "R16",         label: "Octavos"     },
-                  { key: "QF",          label: "Cuartos"     },
-                  { key: "SF",          label: "Semifinales" },
-                  { key: "FINAL",       label: "Final"       },
-                  { key: "CONSOLATION", label: "Consolación" },
+                  { key: "GROUPS",      label: "Grupos"        },
+                  { key: "R32",         label: "Dieciseisavos" },
+                  { key: "R16",         label: "Octavos"       },
+                  { key: "QF",          label: "Cuartos"       },
+                  { key: "SF",          label: "Semifinales"   },
+                  { key: "FINAL",       label: "Final"         },
+                  { key: "CONSOLATION", label: "Consolación"   },
                 ] as const;
                 const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
                 const FORMAT_LABEL: Record<string, string> = {
@@ -3063,6 +3236,20 @@ export default function TorneoDetailPage() {
                     {/* Partidos de eliminatoria */}
                     {hasElim && (
                       <div className="border-b border-border p-4 space-y-4">
+                        {swapSourceMatchId && elimMatches.some((m: any) => m.id === swapSourceMatchId) && (
+                          <div className="flex items-center justify-between gap-3 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-2">
+                            <p className="text-xs text-[#D4AF37]">
+                              <span className="font-semibold">Modo intercambio activo.</span>{" "}
+                              Selecciona otro partido de la misma fase para mover la pareja.
+                            </p>
+                            <button
+                              onClick={() => setSwapSourceMatchId(null)}
+                              className="text-[10px] text-[#D4AF37] hover:text-foreground underline whitespace-nowrap"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
                         {elimPhases.map((phase) => {
                           const phaseMatches = elimMatches.filter((m: any) => m.phase === phase);
                           return (
@@ -3073,14 +3260,55 @@ export default function TorneoDetailPage() {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {phaseMatches.map((m: any) => {
                                   const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
+                                  // Bloque 4 — swap states
+                                  const isSwapSource = swapSourceMatchId === m.id;
+                                  const canBeSwapTarget =
+                                    !!swapSourceMatchId &&
+                                    swapSourceMatchId !== m.id &&
+                                    !m.isResult &&
+                                    (m.team1?.length ?? 0) > 0;
+                                  const canInitSwap =
+                                    !swapSourceMatchId &&
+                                    !m.isResult &&
+                                    (m.team1?.length ?? 0) > 0;
                                   return (
-                                    <div key={m.id} className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${m.isResult ? "border-[rgba(212,175,55,0.3)]" : "border-border"}`}>
+                                    <div
+                                      key={m.id}
+                                      className={`relative bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 transition-all ${
+                                        isSwapSource
+                                          ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-[0_0_12px_rgba(212,175,55,0.25)]"
+                                          : canBeSwapTarget
+                                            ? "border-[#D4AF37]/60 cursor-pointer bg-[#D4AF37]/5 hover:bg-[#D4AF37]/15 hover:border-[#D4AF37] hover:scale-[1.01]"
+                                            : m.isResult
+                                              ? "border-[rgba(212,175,55,0.3)]"
+                                              : "border-border"
+                                      }`}
+                                      onClick={() => {
+                                        if (canBeSwapTarget) {
+                                          if (window.confirm(`¿Intercambiar pareja entre estos 2 partidos?`)) {
+                                            swapMatchPairMut.mutate({
+                                              matchAId: swapSourceMatchId!,
+                                              matchBId: m.id,
+                                            });
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      {canBeSwapTarget && (
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none rounded-md bg-[#D4AF37]/0 hover:bg-[#D4AF37]/10">
+                                          <span className="text-[10px] font-semibold text-[#D4AF37] bg-background/90 px-2 py-0.5 rounded shadow-sm border border-[#D4AF37]/40">
+                                            Click para intercambiar
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex flex-col sm:grid text-xs sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                         <span className={`truncate sm:text-left ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team1?.join(" / ") || "Por definir"}
                                         </span>
                                         <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
-                                          {m.isResult && m.sets1 && m.sets2
+                                          {m.isWalkover
+                                            ? "W.O."
+                                            : m.isResult && m.sets1 && m.sets2
                                             ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                             : "vs"}
                                         </span>
@@ -3089,21 +3317,47 @@ export default function TorneoDetailPage() {
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between">
-                                        {(matchTime || m.court) ? (
+                                        {(matchTime || m.court || m.isWalkover) ? (
                                           <div className="flex items-center gap-2">
+                                            {m.isWalkover && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0">
+                                                WO
+                                              </span>
+                                            )}
                                             {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
                                             {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                           </div>
                                         ) : <span />}
-                                        {m.isResult && (
-                                          <button
-                                            onClick={() => { setResultMatch(m); setResultCorrection(true); }}
-                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
-                                            title="Corregir resultado"
-                                          >
-                                            <RotateCcw size={9} /> Corregir
-                                          </button>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {/* Bloque 4 — chip swap */}
+                                          {canInitSwap && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(m.id); }}
+                                              className="inline-flex items-center gap-1 text-[10px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-full px-2 py-0.5 transition-colors"
+                                              title="Selecciona otro partido de la misma fase para intercambiar parejas"
+                                            >
+                                              <span aria-hidden>⇄</span> Mover pareja
+                                            </button>
+                                          )}
+                                          {isSwapSource && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(null); }}
+                                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-background bg-[#D4AF37] hover:bg-[#D4AF37]/80 rounded-full px-2 py-0.5 transition-colors"
+                                              title="Cancelar swap"
+                                            >
+                                              <span aria-hidden>✕</span> Cancelar swap
+                                            </button>
+                                          )}
+                                          {m.isResult && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
+                                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                              title="Corregir resultado"
+                                            >
+                                              <RotateCcw size={9} /> Corregir
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   );
@@ -3131,15 +3385,22 @@ export default function TorneoDetailPage() {
                                     <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                       <span className="truncate sm:text-left">{m.team1?.join(" / ") ?? "—"}</span>
                                       <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
-                                        {m.isResult && m.sets1 && m.sets2
+                                        {m.isWalkover
+                                          ? "W.O."
+                                          : m.isResult && m.sets1 && m.sets2
                                           ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                           : "vs"}
                                       </span>
                                       <span className="truncate sm:text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
                                     <div className="flex items-center justify-between pl-0.5">
-                                      {(matchTime || m.court) ? (
+                                      {(matchTime || m.court || m.isWalkover) ? (
                                         <div className="flex items-center gap-2">
+                                          {m.isWalkover && (
+                                            <span className="inline-flex items-center text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0">
+                                              WO
+                                            </span>
+                                          )}
                                           {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
@@ -3265,6 +3526,142 @@ export default function TorneoDetailPage() {
         onCancel={() => setBracketPreview(null)}
       />
     )}
+
+    {showGenerateDialog && bracketCatId && tournament && (
+      <GenerateBracketDialog
+        open={showGenerateDialog}
+        onClose={() => setShowGenerateDialog(false)}
+        tournamentId={id}
+        categoryId={bracketCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === bracketCatId)?.label) ?? "Categoría"
+        }
+        totalConfirmedPairs={
+          tournament.categories.find((c) => c.id === bracketCatId)
+            ?.registeredCount ?? 0
+        }
+        alreadyHasBracket={bracketMatches.some(
+          (m: any) => m.categoryId === bracketCatId,
+        )}
+        registrationsOpenReason={
+          tournament.status === "OPEN" &&
+          (!tournament.registrationDeadline ||
+            new Date() <= new Date(tournament.registrationDeadline))
+            ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${new Date(tournament.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
+            : null
+        }
+        onGenerated={() => invalidateBracket()}
+      />
+    )}
+
+    {/* Bloque 5 — Dialog Reestructurar grupos */}
+    {restructureOpen && bracketCatId && tournament && (() => {
+      const cat = tournament.categories.find((c) => c.id === bracketCatId);
+      const totalPairs = cat?.registeredCount ?? 0;
+      const currentGroups = ((allStandings as any)[bracketCatId]?.length ?? 0);
+      const finishedInGroups = bracketMatches.filter(
+        (m: any) => m.categoryId === bracketCatId && m.phase === "GROUPS" && m.isResult,
+      ).length;
+      const requiresForce = finishedInGroups > 0;
+      const confirmOk = !requiresForce || restructureConfirm === "REESTRUCTURAR";
+      const groupSizesValid = restructureNumGroups >= 1 && restructureNumGroups <= 16 && totalPairs >= restructureNumGroups * 3;
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setRestructureOpen(false)}>
+          <div className="bg-card border border-border rounded-lg max-w-md w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Reestructurar grupos</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {cat?.gender === "M" ? "Masculino" : "Femenino"} {cat?.level} — {totalPairs} parejas confirmadas
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Nuevo nº de grupos</label>
+              <div className="grid grid-cols-6 gap-2">
+                {[3, 4, 5, 6, 7, 8].map((n) => {
+                  const disabled = totalPairs < n * 3;
+                  const isActive = restructureNumGroups === n;
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => setRestructureNumGroups(n)}
+                      disabled={disabled}
+                      className={`py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-[#D4AF37] text-background"
+                          : "bg-secondary/50 text-foreground hover:bg-secondary"
+                      } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
+                      title={disabled ? `Necesitas ≥ ${n * 3} parejas` : ""}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Actual: {currentGroups} grupos. Reparto: serpentine por SPA si el torneo usa semillas, aleatorio si no.
+              </p>
+            </div>
+
+            {requiresForce && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-2">
+                <p className="text-xs text-red-400">
+                  <span className="font-semibold">⚠️ Acción destructiva.</span> Hay {finishedInGroups} partido{finishedInGroups > 1 ? "s" : ""} con resultado en la fase de grupos. Reestructurar los borrará permanentemente.
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  La fase eliminatoria NO se toca. Escribe <code className="font-mono text-red-400">REESTRUCTURAR</code> para confirmar:
+                </p>
+                <input
+                  type="text"
+                  value={restructureConfirm}
+                  onChange={(e) => setRestructureConfirm(e.target.value)}
+                  className="w-full rounded-md border border-red-500/40 bg-background px-2 py-1 text-xs text-foreground"
+                  placeholder="REESTRUCTURAR"
+                />
+              </div>
+            )}
+
+            {!groupSizesValid && (
+              <p className="text-xs text-amber-400">
+                No es posible distribuir {totalPairs} parejas en {restructureNumGroups} grupos (mínimo 3 parejas/grupo).
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setRestructureOpen(false)}
+                className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                disabled={restructureGroupsMut.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  restructureGroupsMut.mutate(
+                    {
+                      catId: bracketCatId,
+                      numGroups: restructureNumGroups,
+                      force: requiresForce,
+                    },
+                    { onSuccess: () => setRestructureOpen(false) },
+                  );
+                }}
+                disabled={
+                  !confirmOk ||
+                  !groupSizesValid ||
+                  restructureNumGroups === currentGroups ||
+                  restructureGroupsMut.isPending
+                }
+                className="px-3 py-1.5 text-xs font-semibold text-background bg-[#D4AF37] hover:bg-[#D4AF37]/80 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition-colors"
+              >
+                {restructureGroupsMut.isPending ? "Reestructurando…" : "Reestructurar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
 
     <ConfirmModal
       open={showDeleteModal}

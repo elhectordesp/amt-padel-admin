@@ -24,6 +24,19 @@ export interface ScheduleConflict {
 
 export interface AdminUser { name: string; email: string }
 
+/**
+ * Opciones avanzadas para generación/preview del cuadro (Bloque 1).
+ *
+ * Cuando se omiten, el backend usa el comportamiento histórico (auto-cálculo).
+ * Cuando se pasan, el backend respeta los valores siempre que sean coherentes
+ * entre sí (numGroups × topNPerGroup ≥ plazas de eliminationStartRound).
+ */
+export interface BracketGenerationOptions {
+  numGroups?: number;
+  topNPerGroup?: number;
+  eliminationStartRound?: 'R32' | 'R16' | 'QF' | 'SF' | 'F';
+}
+
 export const adminService = {
   me: () =>
     api.get<AdminUser>("/auth/me").then((r) => r.data),
@@ -39,6 +52,45 @@ export const adminService = {
 
   activity: () =>
     api.get<ActivityItem[]>("/admin/activity").then((r) => r.data).catch((e) => { console.error("[admin] activity:", e); return [] as ActivityItem[]; }),
+
+  /** P3 — Historial de auditoría con filtros y paginación. */
+  auditLogs: (filters: {
+    tournamentId?: string;
+    action?: string;
+    adminId?: string;
+    from?: string;  // ISO date
+    to?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return api
+      .get<{
+        items: {
+          id: string;
+          adminId: string;
+          adminName: string;
+          action: string;
+          actionLabel: string;
+          resource: string;
+          resourceId: string | null;
+          entityName: string | null;
+          href: string | null;
+          details: unknown;
+          createdAt: string;
+        }[];
+        total: number;
+        page: number;
+        pageSize: number;
+        distinctActions: { value: string; label: string; count: number }[];
+      }>(`/admin/audit-logs${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
 
   tournaments: {
     list: () =>
@@ -58,17 +110,144 @@ export const adminService = {
     delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
-    previewBracket:  (id: string, categoryId: string, format?: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId, ...(format ? { format } : {}) } }).then((r) => r.data),
-    generateBracket: (id: string, categoryId: string, customGroups?: string[][], format?: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups, ...(format !== undefined ? { format } : {}) }).then((r) => r.data),
+    previewBracket: (
+      id: string,
+      categoryId: string,
+      format?: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .get(`/admin/tournaments/${id}/bracket/preview`, {
+          params: {
+            categoryId,
+            ...(format ? { format } : {}),
+            ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+            ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+            ...(options?.eliminationStartRound
+              ? { eliminationStartRound: options.eliminationStartRound }
+              : {}),
+          },
+        })
+        .then((r) => r.data),
+    generateBracket: (
+      id: string,
+      categoryId: string,
+      customGroups?: string[][],
+      format?: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .post(`/admin/tournaments/${id}/bracket/generate`, {
+          categoryId,
+          customGroups,
+          ...(format !== undefined ? { format } : {}),
+          ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+          ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.eliminationStartRound
+            ? { eliminationStartRound: options.eliminationStartRound }
+            : {}),
+        })
+        .then((r) => r.data),
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
       api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),
-    regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
+    /**
+     * Estado del cuadro de una categoría (Bloque 2). Usado por el dialog
+     * para decidir nivel de confirmación al regenerar.
+     */
+    getBracketStats: (
+      id: string,
+      categoryId: string,
+    ): Promise<{
+      exists: boolean;
+      totalMatches: number;
+      finishedMatches: number;
+      hasGroupResults: boolean;
+      hasElimResults: boolean;
+    }> =>
+      api
+        .get(`/admin/tournaments/${id}/categories/${categoryId}/bracket/stats`)
+        .then((r) => r.data),
+    regenerateBracket: (
+      id: string,
+      categoryId: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .post(`/admin/tournaments/${id}/bracket/regenerate`, {
+          categoryId,
+          ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+          ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.eliminationStartRound
+            ? { eliminationStartRound: options.eliminationStartRound }
+            : {}),
+        })
+        .then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
     autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
     status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
     auditLog:        (id: string, limit = 100)      => api.get<AuditLogEntry[]>(`/admin/tournaments/${id}/audit`, { params: { limit } }).then((r) => r.data),
+    /**
+     * Swap parejas entre 2 matches del bracket elim (Bloque 4).
+     * Backend valida que sean misma cat + phase + ninguno FINISHED.
+     */
+    swapMatchPair: (matchAId: string, matchBId: string) =>
+      api
+        .post(`/admin/matches/${matchAId}/swap-pair`, { withMatchId: matchBId })
+        .then((r) => r.data),
+
+    /** Añade un grupo vacío al cuadro existente (mini-Bloque 5). */
+    addEmptyGroup: (id: string, catId: string) =>
+      api
+        .post<{ id: string; name: string; members: never[] }>(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/groups`,
+        )
+        .then((r) => r.data),
+
+    /** Borra un grupo vacío (mini-Bloque 5). */
+    deleteGroup: (id: string, catId: string, groupId: string) =>
+      api
+        .delete(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/groups/${groupId}`,
+        )
+        .then((r) => r.data),
+
+    /**
+     * Reestructura grupos: cambia nº de grupos y redistribuye parejas (Bloque 5).
+     * - assignments: opcional, mapeo "Grupo X" → registrationId[]. Si null,
+     *   distribución automática (serpentine si useSeeding, random si no).
+     * - force: requerido si hay partidos de grupos con resultado FINISHED.
+     */
+    restructureGroups: (
+      id: string,
+      catId: string,
+      payload: {
+        numGroups: number;
+        assignments?: Record<string, string[]> | null;
+        force?: boolean;
+      },
+    ) =>
+      api
+        .post<{
+          success: boolean;
+          fromNumGroups: number;
+          toNumGroups: number;
+          matchesCreated: number;
+          hadResults: boolean;
+          force: boolean;
+          // H3 — schedule preservation
+          slotsAvailable?: number;
+          slotsPreserved?: number;
+          slotsNeeded?: number;
+          autoScheduled?: boolean;
+          scheduleWarning?: string;
+        }>(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/restructure-groups`,
+          payload,
+        )
+        .then((r) => r.data),
+
     initBracketManual: (id: string, catId: string, numGroups?: number) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
     updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[]) =>
@@ -260,7 +439,11 @@ export const adminService = {
       api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
     create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean }) =>
       api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
-    update: (clubId: string, courtId: string, data: Partial<{ name: string; isIndoor: boolean; isCentral: boolean; order: number }>) =>
+    update: (clubId: string, courtId: string, data: Partial<{
+      name: string; isIndoor: boolean; isCentral: boolean; order: number;
+      type: "SINGLES" | "DOUBLES"; wallType: "GLASS" | "WALL" | null;
+      allowOpenMatches: boolean;
+    }>) =>
       api.patch<Court>(`/admin/clubs/${clubId}/courts/${courtId}`, data).then((r) => r.data),
     remove: (clubId: string, courtId: string) =>
       api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),

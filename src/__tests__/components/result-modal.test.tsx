@@ -186,4 +186,85 @@ describe('ResultModal', () => {
     render(<ResultModal {...baseProps({ match, isCorrection: true })} />);
     expect(screen.getByRole('button', { name: /guardar corrección/i })).toBeInTheDocument();
   });
+
+  // ── A2 — Walkover ─────────────────────────────────────────────────────
+
+  describe('Walkover (A2)', () => {
+    it('muestra los botones de modo Resultado y Walkover', () => {
+      render(<ResultModal {...baseProps()} />);
+      expect(screen.getByRole('button', { name: 'Resultado' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /walkover/i })).toBeInTheDocument();
+    });
+
+    it('al cambiar a modo Walkover oculta los inputs de sets', () => {
+      render(<ResultModal {...baseProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    });
+
+    it('al cambiar a modo Walkover muestra los 2 botones de pareja ganadora', () => {
+      render(<ResultModal {...baseProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      expect(screen.getByRole('button', { name: /Gana pareja 1.*Jugador A.*Jugador B/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Gana pareja 2.*Jugador C.*Jugador D/i })).toBeInTheDocument();
+    });
+
+    it('el botón de guardar está deshabilitado hasta elegir ganador del walkover', () => {
+      render(<ResultModal {...baseProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      expect(screen.getByRole('button', { name: /registrar walkover/i })).toBeDisabled();
+    });
+
+    it('al elegir pareja 1 como ganadora se habilita el botón Registrar walkover', () => {
+      render(<ResultModal {...baseProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Gana pareja 1.*Jugador A.*Jugador B/i }));
+      expect(screen.getByRole('button', { name: /registrar walkover/i })).not.toBeDisabled();
+    });
+
+    it('llama onSave con walkover=true y walkoverWinnerTeam=1', () => {
+      const onSave = vi.fn();
+      render(<ResultModal {...baseProps({ onSave })} />);
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Gana pareja 1.*Jugador A.*Jugador B/i }));
+      fireEvent.click(screen.getByRole('button', { name: /registrar walkover/i }));
+      expect(onSave).toHaveBeenCalledWith([], [], { walkover: true, walkoverWinnerTeam: 1 });
+    });
+
+    it('llama onSave con walkover=true y walkoverWinnerTeam=2', () => {
+      const onSave = vi.fn();
+      render(<ResultModal {...baseProps({ onSave })} />);
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Gana pareja 2.*Jugador C.*Jugador D/i }));
+      fireEvent.click(screen.getByRole('button', { name: /registrar walkover/i }));
+      expect(onSave).toHaveBeenCalledWith([], [], { walkover: true, walkoverWinnerTeam: 2 });
+    });
+
+    it('en modo corrección con match isWalkover=true preselecciona modo Walkover', () => {
+      const match = makeMatch({
+        sets1: [6, 6], sets2: [0, 0],
+        isResult: true,
+        winner: 'team1',
+        // @ts-expect-error — campo extra del backend no tipado en MatchResult
+        isWalkover: true,
+      });
+      render(<ResultModal {...baseProps({ match, isCorrection: true })} />);
+      // El botón debe ser "Guardar W.O. corregido"
+      expect(screen.getByRole('button', { name: /guardar w\.o\. corregido/i })).toBeInTheDocument();
+      // Y debe haber un overlay con el aviso de walkover (texto)
+      expect(screen.getByText(/no se presentó/i)).toBeInTheDocument();
+    });
+
+    it('alternar Score → Walkover → Score limpia validation error', () => {
+      render(<ResultModal {...baseProps()} />);
+      // Provocar error en score mode
+      fillSet(0, '6', '6');
+      fillSet(1, '3', '6');
+      fireEvent.click(screen.getByRole('button', { name: /guardar resultado/i }));
+      expect(screen.getByText(/no puede haber empate/i)).toBeInTheDocument();
+      // Cambiar a walkover limpia el error
+      fireEvent.click(screen.getByRole('button', { name: /walkover/i }));
+      expect(screen.queryByText(/no puede haber empate/i)).not.toBeInTheDocument();
+    });
+  });
 });
