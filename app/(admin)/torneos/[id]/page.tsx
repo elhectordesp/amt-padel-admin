@@ -1301,7 +1301,7 @@ function PistasTab({
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas" | "estado" | "historial";
+type Tab = "resumen" | "inscripciones" | "cuadro" | "horarios" | "mas";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -1309,6 +1309,8 @@ export default function TorneoDetailPage() {
   const qc      = useQueryClient();
 
   const [tab,             setTab]           = useState<Tab>("resumen");
+  const [horariosView,    setHorariosView]  = useState<"lista" | "tablero">("lista");
+  const [masView,         setMasView]       = useState<"estado" | "historial">("estado");
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
   const [regCatFilter,    setRegCatFilter]  = useState<string>("all");
   const [regSearch,       setRegSearch]     = useState("");
@@ -1389,7 +1391,7 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey: ["matches", id],
     queryFn:  () => adminService.matches.list(id),
-    enabled:  tab === "calendario",
+    enabled:  tab === "horarios",
   });
 
   const {
@@ -1404,14 +1406,14 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey: ["tournament-status", id],
     queryFn:  () => adminService.tournaments.status(id),
-    enabled:  tab === "estado",
+    enabled:  tab === "mas" && masView === "estado",
     staleTime: 30_000,
   });
 
   const { data: auditLog = [], isLoading: loadingAudit } = useQuery({
     queryKey: ["tournament-audit", id],
     queryFn:  () => adminService.tournaments.auditLog(id, 150),
-    enabled:  tab === "historial",
+    enabled:  tab === "mas" && masView === "historial",
     staleTime: 60_000,
   });
 
@@ -2028,12 +2030,10 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
-              { key: "estado",        label: "Estado"         },
-              { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
-              { key: "calendario",    label: "Calendario"     },
               { key: "cuadro",        label: "Cuadro"         },
-              { key: "pistas",        label: "Pistas"         },
-              { key: "historial",     label: "Historial"      },
+              { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
+              { key: "horarios",      label: "Horarios"       },
+              { key: "mas",           label: "Más"            },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
@@ -2049,6 +2049,50 @@ export default function TorneoDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* Sub-navegación de Horarios (Lista / Tablero) */}
+        {tab === "horarios" && (
+          <div className="flex items-center gap-2 py-3">
+            {([
+              { key: "lista", label: "Lista / Calendario" },
+              { key: "tablero", label: "Tablero por pista" },
+            ] as { key: "lista" | "tablero"; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setHorariosView(key)}
+                className={`text-xs font-medium rounded-md px-3 py-1.5 border transition-colors ${
+                  horariosView === key
+                    ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Sub-navegación de Más (Estado / Historial) */}
+        {tab === "mas" && (
+          <div className="flex items-center gap-2 py-3">
+            {([
+              { key: "estado", label: "Estado del torneo" },
+              { key: "historial", label: "Historial" },
+            ] as { key: "estado" | "historial"; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setMasView(key)}
+                className={`text-xs font-medium rounded-md px-3 py-1.5 border transition-colors ${
+                  masView === key
+                    ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── RESUMEN TAB ── */}
         {tab === "resumen" && (
@@ -2675,7 +2719,7 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── CALENDARIO TAB ── */}
-        {tab === "calendario" && (
+        {tab === "horarios" && horariosView === "lista" && (
           <CalendarTab
             matches={matches}
             loading={loadingMatches}
@@ -3574,17 +3618,17 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── ESTADO TAB ── */}
-        {tab === "estado" && (
+        {tab === "mas" && masView === "estado" && (
           <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
         )}
 
         {/* ── PISTAS TAB ── */}
-        {tab === "pistas" && (
+        {tab === "horarios" && horariosView === "tablero" && (
           <PistasTab tournamentId={id} categories={tournament?.categories ?? []} />
         )}
 
         {/* ── HISTORIAL TAB ── */}
-        {tab === "historial" && (
+        {tab === "mas" && masView === "historial" && (
           <div className="p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
