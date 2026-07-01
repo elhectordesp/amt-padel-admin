@@ -3421,6 +3421,15 @@ export default function TorneoDetailPage() {
                                               <span aria-hidden>✕</span> Cancelar swap
                                             </button>
                                           )}
+                                          {!m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && tournament?.status === "ONGOING" && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(false); }}
+                                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                              title="Introducir resultado"
+                                            >
+                                              <CheckCircle size={9} /> Resultado
+                                            </button>
+                                          )}
                                           {m.isResult && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
@@ -3478,6 +3487,15 @@ export default function TorneoDetailPage() {
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
                                       ) : <span />}
+                                      {!m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && tournament?.status === "ONGOING" && (
+                                        <button
+                                          onClick={() => { setResultMatch(m); setResultCorrection(false); }}
+                                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                          title="Introducir resultado"
+                                        >
+                                          <CheckCircle size={9} /> Resultado
+                                        </button>
+                                      )}
                                       {m.isResult && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(true); }}
