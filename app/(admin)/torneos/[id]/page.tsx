@@ -1343,6 +1343,7 @@ export default function TorneoDetailPage() {
   const [manualMode,          setManualMode]           = useState(true); // Bloque 3: editor de grupos siempre visible
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
+  const [groupEditMode,       setGroupEditMode]       = useState(false);
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
@@ -1616,6 +1617,29 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Mejora QA #3 — reparto GLOBAL de grupos (modo edición, atómico)
+  const saveAllGroups = useMutation({
+    mutationFn: ({ catId, groups, force }: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) =>
+      adminService.tournaments.updateAllGroupMembers(id, catId, groups, force),
+    onSuccess: () => {
+      toast.success("Reparto de grupos guardado");
+      setManualGroupEdits({});
+      setGroupEditMode(false);
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+    },
+    onError: (err: unknown, variables: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? (err as Error)?.message ?? "No se pudo guardar el reparto";
+      if (!variables.force && /jugad|resultad/i.test(msg)) {
+        if (window.confirm(`${msg}\n\n¿Continuar y regenerar los partidos afectados?`)) {
+          saveAllGroups.mutate({ ...variables, force: true });
+        }
+        return;
+      }
+      toast.error(msg);
+    },
+  });
+
   // Bloque 4 — swap parejas en bracket elim
   const swapMatchPairMut = useMutation({
     mutationFn: ({ matchAId, matchBId }: { matchAId: string; matchBId: string }) =>
@@ -1712,25 +1736,6 @@ export default function TorneoDetailPage() {
         err?.message ?? "Error al reestructurar grupos";
       toast.error(msg);
     },
-  });
-
-  const saveGroupMembers = useMutation({
-    mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
-      adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
-    onSuccess: (_data, variables) => {
-      toast.success("Grupo guardado correctamente");
-      qc.invalidateQueries({ queryKey: ["standings", id] });
-      qc.invalidateQueries({ queryKey: ["bracket", id] });
-      // Limpia el estado local del grupo guardado para que el siguiente
-      // render se re-hidrate desde el backend actualizado (sin
-      // mantener edits stale del save anterior).
-      setManualGroupEdits((prev) => {
-        const next = { ...prev };
-        delete next[variables.groupId];
-        return next;
-      });
-    },
-    onError: (err: Error) => toast.error(err.message),
   });
 
   const updatePrizesMut = useMutation({
@@ -2777,18 +2782,59 @@ export default function TorneoDetailPage() {
                   </p>
                 </div>
                 {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
-                  <button
-                    onClick={() => {
-                      const current = ((allStandings as any)[bracketCatId]?.length ?? 3);
-                      setRestructureNumGroups(current);
-                      setRestructureConfirm("");
-                      setRestructureOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
-                    title="Cambiar nº de grupos y redistribuir parejas"
-                  >
-                    ⇄ Reestructurar grupos…
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!groupEditMode ? (
+                      <>
+                        <button
+                          onClick={() => setGroupEditMode(true)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground bg-secondary hover:bg-secondary/70 border border-border rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
+                          title="Reorganizar parejas entre grupos y guardar todo de una vez"
+                        >
+                          <Pencil size={12} /> Editar reparto
+                        </button>
+                        <button
+                          onClick={() => {
+                            const current = ((allStandings as any)[bracketCatId]?.length ?? 3);
+                            setRestructureNumGroups(current);
+                            setRestructureConfirm("");
+                            setRestructureOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
+                          title="Cambiar nº de grupos y redistribuir parejas"
+                        >
+                          ⇄ Reestructurar grupos…
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setManualGroupEdits({}); setGroupEditMode(false); }}
+                          disabled={saveAllGroups.isPending}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-secondary hover:bg-secondary/70 border border-border rounded-md px-3 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => {
+                            const cats = (allStandings as any)[bracketCatId] ?? [];
+                            const groups = cats.map((grp: any) => ({
+                              groupId: grp.id,
+                              members: (manualGroupEdits[grp.id] ??
+                                (grp.rows ?? [])
+                                  .filter((r: any) => r.userId)
+                                  .map((r: any) => ({ userId: r.userId, partnerId: r.partnerId ?? null }))),
+                            }));
+                            saveAllGroups.mutate({ catId: bracketCatId, groups });
+                          }}
+                          disabled={saveAllGroups.isPending}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0C0C0C] bg-[#D4AF37] hover:bg-[#C49F2A] rounded-md px-3 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {saveAllGroups.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                          Guardar cambios
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -2939,22 +2985,24 @@ export default function TorneoDetailPage() {
                                           </>
                                         ) : member.userId}
                                       </span>
-                                      <button
-                                        onClick={() =>
-                                          setManualGroupEdits((prev) => ({
-                                            ...prev,
-                                            [grp.id]: (prev[grp.id] ?? hydratedMembers).filter((m) => m.userId !== member.userId),
-                                          }))
-                                        }
-                                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                                      >
-                                        <X size={10} />
-                                      </button>
+                                      {groupEditMode && (
+                                        <button
+                                          onClick={() =>
+                                            setManualGroupEdits((prev) => ({
+                                              ...prev,
+                                              [grp.id]: (prev[grp.id] ?? hydratedMembers).filter((m) => m.userId !== member.userId),
+                                            }))
+                                          }
+                                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                        >
+                                          <X size={10} />
+                                        </button>
+                                      )}
                                     </div>
                                   );
                                 })}
 
-                                {availablePairs.length > 0 && (
+                                {groupEditMode && availablePairs.length > 0 && (
                                   <select
                                     value=""
                                     onChange={(e) => {
@@ -2980,21 +3028,9 @@ export default function TorneoDetailPage() {
                                   </select>
                                 )}
 
-                                <button
-                                  onClick={() =>
-                                    saveGroupMembers.mutate({
-                                      catId: bracketCatId,
-                                      groupId: grp.id,
-                                      members: groupEdit,
-                                    })
-                                  }
-                                  disabled={saveGroupMembers.isPending || groupEdit.length < 2}
-                                  title={groupEdit.length < 2 ? "Añade al menos 2 parejas" : undefined}
-                                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded-md bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)] text-[#D4AF37] hover:bg-[rgba(212,175,55,0.12)] disabled:opacity-50 transition-colors font-medium"
-                                >
-                                  {saveGroupMembers.isPending ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-                                  Guardar grupo
-                                </button>
+                                {groupEditMode && groupEdit.length < 2 && (
+                                  <p className="text-[10px] text-amber-400/80 text-center">Mínimo 2 parejas por grupo</p>
+                                )}
                               </div>
                             );
                           })}
