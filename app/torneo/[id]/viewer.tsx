@@ -41,6 +41,34 @@ function scoreOf(m: any): string {
   if (s1?.length) return s1.map((s: number, i: number) => `${s}-${s2[i]}`).join("  ");
   return "";
 }
+const fmtWhen = (d?: string | null) => (d ? new Date(d).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
+
+// Línea compacta de día·hora · pista (para tarjetas y listas).
+function WhenWhere({ m, className = "" }: { m: any; className?: string }) {
+  const when = fmtWhen(m.date);
+  if (!when && !m.court) return null;
+  return (
+    <span className={`text-[10px] text-zinc-500 flex items-center justify-center gap-2 flex-wrap ${className}`}>
+      {when && <span className="flex items-center gap-0.5"><Clock size={9} /> {when}</span>}
+      {m.court && <span className="flex items-center gap-0.5"><MapPin size={9} /> {m.court}</span>}
+    </span>
+  );
+}
+
+// ── Fila de partido (listas de resultados/horarios) ─────────────────────────
+function MatchRow({ m }: { m: any }) {
+  const finished = m.status === "FINISHED";
+  return (
+    <div className="px-4 py-2.5 grid items-center gap-2" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
+      <span className={`truncate text-right text-sm ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
+      <span className="text-center flex flex-col items-center leading-tight gap-0.5">
+        <span className={`font-mono text-sm ${finished ? "text-zinc-200" : "text-zinc-600"}`}>{finished ? (scoreOf(m) || "—") : "vs"}</span>
+        <WhenWhere m={m} />
+      </span>
+      <span className={`truncate text-left text-sm ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
+    </div>
+  );
+}
 
 // ── Tarjeta de partido del cuadro ────────────────────────────────────────────
 function BracketCard({ m, connectLeft, connectRight }: { m: any; connectLeft?: boolean; connectRight?: boolean }) {
@@ -59,6 +87,11 @@ function BracketCard({ m, connectLeft, connectRight }: { m: any; connectLeft?: b
         <span className="truncate text-sm">{pairLabel(m.team2)}</span>
         {m.winner === "team2" && <span className="text-[#D4AF37]">✓</span>}
       </div>
+      {(m.date || m.court) && (
+        <div className="mt-1.5 pt-1.5 border-t border-zinc-800/70">
+          <WhenWhere m={m} />
+        </div>
+      )}
     </div>
   );
 }
@@ -109,14 +142,25 @@ export default function TournamentViewer({
   // Partidos de la categoría activa
   const catMatches = (matches ?? []).filter((m: any) => m.categoryId === active?.cat.id);
 
-  // Todos los partidos agrupados por fase (para la sección inferior con fecha/pista).
-  const byPhase = (() => {
+  // Fases de ELIMINATORIA (no grupos) agrupadas por fase, para la sección inferior.
+  const elimPhases = (() => {
     const map = new Map<string, { label: string; order: number; items: any[] }>();
     for (const m of catMatches) {
+      if (m.phase === "GROUPS") continue;
       if (!map.has(m.phase)) map.set(m.phase, { label: m.phaseLabel ?? m.phase, order: m.phaseOrder ?? 99, items: [] });
       map.get(m.phase)!.items.push(m);
     }
     return [...map.values()].sort((a, b) => a.order - b.order);
+  })();
+
+  // Partidos de la fase de grupos, agrupados por su grupo (emparejando por nombres de pareja).
+  const namesKey = (arr?: string[]) => (arr ?? []).map((s) => String(s).trim()).sort().join("|");
+  const groupBlocks = (() => {
+    const gm = catMatches.filter((m: any) => m.phase === "GROUPS");
+    return (active?.groups ?? []).map((g: any) => {
+      const keys = new Set((g.rows ?? []).map((r: any) => namesKey(String(r.name).split(" / "))));
+      return { label: g.label, items: gm.filter((m: any) => keys.has(namesKey(m.team1)) || keys.has(namesKey(m.team2))) };
+    }).filter((b: any) => b.items.length > 0);
   })();
 
   return (
@@ -264,34 +308,35 @@ export default function TournamentViewer({
             {catMatches.length > 0 && (
               <section className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Calendar size={14} /> Partidos · horarios y pistas</h3>
-                <div className="space-y-5 max-w-2xl">
-                  {byPhase.map((ph) => (
-                    <div key={ph.label} className="space-y-1.5">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">{ph.label}</p>
-                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 overflow-hidden">
-                        {ph.items.map((m: any) => {
-                          const finished = m.status === "FINISHED";
-                          const when = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
-                          return (
-                            <div key={m.id} className="px-4 py-2.5 grid items-center gap-2" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
-                              <span className={`truncate text-right text-sm ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
-                              <span className="text-center flex flex-col items-center leading-tight gap-0.5">
-                                <span className={`font-mono text-sm ${finished ? "text-zinc-200" : "text-zinc-600"}`}>{finished ? (scoreOf(m) || "—") : "vs"}</span>
-                                {(when || m.court) && (
-                                  <span className="text-[10px] text-zinc-500 flex items-center gap-1 flex-wrap justify-center">
-                                    {when && <span className="flex items-center gap-0.5"><Clock size={9} /> {when}</span>}
-                                    {m.court && <span className="flex items-center gap-0.5"><MapPin size={9} /> {m.court}</span>}
-                                  </span>
-                                )}
-                              </span>
-                              <span className={`truncate text-left text-sm ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
+
+                {groupBlocks.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">Fase de grupos</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {groupBlocks.map((b) => (
+                        <div key={b.label} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                          <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-800/40 text-[11px] font-bold uppercase tracking-widest text-zinc-400">{b.label}</div>
+                          <div className="divide-y divide-zinc-800/60">
+                            {b.items.map((m: any) => <MatchRow key={m.id} m={m} />)}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {elimPhases.length > 0 && (
+                  <div className="space-y-5 max-w-2xl">
+                    {elimPhases.map((ph) => (
+                      <div key={ph.label} className="space-y-1.5">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">{ph.label}</p>
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 overflow-hidden">
+                          {ph.items.map((m: any) => <MatchRow key={m.id} m={m} />)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
           </div>
