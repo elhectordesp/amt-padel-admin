@@ -159,7 +159,7 @@ export default async function TorneoPublicoPage({ params }: { params: Promise<{ 
                 {groups.map((group: any) => (
                   <div key={group.id} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-800/50">
-                      <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">{group.name}</span>
+                      <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">{group.label}</span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
@@ -171,41 +171,25 @@ export default async function TorneoPublicoPage({ params }: { params: Promise<{ 
                           </tr>
                         </thead>
                         <tbody>
-                          {(group.members ?? []).sort((a: any, b: any) => b.points - a.points || (b.setsWon - b.setsLost) - (a.setsWon - a.setsLost)).map((m: any, i: number) => (
-                            <tr key={m.userId} className={`border-b border-zinc-800/50 last:border-0 ${i < 2 ? "bg-[rgba(212,175,55,0.04)]" : ""}`}>
-                              <td className="px-3 py-2.5 font-medium text-white max-w-[140px] truncate">
-                                {i < 2 && <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#D4AF37] mr-1.5 align-middle" />}
-                                {m.playerName ?? "—"}
-                                {m.partnerName && <span className="text-zinc-500"> / {m.partnerName}</span>}
-                              </td>
-                              <td className="px-3 py-2.5 text-zinc-400">{m.played}</td>
-                              <td className="px-3 py-2.5 text-zinc-400">{m.wins}</td>
-                              <td className="px-3 py-2.5 text-zinc-400">{m.setsWon}-{m.setsLost}</td>
-                              <td className="px-3 py-2.5 text-zinc-400">{m.gamesWon}-{m.gamesLost}</td>
-                              <td className="px-3 py-2.5 text-right font-bold" style={{ color: i < 2 ? "#D4AF37" : "#fff" }}>{m.points}</td>
-                            </tr>
-                          ))}
+                          {(group.rows ?? []).map((m: any, i: number) => {
+                            const qualifies = i < (group.qualifyCount ?? 2);
+                            return (
+                              <tr key={m.userId ?? i} className={`border-b border-zinc-800/50 last:border-0 ${qualifies ? "bg-[rgba(212,175,55,0.04)]" : ""}`}>
+                                <td className="px-3 py-2.5 font-medium text-white max-w-[160px] truncate">
+                                  {qualifies && <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#D4AF37] mr-1.5 align-middle" />}
+                                  {m.name ?? "—"}
+                                </td>
+                                <td className="px-3 py-2.5 text-zinc-400">{m.played}</td>
+                                <td className="px-3 py-2.5 text-zinc-400">{m.wins}</td>
+                                <td className="px-3 py-2.5 text-zinc-400">{m.setsWon}-{m.setsLost}</td>
+                                <td className="px-3 py-2.5 text-zinc-400">{m.gamesWon}-{m.gamesLost}</td>
+                                <td className="px-3 py-2.5 text-right font-bold" style={{ color: qualifies ? "#D4AF37" : "#fff" }}>{m.points}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
-
-                    {/* Partidos del grupo */}
-                    {(group.matches ?? []).length > 0 && (
-                      <div className="border-t border-zinc-800 divide-y divide-zinc-800/50">
-                        {group.matches.filter((m: any) => m.status === "FINISHED").map((match: any) => {
-                          const t1 = match.players?.filter((p: any) => p.team === 1).map((p: any) => p.userName).join(" / ");
-                          const t2 = match.players?.filter((p: any) => p.team === 2).map((p: any) => p.userName).join(" / ");
-                          const score = match.sets?.map((s: any) => `${s.score1}-${s.score2}`).join(" ");
-                          return (
-                            <div key={match.id} className="px-4 py-2 flex items-center gap-2 text-xs">
-                              <span className={`flex-1 truncate ${match.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-500"}`}>{t1}</span>
-                              <span className="text-zinc-600 text-[10px] font-mono">{score}</span>
-                              <span className={`flex-1 truncate text-right ${match.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-500"}`}>{t2}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
