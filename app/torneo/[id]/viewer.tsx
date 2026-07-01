@@ -55,17 +55,23 @@ function WhenWhere({ m, className = "" }: { m: any; className?: string }) {
   );
 }
 
+// Ganador (1|2|null) admitiendo winnerTeam (matches/public) o winner:'team1'|'team2' (bracket).
+const winnerNum = (m: any): 1 | 2 | null =>
+  m.winnerTeam === 1 || m.winner === "team1" ? 1 : m.winnerTeam === 2 || m.winner === "team2" ? 2 : null;
+const isFinished = (m: any) => m.status === "FINISHED" || m.status === "finished";
+
 // ── Fila de partido (listas de resultados/horarios) ─────────────────────────
 function MatchRow({ m }: { m: any }) {
-  const finished = m.status === "FINISHED";
+  const w = winnerNum(m);
+  const finished = isFinished(m);
   return (
     <div className="px-4 py-2.5 grid items-center gap-2" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
-      <span className={`truncate text-right text-sm ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
+      <span className={`truncate text-right text-sm ${w === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
       <span className="text-center flex flex-col items-center leading-tight gap-0.5">
         <span className={`font-mono text-sm ${finished ? "text-zinc-200" : "text-zinc-600"}`}>{finished ? (scoreOf(m) || "—") : "vs"}</span>
         <WhenWhere m={m} />
       </span>
-      <span className={`truncate text-left text-sm ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
+      <span className={`truncate text-left text-sm ${w === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
     </div>
   );
 }
@@ -142,20 +148,28 @@ export default function TournamentViewer({
   // Partidos de la categoría activa
   const catMatches = (matches ?? []).filter((m: any) => m.categoryId === active?.cat.id);
 
-  // Fases de ELIMINATORIA (no grupos) agrupadas por fase, para la sección inferior.
+  // Fases de ELIMINATORIA (desde el cuadro: incluye partidos por jugar, con o sin
+  // horario publicado). Cada bloque = una ronda con sus partidos.
   const elimPhases = (() => {
-    const map = new Map<string, { label: string; order: number; items: any[] }>();
-    for (const m of catMatches) {
-      if (m.phase === "GROUPS") continue;
-      if (!map.has(m.phase)) map.set(m.phase, { label: m.phaseLabel ?? m.phase, order: m.phaseOrder ?? 99, items: [] });
-      map.get(m.phase)!.items.push(m);
+    const bk = active?.bracket;
+    const out: { label: string; items: any[] }[] = [];
+    if (bk) {
+      for (const r of BRACKET_ROUNDS) {
+        if ((bk[r.key]?.length ?? 0) > 0) out.push({ label: r.label, items: bk[r.key] });
+      }
+      (bk.consolation ?? []).forEach((round: any[], i: number) => {
+        if (round.length) out.push({ label: `Consolación · Ronda ${i + 1}`, items: round });
+      });
     }
-    return [...map.values()].sort((a, b) => a.order - b.order);
+    return out;
   })();
 
-  // Próximo partido de la categoría (el no jugado con fecha más próxima).
-  const nextMatch = catMatches
-    .filter((m: any) => m.status !== "FINISHED" && m.date)
+  // Próximo partido (el no jugado con fecha más próxima): grupos (de matches) + eliminatoria (del cuadro).
+  const nextMatch = [
+    ...catMatches.filter((m: any) => m.phase === "GROUPS").map((m: any) => ({ ...m, _label: m.phaseLabel ?? "Fase de grupos" })),
+    ...elimPhases.flatMap((p) => p.items.map((m: any) => ({ ...m, _label: p.label }))),
+  ]
+    .filter((m: any) => !isFinished(m) && m.date && (m.team1?.length || m.team2?.length))
     .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
 
   // Partidos de la fase de grupos, agrupados por su grupo (emparejando por nombres de pareja).
@@ -230,7 +244,7 @@ export default function TournamentViewer({
                   <Clock size={16} className="text-[#D4AF37]" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">Próximo partido · {nextMatch.phaseLabel ?? nextMatch.phase}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">Próximo partido · {nextMatch._label}</p>
                   <p className="text-sm text-white truncate">{pairLabel(nextMatch.team1)} <span className="text-zinc-500">vs</span> {pairLabel(nextMatch.team2)}</p>
                   <div className="mt-0.5"><WhenWhere m={nextMatch} className="justify-start" /></div>
                 </div>
