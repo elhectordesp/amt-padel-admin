@@ -104,17 +104,31 @@ export default function TournamentViewer({
   const bracket = active?.bracket;
   const hasBracket = bracket && BRACKET_ROUNDS.some((r) => (bracket[r.key]?.length ?? 0) > 0);
 
-  // Partidos de la categoría activa, agrupados por fase (para el calendario)
+  // Partidos de la categoría activa
   const catMatches = (matches ?? []).filter((m: any) => m.categoryId === active?.cat.id);
-  const byPhase = useMemo(() => {
-    const groupsMap = new Map<string, { label: string; order: number; items: any[] }>();
-    for (const m of catMatches) {
-      const key = m.phase;
-      if (!groupsMap.has(key)) groupsMap.set(key, { label: m.phaseLabel ?? m.phase, order: m.phaseOrder ?? 99, items: [] });
-      groupsMap.get(key)!.items.push(m);
+
+  // Anidar partidos de la fase de grupos bajo su grupo (emparejando por nombres de pareja).
+  const namesKey = (arr?: string[]) => (arr ?? []).map((s) => String(s).trim()).sort().join("|");
+  const matchesByGroup = new Map<string, any[]>();
+  {
+    const gm = catMatches.filter((m: any) => m.phase === "GROUPS" && m.status === "FINISHED");
+    for (const g of active?.groups ?? []) {
+      const keys = new Set((g.rows ?? []).map((r: any) => namesKey(String(r.name).split(" / "))));
+      matchesByGroup.set(g.id, gm.filter((m: any) => keys.has(namesKey(m.team1)) || keys.has(namesKey(m.team2))));
     }
-    return [...groupsMap.values()].sort((a, b) => a.order - b.order);
-  }, [catMatches]);
+  }
+
+  // Próximos partidos (no jugados) con hora/pista, agrupados por fase.
+  const upcomingByPhase = (() => {
+    const map = new Map<string, { label: string; order: number; items: any[] }>();
+    for (const m of catMatches) {
+      if (m.status === "FINISHED") continue;
+      if (!(m.team1?.length || m.team2?.length || m.date)) continue;
+      if (!map.has(m.phase)) map.set(m.phase, { label: m.phaseLabel ?? m.phase, order: m.phaseOrder ?? 99, items: [] });
+      map.get(m.phase)!.items.push(m);
+    }
+    return [...map.values()].sort((a, b) => a.order - b.order);
+  })();
 
   return (
     <div className="min-h-screen bg-[#0C0C0C] text-white">
@@ -211,6 +225,17 @@ export default function TournamentViewer({
                           })}
                         </tbody>
                       </table>
+                      {(matchesByGroup.get(g.id) ?? []).length > 0 && (
+                        <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
+                          {(matchesByGroup.get(g.id) ?? []).map((m: any) => (
+                            <div key={m.id} className="px-4 py-2 grid items-center gap-2 text-xs" style={{ gridTemplateColumns: "1fr 56px 1fr" }}>
+                              <span className={`truncate text-right ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-400"}`}>{pairLabel(m.team1)}</span>
+                              <span className="text-center font-mono text-zinc-500">{scoreOf(m) || "—"}</span>
+                              <span className={`truncate text-left ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-400"}`}>{pairLabel(m.team2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -250,25 +275,22 @@ export default function TournamentViewer({
               </section>
             )}
 
-            {/* ── CALENDARIO / PARTIDOS (hora + pista + resultado) ── */}
-            {catMatches.length > 0 && (
+            {/* ── PRÓXIMOS PARTIDOS (hora + pista) ── */}
+            {upcomingByPhase.length > 0 && (
               <section className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Calendar size={14} /> Partidos, horarios y pistas</h3>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Calendar size={14} /> Próximos partidos · horarios y pistas</h3>
                 <div className="space-y-5 max-w-2xl">
-                  {byPhase.map((ph) => (
+                  {upcomingByPhase.map((ph) => (
                     <div key={ph.label} className="space-y-1.5">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">{ph.label}</p>
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60 overflow-hidden">
                         {ph.items.map((m: any) => {
-                          const finished = m.status === "FINISHED";
                           const when = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
                           return (
-                            <div key={m.id} className="px-4 py-2.5 grid items-center gap-2 text-sm" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
-                              <span className={`truncate text-right ${m.winnerTeam === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
+                            <div key={m.id} className="px-4 py-2.5 grid items-center gap-2 text-sm" style={{ gridTemplateColumns: "1fr 150px 1fr" }}>
+                              <span className="truncate text-right text-zinc-300">{pairLabel(m.team1)}</span>
                               <span className="text-center">
-                                {finished ? (
-                                  <span className="font-mono text-zinc-300">{scoreOf(m) || "—"}</span>
-                                ) : when ? (
+                                {when ? (
                                   <span className="text-[11px] text-[#D4AF37] flex flex-col items-center leading-tight gap-0.5">
                                     <span className="flex items-center gap-1"><Clock size={10} /> {when}</span>
                                     {m.court && <span className="text-zinc-500 flex items-center gap-1"><MapPin size={10} /> {m.court}</span>}
@@ -277,7 +299,7 @@ export default function TournamentViewer({
                                   <span className="text-[11px] text-zinc-600 italic">sin horario</span>
                                 )}
                               </span>
-                              <span className={`truncate text-left ${m.winnerTeam === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
+                              <span className="truncate text-left text-zinc-300">{pairLabel(m.team2)}</span>
                             </div>
                           );
                         })}
