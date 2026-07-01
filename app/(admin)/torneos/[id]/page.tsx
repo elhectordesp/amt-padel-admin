@@ -125,6 +125,15 @@ function groupByPair(regs: AdminRegistration[]): PairReg[] {
   return result;
 }
 
+// ── Orden de fases para listar partidos (Grupos → … → Final → Consolación) ──────
+const CAL_PHASE_ORDER: Record<string, number> = {
+  GROUPS: 0, R32: 1, R16: 2, QF: 3, SF: 4, FINAL: 5, CONSOLATION: 6,
+};
+const phaseRank = (phase?: string | null) => CAL_PHASE_ORDER[phase ?? ""] ?? 99;
+/** ¿El partido tiene definidas las dos parejas? (no "Por definir") */
+const hasBothTeams = (m: { team1?: unknown[]; team2?: unknown[] }) =>
+  (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0;
+
 // ── Conflict labels ───────────────────────────────────────────────────────────
 const CONFLICT_LABEL: Record<ConflictType, string> = {
   MISSING_ASSIGNMENT:    "Sin horario",
@@ -588,7 +597,14 @@ function CalendarTab({
                     </div>
 
                     <div className="divide-y divide-border">
-                      {dayMatches.map((m) => {
+                      {[...dayMatches]
+                        .sort(
+                          (a, b) =>
+                            phaseRank(a.phase) - phaseRank(b.phase) ||
+                            (a.date ? new Date(a.date).getTime() : 0) -
+                              (b.date ? new Date(b.date).getTime() : 0),
+                        )
+                        .map((m) => {
                         const time      = m.date
                           ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
                           : "—";
@@ -598,8 +614,8 @@ function CalendarTab({
                           <div key={m.id}>
                             {/* Match row — mobile: stacked card, desktop: single horizontal row */}
                             <div
-                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
-                              onClick={() => !m.isResult && !isEditing && onMatchClick(m)}
+                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing && hasBothTeams(m) ? "cursor-pointer" : ""}`}
+                              onClick={() => !m.isResult && !isEditing && hasBothTeams(m) && onMatchClick(m)}
                             >
                               <span className="text-xs font-mono text-muted-foreground sm:w-12 shrink-0">{time}</span>
                               <span className="text-xs text-muted-foreground sm:w-16 shrink-0 truncate">{m.court || "—"}</span>
