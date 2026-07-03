@@ -29,6 +29,7 @@ import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialo
 import { ManualCrossDialog } from "@/components/admin/manual-cross-dialog";
 import { MatchCreateDialog } from "@/components/admin/match-create-dialog";
 import { MatchEditPairsDialog } from "@/components/admin/match-edit-pairs-dialog";
+import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -1418,6 +1419,7 @@ export default function TorneoDetailPage() {
   const [manualCrossCatId,   setManualCrossCatId]   = useState<string | null>(null);
   const [createMatchCatId,   setCreateMatchCatId]   = useState<string | null>(null);
   const [editPairsMatch,     setEditPairsMatch]     = useState<any | null>(null);
+  const [editStatsTarget,    setEditStatsTarget]    = useState<any | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
@@ -3534,7 +3536,28 @@ export default function TorneoDetailPage() {
                                         <td className="px-2 py-1.5">
                                           <span className={`font-bold ${qualifies ? "text-[#D4AF37]" : "text-muted-foreground"}`}>{row.pos}</span>
                                         </td>
-                                        <td className="px-2 py-1.5 text-foreground truncate max-w-[140px]">{row.name}</td>
+                                        <td className="px-2 py-1.5 text-foreground max-w-[140px]">
+                                          <div className="flex items-center gap-1">
+                                            <span className="truncate">{row.name}</span>
+                                            <button
+                                              onClick={() => setEditStatsTarget({
+                                                categoryId: cat.id,
+                                                groupId: grp.id,
+                                                userId: row.userId,
+                                                pairLabel: row.name,
+                                                initial: {
+                                                  played: row.played, wins: row.wins, points: row.points,
+                                                  setsWon: row.setsWon, setsLost: row.setsLost,
+                                                  gamesWon: row.gamesWon, gamesLost: row.gamesLost,
+                                                },
+                                              })}
+                                              className="text-muted-foreground hover:text-[#D4AF37] shrink-0"
+                                              title="Editar estadísticas (sanción/ajuste)"
+                                            >
+                                              <Pencil size={10} />
+                                            </button>
+                                          </div>
+                                        </td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.played}</td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.wins}</td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.setsWon}</td>
@@ -3972,6 +3995,21 @@ export default function TorneoDetailPage() {
           qc.invalidateQueries({ queryKey: ["bracket", id] });
           qc.invalidateQueries({ queryKey: ["standings", id] });
         }}
+      />
+    )}
+
+    {editStatsTarget && (
+      <GroupMemberStatsDialog
+        key={`${editStatsTarget.groupId}-${editStatsTarget.userId}`}
+        open={!!editStatsTarget}
+        onClose={() => setEditStatsTarget(null)}
+        tournamentId={id}
+        categoryId={editStatsTarget.categoryId}
+        groupId={editStatsTarget.groupId}
+        userId={editStatsTarget.userId}
+        pairLabel={editStatsTarget.pairLabel}
+        initial={editStatsTarget.initial}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["standings", id] })}
       />
     )}
 
