@@ -270,6 +270,9 @@ export const adminService = {
       api.put(`/admin/tournaments/${id}/categories/${catId}/groups/members`, force ? { groups, force } : { groups }).then((r) => r.data),
     renameGroup: (id: string, catId: string, groupId: string, name: string) =>
       api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/name`, { name }).then((r) => r.data),
+    /** Override manual de stats de una pareja en un grupo (sanciones/ajustes). */
+    overrideGroupMemberStats: (id: string, catId: string, groupId: string, userId: string, stats: { played?: number; wins?: number; points?: number; setsWon?: number; setsLost?: number; gamesWon?: number; gamesLost?: number }) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members/${userId}/stats`, stats).then((r) => r.data),
     /** Edición manual de partidos (Frente 2). */
     editMatchPlayers: (matchId: string, team1: { userId: string; partnerId?: string | null }, team2: { userId: string; partnerId?: string | null }) =>
       api.patch(`/admin/matches/${matchId}/players`, { team1, team2 }).then((r) => r.data),
