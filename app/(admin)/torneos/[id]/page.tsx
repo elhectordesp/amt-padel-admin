@@ -1551,13 +1551,23 @@ export default function TorneoDetailPage() {
   });
 
   const deleteTournament = useMutation({
-    mutationFn: () => adminService.tournaments.delete(id),
+    mutationFn: (force?: boolean) => adminService.tournaments.delete(id, force),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       toast.success("Torneo eliminado");
       router.push("/torneos");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, force) => {
+      const msg: string = err?.message ?? "";
+      // "Confirma para…" → torneo en curso/finalizado o con inscripciones (soft-delete, recuperable).
+      if (!force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Eliminarlo de todas formas? (se puede restaurar)`)) {
+        deleteTournament.mutate(true);
+        return;
+      }
+      toast.error(msg || "No se pudo eliminar el torneo");
+    },
   });
 
   const invalidateBracket = () => {
@@ -1913,13 +1923,25 @@ export default function TorneoDetailPage() {
   });
 
   const deleteCatMut = useMutation({
-    mutationFn: (catId: string) => adminService.categories.remove(id, catId),
+    mutationFn: ({ catId, force }: { catId: string; force?: boolean }) => adminService.categories.remove(id, catId, force),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+      qc.invalidateQueries({ queryKey: ["standings", id] });
       toast.success("Categoría eliminada");
       setDeleteCatId(null);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      const msg: string = err?.message ?? "";
+      // "Confirma para…" → la categoría tiene inscripciones/partidos: borrar en cascada.
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Borrar en cascada de todas formas?`)) {
+        deleteCatMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "No se pudo eliminar la categoría");
+    },
   });
 
   // ── Derived state ─────────────────────────────────────────────────────────
@@ -4130,7 +4152,7 @@ export default function TorneoDetailPage() {
       danger
       loading={deleteTournament.isPending}
       onClose={() => setShowDeleteModal(false)}
-      onConfirm={() => deleteTournament.mutate()}
+      onConfirm={() => deleteTournament.mutate(undefined)}
     />
 
     {availRegId && (
@@ -4245,7 +4267,7 @@ export default function TorneoDetailPage() {
       danger
       loading={deleteCatMut.isPending}
       onClose={() => setDeleteCatId(null)}
-      onConfirm={() => { if (deleteCatId) deleteCatMut.mutate(deleteCatId); }}
+      onConfirm={() => { if (deleteCatId) deleteCatMut.mutate({ catId: deleteCatId }); }}
     />
 
 
