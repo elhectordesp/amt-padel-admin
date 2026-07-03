@@ -338,6 +338,31 @@ function CalendarTab({
     },
   });
 
+  // Des-finalizar (reabrir) un partido: revierte su resultado y lo deja pendiente.
+  const unfinishMatchMut = useMutation({
+    mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
+      adminService.tournaments.unfinishMatch(matchId, force),
+    onSuccess: () => {
+      toast.success("Partido reabierto (resultado deshecho)");
+      qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
+    },
+    onError: (e: unknown, variables) => {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (e as Error)?.message ?? "No se pudo reabrir el partido";
+      // Convención "Confirma para…": ronda siguiente ya jugada / elim ya generada.
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        unfinishMatchMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg);
+    },
+  });
+
   const startEdit = (m: MatchResult) => {
     setEditMatchId(m.id);
     const d = m.date ? new Date(m.date) : null;
@@ -670,6 +695,19 @@ function CalendarTab({
                                     title="Corregir resultado"
                                   >
                                     <RotateCcw size={11} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (window.confirm("¿Reabrir este partido? Se deshará el resultado y volverá a estar pendiente.")) {
+                                        unfinishMatchMut.mutate({ matchId: m.id });
+                                      }
+                                    }}
+                                    disabled={unfinishMatchMut.isPending}
+                                    className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-yellow-400 hover:border-yellow-400/40 transition-colors"
+                                    title="Reabrir partido (deshacer resultado)"
+                                  >
+                                    <Clock size={11} />
                                   </button>
                                 </div>
                               ) : (

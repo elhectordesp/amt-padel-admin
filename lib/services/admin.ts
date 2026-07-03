@@ -282,6 +282,9 @@ export const adminService = {
     ) => api.post(`/admin/tournaments/${tournamentId}/matches`, payload).then((r) => r.data),
     deleteMatch: (matchId: string, force?: boolean) =>
       api.delete(`/admin/matches/${matchId}`, { params: force ? { force: true } : {} }).then((r) => r.data),
+    /** Des-finalizar un partido: revierte su resultado y lo deja pendiente. */
+    unfinishMatch: (matchId: string, force?: boolean) =>
+      api.post(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),
   },
 
   registrations: {
