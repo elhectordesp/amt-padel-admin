@@ -28,6 +28,7 @@ import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-edi
 import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
 import { ManualCrossDialog } from "@/components/admin/manual-cross-dialog";
 import { MatchCreateDialog } from "@/components/admin/match-create-dialog";
+import { MatchEditPairsDialog } from "@/components/admin/match-edit-pairs-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -202,7 +203,7 @@ function ConflictModal({
 
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
-  matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, tournament, tournamentId,
+  matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, onEditPairs, tournament, tournamentId,
   scheduleWarnings, onClearWarnings,
 }: {
   matches:          MatchResult[];
@@ -212,6 +213,7 @@ function CalendarTab({
   autoSchedule:     { mutate: (force?: boolean) => void; isPending: boolean };
   onMatchClick:     (m: MatchResult) => void;
   onCorrectClick:   (m: MatchResult) => void;
+  onEditPairs:      (m: MatchResult) => void;
   tournament:       Tournament | null | undefined;
   tournamentId:     string;
   scheduleWarnings: { pair: string; phase: string; category: string }[];
@@ -714,6 +716,16 @@ function CalendarTab({
                                 <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0 ml-auto sm:ml-0">
                                   <Clock size={12} /> Pendiente
                                 </span>
+                              )}
+                              {m.categoryId && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onEditPairs(m); }}
+                                  className="p-2 sm:p-1.5 rounded-md border border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors shrink-0"
+                                  title="Cambiar parejas"
+                                  aria-label="Cambiar parejas"
+                                >
+                                  <Users size={12} />
+                                </button>
                               )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); if (isEditing) { cancelEdit(); } else { startEdit(m); } }}
@@ -1405,6 +1417,7 @@ export default function TorneoDetailPage() {
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [manualCrossCatId,   setManualCrossCatId]   = useState<string | null>(null);
   const [createMatchCatId,   setCreateMatchCatId]   = useState<string | null>(null);
+  const [editPairsMatch,     setEditPairsMatch]     = useState<any | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
@@ -2871,6 +2884,7 @@ export default function TorneoDetailPage() {
             autoSchedule={autoSchedule}
             onMatchClick={setResultMatch}
             onCorrectClick={(m) => { setResultMatch(m); setResultCorrection(true); }}
+            onEditPairs={(m) => setEditPairsMatch(m)}
             tournament={tournament}
             tournamentId={id}
             scheduleWarnings={scheduleWarnings}
@@ -3928,6 +3942,36 @@ export default function TorneoDetailPage() {
             : p.primary.user.name,
         }))}
         onCreated={() => invalidateBracket()}
+      />
+    )}
+
+    {editPairsMatch && tournament && (
+      <MatchEditPairsDialog
+        key={editPairsMatch.id}
+        open={!!editPairsMatch}
+        onClose={() => setEditPairsMatch(null)}
+        matchId={editPairsMatch.id}
+        categoryLabel={
+          (catOptions.find((c) => c.value === editPairsMatch.categoryId)?.label) ?? "Categoría"
+        }
+        pairs={groupByPair(
+          registrations.filter(
+            (r: any) => r.categoryId === editPairsMatch.categoryId && r.status === "CONFIRMED",
+          ),
+        ).map((p) => ({
+          userId: p.primary.userId,
+          partnerId: p.primary.partnerId ?? null,
+          label: p.primary.partner
+            ? `${p.primary.user.name} / ${p.primary.partner.name}`
+            : p.primary.user.name,
+        }))}
+        team1UserIds={(editPairsMatch.players ?? []).filter((p: any) => p.team === 1).map((p: any) => p.userId)}
+        team2UserIds={(editPairsMatch.players ?? []).filter((p: any) => p.team === 2).map((p: any) => p.userId)}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ["matches", id] });
+          qc.invalidateQueries({ queryKey: ["bracket", id] });
+          qc.invalidateQueries({ queryKey: ["standings", id] });
+        }}
       />
     )}
 
