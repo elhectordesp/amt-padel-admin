@@ -93,7 +93,6 @@ export function GenerateBracketDialog({
   const [topN, setTopN] = useState<number>(2); // base que clasifica por grupo (1-4)
   const [extraN, setExtraN] = useState<number>(0); // comodines (mejores base+1)
   const [elimRound, setElimRound] = useState<AutoOrRound>("auto");
-  const [useSeeding, setUseSeeding] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Bloque 2: input de confirmación REGENERAR cuando hay resultados
   const [regenerateConfirm, setRegenerateConfirm] = useState("");
@@ -514,20 +513,11 @@ export function GenerateBracketDialog({
             </>
           )}
 
-          {/* ── Seeding ──────────────────────────────────────────── */}
-          <Field label="Semillas">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useSeeding}
-                onChange={(e) => setUseSeeding(e.target.checked)}
-                className="h-4 w-4 accent-primary"
-              />
-              <span className="text-xs text-foreground">
-                Aplicar seeding por LSPA (parejas top distribuidas)
-              </span>
-            </label>
-          </Field>
+          {/* ── Seeding (informativo: se configura a nivel de torneo) ──── */}
+          <div className="rounded-md border border-border bg-background p-2.5 text-[11px] text-muted-foreground">
+            El sistema de siembra (aleatorio vs. cabezas de serie por ranking) se
+            configura en los <span className="text-foreground">ajustes del torneo</span>, no aquí.
+          </div>
 
           {/* ── Preview ──────────────────────────────────────────── */}
           <div className="rounded-md border border-border bg-background p-3">
