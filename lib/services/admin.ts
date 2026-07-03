@@ -192,7 +192,7 @@ export const adminService = {
             : {}),
         })
         .then((r) => r.data),
-    regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
+    regenerateElimination: (id: string, categoryId: string, opts?: { topNPerGroup?: number; extraQualifiers?: number; eliminationStartRound?: string; force?: boolean }) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId, ...(opts ?? {}) }).then((r) => r.data),
     /** Cruce MANUAL de eliminatoria (Frente 3): cada cruce = un partido de 1ª ronda; lado = {groupIdx, pos} o null=bye. */
     generateEliminationManual: (id: string, catId: string, crosses: { a: { groupIdx: number; pos: number } | null; b: { groupIdx: number; pos: number } | null }[]) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/elimination/manual`, { crosses }).then((r) => r.data),
@@ -204,9 +204,9 @@ export const adminService = {
      * Swap parejas entre 2 matches del bracket elim (Bloque 4).
      * Backend valida que sean misma cat + phase + ninguno FINISHED.
      */
-    swapMatchPair: (matchAId: string, matchBId: string) =>
+    swapMatchPair: (matchAId: string, matchBId: string, force?: boolean) =>
       api
-        .post(`/admin/matches/${matchAId}/swap-pair`, { withMatchId: matchBId })
+        .post(`/admin/matches/${matchAId}/swap-pair`, { withMatchId: matchBId, ...(force ? { force: true } : {}) })
         .then((r) => r.data),
 
     /** Añade un grupo vacío al cuadro existente (mini-Bloque 5). */
@@ -218,10 +218,11 @@ export const adminService = {
         .then((r) => r.data),
 
     /** Borra un grupo vacío (mini-Bloque 5). */
-    deleteGroup: (id: string, catId: string, groupId: string) =>
+    deleteGroup: (id: string, catId: string, groupId: string, force?: boolean) =>
       api
         .delete(
           `/admin/tournaments/${id}/categories/${catId}/bracket/groups/${groupId}`,
+          force ? { params: { force: true } } : undefined,
         )
         .then((r) => r.data),
 
@@ -311,7 +312,7 @@ export const adminService = {
     update: (
       tournamentId: string,
       categoryId:   string,
-      data: { totalSpots?: number; price?: number; scoringFormat?: string },
+      data: { totalSpots?: number; price?: number; scoringFormat?: string; force?: boolean },
     ) =>
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}`, data).then(r => r.data),
     remove: (tournamentId: string, categoryId: string) =>
@@ -323,9 +324,11 @@ export const adminService = {
       api.get<ScheduleConflict[]>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/validate`).then(r => r.data),
     publish:    (tournamentId: string, categoryId: string, force?: boolean) =>
       api.post<{ published: boolean; conflicts: ScheduleConflict[] }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`, { force }).then(r => r.data),
+    publishAll: (tournamentId: string, force?: boolean) =>
+      api.post<{ results: { categoryId: string; gender: string; level: string; published: boolean; conflicts: ScheduleConflict[] }[]; publishedCount: number; total: number }>(`/admin/tournaments/${tournamentId}/schedule/publish-all`, { force }).then(r => r.data),
     unpublish:  (tournamentId: string, categoryId: string) =>
       api.delete<{ unpublished: boolean }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`).then(r => r.data),
-    patchMatch: (matchId: string, data: { date?: string; court?: string; force?: boolean }) =>
+    patchMatch: (matchId: string, data: { date?: string; court?: string; referee?: string | null; force?: boolean }) =>
       api.patch<{ match: any; conflicts: ScheduleConflict[] }>(`/admin/matches/${matchId}/schedule`, data).then(r => r.data),
   },
 
@@ -352,12 +355,15 @@ export const adminService = {
           winner:   m.winner ?? (m.players?.find((p: any) => p.isWinner && p.team === 1) ? "team1" : m.players?.find((p: any) => p.isWinner && p.team === 2) ? "team2" : undefined),
           phase:    m.phase,
           status:   m.status,
-          scoringFormat: m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
+          // Formato resuelto POR FASE por el backend (roundFormats override); cae al
+          // formato base de la categoría si no viene. Así el hint de super-tiebreak
+          // del modal respeta p.ej. "final a 3 sets" aunque la base sea super-tie.
+          scoringFormat: m.effectiveScoringFormat ?? m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
         }));
       });
     },
-    setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2) =>
-      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}) }).then((r) => r.data),
+    setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
+      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
   },
 
   players: {

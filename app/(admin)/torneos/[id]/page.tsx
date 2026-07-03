@@ -233,6 +233,7 @@ function CalendarTab({
   const [editMatchId,  setEditMatchId]  = useState<string | null>(null);
   const [editDate,     setEditDate]     = useState("");
   const [editCourt,    setEditCourt]    = useState("");
+  const [editReferee,  setEditReferee]  = useState("");
   const [editConflicts,setEditConflicts]= useState<ScheduleConflict[]>([]);
 
   // Courts for inline edit select
@@ -273,6 +274,23 @@ function CalendarTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // ── Publish-all mutation (todas las categorías de golpe) ──────────────────────
+  const publishAllMut = useMutation({
+    mutationFn: (force?: boolean) => adminService.schedule.publishAll(tournamentId, force),
+    onSuccess: (res) => {
+      const blocked = res.total - res.publishedCount;
+      if (res.publishedCount === 0) {
+        toast.warning("Ninguna categoría se pudo publicar (revisa partidos sin asignar o conflictos).");
+      } else if (blocked > 0) {
+        toast.success(`${res.publishedCount}/${res.total} categorías publicadas. ${blocked} con partidos sin asignar o conflictos.`);
+      } else {
+        toast.success(`Horario de las ${res.total} categorías publicado. Jugadores notificados.`);
+      }
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   // ── Unpublish mutation ──────────────────────────────────────────────────────
   const unpublishMut = useMutation({
     mutationFn: (catId: string) => adminService.schedule.unpublish(tournamentId, catId),
@@ -286,7 +304,7 @@ function CalendarTab({
 
   // ── Patch match mutation ────────────────────────────────────────────────────
   const patchMut = useMutation({
-    mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; force?: boolean } }) =>
+    mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; referee?: string | null; force?: boolean } }) =>
       adminService.schedule.patchMatch(matchId, data),
     onSuccess: (res, { data }) => {
       if (res.conflicts?.length > 0 && !data.force) {
@@ -328,13 +346,14 @@ function CalendarTab({
       ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
       : "");
     setEditCourt(m.court ?? "");
+    setEditReferee((m as { referee?: string | null }).referee ?? "");
     setEditConflicts([]);
   };
 
-  const cancelEdit = () => { setEditMatchId(null); setEditDate(""); setEditCourt(""); setEditConflicts([]); };
+  const cancelEdit = () => { setEditMatchId(null); setEditDate(""); setEditCourt(""); setEditReferee(""); setEditConflicts([]); };
 
   const saveEdit = (matchId: string, force = false) => {
-    patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, force } });
+    patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, referee: editReferee, force } });
   };
 
   const catMap = Object.fromEntries(
@@ -457,6 +476,15 @@ function CalendarTab({
           >
             <RefreshCw size={13} />
             <span className="hidden sm:inline">Reprogramar todo</span>
+          </button>
+          <button
+            onClick={() => publishAllMut.mutate(false)}
+            disabled={publishAllMut.isPending || matches.length === 0}
+            title="Publicar el horario de todas las categorías"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
+          >
+            {publishAllMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            <span className="hidden sm:inline">Publicar todo</span>
           </button>
         </div>
       </div>
@@ -706,6 +734,16 @@ function CalendarTab({
                                         <option key={c.court.name} value={c.court.name}>{c.court.name}</option>
                                       ))}
                                     </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Árbitro</label>
+                                    <input
+                                      type="text"
+                                      value={editReferee}
+                                      onChange={(e) => setEditReferee(e.target.value)}
+                                      placeholder="Opcional"
+                                      className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                    />
                                   </div>
                                   <div className="flex items-center gap-2 pb-0.5">
                                     <button
@@ -1349,9 +1387,9 @@ export default function TorneoDetailPage() {
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
-  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number }>({ totalSpots: 0, price: 0 });
+  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ totalSpots: 0, price: 0, scoringFormat: "BEST_OF_3" });
   const [addCatOpen,          setAddCatOpen]           = useState(false);
-  const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number }>({ gender: "M", level: "3a", totalSpots: 16, price: 25 });
+  const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
   const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
   const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
   const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
@@ -1509,19 +1547,30 @@ export default function TorneoDetailPage() {
   });
 
   const regenerateElimination = useMutation({
-    mutationFn: (categoryId: string) => adminService.tournaments.regenerateElimination(id, categoryId),
+    mutationFn: ({ categoryId, force }: { categoryId: string; force?: boolean }) =>
+      adminService.tournaments.regenerateElimination(id, categoryId, force ? { force: true } : undefined),
     onSuccess:  () => {
       toast.success("Eliminatorias regeneradas correctamente");
       setRegenElimCatId(null);
       invalidateBracket();
     },
-    onError: (err: Error) => { toast.error(err.message); setRegenElimCatId(null); },
+    onError: (err: Error, variables) => {
+      const msg: string = err?.message ?? "";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        regenerateElimination.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "Error al regenerar"); setRegenElimCatId(null);
+    },
   });
 
   const saveResult = async (
     sets1: number[],
     sets2: number[],
     opts?: { walkover?: boolean; walkoverWinnerTeam?: 1 | 2 },
+    force = false,
   ) => {
     if (!resultMatch) return;
     setSavingResultId(resultMatch.id);
@@ -1532,6 +1581,7 @@ export default function TorneoDetailPage() {
         sets2,
         opts?.walkover,
         opts?.walkoverWinnerTeam,
+        force,
       );
       toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
       setResultMatch(null);
@@ -1541,7 +1591,16 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
     } catch (err: any) {
-      toast.error(err.message ?? "Error al guardar resultado");
+      // El backend usa la convención "Confirma para…" en los errores que el admin
+      // (dueño del torneo) puede forzar bajo su riesgo: torneo no ONGOING, o corregir
+      // un resultado cuya siguiente ronda ya se jugó. Ofrecemos forzar y reintentar.
+      const msg: string = err?.message ?? "";
+      if (!force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
+        return saveResult(sets1, sets2, opts, true);
+      }
+      toast.error(msg || "Error al guardar resultado");
     } finally {
       setSavingResultId(null);
     }
@@ -1644,18 +1703,24 @@ export default function TorneoDetailPage() {
 
   // Bloque 4 — swap parejas en bracket elim
   const swapMatchPairMut = useMutation({
-    mutationFn: ({ matchAId, matchBId }: { matchAId: string; matchBId: string }) =>
-      adminService.tournaments.swapMatchPair(matchAId, matchBId),
+    mutationFn: ({ matchAId, matchBId, force }: { matchAId: string; matchBId: string; force?: boolean }) =>
+      adminService.tournaments.swapMatchPair(matchAId, matchBId, force),
     onSuccess: () => {
       toast.success("Parejas intercambiadas");
       setSwapSourceMatchId(null);
       qc.invalidateQueries({ queryKey: ["bracket", id] });
       qc.invalidateQueries({ queryKey: ["matches", id] });
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, variables) => {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         (err as Error)?.message ?? "Error al hacer swap";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        swapMatchPairMut.mutate({ ...variables, force: true });
+        return;
+      }
       toast.error(msg);
     },
   });
@@ -1681,8 +1746,8 @@ export default function TorneoDetailPage() {
   });
 
   const deleteGroupMut = useMutation({
-    mutationFn: ({ catId, groupId }: { catId: string; groupId: string }) =>
-      adminService.tournaments.deleteGroup(id, catId, groupId),
+    mutationFn: ({ catId, groupId, force }: { catId: string; groupId: string; force?: boolean }) =>
+      adminService.tournaments.deleteGroup(id, catId, groupId, force),
     onSuccess: (_data, variables) => {
       toast.success("Grupo borrado");
       qc.invalidateQueries({ queryKey: ["standings", id] });
@@ -1693,7 +1758,16 @@ export default function TorneoDetailPage() {
         return next;
       });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      const msg: string = err?.message ?? "";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        deleteGroupMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "Error al borrar el grupo");
+    },
   });
 
   // Bloque 5 completo: reestructurar grupos (cambiar nº y redistribuir)
@@ -1752,14 +1826,25 @@ export default function TorneoDetailPage() {
   });
 
   const updateCatMut = useMutation({
-    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number } }) =>
+    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number; scoringFormat?: string; force?: boolean } }) =>
       adminService.categories.update(id, catId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Categoría actualizada");
       setEditCatId(null);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      // Convención "Confirma para…": el admin puede forzar (p.ej. reducir plazas
+      // por debajo de las parejas confirmadas → sobrecupo) bajo su propio riesgo.
+      const msg: string = err?.message ?? "";
+      if (!variables.data.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        updateCatMut.mutate({ catId: variables.catId, data: { ...variables.data, force: true } });
+        return;
+      }
+      toast.error(msg || "Error al actualizar la categoría");
+    },
   });
 
   const addCatMut = useMutation({
@@ -1769,7 +1854,7 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Categoría añadida");
       setAddCatOpen(false);
-      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25 });
+      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2129,6 +2214,15 @@ export default function TorneoDetailPage() {
                     >
                       {LEVELS.map((l) => <option key={l} value={l}>{CATEGORY_LABEL_SHORT[l]}</option>)}
                     </select>
+                    <select
+                      title="Formato de puntuación base"
+                      value={addCatForm.scoringFormat}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                      className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    >
+                      <option value="BEST_OF_3">3 sets</option>
+                      <option value="BEST_OF_2_SUPERTB">2 sets + super-TB</option>
+                    </select>
                     <input
                       type="number" min={1} placeholder="Plazas"
                       value={addCatForm.totalSpots}
@@ -2192,12 +2286,23 @@ export default function TorneoDetailPage() {
                         </td>
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
-                            <input
-                              type="number" min={0}
-                              value={editCatForm.price}
-                              onChange={(e) => setEditCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
-                              className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                            />
+                            <div className="flex flex-col gap-1">
+                              <input
+                                type="number" min={0}
+                                value={editCatForm.price}
+                                onChange={(e) => setEditCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
+                                className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              />
+                              <select
+                                title="Formato base"
+                                value={editCatForm.scoringFormat}
+                                onChange={(e) => setEditCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                                className="h-7 px-1 rounded bg-secondary border border-border text-[11px] text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              >
+                                <option value="BEST_OF_3">3 sets</option>
+                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                              </select>
+                            </div>
                           ) : <span className="text-muted-foreground">{cat.price ?? 0}€</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-foreground">{pairCount}</td>
@@ -2237,7 +2342,7 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => {
                                     setEditCatId(cat.id);
-                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0 });
+                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0, scoringFormat: (cat.scoringFormat as "BEST_OF_3" | "BEST_OF_2_SUPERTB") ?? "BEST_OF_3" });
                                   }}
                                   className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                                   title="Editar plazas y precio"
@@ -3978,7 +4083,7 @@ export default function TorneoDetailPage() {
       confirmLabel="Regenerar eliminatorias"
       loading={regenerateElimination.isPending}
       onClose={() => setRegenElimCatId(null)}
-      onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
+      onConfirm={() => regenElimCatId && regenerateElimination.mutate({ categoryId: regenElimCatId })}
     />
 
     <ConfirmModal

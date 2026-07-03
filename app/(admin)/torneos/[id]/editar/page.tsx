@@ -135,7 +135,7 @@ export default function EditarTorneoPage() {
   }, [tournament, reset]);
 
   const save = useMutation({
-    mutationFn: (data: FormData) => adminService.tournaments.update(id, data),
+    mutationFn: (data: FormData & { force?: boolean }) => adminService.tournaments.update(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -143,7 +143,18 @@ export default function EditarTorneoPage() {
       toast.success("Torneo actualizado correctamente");
       router.push(`/torneos/${id}`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      // Convención "Confirma para…": el admin (dueño) puede forzar transiciones no
+      // estándar (reabrir FINISHED→ONGOING, cerrar con categorías pendientes…).
+      const msg: string = err?.message ?? "";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        save.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "Error al actualizar el torneo");
+    },
   });
 
   if (isLoading) {
