@@ -26,6 +26,11 @@ import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
+import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
+import { ManualCrossDialog } from "@/components/admin/manual-cross-dialog";
+import { MatchCreateDialog } from "@/components/admin/match-create-dialog";
+import { MatchEditPairsDialog } from "@/components/admin/match-edit-pairs-dialog";
+import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
@@ -123,6 +128,15 @@ function groupByPair(regs: AdminRegistration[]): PairReg[] {
   return result;
 }
 
+// ── Orden de fases para listar partidos (Grupos → … → Final → Consolación) ──────
+const CAL_PHASE_ORDER: Record<string, number> = {
+  GROUPS: 0, R32: 1, R16: 2, QF: 3, SF: 4, FINAL: 5, CONSOLATION: 6,
+};
+const phaseRank = (phase?: string | null) => CAL_PHASE_ORDER[phase ?? ""] ?? 99;
+/** ¿El partido tiene definidas las dos parejas? (no "Por definir") */
+const hasBothTeams = (m: { team1?: unknown[]; team2?: unknown[] }) =>
+  (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0;
+
 // ── Conflict labels ───────────────────────────────────────────────────────────
 const CONFLICT_LABEL: Record<ConflictType, string> = {
   MISSING_ASSIGNMENT:    "Sin horario",
@@ -191,7 +205,7 @@ function ConflictModal({
 
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
-  matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, tournament, tournamentId,
+  matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, onEditPairs, tournament, tournamentId,
   scheduleWarnings, onClearWarnings,
 }: {
   matches:          MatchResult[];
@@ -201,6 +215,7 @@ function CalendarTab({
   autoSchedule:     { mutate: (force?: boolean) => void; isPending: boolean };
   onMatchClick:     (m: MatchResult) => void;
   onCorrectClick:   (m: MatchResult) => void;
+  onEditPairs:      (m: MatchResult) => void;
   tournament:       Tournament | null | undefined;
   tournamentId:     string;
   scheduleWarnings: { pair: string; phase: string; category: string }[];
@@ -222,6 +237,7 @@ function CalendarTab({
   const [editMatchId,  setEditMatchId]  = useState<string | null>(null);
   const [editDate,     setEditDate]     = useState("");
   const [editCourt,    setEditCourt]    = useState("");
+  const [editReferee,  setEditReferee]  = useState("");
   const [editConflicts,setEditConflicts]= useState<ScheduleConflict[]>([]);
 
   // Courts for inline edit select
@@ -262,6 +278,23 @@ function CalendarTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // ── Publish-all mutation (todas las categorías de golpe) ──────────────────────
+  const publishAllMut = useMutation({
+    mutationFn: (force?: boolean) => adminService.schedule.publishAll(tournamentId, force),
+    onSuccess: (res) => {
+      const blocked = res.total - res.publishedCount;
+      if (res.publishedCount === 0) {
+        toast.warning("Ninguna categoría se pudo publicar (revisa partidos sin asignar o conflictos).");
+      } else if (blocked > 0) {
+        toast.success(`${res.publishedCount}/${res.total} categorías publicadas. ${blocked} con partidos sin asignar o conflictos.`);
+      } else {
+        toast.success(`Horario de las ${res.total} categorías publicado. Jugadores notificados.`);
+      }
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   // ── Unpublish mutation ──────────────────────────────────────────────────────
   const unpublishMut = useMutation({
     mutationFn: (catId: string) => adminService.schedule.unpublish(tournamentId, catId),
@@ -275,7 +308,7 @@ function CalendarTab({
 
   // ── Patch match mutation ────────────────────────────────────────────────────
   const patchMut = useMutation({
-    mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; force?: boolean } }) =>
+    mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; referee?: string | null; force?: boolean } }) =>
       adminService.schedule.patchMatch(matchId, data),
     onSuccess: (res, { data }) => {
       if (res.conflicts?.length > 0 && !data.force) {
@@ -291,6 +324,49 @@ function CalendarTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Frente 2 — borrar partido a mano
+  const deleteMatchMut = useMutation({
+    mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
+      adminService.tournaments.deleteMatch(matchId, force),
+    onSuccess: () => {
+      toast.success("Partido borrado");
+      qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
+    },
+    onError: (e: unknown) => {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (e as Error)?.message ?? "No se pudo borrar el partido";
+      toast.error(msg);
+    },
+  });
+
+  // Des-finalizar (reabrir) un partido: revierte su resultado y lo deja pendiente.
+  const unfinishMatchMut = useMutation({
+    mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
+      adminService.tournaments.unfinishMatch(matchId, force),
+    onSuccess: () => {
+      toast.success("Partido reabierto (resultado deshecho)");
+      qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
+    },
+    onError: (e: unknown, variables) => {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (e as Error)?.message ?? "No se pudo reabrir el partido";
+      // Convención "Confirma para…": ronda siguiente ya jugada / elim ya generada.
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        unfinishMatchMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg);
+    },
+  });
+
   const startEdit = (m: MatchResult) => {
     setEditMatchId(m.id);
     const d = m.date ? new Date(m.date) : null;
@@ -299,13 +375,14 @@ function CalendarTab({
       ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
       : "");
     setEditCourt(m.court ?? "");
+    setEditReferee((m as { referee?: string | null }).referee ?? "");
     setEditConflicts([]);
   };
 
-  const cancelEdit = () => { setEditMatchId(null); setEditDate(""); setEditCourt(""); setEditConflicts([]); };
+  const cancelEdit = () => { setEditMatchId(null); setEditDate(""); setEditCourt(""); setEditReferee(""); setEditConflicts([]); };
 
   const saveEdit = (matchId: string, force = false) => {
-    patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, force } });
+    patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, referee: editReferee, force } });
   };
 
   const catMap = Object.fromEntries(
@@ -428,6 +505,15 @@ function CalendarTab({
           >
             <RefreshCw size={13} />
             <span className="hidden sm:inline">Reprogramar todo</span>
+          </button>
+          <button
+            onClick={() => publishAllMut.mutate(false)}
+            disabled={publishAllMut.isPending || matches.length === 0}
+            title="Publicar el horario de todas las categorías"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors disabled:opacity-50"
+          >
+            {publishAllMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            <span className="hidden sm:inline">Publicar todo</span>
           </button>
         </div>
       </div>
@@ -568,7 +654,14 @@ function CalendarTab({
                     </div>
 
                     <div className="divide-y divide-border">
-                      {dayMatches.map((m) => {
+                      {[...dayMatches]
+                        .sort(
+                          (a, b) =>
+                            phaseRank(a.phase) - phaseRank(b.phase) ||
+                            (a.date ? new Date(a.date).getTime() : 0) -
+                              (b.date ? new Date(b.date).getTime() : 0),
+                        )
+                        .map((m) => {
                         const time      = m.date
                           ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
                           : "—";
@@ -578,8 +671,8 @@ function CalendarTab({
                           <div key={m.id}>
                             {/* Match row — mobile: stacked card, desktop: single horizontal row */}
                             <div
-                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing ? "cursor-pointer" : ""}`}
-                              onClick={() => !m.isResult && !isEditing && onMatchClick(m)}
+                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing && hasBothTeams(m) ? "cursor-pointer" : ""}`}
+                              onClick={() => !m.isResult && !isEditing && hasBothTeams(m) && onMatchClick(m)}
                             >
                               <span className="text-xs font-mono text-muted-foreground sm:w-12 shrink-0">{time}</span>
                               <span className="text-xs text-muted-foreground sm:w-16 shrink-0 truncate">{m.court || "—"}</span>
@@ -607,11 +700,34 @@ function CalendarTab({
                                   >
                                     <RotateCcw size={11} />
                                   </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (window.confirm("¿Reabrir este partido? Se deshará el resultado y volverá a estar pendiente.")) {
+                                        unfinishMatchMut.mutate({ matchId: m.id });
+                                      }
+                                    }}
+                                    disabled={unfinishMatchMut.isPending}
+                                    className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-yellow-400 hover:border-yellow-400/40 transition-colors"
+                                    title="Reabrir partido (deshacer resultado)"
+                                  >
+                                    <Clock size={11} />
+                                  </button>
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0 ml-auto sm:ml-0">
                                   <Clock size={12} /> Pendiente
                                 </span>
+                              )}
+                              {m.categoryId && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onEditPairs(m); }}
+                                  className="p-2 sm:p-1.5 rounded-md border border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors shrink-0"
+                                  title="Cambiar parejas"
+                                  aria-label="Cambiar parejas"
+                                >
+                                  <Users size={12} />
+                                </button>
                               )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); if (isEditing) { cancelEdit(); } else { startEdit(m); } }}
@@ -624,6 +740,24 @@ function CalendarTab({
                                 aria-label="Editar fecha y pista"
                               >
                                 <Pencil size={12} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const finished = !!m.isResult;
+                                  const msg = finished
+                                    ? "Este partido tiene resultado. ¿Borrarlo? Se eliminará también su resultado."
+                                    : "¿Borrar este partido?";
+                                  if (window.confirm(msg)) {
+                                    deleteMatchMut.mutate({ matchId: m.id, force: finished });
+                                  }
+                                }}
+                                disabled={deleteMatchMut.isPending}
+                                className="p-2 sm:p-1.5 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors shrink-0"
+                                title="Borrar partido"
+                                aria-label="Borrar partido"
+                              >
+                                <Trash2 size={12} />
                               </button>
                             </div>
 
@@ -652,6 +786,16 @@ function CalendarTab({
                                         <option key={c.court.name} value={c.court.name}>{c.court.name}</option>
                                       ))}
                                     </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Árbitro</label>
+                                    <input
+                                      type="text"
+                                      value={editReferee}
+                                      onChange={(e) => setEditReferee(e.target.value)}
+                                      placeholder="Opcional"
+                                      className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                                    />
                                   </div>
                                   <div className="flex items-center gap-2 pb-0.5">
                                     <button
@@ -1247,7 +1391,7 @@ function PistasTab({
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "calendario" | "cuadro" | "pistas" | "estado" | "historial";
+type Tab = "resumen" | "inscripciones" | "cuadro" | "horarios" | "mas";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -1255,6 +1399,8 @@ export default function TorneoDetailPage() {
   const qc      = useQueryClient();
 
   const [tab,             setTab]           = useState<Tab>("resumen");
+  const [horariosView,    setHorariosView]  = useState<"lista" | "tablero">("lista");
+  const [masView,         setMasView]       = useState<"estado" | "historial">("estado");
   const [showShare,       setShowShare]     = useState(false);
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
   const [regCatFilter,    setRegCatFilter]  = useState<string>("all");
@@ -1267,8 +1413,15 @@ export default function TorneoDetailPage() {
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false); // Bloque 1
+  // Bloque 4 — swap de parejas en bracket elim
+  const [swapSourceMatchId, setSwapSourceMatchId] = useState<string | null>(null);
   const [regenCatId,         setRegenCatId]         = useState<string | null>(null);
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
+  const [manualCrossCatId,   setManualCrossCatId]   = useState<string | null>(null);
+  const [createMatchCatId,   setCreateMatchCatId]   = useState<string | null>(null);
+  const [editPairsMatch,     setEditPairsMatch]     = useState<any | null>(null);
+  const [editStatsTarget,    setEditStatsTarget]    = useState<any | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
   const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
@@ -1282,19 +1435,24 @@ export default function TorneoDetailPage() {
   const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
   const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
   const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
-  const [manualMode,          setManualMode]           = useState(false);
+  const [manualMode,          setManualMode]           = useState(true); // Bloque 3: editor de grupos siempre visible
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
+  const [groupEditMode,       setGroupEditMode]       = useState(false);
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
-  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number }>({ totalSpots: 0, price: 0 });
+  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ totalSpots: 0, price: 0, scoringFormat: "BEST_OF_3" });
   const [addCatOpen,          setAddCatOpen]           = useState(false);
-  const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number }>({ gender: "M", level: "3a", totalSpots: 16, price: 25 });
+  const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
   const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
   const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
   const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
   const [showConflictsCatId, setShowConflictsCatId] = useState<string | null>(null);
+  // Bloque 5: dialog de reestructuración de grupos
+  const [restructureOpen, setRestructureOpen] = useState(false);
+  const [restructureNumGroups, setRestructureNumGroups] = useState<number>(3);
+  const [restructureConfirm, setRestructureConfirm] = useState("");
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const {
@@ -1303,6 +1461,14 @@ export default function TorneoDetailPage() {
     queryKey: ["tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
+
+  // Auto-seleccionar categoría si el torneo tiene solo una (UX: evita
+  // un click innecesario al admin)
+  useEffect(() => {
+    if (!bracketCatId && tournament && tournament.categories.length === 1) {
+      setBracketCatId(tournament.categories[0].id);
+    }
+  }, [tournament, bracketCatId]);
 
   const {
     data: registrations = [], isLoading: loadingRegs, isError: isErrorRegs, refetch: refetchRegs,
@@ -1318,7 +1484,7 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey: ["matches", id],
     queryFn:  () => adminService.matches.list(id),
-    enabled:  tab === "calendario",
+    enabled:  tab === "horarios",
   });
 
   const {
@@ -1333,14 +1499,14 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey: ["tournament-status", id],
     queryFn:  () => adminService.tournaments.status(id),
-    enabled:  tab === "estado",
+    enabled:  tab === "mas" && masView === "estado",
     staleTime: 30_000,
   });
 
   const { data: auditLog = [], isLoading: loadingAudit } = useQuery({
     queryKey: ["tournament-audit", id],
     queryFn:  () => adminService.tournaments.auditLog(id, 150),
-    enabled:  tab === "historial",
+    enabled:  tab === "mas" && masView === "historial",
     staleTime: 60_000,
   });
 
@@ -1387,13 +1553,23 @@ export default function TorneoDetailPage() {
   });
 
   const deleteTournament = useMutation({
-    mutationFn: () => adminService.tournaments.delete(id),
+    mutationFn: (force?: boolean) => adminService.tournaments.delete(id, force),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       toast.success("Torneo eliminado");
       router.push("/torneos");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, force) => {
+      const msg: string = err?.message ?? "";
+      // "Confirma para…" → torneo en curso/finalizado o con inscripciones (soft-delete, recuperable).
+      if (!force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Eliminarlo de todas formas? (se puede restaurar)`)) {
+        deleteTournament.mutate(true);
+        return;
+      }
+      toast.error(msg || "No se pudo eliminar el torneo");
+    },
   });
 
   const invalidateBracket = () => {
@@ -1436,21 +1612,43 @@ export default function TorneoDetailPage() {
   });
 
   const regenerateElimination = useMutation({
-    mutationFn: (categoryId: string) => adminService.tournaments.regenerateElimination(id, categoryId),
+    mutationFn: ({ categoryId, force }: { categoryId: string; force?: boolean }) =>
+      adminService.tournaments.regenerateElimination(id, categoryId, force ? { force: true } : undefined),
     onSuccess:  () => {
       toast.success("Eliminatorias regeneradas correctamente");
       setRegenElimCatId(null);
       invalidateBracket();
     },
-    onError: (err: Error) => { toast.error(err.message); setRegenElimCatId(null); },
+    onError: (err: Error, variables) => {
+      const msg: string = err?.message ?? "";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        regenerateElimination.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "Error al regenerar"); setRegenElimCatId(null);
+    },
   });
 
-  const saveResult = async (sets1: number[], sets2: number[]) => {
+  const saveResult = async (
+    sets1: number[],
+    sets2: number[],
+    opts?: { walkover?: boolean; walkoverWinnerTeam?: 1 | 2 },
+    force = false,
+  ) => {
     if (!resultMatch) return;
     setSavingResultId(resultMatch.id);
     try {
-      await adminService.matches.setResult(resultMatch.id, sets1, sets2);
-      toast.success("Resultado guardado");
+      await adminService.matches.setResult(
+        resultMatch.id,
+        sets1,
+        sets2,
+        opts?.walkover,
+        opts?.walkoverWinnerTeam,
+        force,
+      );
+      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
       setResultMatch(null);
       setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
@@ -1458,7 +1656,16 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
     } catch (err: any) {
-      toast.error(err.message ?? "Error al guardar resultado");
+      // El backend usa la convención "Confirma para…" en los errores que el admin
+      // (dueño del torneo) puede forzar bajo su riesgo: torneo no ONGOING, o corregir
+      // un resultado cuya siguiente ronda ya se jugó. Ofrecemos forzar y reintentar.
+      const msg: string = err?.message ?? "";
+      if (!force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
+        return saveResult(sets1, sets2, opts, true);
+      }
+      toast.error(msg || "Error al guardar resultado");
     } finally {
       setSavingResultId(null);
     }
@@ -1536,15 +1743,140 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const saveGroupMembers = useMutation({
-    mutationFn: ({ catId, groupId, members }: { catId: string; groupId: string; members: { userId: string; partnerId?: string | null }[] }) =>
-      adminService.tournaments.updateGroupMembers(id, catId, groupId, members),
+  // Mejora QA #3 — reparto GLOBAL de grupos (modo edición, atómico)
+  const saveAllGroups = useMutation({
+    mutationFn: ({ catId, groups, force }: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) =>
+      adminService.tournaments.updateAllGroupMembers(id, catId, groups, force),
     onSuccess: () => {
-      toast.success("Grupo guardado correctamente");
+      toast.success("Reparto de grupos guardado");
+      setManualGroupEdits({});
+      setGroupEditMode(false);
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
     },
+    onError: (err: unknown, variables: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? (err as Error)?.message ?? "No se pudo guardar el reparto";
+      if (!variables.force && /jugad|resultad/i.test(msg)) {
+        if (window.confirm(`${msg}\n\n¿Continuar y regenerar los partidos afectados?`)) {
+          saveAllGroups.mutate({ ...variables, force: true });
+        }
+        return;
+      }
+      toast.error(msg);
+    },
+  });
+
+  // Bloque 4 — swap parejas en bracket elim
+  const swapMatchPairMut = useMutation({
+    mutationFn: ({ matchAId, matchBId, force }: { matchAId: string; matchBId: string; force?: boolean }) =>
+      adminService.tournaments.swapMatchPair(matchAId, matchBId, force),
+    onSuccess: () => {
+      toast.success("Parejas intercambiadas");
+      setSwapSourceMatchId(null);
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+    },
+    onError: (err: unknown, variables) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ?? "Error al hacer swap";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        swapMatchPairMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg);
+    },
+  });
+
+  // Mini-Bloque 5: añadir/borrar grupos individuales
+  const addEmptyGroupMut = useMutation({
+    mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId),
+    onSuccess: () => {
+      toast.success("Grupo vacío añadido");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+    },
     onError: (err: Error) => toast.error(err.message),
+  });
+
+  const renameGroupMut = useMutation({
+    mutationFn: ({ catId, groupId, name }: { catId: string; groupId: string; name: string }) =>
+      adminService.tournaments.renameGroup(id, catId, groupId, name),
+    onSuccess: () => {
+      toast.success("Grupo renombrado");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteGroupMut = useMutation({
+    mutationFn: ({ catId, groupId, force }: { catId: string; groupId: string; force?: boolean }) =>
+      adminService.tournaments.deleteGroup(id, catId, groupId, force),
+    onSuccess: (_data, variables) => {
+      toast.success("Grupo borrado");
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      setManualGroupEdits((prev) => {
+        const next = { ...prev };
+        delete next[variables.groupId];
+        return next;
+      });
+    },
+    onError: (err: Error, variables) => {
+      const msg: string = err?.message ?? "";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        deleteGroupMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "Error al borrar el grupo");
+    },
+  });
+
+  // Bloque 5 completo: reestructurar grupos (cambiar nº y redistribuir)
+  const restructureGroupsMut = useMutation({
+    mutationFn: ({
+      catId,
+      numGroups,
+      force,
+    }: {
+      catId: string;
+      numGroups: number;
+      force: boolean;
+    }) =>
+      adminService.tournaments.restructureGroups(id, catId, {
+        numGroups,
+        force,
+      }),
+    onSuccess: (data) => {
+      // H3 — feedback detallado sobre preservación de horarios
+      const baseMsg = `Grupos reestructurados: ${data.fromNumGroups} → ${data.toNumGroups} (${data.matchesCreated} partidos)`;
+      const slotsLine = (data.slotsPreserved ?? 0) > 0
+        ? ` · ${data.slotsPreserved} horarios preservados`
+        : "";
+      toast.success(baseMsg + slotsLine);
+
+      // Aviso secundario si quedaron matches sin hora
+      if ((data.slotsNeeded ?? 0) > 0) {
+        if (data.autoScheduled) {
+          toast.success(`${data.slotsNeeded} partidos nuevos programados automáticamente`);
+        } else if (data.scheduleWarning) {
+          toast(data.scheduleWarning, { icon: "⚠️" });
+        }
+      }
+      qc.invalidateQueries({ queryKey: ["standings", id] });
+      qc.invalidateQueries({ queryKey: ["bracket", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+      setManualGroupEdits({});
+    },
+    onError: (err: Error) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        err?.message ?? "Error al reestructurar grupos";
+      toast.error(msg);
+    },
   });
 
   const updatePrizesMut = useMutation({
@@ -1559,14 +1891,25 @@ export default function TorneoDetailPage() {
   });
 
   const updateCatMut = useMutation({
-    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number } }) =>
+    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number; scoringFormat?: string; force?: boolean } }) =>
       adminService.categories.update(id, catId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Categoría actualizada");
       setEditCatId(null);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      // Convención "Confirma para…": el admin puede forzar (p.ej. reducir plazas
+      // por debajo de las parejas confirmadas → sobrecupo) bajo su propio riesgo.
+      const msg: string = err?.message ?? "";
+      if (!variables.data.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        updateCatMut.mutate({ catId: variables.catId, data: { ...variables.data, force: true } });
+        return;
+      }
+      toast.error(msg || "Error al actualizar la categoría");
+    },
   });
 
   const addCatMut = useMutation({
@@ -1576,19 +1919,31 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Categoría añadida");
       setAddCatOpen(false);
-      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25 });
+      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
     },
     onError: (err: Error) => toast.error(err.message),
   });
 
   const deleteCatMut = useMutation({
-    mutationFn: (catId: string) => adminService.categories.remove(id, catId),
+    mutationFn: ({ catId, force }: { catId: string; force?: boolean }) => adminService.categories.remove(id, catId, force),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
+      qc.invalidateQueries({ queryKey: ["matches", id] });
+      qc.invalidateQueries({ queryKey: ["standings", id] });
       toast.success("Categoría eliminada");
       setDeleteCatId(null);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      const msg: string = err?.message ?? "";
+      // "Confirma para…" → la categoría tiene inscripciones/partidos: borrar en cascada.
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Borrar en cascada de todas formas?`)) {
+        deleteCatMut.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "No se pudo eliminar la categoría");
+    },
   });
 
   // ── Derived state ─────────────────────────────────────────────────────────
@@ -1847,12 +2202,10 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
-              { key: "estado",        label: "Estado"         },
-              { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
-              { key: "calendario",    label: "Calendario"     },
               { key: "cuadro",        label: "Cuadro"         },
-              { key: "pistas",        label: "Pistas"         },
-              { key: "historial",     label: "Historial"      },
+              { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
+              { key: "horarios",      label: "Horarios"       },
+              { key: "mas",           label: "Más"            },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
@@ -1868,6 +2221,50 @@ export default function TorneoDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* Sub-navegación de Horarios (Lista / Tablero) */}
+        {tab === "horarios" && (
+          <div className="flex items-center gap-2 py-3">
+            {([
+              { key: "lista", label: "Lista / Calendario" },
+              { key: "tablero", label: "Tablero por pista" },
+            ] as { key: "lista" | "tablero"; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setHorariosView(key)}
+                className={`text-xs font-medium rounded-md px-3 py-1.5 border transition-colors ${
+                  horariosView === key
+                    ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Sub-navegación de Más (Estado / Historial) */}
+        {tab === "mas" && (
+          <div className="flex items-center gap-2 py-3">
+            {([
+              { key: "estado", label: "Estado del torneo" },
+              { key: "historial", label: "Historial" },
+            ] as { key: "estado" | "historial"; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setMasView(key)}
+                className={`text-xs font-medium rounded-md px-3 py-1.5 border transition-colors ${
+                  masView === key
+                    ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── RESUMEN TAB ── */}
         {tab === "resumen" && (
@@ -1903,6 +2300,15 @@ export default function TorneoDetailPage() {
                       className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                     >
                       {LEVELS.map((l) => <option key={l} value={l}>{CATEGORY_LABEL_SHORT[l]}</option>)}
+                    </select>
+                    <select
+                      title="Formato de puntuación base"
+                      value={addCatForm.scoringFormat}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                      className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                    >
+                      <option value="BEST_OF_3">3 sets</option>
+                      <option value="BEST_OF_2_SUPERTB">2 sets + super-TB</option>
                     </select>
                     <input
                       type="number" min={1} placeholder="Plazas"
@@ -1967,12 +2373,23 @@ export default function TorneoDetailPage() {
                         </td>
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
-                            <input
-                              type="number" min={0}
-                              value={editCatForm.price}
-                              onChange={(e) => setEditCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
-                              className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                            />
+                            <div className="flex flex-col gap-1">
+                              <input
+                                type="number" min={0}
+                                value={editCatForm.price}
+                                onChange={(e) => setEditCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
+                                className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              />
+                              <select
+                                title="Formato base"
+                                value={editCatForm.scoringFormat}
+                                onChange={(e) => setEditCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                                className="h-7 px-1 rounded bg-secondary border border-border text-[11px] text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                              >
+                                <option value="BEST_OF_3">3 sets</option>
+                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                              </select>
+                            </div>
                           ) : <span className="text-muted-foreground">{cat.price ?? 0}€</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-foreground">{pairCount}</td>
@@ -2012,7 +2429,7 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => {
                                     setEditCatId(cat.id);
-                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0 });
+                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0, scoringFormat: (cat.scoringFormat as "BEST_OF_3" | "BEST_OF_2_SUPERTB") ?? "BEST_OF_3" });
                                   }}
                                   className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                                   title="Editar plazas y precio"
@@ -2494,7 +2911,7 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── CALENDARIO TAB ── */}
-        {tab === "calendario" && (
+        {tab === "horarios" && horariosView === "lista" && (
           <CalendarTab
             matches={matches}
             loading={loadingMatches}
@@ -2503,6 +2920,7 @@ export default function TorneoDetailPage() {
             autoSchedule={autoSchedule}
             onMatchClick={setResultMatch}
             onCorrectClick={(m) => { setResultMatch(m); setResultCorrection(true); }}
+            onEditPairs={(m) => setEditPairsMatch(m)}
             tournament={tournament}
             tournamentId={id}
             scheduleWarnings={scheduleWarnings}
@@ -2546,10 +2964,12 @@ export default function TorneoDetailPage() {
                 { value: "eliminatoria+consolacion",label: "Eliminatoria + Consolación" },
               ];
 
+              // El dialog (Bloque 2) maneja todos los casos internamente:
+              // - "ya generado": banner ámbar o rojo según resultados
+              // - "inscripciones abiertas": modo read-only con motivo
+              // El botón siempre se puede pulsar para abrir el dialog.
               const blockedReason = !deadlinePassed
                 ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Cambia el estado a "Sorteo" para generar el cuadro.`
-                : alreadyGenerated
-                ? "El cuadro ya ha sido generado para esta categoría."
                 : null;
 
               return (
@@ -2574,25 +2994,13 @@ export default function TorneoDetailPage() {
                           onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
-                      {bracketCatId && (
-                        <select
-                          value={bracketFormat || defaultFormat}
-                          onChange={(e) => setBracketFormat(e.target.value)}
-                          className="h-9 rounded-md border border-border bg-background text-foreground text-sm px-2 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                        >
-                          {FORMAT_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      )}
                       <button
-                        onClick={handlePreviewBracket}
-                        disabled={!bracketCatId || loadingPreview || generateBracket.isPending || !!blockedReason}
-                        title={blockedReason ?? undefined}
+                        onClick={() => setShowGenerateDialog(true)}
+                        disabled={!bracketCatId}
                         className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
-                        {loadingPreview ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
-                        Vista previa
+                        <GitBranch size={14} />
+                        Generar cuadro…
                       </button>
                     </div>
                   </div>
@@ -2600,26 +3008,71 @@ export default function TorneoDetailPage() {
               );
             })()}
 
-            {/* ── CUADRO MANUAL ── */}
+            {/* ── EDITOR DE GRUPOS (Bloque 3 — siempre visible) ── */}
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Asignación de grupos manual</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Editor de grupos</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Crea grupos y asigna las parejas sin usar el algoritmo automático.
+                    Reorganiza las parejas en cada grupo. Para regenerar todo
+                    desde cero usa &quot;Generar cuadro…&quot; de arriba.
                   </p>
                 </div>
-                <button
-                  onClick={() => setManualMode((m) => !m)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                    manualMode
-                      ? "border-[rgba(212,175,55,0.4)] text-[#D4AF37] bg-[rgba(212,175,55,0.08)]"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <List size={12} />
-                  {manualMode ? "Cerrar modo manual" : "Modo manual"}
-                </button>
+                {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!groupEditMode ? (
+                      <>
+                        <button
+                          onClick={() => setGroupEditMode(true)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground bg-secondary hover:bg-secondary/70 border border-border rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
+                          title="Reorganizar parejas entre grupos y guardar todo de una vez"
+                        >
+                          <Pencil size={12} /> Editar reparto
+                        </button>
+                        <button
+                          onClick={() => {
+                            const current = ((allStandings as any)[bracketCatId]?.length ?? 3);
+                            setRestructureNumGroups(current);
+                            setRestructureConfirm("");
+                            setRestructureOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-md px-3 py-1.5 transition-colors whitespace-nowrap"
+                          title="Cambiar nº de grupos y redistribuir parejas"
+                        >
+                          ⇄ Reestructurar grupos…
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setManualGroupEdits({}); setGroupEditMode(false); }}
+                          disabled={saveAllGroups.isPending}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-secondary hover:bg-secondary/70 border border-border rounded-md px-3 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => {
+                            const cats = (allStandings as any)[bracketCatId] ?? [];
+                            const groups = cats.map((grp: any) => ({
+                              groupId: grp.id,
+                              members: (manualGroupEdits[grp.id] ??
+                                (grp.rows ?? [])
+                                  .filter((r: any) => r.userId)
+                                  .map((r: any) => ({ userId: r.userId, partnerId: r.partnerId ?? null }))),
+                            }));
+                            saveAllGroups.mutate({ catId: bracketCatId, groups });
+                          }}
+                          disabled={saveAllGroups.isPending}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0C0C0C] bg-[#D4AF37] hover:bg-[#C49F2A] rounded-md px-3 py-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {saveAllGroups.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                          Guardar cambios
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {manualMode && (
@@ -2640,31 +3093,12 @@ export default function TorneoDetailPage() {
 
                     if (catGroups.length === 0) {
                       return (
-                        <div className="space-y-4">
+                        <div className="rounded-md border border-dashed border-border bg-background/50 p-6 text-center">
                           <p className="text-xs text-muted-foreground">
-                            No hay grupos creados todavía. Define cuántos grupos quieres y crea la estructura vacía.
+                            Sin grupos creados todavía. Usa el botón{" "}
+                            <span className="text-[#D4AF37] font-semibold">&quot;Generar cuadro…&quot;</span>
+                            {" "}de arriba — elige <span className="text-foreground">&quot;Crear grupos vacíos y asignar a mano&quot;</span> para empezar a configurar manualmente.
                           </p>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs font-medium text-muted-foreground">Nº de grupos</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={16}
-                                value={manualNumGroups}
-                                onChange={(e) => setManualNumGroups(Math.max(1, Math.min(16, Number(e.target.value))))}
-                                className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                              />
-                            </div>
-                            <button
-                              onClick={() => initManualBracket.mutate({ catId: bracketCatId, numGroups: manualNumGroups })}
-                              disabled={initManualBracket.isPending}
-                              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
-                            >
-                              {initManualBracket.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
-                              Crear grupos
-                            </button>
-                          </div>
                         </div>
                       );
                     }
@@ -2685,24 +3119,97 @@ export default function TorneoDetailPage() {
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {catGroups.map((grp: any) => {
-                            const groupEdit = manualGroupEdits[grp.id] ?? [];
-                            const assignedToOtherGroups = new Set(
-                              Object.entries(manualGroupEdits)
-                                .filter(([gId]) => gId !== grp.id)
-                                .flatMap(([, members]) => members.map((m) => m.userId))
-                            );
-                            const availablePairs = confirmedPairs.filter((p) => !assignedToOtherGroups.has(p.primary.userId));
+                            // Hidratamos desde el backend si no hay edits locales aún:
+                            // grp.rows contiene los miembros actuales del grupo
+                            // (cada row = 1 pareja, con userId/partnerId).
+                            const hydratedMembers = (grp.rows ?? [])
+                              .filter((r: any) => r.userId)
+                              .map((r: any) => ({
+                                userId: r.userId,
+                                partnerId: r.partnerId ?? null,
+                              }));
+                            const groupEdit = manualGroupEdits[grp.id] ?? hydratedMembers;
+                            // Excluye parejas asignadas a OTROS grupos (estado local o BD).
+                            // Acumulamos AMBOS userId + partnerId de cada miembro para
+                            // poder comparar contra cualquier lado de la pareja en
+                            // confirmedPairs (que viene con orden distinto de groupByPair).
+                            const assignedToOtherGroups = new Set<string>();
+                            for (const otherGrp of catGroups) {
+                              if (otherGrp.id === grp.id) continue;
+                              const otherMembers =
+                                manualGroupEdits[otherGrp.id] ??
+                                (otherGrp.rows ?? [])
+                                  .filter((r: any) => r.userId)
+                                  .map((r: any) => ({ userId: r.userId, partnerId: r.partnerId ?? null }));
+                              for (const m of otherMembers) {
+                                assignedToOtherGroups.add(m.userId);
+                                if (m.partnerId) assignedToOtherGroups.add(m.partnerId);
+                              }
+                            }
+                            // También excluye parejas ya en ESTE grupo (evita duplicados)
+                            const inThisGroup = new Set<string>();
+                            for (const m of groupEdit) {
+                              inThisGroup.add(m.userId);
+                              if (m.partnerId) inThisGroup.add(m.partnerId);
+                            }
+                            const availablePairs = confirmedPairs.filter((p) => {
+                              const a = p.primary.userId;
+                              const b = p.primary.partnerId ?? "";
+                              return (
+                                !assignedToOtherGroups.has(a) &&
+                                !assignedToOtherGroups.has(b) &&
+                                !inThisGroup.has(a) &&
+                                !inThisGroup.has(b)
+                              );
+                            });
 
                             return (
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
-                                <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => {
+                                        const name = window.prompt("Nuevo nombre del grupo:", grp.label);
+                                        if (name && name.trim() && name.trim() !== grp.label) {
+                                          renameGroupMut.mutate({ catId: bracketCatId, groupId: grp.id, name: name.trim() });
+                                        }
+                                      }}
+                                      disabled={renameGroupMut.isPending}
+                                      className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                                      title="Renombrar este grupo"
+                                    >
+                                      <Pencil size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm(`¿Borrar "${grp.label}"? Solo se puede si no tiene partidos jugados.`)) {
+                                          deleteGroupMut.mutate({ catId: bracketCatId, groupId: grp.id });
+                                        }
+                                      }}
+                                      disabled={deleteGroupMut.isPending}
+                                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                      title="Borrar este grupo"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </div>
 
                                 {groupEdit.length === 0 && (
                                   <p className="text-[10px] text-muted-foreground/60 italic">Sin parejas asignadas aún</p>
                                 )}
 
                                 {groupEdit.map((member) => {
-                                  const pair = confirmedPairs.find((p) => p.primary.userId === member.userId);
+                                  // Match contra userId Y partnerId (cualquiera de los 2 lados)
+                                  // porque tras guardar el backend normaliza el orden
+                                  // (userId siempre menor), que puede no coincidir con
+                                  // pair.primary.userId del groupByPair.
+                                  const pair = confirmedPairs.find(
+                                    (p) =>
+                                      p.primary.userId === member.userId ||
+                                      p.primary.partnerId === member.userId,
+                                  );
                                   return (
                                     <div key={member.userId} className="flex items-center gap-1.5">
                                       <span className="flex-1 text-xs text-foreground truncate">
@@ -2715,22 +3222,24 @@ export default function TorneoDetailPage() {
                                           </>
                                         ) : member.userId}
                                       </span>
-                                      <button
-                                        onClick={() =>
-                                          setManualGroupEdits((prev) => ({
-                                            ...prev,
-                                            [grp.id]: (prev[grp.id] ?? []).filter((m) => m.userId !== member.userId),
-                                          }))
-                                        }
-                                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                                      >
-                                        <X size={10} />
-                                      </button>
+                                      {groupEditMode && (
+                                        <button
+                                          onClick={() =>
+                                            setManualGroupEdits((prev) => ({
+                                              ...prev,
+                                              [grp.id]: (prev[grp.id] ?? hydratedMembers).filter((m) => m.userId !== member.userId),
+                                            }))
+                                          }
+                                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                        >
+                                          <X size={10} />
+                                        </button>
+                                      )}
                                     </div>
                                   );
                                 })}
 
-                                {availablePairs.length > 0 && (
+                                {groupEditMode && availablePairs.length > 0 && (
                                   <select
                                     value=""
                                     onChange={(e) => {
@@ -2739,7 +3248,7 @@ export default function TorneoDetailPage() {
                                       setManualGroupEdits((prev) => ({
                                         ...prev,
                                         [grp.id]: [
-                                          ...(prev[grp.id] ?? []),
+                                          ...(prev[grp.id] ?? hydratedMembers),
                                           { userId: pair.primary.userId, partnerId: pair.primary.partnerId ?? null },
                                         ],
                                       }));
@@ -2756,24 +3265,29 @@ export default function TorneoDetailPage() {
                                   </select>
                                 )}
 
-                                <button
-                                  onClick={() =>
-                                    saveGroupMembers.mutate({
-                                      catId: bracketCatId,
-                                      groupId: grp.id,
-                                      members: groupEdit,
-                                    })
-                                  }
-                                  disabled={saveGroupMembers.isPending || groupEdit.length < 2}
-                                  title={groupEdit.length < 2 ? "Añade al menos 2 parejas" : undefined}
-                                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded-md bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)] text-[#D4AF37] hover:bg-[rgba(212,175,55,0.12)] disabled:opacity-50 transition-colors font-medium"
-                                >
-                                  {saveGroupMembers.isPending ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-                                  Guardar grupo
-                                </button>
+                                {groupEditMode && groupEdit.length < 2 && (
+                                  <p className="text-[10px] text-amber-400/80 text-center">Mínimo 2 parejas por grupo</p>
+                                )}
                               </div>
                             );
                           })}
+
+                          {/* Botón "+ Nuevo grupo" — mini-Bloque 5 */}
+                          <button
+                            onClick={() => addEmptyGroupMut.mutate(bracketCatId)}
+                            disabled={addEmptyGroupMut.isPending || catGroups.length >= 16}
+                            className="flex flex-col items-center justify-center gap-2 min-h-[120px] rounded-md border-2 border-dashed border-border bg-background/30 text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={catGroups.length >= 16 ? "Máximo 16 grupos" : "Añadir un grupo vacío"}
+                          >
+                            {addEmptyGroupMut.isPending ? (
+                              <Loader2 size={20} className="animate-spin" />
+                            ) : (
+                              <>
+                                <span className="text-2xl leading-none">+</span>
+                                <span className="text-xs">Nuevo grupo</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     );
@@ -2792,20 +3306,21 @@ export default function TorneoDetailPage() {
                 const hasElim       = elimMatches.length > 0;
 
                 // Agrupar eliminatoria por fase
-                const PHASE_LABEL: Record<string, string> = { R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final" };
+                const PHASE_LABEL: Record<string, string> = { R32: "Dieciseisavos", R16: "Octavos", QF: "Cuartos", SF: "Semifinales", FINAL: "Final", CONSOLATION: "Consolación" };
                 const elimPhases = [...new Set(elimMatches.map((m: any) => m.phase))]
                   .sort((a, b) => {
-                    const order: Record<string, number> = { R16: 0, QF: 1, SF: 2, FINAL: 3 };
-                    return (order[a] ?? 0) - (order[b] ?? 0);
+                    const order: Record<string, number> = { R32: 0, R16: 1, QF: 2, SF: 3, FINAL: 4, CONSOLATION: 5 };
+                    return (order[a] ?? 99) - (order[b] ?? 99);
                   });
                 const roundFmtOpen = showRoundFmtCatId === cat.id;
                 const ROUND_PHASES = [
-                  { key: "GROUPS",      label: "Grupos"      },
-                  { key: "R16",         label: "Octavos"     },
-                  { key: "QF",          label: "Cuartos"     },
-                  { key: "SF",          label: "Semifinales" },
-                  { key: "FINAL",       label: "Final"       },
-                  { key: "CONSOLATION", label: "Consolación" },
+                  { key: "GROUPS",      label: "Grupos"        },
+                  { key: "R32",         label: "Dieciseisavos" },
+                  { key: "R16",         label: "Octavos"       },
+                  { key: "QF",          label: "Cuartos"       },
+                  { key: "SF",          label: "Semifinales"   },
+                  { key: "FINAL",       label: "Final"         },
+                  { key: "CONSOLATION", label: "Consolación"   },
                 ] as const;
                 const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
                 const FORMAT_LABEL: Record<string, string> = {
@@ -2908,6 +3423,26 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Regen. eliminatorias</span>
                               </button>
                             )}
+                            {((allStandings as any)[cat.id]?.length ?? 0) > 0 && (
+                              <button
+                                onClick={() => setManualCrossCatId(cat.id)}
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.5)] transition-colors"
+                                title="Definir el cruce de eliminatoria a mano (1ºA vs 2ºC…)"
+                                aria-label="Cruce manual"
+                              >
+                                <GitBranch size={13} />
+                                <span className="hidden sm:inline">Cruce manual</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setCreateMatchCatId(cat.id)}
+                              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-green-400/50 transition-colors"
+                              title="Crear un partido a mano"
+                              aria-label="Crear partido"
+                            >
+                              <Plus size={13} />
+                              <span className="hidden sm:inline">Crear partido</span>
+                            </button>
                             <button
                               onClick={() => setRegenCatId(cat.id)}
                               className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
@@ -3035,7 +3570,28 @@ export default function TorneoDetailPage() {
                                         <td className="px-2 py-1.5">
                                           <span className={`font-bold ${qualifies ? "text-[#D4AF37]" : "text-muted-foreground"}`}>{row.pos}</span>
                                         </td>
-                                        <td className="px-2 py-1.5 text-foreground truncate max-w-[140px]">{row.name}</td>
+                                        <td className="px-2 py-1.5 text-foreground max-w-[140px]">
+                                          <div className="flex items-center gap-1">
+                                            <span className="truncate">{row.name}</span>
+                                            <button
+                                              onClick={() => setEditStatsTarget({
+                                                categoryId: cat.id,
+                                                groupId: grp.id,
+                                                userId: row.userId,
+                                                pairLabel: row.name,
+                                                initial: {
+                                                  played: row.played, wins: row.wins, points: row.points,
+                                                  setsWon: row.setsWon, setsLost: row.setsLost,
+                                                  gamesWon: row.gamesWon, gamesLost: row.gamesLost,
+                                                },
+                                              })}
+                                              className="text-muted-foreground hover:text-[#D4AF37] shrink-0"
+                                              title="Editar estadísticas (sanción/ajuste)"
+                                            >
+                                              <Pencil size={10} />
+                                            </button>
+                                          </div>
+                                        </td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.played}</td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.wins}</td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.setsWon}</td>
@@ -3063,6 +3619,20 @@ export default function TorneoDetailPage() {
                     {/* Partidos de eliminatoria */}
                     {hasElim && (
                       <div className="border-b border-border p-4 space-y-4">
+                        {swapSourceMatchId && elimMatches.some((m: any) => m.id === swapSourceMatchId) && (
+                          <div className="flex items-center justify-between gap-3 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-2">
+                            <p className="text-xs text-[#D4AF37]">
+                              <span className="font-semibold">Modo intercambio activo.</span>{" "}
+                              Selecciona otro partido de la misma fase para mover la pareja.
+                            </p>
+                            <button
+                              onClick={() => setSwapSourceMatchId(null)}
+                              className="text-[10px] text-[#D4AF37] hover:text-foreground underline whitespace-nowrap"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
                         {elimPhases.map((phase) => {
                           const phaseMatches = elimMatches.filter((m: any) => m.phase === phase);
                           return (
@@ -3073,14 +3643,55 @@ export default function TorneoDetailPage() {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {phaseMatches.map((m: any) => {
                                   const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
+                                  // Bloque 4 — swap states
+                                  const isSwapSource = swapSourceMatchId === m.id;
+                                  const canBeSwapTarget =
+                                    !!swapSourceMatchId &&
+                                    swapSourceMatchId !== m.id &&
+                                    !m.isResult &&
+                                    (m.team1?.length ?? 0) > 0;
+                                  const canInitSwap =
+                                    !swapSourceMatchId &&
+                                    !m.isResult &&
+                                    (m.team1?.length ?? 0) > 0;
                                   return (
-                                    <div key={m.id} className={`bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 ${m.isResult ? "border-[rgba(212,175,55,0.3)]" : "border-border"}`}>
+                                    <div
+                                      key={m.id}
+                                      className={`relative bg-secondary/40 border rounded-md px-3 py-2 space-y-0.5 transition-all ${
+                                        isSwapSource
+                                          ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-[0_0_12px_rgba(212,175,55,0.25)]"
+                                          : canBeSwapTarget
+                                            ? "border-[#D4AF37]/60 cursor-pointer bg-[#D4AF37]/5 hover:bg-[#D4AF37]/15 hover:border-[#D4AF37] hover:scale-[1.01]"
+                                            : m.isResult
+                                              ? "border-[rgba(212,175,55,0.3)]"
+                                              : "border-border"
+                                      }`}
+                                      onClick={() => {
+                                        if (canBeSwapTarget) {
+                                          if (window.confirm(`¿Intercambiar pareja entre estos 2 partidos?`)) {
+                                            swapMatchPairMut.mutate({
+                                              matchAId: swapSourceMatchId!,
+                                              matchBId: m.id,
+                                            });
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      {canBeSwapTarget && (
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none rounded-md bg-[#D4AF37]/0 hover:bg-[#D4AF37]/10">
+                                          <span className="text-[10px] font-semibold text-[#D4AF37] bg-background/90 px-2 py-0.5 rounded shadow-sm border border-[#D4AF37]/40">
+                                            Click para intercambiar
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex flex-col sm:grid text-xs sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                         <span className={`truncate sm:text-left ${m.winner === "team1" ? "text-[#D4AF37] font-semibold" : "text-muted-foreground"}`}>
                                           {m.team1?.join(" / ") || "Por definir"}
                                         </span>
                                         <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
-                                          {m.isResult && m.sets1 && m.sets2
+                                          {m.isWalkover
+                                            ? "W.O."
+                                            : m.isResult && m.sets1 && m.sets2
                                             ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                             : "vs"}
                                         </span>
@@ -3089,21 +3700,56 @@ export default function TorneoDetailPage() {
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between">
-                                        {(matchTime || m.court) ? (
+                                        {(matchTime || m.court || m.isWalkover) ? (
                                           <div className="flex items-center gap-2">
+                                            {m.isWalkover && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0">
+                                                WO
+                                              </span>
+                                            )}
                                             {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
                                             {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                           </div>
                                         ) : <span />}
-                                        {m.isResult && (
-                                          <button
-                                            onClick={() => { setResultMatch(m); setResultCorrection(true); }}
-                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
-                                            title="Corregir resultado"
-                                          >
-                                            <RotateCcw size={9} /> Corregir
-                                          </button>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {/* Bloque 4 — chip swap */}
+                                          {canInitSwap && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(m.id); }}
+                                              className="inline-flex items-center gap-1 text-[10px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-full px-2 py-0.5 transition-colors"
+                                              title="Selecciona otro partido de la misma fase para intercambiar parejas"
+                                            >
+                                              <span aria-hidden>⇄</span> Mover pareja
+                                            </button>
+                                          )}
+                                          {isSwapSource && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setSwapSourceMatchId(null); }}
+                                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-background bg-[#D4AF37] hover:bg-[#D4AF37]/80 rounded-full px-2 py-0.5 transition-colors"
+                                              title="Cancelar swap"
+                                            >
+                                              <span aria-hidden>✕</span> Cancelar swap
+                                            </button>
+                                          )}
+                                          {!m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && tournament?.status === "ONGOING" && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(false); }}
+                                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                              title="Introducir resultado"
+                                            >
+                                              <CheckCircle size={9} /> Resultado
+                                            </button>
+                                          )}
+                                          {m.isResult && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
+                                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
+                                              title="Corregir resultado"
+                                            >
+                                              <RotateCcw size={9} /> Corregir
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   );
@@ -3131,19 +3777,35 @@ export default function TorneoDetailPage() {
                                     <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                                       <span className="truncate sm:text-left">{m.team1?.join(" / ") ?? "—"}</span>
                                       <span className="text-[10px] font-mono text-foreground text-center whitespace-nowrap sm:px-1">
-                                        {m.isResult && m.sets1 && m.sets2
+                                        {m.isWalkover
+                                          ? "W.O."
+                                          : m.isResult && m.sets1 && m.sets2
                                           ? m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")
                                           : "vs"}
                                       </span>
                                       <span className="truncate sm:text-right">{m.team2?.join(" / ") ?? "—"}</span>
                                     </div>
                                     <div className="flex items-center justify-between pl-0.5">
-                                      {(matchTime || m.court) ? (
+                                      {(matchTime || m.court || m.isWalkover) ? (
                                         <div className="flex items-center gap-2">
+                                          {m.isWalkover && (
+                                            <span className="inline-flex items-center text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0">
+                                              WO
+                                            </span>
+                                          )}
                                           {matchTime && <span className="text-[10px] text-[#D4AF37]/70">🕐 {matchTime}</span>}
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
                                       ) : <span />}
+                                      {!m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && tournament?.status === "ONGOING" && (
+                                        <button
+                                          onClick={() => { setResultMatch(m); setResultCorrection(false); }}
+                                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                          title="Introducir resultado"
+                                        >
+                                          <CheckCircle size={9} /> Resultado
+                                        </button>
+                                      )}
                                       {m.isResult && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(true); }}
@@ -3170,17 +3832,17 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── ESTADO TAB ── */}
-        {tab === "estado" && (
+        {tab === "mas" && masView === "estado" && (
           <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
         )}
 
         {/* ── PISTAS TAB ── */}
-        {tab === "pistas" && (
+        {tab === "horarios" && horariosView === "tablero" && (
           <PistasTab tournamentId={id} categories={tournament?.categories ?? []} />
         )}
 
         {/* ── HISTORIAL TAB ── */}
-        {tab === "historial" && (
+        {tab === "mas" && masView === "historial" && (
           <div className="p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
@@ -3266,6 +3928,234 @@ export default function TorneoDetailPage() {
       />
     )}
 
+    {showGenerateDialog && bracketCatId && tournament && (
+      <GenerateBracketDialog
+        open={showGenerateDialog}
+        onClose={() => setShowGenerateDialog(false)}
+        tournamentId={id}
+        categoryId={bracketCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === bracketCatId)?.label) ?? "Categoría"
+        }
+        totalConfirmedPairs={
+          tournament.categories.find((c) => c.id === bracketCatId)
+            ?.registeredCount ?? 0
+        }
+        alreadyHasBracket={bracketMatches.some(
+          (m: any) => m.categoryId === bracketCatId,
+        )}
+        registrationsOpenReason={
+          tournament.status === "OPEN" &&
+          (!tournament.registrationDeadline ||
+            new Date() <= new Date(tournament.registrationDeadline))
+            ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${new Date(tournament.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
+            : null
+        }
+        onGenerated={() => invalidateBracket()}
+      />
+    )}
+
+    {/* Frente 3 — Dialog Cruce manual de eliminatoria */}
+    {manualCrossCatId && tournament && (
+      <ManualCrossDialog
+        open={!!manualCrossCatId}
+        onClose={() => setManualCrossCatId(null)}
+        tournamentId={id}
+        categoryId={manualCrossCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === manualCrossCatId)?.label) ?? "Categoría"
+        }
+        groups={((allStandings as any)[manualCrossCatId] ?? []).map((grp: any) => ({
+          label: grp.label,
+          size: grp.rows?.length ?? 0,
+        }))}
+        onGenerated={() => invalidateBracket()}
+      />
+    )}
+
+    {/* Frente 2 — Dialog Crear partido a mano */}
+    {createMatchCatId && tournament && (
+      <MatchCreateDialog
+        open={!!createMatchCatId}
+        onClose={() => setCreateMatchCatId(null)}
+        tournamentId={id}
+        categoryId={createMatchCatId}
+        categoryLabel={
+          (catOptions.find((c) => c.value === createMatchCatId)?.label) ?? "Categoría"
+        }
+        groups={((allStandings as any)[createMatchCatId] ?? []).map((grp: any) => ({
+          id: grp.id,
+          label: grp.label,
+        }))}
+        pairs={groupByPair(
+          registrations.filter(
+            (r: any) => r.categoryId === createMatchCatId && r.status === "CONFIRMED",
+          ),
+        ).map((p) => ({
+          userId: p.primary.userId,
+          partnerId: p.primary.partnerId ?? null,
+          label: p.primary.partner
+            ? `${p.primary.user.name} / ${p.primary.partner.name}`
+            : p.primary.user.name,
+        }))}
+        onCreated={() => invalidateBracket()}
+      />
+    )}
+
+    {editPairsMatch && tournament && (
+      <MatchEditPairsDialog
+        key={editPairsMatch.id}
+        open={!!editPairsMatch}
+        onClose={() => setEditPairsMatch(null)}
+        matchId={editPairsMatch.id}
+        categoryLabel={
+          (catOptions.find((c) => c.value === editPairsMatch.categoryId)?.label) ?? "Categoría"
+        }
+        pairs={groupByPair(
+          registrations.filter(
+            (r: any) => r.categoryId === editPairsMatch.categoryId && r.status === "CONFIRMED",
+          ),
+        ).map((p) => ({
+          userId: p.primary.userId,
+          partnerId: p.primary.partnerId ?? null,
+          label: p.primary.partner
+            ? `${p.primary.user.name} / ${p.primary.partner.name}`
+            : p.primary.user.name,
+        }))}
+        team1UserIds={(editPairsMatch.players ?? []).filter((p: any) => p.team === 1).map((p: any) => p.userId)}
+        team2UserIds={(editPairsMatch.players ?? []).filter((p: any) => p.team === 2).map((p: any) => p.userId)}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ["matches", id] });
+          qc.invalidateQueries({ queryKey: ["bracket", id] });
+          qc.invalidateQueries({ queryKey: ["standings", id] });
+        }}
+      />
+    )}
+
+    {editStatsTarget && (
+      <GroupMemberStatsDialog
+        key={`${editStatsTarget.groupId}-${editStatsTarget.userId}`}
+        open={!!editStatsTarget}
+        onClose={() => setEditStatsTarget(null)}
+        tournamentId={id}
+        categoryId={editStatsTarget.categoryId}
+        groupId={editStatsTarget.groupId}
+        userId={editStatsTarget.userId}
+        pairLabel={editStatsTarget.pairLabel}
+        initial={editStatsTarget.initial}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["standings", id] })}
+      />
+    )}
+
+    {/* Bloque 5 — Dialog Reestructurar grupos */}
+    {restructureOpen && bracketCatId && tournament && (() => {
+      const cat = tournament.categories.find((c) => c.id === bracketCatId);
+      const totalPairs = cat?.registeredCount ?? 0;
+      const currentGroups = ((allStandings as any)[bracketCatId]?.length ?? 0);
+      const finishedInGroups = bracketMatches.filter(
+        (m: any) => m.categoryId === bracketCatId && m.phase === "GROUPS" && m.isResult,
+      ).length;
+      const requiresForce = finishedInGroups > 0;
+      const confirmOk = !requiresForce || restructureConfirm === "REESTRUCTURAR";
+      const groupSizesValid = restructureNumGroups >= 1 && restructureNumGroups <= 16 && totalPairs >= restructureNumGroups * 3;
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setRestructureOpen(false)}>
+          <div className="bg-card border border-border rounded-lg max-w-md w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Reestructurar grupos</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {cat?.gender === "M" ? "Masculino" : "Femenino"} {cat?.level} — {totalPairs} parejas confirmadas
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Nuevo nº de grupos</label>
+              <div className="grid grid-cols-6 gap-2">
+                {[3, 4, 5, 6, 7, 8].map((n) => {
+                  const disabled = totalPairs < n * 3;
+                  const isActive = restructureNumGroups === n;
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => setRestructureNumGroups(n)}
+                      disabled={disabled}
+                      className={`py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-[#D4AF37] text-background"
+                          : "bg-secondary/50 text-foreground hover:bg-secondary"
+                      } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
+                      title={disabled ? `Necesitas ≥ ${n * 3} parejas` : ""}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Actual: {currentGroups} grupos. Reparto: serpentine por SPA si el torneo usa semillas, aleatorio si no.
+              </p>
+            </div>
+
+            {requiresForce && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-2">
+                <p className="text-xs text-red-400">
+                  <span className="font-semibold">⚠️ Acción destructiva.</span> Hay {finishedInGroups} partido{finishedInGroups > 1 ? "s" : ""} con resultado en la fase de grupos. Reestructurar los borrará permanentemente.
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  La fase eliminatoria NO se toca. Escribe <code className="font-mono text-red-400">REESTRUCTURAR</code> para confirmar:
+                </p>
+                <input
+                  type="text"
+                  value={restructureConfirm}
+                  onChange={(e) => setRestructureConfirm(e.target.value)}
+                  className="w-full rounded-md border border-red-500/40 bg-background px-2 py-1 text-xs text-foreground"
+                  placeholder="REESTRUCTURAR"
+                />
+              </div>
+            )}
+
+            {!groupSizesValid && (
+              <p className="text-xs text-amber-400">
+                No es posible distribuir {totalPairs} parejas en {restructureNumGroups} grupos (mínimo 3 parejas/grupo).
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setRestructureOpen(false)}
+                className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                disabled={restructureGroupsMut.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  restructureGroupsMut.mutate(
+                    {
+                      catId: bracketCatId,
+                      numGroups: restructureNumGroups,
+                      force: requiresForce,
+                    },
+                    { onSuccess: () => setRestructureOpen(false) },
+                  );
+                }}
+                disabled={
+                  !confirmOk ||
+                  !groupSizesValid ||
+                  restructureNumGroups === currentGroups ||
+                  restructureGroupsMut.isPending
+                }
+                className="px-3 py-1.5 text-xs font-semibold text-background bg-[#D4AF37] hover:bg-[#D4AF37]/80 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition-colors"
+              >
+                {restructureGroupsMut.isPending ? "Reestructurando…" : "Reestructurar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+
     <ConfirmModal
       open={showDeleteModal}
       title="Eliminar torneo"
@@ -3274,7 +4164,7 @@ export default function TorneoDetailPage() {
       danger
       loading={deleteTournament.isPending}
       onClose={() => setShowDeleteModal(false)}
-      onConfirm={() => deleteTournament.mutate()}
+      onConfirm={() => deleteTournament.mutate(undefined)}
     />
 
     {availRegId && (
@@ -3354,7 +4244,7 @@ export default function TorneoDetailPage() {
       confirmLabel="Regenerar eliminatorias"
       loading={regenerateElimination.isPending}
       onClose={() => setRegenElimCatId(null)}
-      onConfirm={() => regenElimCatId && regenerateElimination.mutate(regenElimCatId)}
+      onConfirm={() => regenElimCatId && regenerateElimination.mutate({ categoryId: regenElimCatId })}
     />
 
     <ConfirmModal
@@ -3396,7 +4286,7 @@ export default function TorneoDetailPage() {
       danger
       loading={deleteCatMut.isPending}
       onClose={() => setDeleteCatId(null)}
-      onConfirm={() => { if (deleteCatId) deleteCatMut.mutate(deleteCatId); }}
+      onConfirm={() => { if (deleteCatId) deleteCatMut.mutate({ catId: deleteCatId }); }}
     />
 
 

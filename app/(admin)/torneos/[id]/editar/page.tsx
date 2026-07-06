@@ -4,6 +4,7 @@ import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,6 +31,9 @@ const schema = z.object({
   matchDuration:             z.number().optional(),
   elimMatchDuration:         z.number().min(15).max(180).nullable().optional(),
   maxMatchesPerPlayerPerDay: z.number().min(1).max(10).nullable().optional(),
+  maxUnavailableTotalHours:  z.number().min(0).optional(),
+  hasShirts:                 z.boolean().optional(),
+  useSeeding:                z.boolean().optional(),
   registrationDeadline:      z.string().optional(),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 }).superRefine((data, ctx) => {
@@ -52,6 +56,7 @@ export default function EditarTorneoPage() {
   const router = useRouter();
   const qc     = useQueryClient();
   const [pendingData, setPendingData] = useState<FormData | null>(null);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
@@ -120,6 +125,9 @@ export default function EditarTorneoPage() {
       matchDuration:             tournament.matchDuration ?? 60,
       elimMatchDuration:         tournament.elimMatchDuration ?? null,
       maxMatchesPerPlayerPerDay: tournament.maxMatchesPerPlayerPerDay ?? null,
+      maxUnavailableTotalHours:  tournament.maxUnavailableTotalHours ?? 0,
+      hasShirts:                 tournament.hasShirts ?? false,
+      useSeeding:                tournament.useSeeding ?? false,
       registrationDeadline:      regDeadline,
       status:               tournament.status as FormData["status"],
       tier:                 tournament.tier ?? "BRONZE",
@@ -127,7 +135,7 @@ export default function EditarTorneoPage() {
   }, [tournament, reset]);
 
   const save = useMutation({
-    mutationFn: (data: FormData) => adminService.tournaments.update(id, data),
+    mutationFn: (data: FormData & { force?: boolean }) => adminService.tournaments.update(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -135,7 +143,18 @@ export default function EditarTorneoPage() {
       toast.success("Torneo actualizado correctamente");
       router.push(`/torneos/${id}`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, variables) => {
+      // Convención "Confirma para…": el admin (dueño) puede forzar transiciones no
+      // estándar (reabrir FINISHED→ONGOING, cerrar con categorías pendientes…).
+      const msg: string = err?.message ?? "";
+      if (!variables.force && /Confirma para/i.test(msg) &&
+          typeof window !== "undefined" &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
+        save.mutate({ ...variables, force: true });
+        return;
+      }
+      toast.error(msg || "Error al actualizar el torneo");
+    },
   });
 
   if (isLoading) {
@@ -360,6 +379,57 @@ export default function EditarTorneoPage() {
               <Field label="Cierre de inscripciones">
                 <Input {...register("registrationDeadline")} type="datetime-local" />
               </Field>
+              <Field label="Máx. horas no disponibles (total)">
+                <Input
+                  type="number"
+                  min={0}
+                  {...register("maxUnavailableTotalHours", { valueAsNumber: true })}
+                />
+              </Field>
+              <Field label="Camisetas">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer h-10">
+                  <input
+                    type="checkbox"
+                    checked={watch("hasShirts") ?? false}
+                    onChange={(e) => setValue("hasShirts", e.target.checked, { shouldDirty: true })}
+                    className="accent-[#D4AF37] h-4 w-4"
+                  />
+                  El torneo incluye camisetas
+                </label>
+              </Field>
+              <Field label="Cabezas de serie">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer h-10">
+                  <input
+                    type="checkbox"
+                    checked={watch("useSeeding") ?? false}
+                    onChange={(e) => setValue("useSeeding", e.target.checked, { shouldDirty: true })}
+                    className="accent-[#D4AF37] h-4 w-4"
+                  />
+                  Usar cabezas de serie en el cuadro
+                </label>
+              </Field>
+            </div>
+          </div>
+
+          {/* Jornadas y horarios (editar = crear, solo durante el montaje) */}
+          <div className="rounded-lg border border-border bg-card/40 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Jornadas y horarios</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {tournament?.status === "ONGOING" || tournament?.status === "FINISHED"
+                    ? "El torneo ya ha empezado: las jornadas no se pueden editar."
+                    : "Edita los días y tramos horarios del torneo."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSchedule(true)}
+                disabled={tournament?.status === "ONGOING" || tournament?.status === "FINISHED"}
+                className="px-3 py-1.5 rounded-md border border-border text-sm text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+              >
+                Editar jornadas
+              </button>
             </div>
           </div>
 
@@ -382,6 +452,22 @@ export default function EditarTorneoPage() {
           </div>
         </form>
       </div>
+
+      {showSchedule && tournament && (
+        <ScheduleEditorDialog
+          open={showSchedule}
+          onClose={() => setShowSchedule(false)}
+          tournamentId={id}
+          initialDays={((tournament as any).schedule ?? []).map((d: any) => ({
+            date: d.date,
+            type: d.type,
+            isFinal: d.isFinal,
+            slots: d.slots,
+            maxUnavailableHours: d.maxUnavailableHours,
+          }))}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["admin-tournament", id] })}
+        />
+      )}
     </div>
   );
 }

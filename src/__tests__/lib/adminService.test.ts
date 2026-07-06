@@ -99,7 +99,7 @@ describe('adminService', () => {
     it('llama a DELETE /admin/tournaments/:id', async () => {
       mockDelete.mockResolvedValueOnce({ data: {} });
       await adminService.tournaments.delete('t1');
-      expect(mockDelete).toHaveBeenCalledWith('/admin/tournaments/t1');
+      expect(mockDelete).toHaveBeenCalledWith('/admin/tournaments/t1', undefined);
     });
   });
 

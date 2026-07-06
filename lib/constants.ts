@@ -98,6 +98,7 @@ export const SPA_TIER_COLOR: Record<string, string> = {
 // Resolves whichever tier field is present and returns { label, color } for display
 export const MATCH_PHASE_LABEL: Record<string, string> = {
   GROUPS: "Grupos",
+  R32:    "Dieciseisavos",
   R16:    "Octavos",
   QF:     "Cuartos",
   SF:     "Semifinal",

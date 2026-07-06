@@ -163,9 +163,9 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
 
 // ── printTournamentReport ──────────────────────────────────────────────────────
 
-const REPORT_PHASE_ORDER = ["GROUPS", "R16", "QF", "SF", "CONSOLATION", "FINAL"] as const;
+const REPORT_PHASE_ORDER = ["GROUPS", "R32", "R16", "QF", "SF", "CONSOLATION", "FINAL"] as const;
 const REPORT_PHASE_LABEL: Record<string, string> = {
-  GROUPS: "Grupos", R16: "Octavos", QF: "Cuartos", SF: "Semis", CONSOLATION: "Consolación", FINAL: "Final",
+  GROUPS: "Grupos", R32: "Dieciseisavos", R16: "Octavos", QF: "Cuartos", SF: "Semis", CONSOLATION: "Consolación", FINAL: "Final",
 };
 
 export function printTournamentReport(
@@ -399,6 +399,7 @@ export function printTournamentReport(
 
 const PHASE_LABEL: Record<string, string> = {
   GROUPS:      "Grupos",
+  R32:         "Dieciseisavos",
   R16:         "Octavos",
   QF:          "Cuartos",
   SF:          "Semis",

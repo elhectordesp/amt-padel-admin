@@ -86,6 +86,10 @@ export interface Court {
   order:     number;
   active:    boolean;
   blocks?:   CourtBlock[];
+  // Atributos del módulo Reservas (Sprint 1)
+  type?:             "SINGLES" | "DOUBLES";
+  wallType?:         "GLASS" | "WALL" | null;
+  allowOpenMatches?: boolean;
 }
 
 export interface TournamentCourt {

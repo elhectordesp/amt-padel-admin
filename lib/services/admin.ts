@@ -24,6 +24,22 @@ export interface ScheduleConflict {
 
 export interface AdminUser { name: string; email: string }
 
+/**
+ * Opciones avanzadas para generación/preview del cuadro (Bloque 1).
+ *
+ * Cuando se omiten, el backend usa el comportamiento histórico (auto-cálculo).
+ * Cuando se pasan, el backend respeta los valores siempre que sean coherentes
+ * entre sí (numGroups × topNPerGroup ≥ plazas de eliminationStartRound).
+ */
+export interface BracketGenerationOptions {
+  numGroups?: number;
+  /** Clasifican FIJO por grupo (base): 1-4. */
+  topNPerGroup?: number;
+  /** Comodines extra: nº de "mejores (base+1)os" que clasifican además de la base. */
+  extraQualifiers?: number;
+  eliminationStartRound?: 'R32' | 'R16' | 'QF' | 'SF' | 'F';
+}
+
 export const adminService = {
   me: () =>
     api.get<AdminUser>("/auth/me").then((r) => r.data),
@@ -40,6 +56,45 @@ export const adminService = {
   activity: () =>
     api.get<ActivityItem[]>("/admin/activity").then((r) => r.data).catch((e) => { console.error("[admin] activity:", e); return [] as ActivityItem[]; }),
 
+  /** P3 — Historial de auditoría con filtros y paginación. */
+  auditLogs: (filters: {
+    tournamentId?: string;
+    action?: string;
+    adminId?: string;
+    from?: string;  // ISO date
+    to?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return api
+      .get<{
+        items: {
+          id: string;
+          adminId: string;
+          adminName: string;
+          action: string;
+          actionLabel: string;
+          resource: string;
+          resourceId: string | null;
+          entityName: string | null;
+          href: string | null;
+          details: unknown;
+          createdAt: string;
+        }[];
+        total: number;
+        page: number;
+        pageSize: number;
+        distinctActions: { value: string; label: string; count: number }[];
+      }>(`/admin/audit-logs${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
+
   tournaments: {
     list: () =>
       api.get<Tournament[]>("/admin/tournaments").then((r) =>
@@ -55,24 +110,181 @@ export const adminService = {
       ),
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
-    delete:          (id: string)                  => api.delete(`/admin/tournaments/${id}`).then((r) => r.data),
+    /** Editar jornadas/tramos horarios (solo durante el montaje). Reemplaza todas las jornadas. */
+    updateSchedule:  (id: string, schedule: { date: string; type?: string; isFinal?: boolean; maxUnavailableSlots?: number; blocks: { start: string; end: string }[] }[]) =>
+      api.put(`/admin/tournaments/${id}/schedule`, { schedule }).then((r) => r.data),
+    delete:          (id: string, force?: boolean)  => api.delete(`/admin/tournaments/${id}`, force ? { params: { force: true } } : undefined).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
-    previewBracket:  (id: string, categoryId: string, format?: string) => api.get(`/admin/tournaments/${id}/bracket/preview`, { params: { categoryId, ...(format ? { format } : {}) } }).then((r) => r.data),
-    generateBracket: (id: string, categoryId: string, customGroups?: string[][], format?: string) => api.post(`/admin/tournaments/${id}/bracket/generate`, { categoryId, customGroups, ...(format !== undefined ? { format } : {}) }).then((r) => r.data),
+    previewBracket: (
+      id: string,
+      categoryId: string,
+      format?: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .get(`/admin/tournaments/${id}/bracket/preview`, {
+          params: {
+            categoryId,
+            ...(format ? { format } : {}),
+            ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+            ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+            ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
+            ...(options?.eliminationStartRound
+              ? { eliminationStartRound: options.eliminationStartRound }
+              : {}),
+          },
+        })
+        .then((r) => r.data),
+    generateBracket: (
+      id: string,
+      categoryId: string,
+      customGroups?: string[][],
+      format?: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .post(`/admin/tournaments/${id}/bracket/generate`, {
+          categoryId,
+          customGroups,
+          ...(format !== undefined ? { format } : {}),
+          ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+          ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
+          ...(options?.eliminationStartRound
+            ? { eliminationStartRound: options.eliminationStartRound }
+            : {}),
+        })
+        .then((r) => r.data),
     registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
       api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),
-    regenerateBracket:     (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate`, { categoryId }).then((r) => r.data),
-    regenerateElimination: (id: string, categoryId: string) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId }).then((r) => r.data),
+    /**
+     * Estado del cuadro de una categoría (Bloque 2). Usado por el dialog
+     * para decidir nivel de confirmación al regenerar.
+     */
+    getBracketStats: (
+      id: string,
+      categoryId: string,
+    ): Promise<{
+      exists: boolean;
+      totalMatches: number;
+      finishedMatches: number;
+      hasGroupResults: boolean;
+      hasElimResults: boolean;
+    }> =>
+      api
+        .get(`/admin/tournaments/${id}/categories/${categoryId}/bracket/stats`)
+        .then((r) => r.data),
+    regenerateBracket: (
+      id: string,
+      categoryId: string,
+      options?: BracketGenerationOptions,
+    ) =>
+      api
+        .post(`/admin/tournaments/${id}/bracket/regenerate`, {
+          categoryId,
+          ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
+          ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
+          ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
+          ...(options?.eliminationStartRound
+            ? { eliminationStartRound: options.eliminationStartRound }
+            : {}),
+        })
+        .then((r) => r.data),
+    regenerateElimination: (id: string, categoryId: string, opts?: { topNPerGroup?: number; extraQualifiers?: number; eliminationStartRound?: string; force?: boolean }) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId, ...(opts ?? {}) }).then((r) => r.data),
+    /** Cruce MANUAL de eliminatoria (Frente 3): cada cruce = un partido de 1ª ronda; lado = {groupIdx, pos} o null=bye. */
+    generateEliminationManual: (id: string, catId: string, crosses: { a: { groupIdx: number; pos: number } | null; b: { groupIdx: number; pos: number } | null }[]) =>
+      api.post(`/admin/tournaments/${id}/categories/${catId}/elimination/manual`, { crosses }).then((r) => r.data),
     groups:            (id: string, categoryId: string) => api.get(`/tournaments/${id}/categories/${categoryId}/groups`).then((r) => r.data ?? []),
     autoSchedule:    (id: string, force?: boolean)  => api.post<{ count: number; failures?: string[]; unscheduledPlayers?: { pair: string; phase: string; category: string }[] }>(`/admin/tournaments/${id}/auto-schedule`, { force }).then((r) => r.data),
     status:          (id: string)                   => api.get(`/admin/tournaments/${id}/status`).then((r) => r.data),
     auditLog:        (id: string, limit = 100)      => api.get<AuditLogEntry[]>(`/admin/tournaments/${id}/audit`, { params: { limit } }).then((r) => r.data),
+    /**
+     * Swap parejas entre 2 matches del bracket elim (Bloque 4).
+     * Backend valida que sean misma cat + phase + ninguno FINISHED.
+     */
+    swapMatchPair: (matchAId: string, matchBId: string, force?: boolean) =>
+      api
+        .post(`/admin/matches/${matchAId}/swap-pair`, { withMatchId: matchBId, ...(force ? { force: true } : {}) })
+        .then((r) => r.data),
+
+    /** Añade un grupo vacío al cuadro existente (mini-Bloque 5). */
+    addEmptyGroup: (id: string, catId: string) =>
+      api
+        .post<{ id: string; name: string; members: never[] }>(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/groups`,
+        )
+        .then((r) => r.data),
+
+    /** Borra un grupo vacío (mini-Bloque 5). */
+    deleteGroup: (id: string, catId: string, groupId: string, force?: boolean) =>
+      api
+        .delete(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/groups/${groupId}`,
+          force ? { params: { force: true } } : undefined,
+        )
+        .then((r) => r.data),
+
+    /**
+     * Reestructura grupos: cambia nº de grupos y redistribuye parejas (Bloque 5).
+     * - assignments: opcional, mapeo "Grupo X" → registrationId[]. Si null,
+     *   distribución automática (serpentine si useSeeding, random si no).
+     * - force: requerido si hay partidos de grupos con resultado FINISHED.
+     */
+    restructureGroups: (
+      id: string,
+      catId: string,
+      payload: {
+        numGroups: number;
+        assignments?: Record<string, string[]> | null;
+        force?: boolean;
+      },
+    ) =>
+      api
+        .post<{
+          success: boolean;
+          fromNumGroups: number;
+          toNumGroups: number;
+          matchesCreated: number;
+          hadResults: boolean;
+          force: boolean;
+          // H3 — schedule preservation
+          slotsAvailable?: number;
+          slotsPreserved?: number;
+          slotsNeeded?: number;
+          autoScheduled?: boolean;
+          scheduleWarning?: string;
+        }>(
+          `/admin/tournaments/${id}/categories/${catId}/bracket/restructure-groups`,
+          payload,
+        )
+        .then((r) => r.data),
+
     initBracketManual: (id: string, catId: string, numGroups?: number) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
-    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[]) =>
-      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, { members }).then((r) => r.data),
+    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[], force?: boolean) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, force ? { members, force } : { members }).then((r) => r.data),
+    /** Reparto global de grupos (modo edición, atómico): reemplaza todos los grupos de una vez. */
+    updateAllGroupMembers: (id: string, catId: string, groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[], force?: boolean) =>
+      api.put(`/admin/tournaments/${id}/categories/${catId}/groups/members`, force ? { groups, force } : { groups }).then((r) => r.data),
+    renameGroup: (id: string, catId: string, groupId: string, name: string) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/name`, { name }).then((r) => r.data),
+    /** Override manual de stats de una pareja en un grupo (sanciones/ajustes). */
+    overrideGroupMemberStats: (id: string, catId: string, groupId: string, userId: string, stats: { played?: number; wins?: number; points?: number; setsWon?: number; setsLost?: number; gamesWon?: number; gamesLost?: number }) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members/${userId}/stats`, stats).then((r) => r.data),
+    /** Edición manual de partidos (Frente 2). */
+    editMatchPlayers: (matchId: string, team1: { userId: string; partnerId?: string | null }, team2: { userId: string; partnerId?: string | null }, force?: boolean) =>
+      api.patch(`/admin/matches/${matchId}/players`, { team1, team2, ...(force ? { force: true } : {}) }).then((r) => r.data),
+    createManualMatch: (
+      tournamentId: string,
+      payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string },
+    ) => api.post(`/admin/tournaments/${tournamentId}/matches`, payload).then((r) => r.data),
+    deleteMatch: (matchId: string, force?: boolean) =>
+      api.delete(`/admin/matches/${matchId}`, { params: force ? { force: true } : {} }).then((r) => r.data),
+    /** Des-finalizar un partido: revierte su resultado y lo deja pendiente. */
+    unfinishMatch: (matchId: string, force?: boolean) =>
+      api.post(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),
   },
 
   registrations: {
@@ -106,11 +318,11 @@ export const adminService = {
     update: (
       tournamentId: string,
       categoryId:   string,
-      data: { totalSpots?: number; price?: number; scoringFormat?: string },
+      data: { totalSpots?: number; price?: number; scoringFormat?: string; force?: boolean },
     ) =>
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}`, data).then(r => r.data),
-    remove: (tournamentId: string, categoryId: string) =>
-      api.delete(`/admin/tournaments/${tournamentId}/categories/${categoryId}`).then(r => r.data),
+    remove: (tournamentId: string, categoryId: string, force?: boolean) =>
+      api.delete(`/admin/tournaments/${tournamentId}/categories/${categoryId}`, force ? { params: { force: true } } : undefined).then(r => r.data),
   },
 
   schedule: {
@@ -118,9 +330,11 @@ export const adminService = {
       api.get<ScheduleConflict[]>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/validate`).then(r => r.data),
     publish:    (tournamentId: string, categoryId: string, force?: boolean) =>
       api.post<{ published: boolean; conflicts: ScheduleConflict[] }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`, { force }).then(r => r.data),
+    publishAll: (tournamentId: string, force?: boolean) =>
+      api.post<{ results: { categoryId: string; gender: string; level: string; published: boolean; conflicts: ScheduleConflict[] }[]; publishedCount: number; total: number }>(`/admin/tournaments/${tournamentId}/schedule/publish-all`, { force }).then(r => r.data),
     unpublish:  (tournamentId: string, categoryId: string) =>
       api.delete<{ unpublished: boolean }>(`/admin/tournaments/${tournamentId}/categories/${categoryId}/schedule/publish`).then(r => r.data),
-    patchMatch: (matchId: string, data: { date?: string; court?: string; force?: boolean }) =>
+    patchMatch: (matchId: string, data: { date?: string; court?: string; referee?: string | null; force?: boolean }) =>
       api.patch<{ match: any; conflicts: ScheduleConflict[] }>(`/admin/matches/${matchId}/schedule`, data).then(r => r.data),
   },
 
@@ -147,12 +361,15 @@ export const adminService = {
           winner:   m.winner ?? (m.players?.find((p: any) => p.isWinner && p.team === 1) ? "team1" : m.players?.find((p: any) => p.isWinner && p.team === 2) ? "team2" : undefined),
           phase:    m.phase,
           status:   m.status,
-          scoringFormat: m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
+          // Formato resuelto POR FASE por el backend (roundFormats override); cae al
+          // formato base de la categoría si no viene. Así el hint de super-tiebreak
+          // del modal respeta p.ej. "final a 3 sets" aunque la base sea super-tie.
+          scoringFormat: m.effectiveScoringFormat ?? m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
         }));
       });
     },
-    setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2) =>
-      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}) }).then((r) => r.data),
+    setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
+      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
   },
 
   players: {
@@ -260,7 +477,11 @@ export const adminService = {
       api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
     create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean }) =>
       api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
-    update: (clubId: string, courtId: string, data: Partial<{ name: string; isIndoor: boolean; isCentral: boolean; order: number }>) =>
+    update: (clubId: string, courtId: string, data: Partial<{
+      name: string; isIndoor: boolean; isCentral: boolean; order: number;
+      type: "SINGLES" | "DOUBLES"; wallType: "GLASS" | "WALL" | null;
+      allowOpenMatches: boolean;
+    }>) =>
       api.patch<Court>(`/admin/clubs/${clubId}/courts/${courtId}`, data).then((r) => r.data),
     remove: (clubId: string, courtId: string) =>
       api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),

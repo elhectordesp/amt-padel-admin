@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
-  ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare,
+  ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/clubes",           icon: Landmark,         label: "Clubes"         },
   { href: "/patrocinadores",  icon: Handshake,        label: "Patrocinadores" },
   { href: "/soporte",          icon: MessageSquare,    label: "Soporte"        },
+  { href: "/historial",        icon: History,          label: "Historial"      },
   { href: "/configuracion",   icon: Settings,         label: "Configuración"  },
 ];
 
@@ -38,12 +40,16 @@ const CLUB_ALLOWED_PATHS = new Set([
   "/patrocinadores",
 ]);
 
-// Item que se inserta SOLO para CLUB users — link a la página de
-// configuración de su propio club.
+// Items que se insertan SOLO para CLUB users.
 const CLUB_MY_CLUB_ITEM = {
   href: "/mi-club",
   icon: Landmark,
   label: "Mi club",
+};
+const CLUB_RESERVAS_ITEM = {
+  href: "/mi-club/reservas",
+  icon: CalendarRange,
+  label: "Reservas",
 };
 
 export function Sidebar() {
@@ -57,8 +63,11 @@ export function Sidebar() {
     ? [
         ...NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href)),
         CLUB_MY_CLUB_ITEM,
+        CLUB_RESERVAS_ITEM,
       ]
     : NAV;
+
+  const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
 
   // Cierra el drawer móvil al navegar
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -108,7 +117,7 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
         {visibleNav.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+          const active = href === activeHref;
           return (
             <Link
               key={href}
@@ -206,4 +215,25 @@ export function Sidebar() {
       <LogoutModal open={showLogout} onClose={() => setShowLogout(false)} />
     </>
   );
+}
+
+/**
+ * Dado el listado de hrefs visibles en el sidebar y el pathname actual,
+ * devuelve el href que debe marcarse activo (el match MÁS LARGO).
+ *
+ * Necesario porque dos hrefs pueden matchear el mismo path por prefijo
+ * (p. ej. /mi-club y /mi-club/reservas) — sin esto, ambos se marcarían.
+ *
+ * Exportado para poder testarse sin montar el componente entero.
+ */
+export function computeActiveHref(
+  hrefs: string[],
+  pathname: string,
+): string | null {
+  return hrefs.reduce<string | null>((best, href) => {
+    const matches = pathname === href || pathname.startsWith(href + "/");
+    if (!matches) return best;
+    if (best === null || href.length > best.length) return href;
+    return best;
+  }, null);
 }
