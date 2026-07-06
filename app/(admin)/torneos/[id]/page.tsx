@@ -3015,7 +3015,7 @@ export default function TorneoDetailPage() {
                   <h3 className="text-sm font-semibold text-foreground">Editor de grupos</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Reorganiza las parejas en cada grupo. Para regenerar todo
-                    desde cero usa "Generar cuadro…" de arriba.
+                    desde cero usa &quot;Generar cuadro…&quot; de arriba.
                   </p>
                 </div>
                 {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
@@ -3096,8 +3096,8 @@ export default function TorneoDetailPage() {
                         <div className="rounded-md border border-dashed border-border bg-background/50 p-6 text-center">
                           <p className="text-xs text-muted-foreground">
                             Sin grupos creados todavía. Usa el botón{" "}
-                            <span className="text-[#D4AF37] font-semibold">"Generar cuadro…"</span>
-                            {" "}de arriba — elige <span className="text-foreground">"Crear grupos vacíos y asignar a mano"</span> para empezar a configurar manualmente.
+                            <span className="text-[#D4AF37] font-semibold">&quot;Generar cuadro…&quot;</span>
+                            {" "}de arriba — elige <span className="text-foreground">&quot;Crear grupos vacíos y asignar a mano&quot;</span> para empezar a configurar manualmente.
                           </p>
                         </div>
                       );
