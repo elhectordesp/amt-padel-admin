@@ -109,6 +109,23 @@ export default function BookingDetailPage({
     },
   });
 
+  const markPaidMut = useMutation({
+    mutationFn: (method: BookingPaymentMethod) =>
+      bookingsService.bookings.markPaid(id, { method }),
+    onSuccess: () => {
+      toast.success("Pago actualizado");
+      qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
+      qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ??
+        "Error al actualizar el pago";
+      toast.error(msg);
+    },
+  });
+
   if (role === null || query.isLoading) {
     return (
       <div className="flex h-full items-center justify-center p-12">
@@ -207,6 +224,24 @@ export default function BookingDetailPage({
             </span>
           )}
         </Row>
+        {b.status !== "CANCELLED" && (
+          <div className="ml-7 flex flex-wrap items-center gap-2">
+            {b.paymentMethod === "PENDING" ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("CASH_AT_VENUE")} disabled={markPaidMut.isPending}>
+                  {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar pagado (efectivo)
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PAID_MANUAL")} disabled={markPaidMut.isPending}>
+                  Manual / Bizum
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PENDING")} disabled={markPaidMut.isPending}>
+                {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar como no pagada
+              </Button>
+            )}
+          </div>
+        )}
         {b.priceBreakdown.extras.length > 0 && (
           <div className="ml-7 text-xs text-muted-foreground">
             Incluye: {b.priceBreakdown.extras.map((e) => `${e.name} (${(e.cents / 100).toFixed(2)}€)`).join(", ")}

@@ -14,12 +14,13 @@ import {
   ArrowLeft,
   Calendar,
   Loader2,
-  Search,
+  Plus,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
+import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
 import type {
@@ -51,6 +52,7 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
 export default function BookingsListPage() {
   const { role, clubId } = useRole();
   const [tab, setTab] = useState<Tab>("today");
+  const [showCreate, setShowCreate] = useState(false);
 
   const filters = useMemo<BookingFiltersQuery>(() => {
     if (!clubId) return {};
@@ -107,11 +109,22 @@ export default function BookingsListPage() {
   return (
     <div className="p-6">
       <BackLink />
-      <Header title="Reservas" />
+      <div className="flex items-start justify-between gap-3">
+        <Header title="Reservas" />
+        <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Plus className="h-3.5 w-3.5" /> Crear reserva
+        </Button>
+      </div>
       <p className="mt-2 text-sm text-muted-foreground">
         Listado de reservas de tu club. Cancelar aquí notifica automáticamente
         a los jugadores con el motivo opcional.
       </p>
+
+      <BookingCreateDialog
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        clubId={clubId}
+      />
 
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">

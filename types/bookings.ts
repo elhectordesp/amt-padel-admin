@@ -269,6 +269,42 @@ export interface AddTesterUserPayload {
   validUntil?: string;
 }
 
+export interface CreateBookingPayload {
+  courtId: string;
+  matchMode: BookingMatchMode;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+  participants?: { userId?: string; guestName?: string }[];
+  isCompetitive?: boolean;
+  openMatchMinLspa?: number;
+  openMatchMaxLspa?: number;
+  notes?: string;
+}
+
+export interface AvailabilityQuery {
+  clubId: string;
+  date: string; // "YYYY-MM-DD"
+  duration?: number;
+  courtType?: CourtType;
+  indoor?: boolean;
+}
+
+export interface AvailableSlot {
+  courtId: string;
+  courtName: string;
+  courtType: string;
+  isIndoor: boolean;
+  startsAt: string; // ISO UTC
+  endsAt: string;
+  startsAtLocal: string; // "HH:mm" local del club
+  durationMinutes: number;
+  priceCents: number;
+  priceBreakdown: {
+    slot: number;
+    extras: { id: string; name: string; cents: number }[];
+  };
+}
+
 export interface BookingFiltersQuery {
   clubId?: string;
   courtId?: string;

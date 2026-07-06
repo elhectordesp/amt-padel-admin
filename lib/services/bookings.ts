@@ -14,6 +14,7 @@ import type {
   Booking,
   BookingExtra,
   BookingFiltersQuery,
+  BookingPaymentMethod,
   ClubBookingConfig,
   ClubOperatingHours,
   ClubRulesResponse,
@@ -25,6 +26,9 @@ import type {
   CreateScheduleExceptionPayload,
   PaginatedBookings,
   AddTesterUserPayload,
+  AvailabilityQuery,
+  AvailableSlot,
+  CreateBookingPayload,
   ReplaceCourtDurationsPayload,
   ReplaceCourtPricingPayload,
   ReplaceOperatingHoursPayload,
@@ -231,11 +235,34 @@ export const bookingsService = {
     detail: (id: string) =>
       api.get<Booking>(`/bookings/${id}`).then((r) => r.data),
 
+    create: (payload: CreateBookingPayload) =>
+      api.post<Booking>(`/bookings`, payload).then((r) => r.data),
+
     cancel: (id: string, reason?: string) =>
       api
         .delete<Booking>(`/bookings/${id}`, { data: { reason } })
         .then((r) => r.data),
+
+    /** Registrar/marcar pago offline (efectivo/manual). method=PENDING revierte. */
+    markPaid: (
+      id: string,
+      payload: {
+        method: BookingPaymentMethod;
+        amountCents?: number;
+        notes?: string;
+      },
+    ) =>
+      api
+        .patch<Booking>(`/bookings/${id}/payment`, payload)
+        .then((r) => r.data),
   },
+
+  // ── Availability (público) ─────────────────────────────────────────────
+
+  availability: (params: AvailabilityQuery) =>
+    api
+      .get<AvailableSlot[]>(`/availability`, { params })
+      .then((r) => r.data),
 };
 
 // ── React Query keys ─────────────────────────────────────────────────────
@@ -259,4 +286,6 @@ export const bookingsQK = {
   bookingsList: (filters: BookingFiltersQuery) =>
     ["bookings", "list", JSON.stringify(filters)] as const,
   bookingDetail: (id: string) => ["bookings", "detail", id] as const,
+  availability: (clubId: string, courtId: string, date: string, duration: number) =>
+    ["bookings", "availability", clubId, courtId, date, duration] as const,
 };
