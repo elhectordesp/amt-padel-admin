@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ShareViewerModal } from "@/components/admin/share-viewer-modal";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
@@ -1400,6 +1401,7 @@ export default function TorneoDetailPage() {
   const [tab,             setTab]           = useState<Tab>("resumen");
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero">("lista");
   const [masView,         setMasView]       = useState<"estado" | "historial">("estado");
+  const [showShare,       setShowShare]     = useState(false);
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
   const [regCatFilter,    setRegCatFilter]  = useState<string>("all");
   const [regSearch,       setRegSearch]     = useState("");
@@ -2150,6 +2152,16 @@ export default function TorneoDetailPage() {
                 <Tv2 size={14} />
                 <span className="hidden sm:inline">Widget TV</span>
               </Link>
+              <button
+                type="button"
+                onClick={() => setShowShare(true)}
+                title="Compartir el visor público (QR y enlace) para jugadores y espectadores, sin login"
+                aria-label="Compartir visor público"
+                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
+              >
+                <Copy size={14} />
+                <span className="hidden sm:inline">Visor público</span>
+              </button>
               <Link
                 href={`/torneos/${id}/editar`}
                 aria-label="Editar torneo"
@@ -4207,6 +4219,13 @@ export default function TorneoDetailPage() {
         isCorrection={resultCorrection}
       />
     )}
+
+    <ShareViewerModal
+      open={showShare}
+      onClose={() => setShowShare(false)}
+      tournamentId={id}
+      tournamentName={tournament?.name}
+    />
 
     <ConfirmModal
       open={!!regenCatId}

@@ -57,9 +57,10 @@ async function toDataUrl(url: string): Promise<string | null> {
   }
 }
 
-export default async function Image({ params }: { params: { id: string } }) {
+export default async function Image({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const [tournament, fontData] = await Promise.all([
-    getTournament(params.id),
+    getTournament(id),
     loadInterFont(),
   ]);
 

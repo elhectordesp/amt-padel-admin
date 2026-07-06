@@ -14,14 +14,15 @@ async function getTournament(id: string) {
 }
 
 export async function generateMetadata(
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ): Promise<Metadata> {
-  const t = await getTournament(params.id);
+  const { id } = await params;
+  const t = await getTournament(id);
   if (!t) return { title: "En directo · AMT Pádel" };
 
   const title       = `${t.name} — En directo · AMT Pádel`;
   const description = `Sigue en tiempo real los resultados de ${t.name}. Marcadores, grupos y clasificación actualizados al momento.`;
-  const ogImageUrl  = `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/torneo/${params.id}/opengraph-image`;
+  const ogImageUrl  = `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/torneo/${id}/opengraph-image`;
 
   return {
     title,
