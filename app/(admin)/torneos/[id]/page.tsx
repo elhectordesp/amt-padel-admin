@@ -1410,6 +1410,7 @@ export default function TorneoDetailPage() {
   const [updatingIds,     setUpdatingIds]   = useState<Set<string>>(new Set());
   const [bracketCatId,       setBracketCatId]       = useState("");
   const [bracketFormat,      setBracketFormat]      = useState("");
+  const [cuadroCatId,        setCuadroCatId]        = useState("");
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [bracketPreview,     setBracketPreview]     = useState<{ groups: PreviewGroup[]; totalMatches: number; isGroups: boolean } | null>(null);
   const [loadingPreview,     setLoadingPreview]     = useState(false);
@@ -3296,8 +3297,31 @@ export default function TorneoDetailPage() {
               )}
             </div>
 
+            {tournament.categories.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {tournament.categories.map((cat) => {
+                  const active = (cuadroCatId || tournament.categories[0]?.id) === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setCuadroCatId(cat.id)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                        active
+                          ? "border-[#D4AF37] bg-[rgba(212,175,55,0.1)] text-[#D4AF37]"
+                          : "border-border text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.4)]"
+                      }`}
+                    >
+                      {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="space-y-4">
-              {tournament.categories.map((cat) => {
+              {tournament.categories
+                .filter((cat) => (cuadroCatId || tournament.categories[0]?.id) === cat.id)
+                .map((cat) => {
                 const allCatMatches = bracketMatches.filter((m: any) => m.categoryId === cat.id);
                 const catMatches    = allCatMatches.filter((m: any) => m.phase === "GROUPS");
                 const elimMatches   = allCatMatches.filter((m: any) => m.phase !== "GROUPS");
@@ -3642,7 +3666,7 @@ export default function TorneoDetailPage() {
                               </p>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {phaseMatches.map((m: any) => {
-                                  const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
+                                  const matchTime = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
                                   // Bloque 4 — swap states
                                   const isSwapSource = swapSourceMatchId === m.id;
                                   const canBeSwapTarget =
@@ -3731,13 +3755,13 @@ export default function TorneoDetailPage() {
                                               <span aria-hidden>✕</span> Cancelar swap
                                             </button>
                                           )}
-                                          {!m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && tournament?.status === "ONGOING" && (
+                                          {!m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(false); }}
-                                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                              className="inline-flex items-center gap-1 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37] transition-colors"
                                               title="Introducir resultado"
                                             >
-                                              <CheckCircle size={9} /> Resultado
+                                              <CheckCircle size={10} /> Meter resultado
                                             </button>
                                           )}
                                           {m.isResult && (
@@ -3771,7 +3795,7 @@ export default function TorneoDetailPage() {
                             <div key={grp} className="bg-secondary/40 border border-border rounded-md p-3 space-y-2">
                               <p className="text-xs font-semibold text-[#D4AF37]">{grp}</p>
                               {grpMatches.map((m: any) => {
-                                const matchTime = m.date ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : null;
+                                const matchTime = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
                                 return (
                                   <div key={m.id} className="space-y-0.5">
                                     <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
@@ -3797,13 +3821,13 @@ export default function TorneoDetailPage() {
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
                                       ) : <span />}
-                                      {!m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && tournament?.status === "ONGOING" && (
+                                      {!m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(false); }}
-                                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#D4AF37] transition-colors"
+                                          className="flex items-center gap-1 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37] transition-colors"
                                           title="Introducir resultado"
                                         >
-                                          <CheckCircle size={9} /> Resultado
+                                          <CheckCircle size={10} /> Meter resultado
                                         </button>
                                       )}
                                       {m.isResult && (
