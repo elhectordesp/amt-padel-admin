@@ -296,7 +296,7 @@ export default function TournamentViewer({
 
             {/* Pestañas (solo móvil) */}
             {mobileTabs.length > 1 && (
-              <div className="sm:hidden flex gap-2 -mb-4">
+              <div className="sm:hidden flex gap-2">
                 {mobileTabs.map((t) => (
                   <button
                     key={t.key}
@@ -316,7 +316,7 @@ export default function TournamentViewer({
             {/* ── GRUPOS / CLASIFICACIÓN ── */}
             {(active.groups?.length ?? 0) > 0 && (
               <section className={`space-y-4 ${secShow("clasif")}`}>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><ListTree size={14} /> Clasificación de grupos</h3>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 hidden sm:flex items-center gap-2"><ListTree size={14} /> Clasificación de grupos</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {active.groups.map((g: any) => (
                     <div key={g.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
@@ -364,7 +364,7 @@ export default function TournamentViewer({
             {hasBracket && (
               <section className={`space-y-4 ${secShow("cuadro")}`}>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Trophy size={14} /> Eliminatoria</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 hidden sm:flex items-center gap-2"><Trophy size={14} /> Eliminatoria</h3>
                   {bracket.champion?.length ? (
                     <span className="text-sm text-[#D4AF37] font-bold flex items-center gap-1">
                       🏆 Campeón:{" "}
@@ -411,7 +411,7 @@ export default function TournamentViewer({
             {/* ── PARTIDOS · HORARIOS Y PISTAS (todos: jugados y por jugar) ── */}
             {catMatches.length > 0 && (
               <section className={`space-y-4 ${secShow("part")}`}>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Calendar size={14} /> Partidos · horarios y pistas</h3>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 hidden sm:flex items-center gap-2"><Calendar size={14} /> Partidos · horarios y pistas</h3>
 
                 {groupBlocks.length > 0 && (
                   <div className="space-y-2">
