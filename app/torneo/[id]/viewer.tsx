@@ -33,6 +33,10 @@ async function fetchJson(url: string) {
 
 const catName = (c: any) => `${c.gender === "M" ? "Masculino" : "Femenino"} · ${CATEGORY_LABEL[c.level] ?? c.level}`;
 const pairLabel = (arr?: string[]) => (arr && arr.length ? arr.join(" / ") : "Por definir");
+// Etiqueta corta (móvil): usa los nombres abreviados del backend; si no llegan
+// (deploy desfasado), cae al nombre completo.
+const pairShort = (short?: string[], full?: string[]) =>
+  pairLabel(short && short.length ? short : full);
 
 function scoreOf(m: any): string {
   if (m.isWalkover) return "W.O.";
@@ -44,11 +48,11 @@ function scoreOf(m: any): string {
 const fmtWhen = (d?: string | null) => (d ? new Date(d).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
 
 // Línea compacta de día·hora · pista (para tarjetas y listas).
-function WhenWhere({ m, className = "" }: { m: any; className?: string }) {
+function WhenWhere({ m, className = "", justify = "justify-center" }: { m: any; className?: string; justify?: string }) {
   const when = fmtWhen(m.date);
   if (!when && !m.court) return null;
   return (
-    <span className={`text-[10px] text-zinc-500 flex items-center justify-center gap-2 flex-wrap ${className}`}>
+    <span className={`text-[10px] text-zinc-500 flex items-center ${justify} gap-2 flex-wrap ${className}`}>
       {when && <span className="flex items-center gap-0.5"><Clock size={9} /> {when}</span>}
       {m.court && <span className="flex items-center gap-0.5"><MapPin size={9} /> {m.court}</span>}
     </span>
@@ -64,15 +68,32 @@ const isFinished = (m: any) => m.status === "FINISHED" || m.status === "finished
 function MatchRow({ m }: { m: any }) {
   const w = winnerNum(m);
   const finished = isFinished(m);
+  const score = finished ? scoreOf(m) || "—" : null;
   return (
-    <div className="px-4 py-2.5 grid items-center gap-2" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
-      <span className={`truncate text-right text-sm ${w === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
-      <span className="text-center flex flex-col items-center leading-tight gap-0.5">
-        <span className={`font-mono text-sm ${finished ? "text-zinc-200" : "text-zinc-600"}`}>{finished ? (scoreOf(m) || "—") : "vs"}</span>
-        <WhenWhere m={m} />
-      </span>
-      <span className={`truncate text-left text-sm ${w === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
-    </div>
+    <>
+      {/* Desktop: pareja · marcador · pareja en una línea */}
+      <div className="hidden sm:grid px-4 py-2.5 items-center gap-2" style={{ gridTemplateColumns: "1fr 130px 1fr" }}>
+        <span className={`truncate text-right text-sm ${w === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team1)}</span>
+        <span className="text-center flex flex-col items-center leading-tight gap-0.5">
+          <span className={`font-mono text-sm ${finished ? "text-zinc-200" : "text-zinc-600"}`}>{score ?? "vs"}</span>
+          <WhenWhere m={m} />
+        </span>
+        <span className={`truncate text-left text-sm ${w === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairLabel(m.team2)}</span>
+      </div>
+      {/* Móvil: parejas apiladas a ancho completo, marcador a la derecha */}
+      <div className="sm:hidden px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className={`text-sm leading-snug ${w === 1 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairShort(m.team1Short, m.team1)}</div>
+            <div className={`text-sm leading-snug ${w === 2 ? "text-white font-semibold" : "text-zinc-300"}`}>{pairShort(m.team2Short, m.team2)}</div>
+          </div>
+          <div className="shrink-0 font-mono text-[13px] leading-snug text-right text-zinc-200 whitespace-nowrap">
+            {score ?? <span className="text-zinc-600">vs</span>}
+          </div>
+        </div>
+        <WhenWhere m={m} justify="justify-start" className="mt-2" />
+      </div>
+    </>
   );
 }
 
@@ -84,14 +105,20 @@ function BracketCard({ m, connectLeft, connectRight }: { m: any; connectLeft?: b
     <div className="relative bg-zinc-900 border border-zinc-800 rounded-lg px-3.5 py-3 w-[230px] shrink-0">
       {connectLeft && <span className="hidden lg:block absolute top-1/2 right-full w-5 h-px bg-zinc-700" aria-hidden />}
       {connectRight && <span className="hidden lg:block absolute top-1/2 left-full w-5 h-px bg-zinc-700" aria-hidden />}
-      <div className={`flex items-center justify-between gap-2 ${m.winner === "team1" ? "text-white font-bold" : undef1 ? "text-zinc-600 italic" : "text-zinc-300"}`}>
-        <span className="truncate text-sm">{pairLabel(m.team1)}</span>
-        {m.winner === "team1" && <span className="text-[#D4AF37]">✓</span>}
+      <div className={`flex items-start justify-between gap-2 ${m.winner === "team1" ? "text-white font-bold" : undef1 ? "text-zinc-600 italic" : "text-zinc-300"}`}>
+        <span className="text-sm leading-tight flex-1 min-w-0">
+          <span className="sm:hidden">{pairShort(m.team1Short, m.team1)}</span>
+          <span className="hidden sm:inline">{pairLabel(m.team1)}</span>
+        </span>
+        {m.winner === "team1" && <span className="text-[#D4AF37] shrink-0">✓</span>}
       </div>
       <div className="text-sm text-zinc-500 font-mono text-center py-1.5 tracking-wide">{scoreOf(m) || "vs"}</div>
-      <div className={`flex items-center justify-between gap-2 ${m.winner === "team2" ? "text-white font-bold" : undef2 ? "text-zinc-600 italic" : "text-zinc-300"}`}>
-        <span className="truncate text-sm">{pairLabel(m.team2)}</span>
-        {m.winner === "team2" && <span className="text-[#D4AF37]">✓</span>}
+      <div className={`flex items-start justify-between gap-2 ${m.winner === "team2" ? "text-white font-bold" : undef2 ? "text-zinc-600 italic" : "text-zinc-300"}`}>
+        <span className="text-sm leading-tight flex-1 min-w-0">
+          <span className="sm:hidden">{pairShort(m.team2Short, m.team2)}</span>
+          <span className="hidden sm:inline">{pairLabel(m.team2)}</span>
+        </span>
+        {m.winner === "team2" && <span className="text-[#D4AF37] shrink-0">✓</span>}
       </div>
       {(m.date || m.court) && (
         <div className="mt-1.5 pt-1.5 border-t border-zinc-800/70">
@@ -117,6 +144,7 @@ export default function TournamentViewer({
   const [matches, setMatches] = useState(initialMatches);
   const [activeCatId, setActiveCatId] = useState<string>(initialCats[0]?.cat.id ?? "");
   const [secs, setSecs] = useState(0);
+  const [mobileTab, setMobileTab] = useState<string>("clasif");
 
   const categories = useMemo(() => initialCats.map((c) => c.cat), [initialCats]);
   const tierColor = TIER_COLOR[tournament.tier] ?? "#D4AF37";
@@ -182,6 +210,18 @@ export default function TournamentViewer({
     }).filter((b: any) => b.items.length > 0);
   })();
 
+  // Pestañas SOLO en móvil (en desktop se ve todo seguido). Solo se muestran
+  // las secciones con contenido; la activa cae a la primera disponible.
+  const hasGroups = (active?.groups?.length ?? 0) > 0;
+  const hasMatchesSection = catMatches.length > 0;
+  const mobileTabs = [
+    hasGroups ? { key: "clasif", label: "Clasificación" } : null,
+    hasBracket ? { key: "cuadro", label: "Cuadro" } : null,
+    hasMatchesSection ? { key: "part", label: "Partidos" } : null,
+  ].filter(Boolean) as { key: string; label: string }[];
+  const curTab = mobileTabs.some((t) => t.key === mobileTab) ? mobileTab : (mobileTabs[0]?.key ?? "clasif");
+  const secShow = (key: string) => (curTab === key ? "" : "hidden") + " sm:block";
+
   return (
     <div className="min-h-screen bg-[#0C0C0C] text-white">
       {/* Header */}
@@ -245,15 +285,37 @@ export default function TournamentViewer({
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">Próximo partido · {nextMatch._label}</p>
-                  <p className="text-sm text-white truncate">{pairLabel(nextMatch.team1)} <span className="text-zinc-500">vs</span> {pairLabel(nextMatch.team2)}</p>
+                  <p className="text-sm text-white">
+                    <span className="sm:hidden">{pairShort(nextMatch.team1Short, nextMatch.team1)} <span className="text-zinc-500">vs</span> {pairShort(nextMatch.team2Short, nextMatch.team2)}</span>
+                    <span className="hidden sm:inline">{pairLabel(nextMatch.team1)} <span className="text-zinc-500">vs</span> {pairLabel(nextMatch.team2)}</span>
+                  </p>
                   <div className="mt-0.5"><WhenWhere m={nextMatch} className="justify-start" /></div>
                 </div>
               </div>
             )}
 
+            {/* Pestañas (solo móvil) */}
+            {mobileTabs.length > 1 && (
+              <div className="sm:hidden flex gap-2 -mb-4">
+                {mobileTabs.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setMobileTab(t.key)}
+                    className={`flex-1 text-xs font-semibold rounded-lg px-3 py-2 border transition-colors ${
+                      curTab === t.key
+                        ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                        : "border-zinc-700 text-zinc-400"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* ── GRUPOS / CLASIFICACIÓN ── */}
             {(active.groups?.length ?? 0) > 0 && (
-              <section className="space-y-4">
+              <section className={`space-y-4 ${secShow("clasif")}`}>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><ListTree size={14} /> Clasificación de grupos</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {active.groups.map((g: any) => (
@@ -277,9 +339,10 @@ export default function TournamentViewer({
                             const qualifies = i < (g.qualifyCount ?? 2);
                             return (
                               <tr key={m.userId ?? i} className={`border-b border-zinc-800/50 last:border-0 ${qualifies ? "bg-[rgba(212,175,55,0.06)]" : ""}`}>
-                                <td className="px-3 py-2.5 font-medium text-white max-w-[190px] truncate">
-                                  <span className={`inline-block w-5 text-center mr-1.5 font-bold ${qualifies ? "text-[#D4AF37]" : "text-zinc-600"}`}>{i + 1}</span>
-                                  {m.name ?? "—"}
+                                <td className="px-3 py-2.5 font-medium text-white">
+                                  <span className={`inline-block w-5 text-center mr-1.5 font-bold align-top ${qualifies ? "text-[#D4AF37]" : "text-zinc-600"}`}>{i + 1}</span>
+                                  <span className="sm:hidden">{m.nameShort ?? m.name ?? "—"}</span>
+                                  <span className="hidden sm:inline">{m.name ?? "—"}</span>
                                 </td>
                                 <td className="px-2 py-2.5 text-center text-zinc-400">{m.played}</td>
                                 <td className="px-2 py-2.5 text-center text-zinc-400">{m.wins}</td>
@@ -299,11 +362,15 @@ export default function TournamentViewer({
 
             {/* ── ELIMINATORIA ── */}
             {hasBracket && (
-              <section className="space-y-4">
+              <section className={`space-y-4 ${secShow("cuadro")}`}>
                 <div className="flex items-center gap-3 flex-wrap">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Trophy size={14} /> Eliminatoria</h3>
                   {bracket.champion?.length ? (
-                    <span className="text-sm text-[#D4AF37] font-bold flex items-center gap-1">🏆 Campeón: {bracket.champion.join(" / ")}</span>
+                    <span className="text-sm text-[#D4AF37] font-bold flex items-center gap-1">
+                      🏆 Campeón:{" "}
+                      <span className="sm:hidden">{(bracket.championShort?.length ? bracket.championShort : bracket.champion).join(" / ")}</span>
+                      <span className="hidden sm:inline">{bracket.champion.join(" / ")}</span>
+                    </span>
                   ) : null}
                 </div>
                 {(() => {
@@ -343,7 +410,7 @@ export default function TournamentViewer({
 
             {/* ── PARTIDOS · HORARIOS Y PISTAS (todos: jugados y por jugar) ── */}
             {catMatches.length > 0 && (
-              <section className="space-y-4">
+              <section className={`space-y-4 ${secShow("part")}`}>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Calendar size={14} /> Partidos · horarios y pistas</h3>
 
                 {groupBlocks.length > 0 && (
