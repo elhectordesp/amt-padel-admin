@@ -80,7 +80,7 @@ export default function EliminarCuentaPage() {
           </div>
 
           <div style={{ marginTop: 40, fontSize: 11, color: "#555", borderTop: "1px solid #1a1a1a", paddingTop: 16 }}>
-            AMT Pádel · <a href="/privacidad.pdf" style={{ color: "#D4AF37" }}>Privacy Policy</a>
+            AMT Pádel · <a href="/privacidad" style={{ color: "#D4AF37" }}>Privacy Policy</a>
           </div>
 
         </div>
