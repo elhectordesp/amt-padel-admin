@@ -206,7 +206,7 @@ function ConflictModal({
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
   matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, onEditPairs, tournament, tournamentId,
-  scheduleWarnings, onClearWarnings,
+  scheduleWarnings, onClearWarnings, onCreateAt,
 }: {
   matches:          MatchResult[];
   loading:          boolean;
@@ -220,6 +220,7 @@ function CalendarTab({
   tournamentId:     string;
   scheduleWarnings: { pair: string; phase: string; category: string }[];
   onClearWarnings:  () => void;
+  onCreateAt?:      (target: { date: string; court: string }) => void;
 }) {
   const qc = useQueryClient();
 
@@ -320,6 +321,27 @@ function CalendarTab({
         qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
         qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Mover partido desde la rejilla (drag&drop). Reutiliza patchMatch; si hay
+  // conflictos, pide confirmación para forzar.
+  const moveMut = useMutation({
+    mutationFn: ({ matchId, data }: { matchId: string; data: { date?: string; court?: string; force?: boolean } }) =>
+      adminService.schedule.patchMatch(matchId, data),
+    onSuccess: (res, { matchId, data }) => {
+      if (res.conflicts?.length > 0 && !data.force) {
+        const desc = res.conflicts.map((c) => `• ${c.description}`).join("\n");
+        if (typeof window !== "undefined" &&
+            window.confirm(`Conflictos detectados:\n${desc}\n\n¿Mover el partido igualmente?`)) {
+          moveMut.mutate({ matchId, data: { ...data, force: true } });
+        }
+        return;
+      }
+      toast.success("Partido movido");
+      qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -572,6 +594,17 @@ function CalendarTab({
           tournament={tournament}
           onMatchClick={onMatchClick}
           onCorrectClick={onCorrectClick}
+          onMove={(m, target) => moveMut.mutate({ matchId: m.id, data: { date: target.date, court: target.court } })}
+          onDelete={(m) => {
+            const finished = !!(m as { isResult?: boolean }).isResult;
+            if (typeof window !== "undefined" &&
+                window.confirm(finished
+                  ? "Este partido ya tiene resultado. ¿Borrarlo igualmente?"
+                  : "¿Borrar este partido?")) {
+              deleteMatchMut.mutate({ matchId: m.id, force: finished });
+            }
+          }}
+          onCreateAt={onCreateAt}
         />
       ) : (
         // Per-category sections (lista)
@@ -1421,6 +1454,10 @@ export default function TorneoDetailPage() {
   const [regenElimCatId,     setRegenElimCatId]     = useState<string | null>(null);
   const [manualCrossCatId,   setManualCrossCatId]   = useState<string | null>(null);
   const [createMatchCatId,   setCreateMatchCatId]   = useState<string | null>(null);
+  // Crear partido desde un hueco de la rejilla: hora/pista pre-rellenadas y, si
+  // hay varias categorías, un selector previo.
+  const [createAt,           setCreateAt]           = useState<{ date: string; court: string } | null>(null);
+  const [pickCatFor,         setPickCatFor]         = useState<{ date: string; court: string } | null>(null);
   const [editPairsMatch,     setEditPairsMatch]     = useState<any | null>(null);
   const [editStatsTarget,    setEditStatsTarget]    = useState<any | null>(null);
   const [availRegId,         setAvailRegId]         = useState<string | null>(null);
@@ -2926,6 +2963,15 @@ export default function TorneoDetailPage() {
             tournamentId={id}
             scheduleWarnings={scheduleWarnings}
             onClearWarnings={() => setScheduleWarnings([])}
+            onCreateAt={(target) => {
+              const cats = tournament.categories;
+              if (cats.length === 1) {
+                setCreateAt(target);
+                setCreateMatchCatId(cats[0].id);
+              } else {
+                setPickCatFor(target);
+              }
+            }}
           />
         )}
 
@@ -3997,13 +4043,36 @@ export default function TorneoDetailPage() {
       />
     )}
 
+    {/* Selector de categoría al crear desde un hueco de la rejilla */}
+    {pickCatFor && tournament && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPickCatFor(null)}>
+        <div className="bg-card border border-border rounded-lg p-5 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+          <p className="text-sm font-semibold text-foreground">¿Para qué categoría?</p>
+          <div className="grid grid-cols-1 gap-2">
+            {tournament.categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => { setCreateAt(pickCatFor); setCreateMatchCatId(cat.id); setPickCatFor(null); }}
+                className="text-left px-3 py-2 rounded-md border border-border text-sm text-foreground hover:border-[rgba(212,175,55,0.4)] hover:bg-secondary/40 transition-colors"
+              >
+                {catOptions.find((c) => c.value === cat.id)?.label ?? cat.id}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setPickCatFor(null)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+        </div>
+      </div>
+    )}
+
     {/* Frente 2 — Dialog Crear partido a mano */}
     {createMatchCatId && tournament && (
       <MatchCreateDialog
         open={!!createMatchCatId}
-        onClose={() => setCreateMatchCatId(null)}
+        onClose={() => { setCreateMatchCatId(null); setCreateAt(null); }}
         tournamentId={id}
         categoryId={createMatchCatId}
+        initialDate={createAt?.date}
+        initialCourt={createAt?.court}
         categoryLabel={
           (catOptions.find((c) => c.value === createMatchCatId)?.label) ?? "Categoría"
         }

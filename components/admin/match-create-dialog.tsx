@@ -33,6 +33,9 @@ interface Props {
   groups: MatchCreateGroup[];
   pairs: MatchCreatePair[];
   onCreated?: () => void;
+  /** Prefill al crear desde un hueco de la rejilla ("YYYY-MM-DDTHH:MM" y nombre de pista). */
+  initialDate?: string;
+  initialCourt?: string;
 }
 
 const PHASES = [
@@ -53,13 +56,15 @@ export function MatchCreateDialog({
   groups,
   pairs,
   onCreated,
+  initialDate,
+  initialCourt,
 }: Props) {
   const [target, setTarget] = useState<string>(groups[0]?.id ?? "free"); // groupId | "free"
   const [phase, setPhase] = useState("QF");
   const [team1, setTeam1] = useState("");
   const [team2, setTeam2] = useState("");
-  const [date, setDate] = useState("");
-  const [court, setCourt] = useState("");
+  const [date, setDate] = useState(initialDate ?? "");
+  const [court, setCourt] = useState(initialCourt ?? "");
   const [saving, setSaving] = useState(false);
 
   if (!open) return null;
