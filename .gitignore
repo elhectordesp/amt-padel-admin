@@ -41,3 +41,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code: ajustes personales de cada maquina. Nunca versionar:
+# pueden acabar conteniendo comandos con credenciales.
+.claude/settings.local.json
+.claude/worktrees/
