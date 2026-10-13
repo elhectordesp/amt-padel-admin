@@ -40,6 +40,33 @@ export interface BracketGenerationOptions {
   eliminationStartRound?: 'R32' | 'R16' | 'QF' | 'SF' | 'F';
 }
 
+/** Tope de seguridad: 100 páginas × 200 = 20.000 filas. */
+const MAX_PAGES = 100;
+
+/**
+ * Pide TODAS las páginas de un listado paginado del back ({ data, total }).
+ * Pedir solo la primera dejaba los torneos grandes cortados sin avisar
+ * (inscripciones a 50, partidos a 200): faltaban filas en la lista, la CSV,
+ * la impresión y el editor de grupos. `pageSize` no debe pasar del máximo
+ * del endpoint (el back lo recorta y las páginas se solaparían).
+ */
+export async function fetchAllPages<T>(
+  url: string,
+  params: Record<string, string | number | undefined> = {},
+  pageSize = 200,
+): Promise<T[]> {
+  const items: T[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const { data: body } = await api.get<any>(url, { params: { ...params, page, pageSize } });
+    if (Array.isArray(body)) return body as T[]; // endpoint sin paginar
+    const batch: T[] = body?.data ?? [];
+    items.push(...batch);
+    const total: number = body?.total ?? items.length;
+    if (batch.length === 0 || items.length >= total) break;
+  }
+  return items;
+}
+
 export const adminService = {
   me: () =>
     api.get<AdminUser>("/auth/me").then((r) => r.data),
@@ -288,7 +315,8 @@ export const adminService = {
   },
 
   registrations: {
-    list:         (tournamentId: string)               => api.get<any>(`/admin/tournaments/${tournamentId}/registrations`).then((r) => (r.data?.data ?? r.data ?? []) as AdminRegistration[]),
+    // Todas: el back pagina (máx. 200 por página).
+    list:         (tournamentId: string)               => fetchAllPages<AdminRegistration>(`/admin/tournaments/${tournamentId}/registrations`, {}, 200),
     count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
@@ -339,16 +367,13 @@ export const adminService = {
   },
 
   matches: {
-    list: (tournamentId: string, params?: { categoryId?: string; phase?: string; status?: string; page?: number; pageSize?: number }) => {
-      const query = new URLSearchParams();
-      if (params?.categoryId) query.set('categoryId', params.categoryId);
-      if (params?.phase)      query.set('phase',      params.phase);
-      if (params?.status)     query.set('status',     params.status);
-      if (params?.page)       query.set('page',       String(params.page));
-      if (params?.pageSize)   query.set('pageSize',   String(params.pageSize));
-      const qs = query.toString();
-      return api.get<any>(`/admin/tournaments/${tournamentId}/matches${qs ? `?${qs}` : ''}`).then((r) => {
-        const items: any[] = r.data?.data ?? r.data ?? [];
+    // Todos los partidos (el back pagina, máx. 500 por página).
+    list: (tournamentId: string, params?: { categoryId?: string; phase?: string; status?: string }) => {
+      return fetchAllPages<any>(
+        `/admin/tournaments/${tournamentId}/matches`,
+        { categoryId: params?.categoryId, phase: params?.phase, status: params?.status },
+        500,
+      ).then((items) => {
         return items.map((m: any): MatchResult => ({
           ...m,
           categoryId: m.categoryId ?? m.category?.id,
