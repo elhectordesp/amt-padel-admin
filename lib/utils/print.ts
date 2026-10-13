@@ -2,13 +2,22 @@
 import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 
-function esc(s: string | null | undefined): string {
-  return (s ?? "")
+// Las ventanas de impresión comparten origen con el admin: cualquier dato que
+// venga del back (nombres, pistas, categorías, fases) pasa por esc().
+function esc(s: string | number | null | undefined): string {
+  return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+const DEFAULT_ACCENT = "#D4AF37";
+
+/** El color va dentro de <style>: solo #rrggbb, si no el de por defecto. */
+function safeColor(c: unknown): string {
+  return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
 }
 
 interface PairReg {
@@ -55,8 +64,8 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
             ${reg.partner?.name ? `<br><span class="secondary">${esc(reg.partner.name)}</span>` : "<br><span class='secondary italic'>Sin pareja</span>"}
           </td>
           <td class="center">
-            ${reg.user.categoryLevel ?? "—"}
-            ${reg.partner?.categoryLevel ? `<br><span class="secondary">${reg.partner.categoryLevel}</span>` : ""}
+            ${esc(reg.user.categoryLevel ?? "—")}
+            ${reg.partner?.categoryLevel ? `<br><span class="secondary">${esc(reg.partner.categoryLevel)}</span>` : ""}
           </td>
           <td class="center">
             ${spa1}
@@ -75,7 +84,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
     return `
       <div class="category-block">
         <div class="category-header">
-          <span>${genderLabel} · ${level}</span>
+          <span>${genderLabel} · ${esc(level)}</span>
           <span class="cat-count">${catPairs.length} inscripciones</span>
         </div>
         <table>
@@ -172,7 +181,7 @@ export function printTournamentReport(
   tournament: Tournament,
   matches:    MatchResult[],
 ): void {
-  const accent = (tournament as any).imageColor ?? "#D4AF37";
+  const accent = safeColor((tournament as any).imageColor);
 
   const catMap: Record<string, string> = {};
   for (const c of tournament.categories ?? []) {
@@ -432,8 +441,8 @@ export function printSchedule(
 
     const rows = sorted.map((m, i) => {
       const time    = new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-      const cat     = catMap[m.categoryId ?? ""] ?? "—";
-      const phase   = PHASE_LABEL[m.phase] ?? m.phase;
+      const cat     = esc(catMap[m.categoryId ?? ""] ?? "—");
+      const phase   = esc(PHASE_LABEL[m.phase] ?? m.phase);
       const t1      = m.team1.map(esc).join(" / ") || "—";
       const t2      = m.team2.map(esc).join(" / ") || "—";
       const done    = m.status === "finished";
@@ -444,18 +453,18 @@ export function printSchedule(
       const w2 = m.winner === "team2";
       return `
         <tr class="${i % 2 === 0 ? "row-alt" : ""}">
-          <td class="center time">${time}</td>
-          <td class="center">${m.court ?? "—"}</td>
+          <td class="center time">${esc(time)}</td>
+          <td class="center">${esc(m.court ?? "—")}</td>
           <td class="center">${cat}</td>
           <td class="center phase">${phase}</td>
           <td class="${w1 ? "winner" : ""}">${t1}</td>
           <td class="center vs">vs</td>
           <td class="${w2 ? "winner" : ""}">${t2}</td>
-          <td class="center">${done ? `<span class="score">${score || "—"}</span>` : '<span class="pending">Pendiente</span>'}</td>
+          <td class="center">${done ? `<span class="score">${esc(score || "—")}</span>` : '<span class="pending">Pendiente</span>'}</td>
         </tr>`;
     }).join("");
 
-    const label = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+    const label = esc(dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1));
     return `
       <div class="day-block">
         <div class="day-header">${label}<span class="match-count">${dayMatches.length} partido(s)</span></div>
