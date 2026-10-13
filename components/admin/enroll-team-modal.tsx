@@ -127,7 +127,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
               type="text"
               value={slot.query}
               onChange={(e) => handleQueryChange(e.target.value, setSlot, debounceRef)}
-              placeholder="Buscar por nombre, email o teléfono…"
+              placeholder="Buscar por nombre o email…"
               className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
             {slot.player && (

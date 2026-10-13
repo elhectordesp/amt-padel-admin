@@ -295,7 +295,7 @@ function TestersSection({ clubId }: { clubId: string }) {
               <div>
                 <p className="text-sm font-medium">{t.user?.name ?? "—"}</p>
                 <p className="text-xs text-muted-foreground">
-                  {t.user?.email ?? t.userId} · Hasta{" "}
+                  {t.user?.email ? `${t.user.email} · ` : ""}Hasta{" "}
                   {new Date(t.validUntil).toLocaleString("es-ES", {
                     dateStyle: "short",
                     timeStyle: "short",
