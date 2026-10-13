@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { printRegistrations, printSchedule } from '../../../lib/utils/print';
+import { printRegistrations, printSchedule, printTournamentReport } from '../../../lib/utils/print';
 
 const makeMockWindow = () => {
   let html = '';
@@ -111,6 +111,19 @@ describe('printRegistrations', () => {
     expect(html).not.toContain('<bad>');
   });
 
+  it('escapa el nivel del jugador, del partner y de la categoría', () => {
+    const pair = makePair();
+    pair.primary.user.categoryLevel = '<i>4a';
+    pair.primary.partner = { name: 'Bea', spaPoints: null, categoryLevel: '<b>3a' };
+    pair.primary.category.level = '<u>4a';
+    printRegistrations(makeTournament(), [pair]);
+    const html = mockData.getHtml();
+    expect(html).toContain('&lt;i&gt;4a');
+    expect(html).toContain('&lt;b&gt;3a');
+    expect(html).toContain('&lt;u&gt;4a');
+    expect(html).not.toMatch(/<[ibu]>/);
+  });
+
   it('filtra inscripciones CANCELLED', () => {
     const cancelled = makePair({ status: 'CANCELLED' });
     printRegistrations(makeTournament(), [cancelled]);
@@ -187,6 +200,30 @@ describe('printSchedule', () => {
     expect(html).toContain('&quot;&gt;&lt;svg/onload=alert(1)&gt;');
   });
 
+  it('escapa XSS en el nombre de la pista (lo escribe un club)', () => {
+    printSchedule(
+      makeTournament(),
+      [makeMatch({ court: '<img src=x onerror=alert(1)>' })],
+      {},
+    );
+    const html = mockData.getHtml();
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img');
+  });
+
+  it('escapa la categoría y una fase desconocida', () => {
+    printSchedule(
+      makeTournament(),
+      [makeMatch({ phase: '<b>RARA' })],
+      { 'cat-1': '<script>cat</script>' },
+    );
+    const html = mockData.getHtml();
+    expect(html).toContain('&lt;script&gt;cat&lt;/script&gt;');
+    expect(html).toContain('&lt;b&gt;RARA');
+    expect(html).not.toContain('<script>cat');
+    expect(html).not.toContain('<b>RARA');
+  });
+
   it('no hace nada si window.open devuelve null', () => {
     openSpy.mockReturnValue(null as unknown as Window);
     expect(() => printSchedule(makeTournament(), [makeMatch()], {})).not.toThrow();
@@ -208,5 +245,59 @@ describe('printSchedule', () => {
   it('muestra "Pendiente" cuando el partido no está FINISHED', () => {
     printSchedule(makeTournament(), [makeMatch({ status: 'pending' })], {});
     expect(mockData.getHtml()).toContain('Pendiente');
+  });
+});
+
+// ── printTournamentReport ──────────────────────────────────────────────────
+
+describe('printTournamentReport', () => {
+  let openSpy: ReturnType<typeof vi.spyOn>;
+  let mockData: ReturnType<typeof makeMockWindow>;
+
+  beforeEach(() => {
+    mockData = makeMockWindow();
+    openSpy = vi.spyOn(window, 'open').mockReturnValue(mockData.win as unknown as Window);
+  });
+
+  afterEach(() => {
+    openSpy.mockRestore();
+  });
+
+  const finalMatch: any = {
+    id: 'm1',
+    date: '2026-05-11T18:00:00Z',
+    court: 'Central',
+    categoryId: 'cat-1',
+    phase: 'FINAL',
+    team1: ['Ana', 'Bea'],
+    team2: ['Carla', 'Dora'],
+    status: 'finished',
+    sets1: [6, 6],
+    sets2: [4, 3],
+    winner: 'team1',
+  };
+
+  it('usa el color del torneo si es #rrggbb', () => {
+    printTournamentReport(makeTournament({ imageColor: '#1A1400' }), [finalMatch]);
+    expect(mockData.getHtml()).toContain('border-bottom: 3px solid #1A1400');
+  });
+
+  it('un color que no es #rrggbb no llega al CSS: usa el de por defecto', () => {
+    const evil = 'red}</style><script>alert(1)</script><style>';
+    printTournamentReport(makeTournament({ imageColor: evil }), [finalMatch]);
+    const html = mockData.getHtml();
+    expect(html).not.toContain('<script>alert(1)');
+    expect(html).toContain('border-bottom: 3px solid #D4AF37');
+  });
+
+  it('escapa la categoría, la pista y los equipos', () => {
+    printTournamentReport(
+      makeTournament({ categories: [{ id: 'cat-1', gender: 'M', level: '<b>4a' }] }),
+      [{ ...finalMatch, court: '<i>Central', team1: ['<u>Ana', 'Bea'] }],
+    );
+    const html = mockData.getHtml();
+    expect(html).toContain('&lt;b&gt;4a');
+    expect(html).toContain('&lt;u&gt;Ana');
+    expect(html).not.toMatch(/<[biu]>/);
   });
 });
