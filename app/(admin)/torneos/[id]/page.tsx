@@ -1103,7 +1103,7 @@ function CourtBoard({
 
   const { data: allMatches = [], isLoading } = useQuery<MatchResult[]>({
     queryKey: ["matches-board", tournamentId],
-    queryFn:  () => adminService.matches.list(tournamentId, { pageSize: 500 }),
+    queryFn:  () => adminService.matches.list(tournamentId),
   });
 
   const scheduled = useMemo(

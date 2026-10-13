@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../lib/api', () => ({
   api: {
@@ -176,6 +176,70 @@ describe('adminService', () => {
       mockGet.mockResolvedValueOnce({ data: null });
       const result = await adminService.matches.list('t1');
       expect(result).toEqual([]);
+    });
+
+    it('pide todas las páginas (de 500) con los filtros', async () => {
+      const m = (id: string) => ({ id, status: 'SCHEDULED', players: [], sets: [] });
+      mockGet
+        .mockResolvedValueOnce({ data: { data: [m('m1'), m('m2')], total: 3, page: 1, pageSize: 2 } })
+        .mockResolvedValueOnce({ data: { data: [m('m3')], total: 3, page: 2, pageSize: 2 } });
+
+      const result = await adminService.matches.list('t1', { categoryId: 'c1' });
+
+      expect(result.map((r) => r.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(mockGet).toHaveBeenNthCalledWith(1, '/admin/tournaments/t1/matches', {
+        params: { categoryId: 'c1', phase: undefined, status: undefined, page: 1, pageSize: 500 },
+      });
+      expect(mockGet).toHaveBeenNthCalledWith(2, '/admin/tournaments/t1/matches', {
+        params: expect.objectContaining({ page: 2, pageSize: 500 }),
+      });
+    });
+  });
+
+  // ── Registrations — todas las páginas ───────────────────────────────
+
+  describe('registrations.list', () => {
+    // clearAllMocks no borra las respuestas pendientes: que no lleguen a otros tests.
+    afterEach(() => mockGet.mockReset());
+
+    // Antes solo pedía la primera página (50): en torneos de más de 50
+    // inscripciones faltaban filas en la lista, la CSV y el editor de grupos.
+    it('junta todas las páginas hasta el total', async () => {
+      const page = (ids: string[], total: number) => ({
+        data: { data: ids.map((id) => ({ id })), total, page: 1, pageSize: 200 },
+      });
+      mockGet
+        .mockResolvedValueOnce(page(['r1', 'r2'], 5))
+        .mockResolvedValueOnce(page(['r3', 'r4'], 5))
+        .mockResolvedValueOnce(page(['r5'], 5));
+
+      const result = await adminService.registrations.list('t1');
+
+      expect(result.map((r) => r.id)).toEqual(['r1', 'r2', 'r3', 'r4', 'r5']);
+      expect(mockGet).toHaveBeenCalledTimes(3);
+      expect(mockGet).toHaveBeenLastCalledWith('/admin/tournaments/t1/registrations', {
+        params: { page: 3, pageSize: 200 },
+      });
+    });
+
+    it('para si una página llega vacía aunque el total diga más', async () => {
+      mockGet
+        .mockResolvedValueOnce({ data: { data: [{ id: 'r1' }], total: 10 } })
+        .mockResolvedValueOnce({ data: { data: [], total: 10 } });
+
+      const result = await adminService.registrations.list('t1');
+
+      expect(result).toHaveLength(1);
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('nunca pide más de 100 páginas', async () => {
+      mockGet.mockResolvedValue({ data: { data: [{ id: 'r' }], total: 1_000_000 } });
+
+      const result = await adminService.registrations.list('t1');
+
+      expect(mockGet).toHaveBeenCalledTimes(100);
+      expect(result).toHaveLength(100);
     });
   });
 
