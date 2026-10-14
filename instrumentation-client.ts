@@ -1,5 +1,9 @@
 import * as Sentry from '@sentry/nextjs';
 
+// Next carga este archivo en el navegador antes de que la app sea
+// interactiva (también con Turbopack, que no inyectaba el antiguo
+// sentry.client.config.ts: Sentry no llegaba a iniciarse en el cliente).
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
@@ -11,3 +15,6 @@ Sentry.init({
     'Network Error',
   ],
 });
+
+// Navegaciones del App Router (rendimiento en Sentry).
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

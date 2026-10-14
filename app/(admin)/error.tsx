@@ -1,17 +1,19 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function AdminError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("[Admin Error]", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (
@@ -26,7 +28,7 @@ export default function AdminError({
         </p>
       </div>
       <button
-        onClick={reset}
+        onClick={() => retry()}
         className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors"
       >
         <RefreshCw size={14} />

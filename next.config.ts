@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
   images: {
@@ -20,6 +20,6 @@ export default withSentryConfig(nextConfig, {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
   sourcemaps: { disable: true },
-  disableLogger: true,
-  automaticVercelMonitors: false,
+  // disableLogger y automaticVercelMonitors: obsoletos y sin efecto con
+  // Turbopack (el segundo ya era false por defecto).
 });
