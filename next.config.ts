@@ -20,6 +20,9 @@ export default withSentryConfig(nextConfig, {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
   sourcemaps: { disable: true },
+  // Los eventos del navegador pasan por el propio panel: los bloqueadores de
+  // anuncios cortan *.ingest.sentry.io. Excluida del middleware.
+  tunnelRoute: "/monitoring",
   // disableLogger y automaticVercelMonitors: obsoletos y sin efecto con
   // Turbopack (el segundo ya era false por defecto).
 });

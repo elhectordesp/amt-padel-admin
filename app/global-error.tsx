@@ -13,7 +13,9 @@ export default function GlobalError({
   retry: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    // Con digest es un error del servidor: ya lo envió onRequestError
+    // (instrumentation.ts) con el error real; aquí llega uno genérico.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   return (
