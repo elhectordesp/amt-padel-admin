@@ -230,6 +230,8 @@ export default function JugadorDetailPage() {
                       ? "bg-green-500"
                       : player.activationStatus === "invited"
                       ? "bg-yellow-500"
+                      : player.activationStatus === "invite_expired"
+                      ? "bg-red-500"
                       : "bg-orange-500"
                   }`}>
                     {player.activationStatus === "active"
@@ -255,9 +257,11 @@ export default function JugadorDetailPage() {
                     const cfg = {
                       pending_invite: { label: "Sin invitar",        cls: "bg-orange-500/10 text-orange-400 border-orange-500/30", Icon: AlertCircle },
                       invited:        { label: "Invitado — pendiente", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30", Icon: Clock       },
+                      invite_expired: { label: "Invitación caducada",  cls: "bg-red-500/10 text-red-400 border-red-500/30",          Icon: AlertCircle },
                       active:         { label: "Cuenta gestionada",    cls: "bg-blue-500/10 text-blue-400 border-blue-500/30",       Icon: ShieldCheck  },
                     };
-                    const s = cfg[player.activationStatus ?? "active"];
+                    // Un estado que este panel aún no conozca no rompe la ficha
+                    const s = cfg[player.activationStatus ?? "active"] ?? cfg.active;
                     return (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${s.cls}`}>
                         <s.Icon size={10} /> {s.label}
