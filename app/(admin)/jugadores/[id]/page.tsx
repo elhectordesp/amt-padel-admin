@@ -865,7 +865,7 @@ export default function JugadorDetailPage() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? No podrá volver a entrar con esta cuenta y se borrarán sus datos de contacto. Su nombre se mantiene en los cuadros y resultados en los que jugó. Su email queda libre: si vuelve, será como una cuenta nueva, sin su historial.
+              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? No podrá volver a entrar con esta cuenta y se borrarán sus datos de contacto. Su nombre se mantiene en los cuadros y resultados en los que jugó. Sus inscripciones en torneos que aún no tienen cuadro se cancelan, también la de su pareja, a la que se avisa. Su email queda libre: si vuelve, será como una cuenta nueva, sin su historial.
             </p>
             <div className="flex gap-3 pt-1">
               <button
