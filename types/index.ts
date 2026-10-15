@@ -225,7 +225,8 @@ export interface Player {
   matches?:       PlayerMatch[];
   managedByAdmin?:   boolean;
   invitedAt?:        string | null;
-  activationStatus?: "pending_invite" | "invited" | "active";
+  // invite_expired: se le invitó pero el enlace ya caducó (hay que reenviarlo)
+  activationStatus?: "pending_invite" | "invited" | "invite_expired" | "active";
 }
 
 export interface AdminEnrollTeamPayload {

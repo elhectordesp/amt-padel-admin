@@ -57,6 +57,23 @@ const EMPTY_FORM: CreatePlayerPayload = {
   email: "", phone: "", city: "", categoryLevel: undefined,
 };
 
+/** Filtros por acceso a la app ("Caducadas": invitación con el enlace ya caducado). */
+type ActivationFilter = "all" | "unactivated" | "invite_expired" | "active";
+
+/** Aviso bajo el nombre de un jugador sin acceso a la app. */
+function AccessWarning({ status }: { status?: string }) {
+  const text =
+    status === "pending_invite" ? "Sin acceso a la app — añadir email"
+    : status === "invite_expired" ? "Invitación caducada — reenviarla"
+    : null;
+  if (!text) return null;
+  return (
+    <p className="flex items-center gap-1 text-[10px] font-medium text-orange-400 mt-0.5">
+      <AlertTriangle size={10} /> {text}
+    </p>
+  );
+}
+
 export default function JugadoresPage() {
   const router  = useRouter();
   const qc      = useQueryClient();
@@ -66,7 +83,7 @@ export default function JugadoresPage() {
   const [search,       setSearch]       = useState("");
   const [genderFilter,     setGenderFilter]     = useState<"all" | Gender>("all");
   const [levelFilter,      setLevelFilter]      = useState<"all" | CategoryLevel>("all");
-  const [activationFilter, setActivationFilter] = useState<"all" | "unactivated" | "active">("all");
+  const [activationFilter, setActivationFilter] = useState<ActivationFilter>("all");
   const [sorting,      setSorting]      = useState<SortingState>([{ id: "points", desc: true }]);
   const sortBy  = sorting[0]?.id   ?? "points";
   const sortDir = sorting[0]?.desc === false ? "asc" : "desc";
@@ -160,12 +177,7 @@ export default function JugadoresPage() {
             {row.original.partner && (
               <p className="text-xs text-muted-foreground">c/ {row.original.partner}</p>
             )}
-            {row.original.activationStatus === "pending_invite" && (
-              <p className="flex items-center gap-1 text-[10px] font-medium text-orange-400 mt-0.5">
-                <AlertTriangle size={10} />
-                Sin acceso a la app — añadir email
-              </p>
-            )}
+            <AccessWarning status={row.original.activationStatus} />
           </div>
         </div>
       ),
@@ -292,16 +304,17 @@ export default function JugadoresPage() {
 
           <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
             {([
-              { key: "all",        label: "Todos"        },
-              { key: "unactivated", label: "Sin activar"  },
-              { key: "active",     label: "Activados"    },
-            ] as { key: "all" | "unactivated" | "active"; label: string }[]).map((f) => (
+              { key: "all",            label: "Todos"        },
+              { key: "unactivated",    label: "Sin activar"  },
+              { key: "invite_expired", label: "Caducadas"    },
+              { key: "active",         label: "Activados"    },
+            ] as { key: ActivationFilter; label: string }[]).map((f) => (
               <button
                 key={f.key}
                 onClick={() => setActivationFilter(f.key)}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   activationFilter === f.key
-                    ? f.key === "unactivated"
+                    ? f.key === "unactivated" || f.key === "invite_expired"
                       ? "bg-orange-500/10 text-orange-400 border border-orange-500/30"
                       : "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
                     : "text-muted-foreground hover:text-foreground"
@@ -433,11 +446,7 @@ export default function JugadoresPage() {
                         {CATEGORY_LABEL[p.level]}
                       </span>
                     </div>
-                    {p.activationStatus === "pending_invite" && (
-                      <p className="flex items-center gap-1 text-[10px] font-medium text-orange-400 mt-1.5">
-                        <AlertTriangle size={10} /> Sin acceso a la app — añadir email
-                      </p>
-                    )}
+                    <AccessWarning status={p.activationStatus} />
                     {p.partner && (
                       <p className="text-[11px] text-muted-foreground mt-1.5 truncate">c/ {p.partner}</p>
                     )}
