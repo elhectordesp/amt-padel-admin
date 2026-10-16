@@ -92,9 +92,14 @@ export default function JugadorDetailPage() {
 
   const deleteMutation = useMutation({
     mutationFn: () => adminService.players.delete(id, { erasure: deleteAtRequest }),
-    onSuccess: () => {
+    onSuccess: (res: { erasure?: boolean } | undefined) => {
       qc.invalidateQueries({ queryKey: ["admin-players"] });
-      toast.success("Jugador eliminado");
+      if (deleteAtRequest && res?.erasure !== true) {
+        // El servidor no hizo la supresión pedida (versión anterior de la API)
+        toast.error("Se ha eliminado, pero sin anonimizar su nombre. Avisa al equipo técnico.");
+      } else {
+        toast.success(deleteAtRequest ? "Jugador eliminado y anonimizado" : "Jugador eliminado");
+      }
       router.push("/jugadores");
     },
     onError: (err: Error) => toast.error(err.message ?? "Error al eliminar"),
@@ -879,18 +884,20 @@ export default function JugadorDetailPage() {
               <input
                 type="checkbox"
                 checked={deleteAtRequest}
+                disabled={deleteMutation.isPending}
                 onChange={(e) => setDeleteAtRequest(e.target.checked)}
                 className="mt-0.5 accent-[#D4AF37]"
               />
               <span>
                 La baja la pide el propio jugador
-                <span className="block text-xs text-muted-foreground">Derecho de supresión: se borra como si lo hiciera él desde la app.</span>
+                <span className="block text-xs text-muted-foreground">Derecho de supresión: igual que si borrara él su cuenta. Márcala ahora si es el caso: después no se puede cambiar.</span>
               </span>
             </label>
             <div className="flex gap-3 pt-1">
               <button
+                disabled={deleteMutation.isPending}
                 onClick={() => { setShowDelete(false); setDeleteAtRequest(false); }}
-                className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-60 transition-colors"
               >
                 Cancelar
               </button>
