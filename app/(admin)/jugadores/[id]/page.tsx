@@ -50,6 +50,8 @@ export default function JugadorDetailPage() {
   const [showCatModal,  setShowCatModal]  = useState(false);
   const [showEdit,      setShowEdit]      = useState(false);
   const [showDelete,    setShowDelete]    = useState(false);
+  // La baja la pide el propio jugador (derecho de supresión)
+  const [deleteAtRequest, setDeleteAtRequest] = useState(false);
   const [editForm,      setEditForm]      = useState<UpdatePlayerPayload>({});
   const [shareOpen,     setShareOpen]     = useState(false);
   const [qrData,        setQrData]        = useState<{ url: string; name: string } | null>(null);
@@ -89,10 +91,15 @@ export default function JugadorDetailPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => adminService.players.delete(id),
-    onSuccess: () => {
+    mutationFn: () => adminService.players.delete(id, { erasure: deleteAtRequest }),
+    onSuccess: (res: { erasure?: boolean } | undefined) => {
       qc.invalidateQueries({ queryKey: ["admin-players"] });
-      toast.success("Jugador eliminado");
+      if (deleteAtRequest && res?.erasure !== true) {
+        // El servidor no hizo la supresión pedida (versión anterior de la API)
+        toast.error("Se ha eliminado, pero sin anonimizar su nombre. Avisa al equipo técnico.");
+      } else {
+        toast.success(deleteAtRequest ? "Jugador eliminado y anonimizado" : "Jugador eliminado");
+      }
       router.push("/jugadores");
     },
     onError: (err: Error) => toast.error(err.message ?? "Error al eliminar"),
@@ -869,12 +876,28 @@ export default function JugadorDetailPage() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? No podrá volver a entrar con esta cuenta y se borrarán sus datos de contacto. Su nombre se mantiene en los cuadros y resultados en los que jugó. Sus inscripciones en torneos que aún no tienen cuadro se cancelan, también la de su pareja, a la que se avisa. Su email queda libre: si vuelve, será como una cuenta nueva, sin su historial.
+              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? No podrá volver a entrar con esta cuenta y se borrarán sus datos de contacto. {deleteAtRequest
+                ? "Su nombre se quita también de los cuadros y resultados en los que jugó (aparecerá como «Usuario eliminado»), y se borran sus mensajes de soporte."
+                : "Su nombre se mantiene en los cuadros y resultados en los que jugó."} Sus inscripciones en torneos que aún no tienen cuadro se cancelan, también la de su pareja, a la que se avisa. Su email queda libre: si vuelve, será como una cuenta nueva, sin su historial.
             </p>
+            <label className="flex items-start gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deleteAtRequest}
+                disabled={deleteMutation.isPending}
+                onChange={(e) => setDeleteAtRequest(e.target.checked)}
+                className="mt-0.5 accent-[#D4AF37]"
+              />
+              <span>
+                La baja la pide el propio jugador
+                <span className="block text-xs text-muted-foreground">Derecho de supresión: igual que si borrara él su cuenta. Márcala ahora si es el caso: después no se puede cambiar.</span>
+              </span>
+            </label>
             <div className="flex gap-3 pt-1">
               <button
-                onClick={() => setShowDelete(false)}
-                className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                disabled={deleteMutation.isPending}
+                onClick={() => { setShowDelete(false); setDeleteAtRequest(false); }}
+                className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-60 transition-colors"
               >
                 Cancelar
               </button>
