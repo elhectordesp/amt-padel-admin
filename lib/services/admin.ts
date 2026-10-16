@@ -440,7 +440,9 @@ export const adminService = {
     auditLog:          (id: string) => api.get<AuditLogEntry[]>(`/admin/players/${id}/audit`).then((r) => r.data ?? []).catch(() => [] as AuditLogEntry[]),
     create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null }>("/admin/players", data).then((r) => r.data),
     update:       (id: string, data: UpdatePlayerPayload) => api.patch(`/admin/players/${id}/profile`, data).then((r) => r.data),
-    delete:       (id: string)                            => api.delete(`/admin/players/${id}`).then((r) => r.data),
+    // erasure: la baja la pide el propio jugador (supresión completa)
+    delete:       (id: string, { erasure = false }: { erasure?: boolean } = {}) =>
+      api.delete(`/admin/players/${id}`, { params: erasure ? { erasure: true } : undefined }).then((r) => r.data),
     resendInvite: (id: string)                            => api.post(`/admin/players/${id}/resend-invite`).then((r) => r.data),
     getInviteLink: (id: string)                           => api.post<{ url: string; name: string }>(`/admin/players/${id}/invite-link`).then((r) => r.data),
     bulkInvite:   ()                                       => api.post<{ sent: number; skipped: number; total: number }>("/admin/players/bulk-invite").then((r) => r.data),

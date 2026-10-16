@@ -50,6 +50,8 @@ export default function JugadorDetailPage() {
   const [showCatModal,  setShowCatModal]  = useState(false);
   const [showEdit,      setShowEdit]      = useState(false);
   const [showDelete,    setShowDelete]    = useState(false);
+  // La baja la pide el propio jugador (derecho de supresión)
+  const [deleteAtRequest, setDeleteAtRequest] = useState(false);
   const [editForm,      setEditForm]      = useState<UpdatePlayerPayload>({});
   const [shareOpen,     setShareOpen]     = useState(false);
   const [qrData,        setQrData]        = useState<{ url: string; name: string } | null>(null);
@@ -89,7 +91,7 @@ export default function JugadorDetailPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => adminService.players.delete(id),
+    mutationFn: () => adminService.players.delete(id, { erasure: deleteAtRequest }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-players"] });
       toast.success("Jugador eliminado");
@@ -869,11 +871,25 @@ export default function JugadorDetailPage() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? No podrá volver a entrar con esta cuenta y se borrarán sus datos de contacto. Su nombre se mantiene en los cuadros y resultados en los que jugó. Sus inscripciones en torneos que aún no tienen cuadro se cancelan, también la de su pareja, a la que se avisa. Su email queda libre: si vuelve, será como una cuenta nueva, sin su historial.
+              ¿Seguro que quieres eliminar a <span className="font-medium text-foreground">{player.name}</span>? No podrá volver a entrar con esta cuenta y se borrarán sus datos de contacto. {deleteAtRequest
+                ? "Su nombre se quita también de los cuadros y resultados en los que jugó (aparecerá como «Usuario eliminado»), y se borran sus mensajes de soporte."
+                : "Su nombre se mantiene en los cuadros y resultados en los que jugó."} Sus inscripciones en torneos que aún no tienen cuadro se cancelan, también la de su pareja, a la que se avisa. Su email queda libre: si vuelve, será como una cuenta nueva, sin su historial.
             </p>
+            <label className="flex items-start gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deleteAtRequest}
+                onChange={(e) => setDeleteAtRequest(e.target.checked)}
+                className="mt-0.5 accent-[#D4AF37]"
+              />
+              <span>
+                La baja la pide el propio jugador
+                <span className="block text-xs text-muted-foreground">Derecho de supresión: se borra como si lo hiciera él desde la app.</span>
+              </span>
+            </label>
             <div className="flex gap-3 pt-1">
               <button
-                onClick={() => setShowDelete(false)}
+                onClick={() => { setShowDelete(false); setDeleteAtRequest(false); }}
                 className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               >
                 Cancelar
