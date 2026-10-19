@@ -14,7 +14,11 @@ export interface PairRegistration {
    * crearía una segunda inscripción de la misma pareja.
    */
   ids:        string[];
-  /** La que se enseña y se edita: la viva más reciente; si no hay, la más reciente. */
+  /**
+   * La que se enseña y se edita: la viva más reciente (con dos vivas de una
+   * pareja espejo antigua, la que tiene la disponibilidad, que pudo darse en
+   * una sola); si no hay viva, la más reciente.
+   */
   primary:    AdminRegistration;
   status:     RegistrationStatus;
   categoryId: string;
@@ -41,7 +45,7 @@ export function groupByPair(regs: AdminRegistration[]): PairRegistration[] {
 
   return [...groups.entries()].map(([pairKey, rows]) => {
     const live    = rows.filter((r) => r.status !== "CANCELLED");
-    const primary = live[0] ?? rows[0];
+    const primary = live.find((r) => r.hasAvailability) ?? live[0] ?? rows[0];
     return {
       pairKey,
       ids:        live.length > 0 ? live.map((r) => r.id) : [primary.id],
@@ -73,6 +77,12 @@ export function playerPayment(reg: AdminRegistration, player: PaymentPlayer): Pl
   }
   if (!reg.partnerId) return UNPAID;
   return reg.partnerPayment ?? UNPAID;
+}
+
+/** Las columnas de pago del CSV: una por jugador (la del compañero, vacía sin pareja). */
+export function paymentCsvColumns(reg: AdminRegistration): { "Pago J1": string; "Pago J2": string } {
+  const yesNo = (player: PaymentPlayer) => (playerPayment(reg, player).paid ? "Sí" : "No");
+  return { "Pago J1": yesNo("titular"), "Pago J2": reg.partnerId ? yesNo("partner") : "" };
 }
 
 /** Los jugadores de la inscripción con su pago: el titular y, si lo hay, el compañero. */

@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
-import { adminService } from "@/lib/services/admin";
-import { playerPayment, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { adminService, registrationsQK } from "@/lib/services/admin";
+import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
 
 const PAYMENT_METHODS = ["Efectivo", "Transferencia", "TPV", "Online"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 interface Props {
+  /** Se monta al abrirlo, con la inscripción de ese momento. */
   registration: AdminRegistration;
   /** De quién es el pago: el titular de la inscripción o su compañero. */
   player:       PaymentPlayer;
@@ -19,27 +20,19 @@ interface Props {
   onClose: () => void;
 }
 
-const toDateInput = (d: string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+/** La fecha local (YYYY-MM-DD): toISOString da la de UTC (de madrugada en Madrid, la del día anterior). */
+const localDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const toDateInput = (d: string | null | undefined) => (d ? localDate(new Date(d)) : "");
 
 export default function PaymentModal({ registration, player, tournamentId, onClose }: Props) {
-  const current = playerPayment(registration, player);
-  const [paid,   setPaid]   = useState(current.paid);
-  const [method, setMethod] = useState<PaymentMethod | "">((current.paymentMethod as PaymentMethod | null | undefined) ?? "");
-  const [paidAt, setPaidAt] = useState<string>(toDateInput(current.paidAt));
-  const [note,   setNote]   = useState<string>(current.paymentNote ?? "");
+  const who = pairPlayers(registration).find((p) => p.player === player);
+  const current = who?.payment;
+  const [paid,   setPaid]   = useState(current?.paid ?? false);
+  const [method, setMethod] = useState<PaymentMethod | "">((current?.paymentMethod as PaymentMethod | null | undefined) ?? "");
+  const [paidAt, setPaidAt] = useState<string>(toDateInput(current?.paidAt));
+  const [note,   setNote]   = useState<string>(current?.paymentNote ?? "");
   const qc = useQueryClient();
-
-  useEffect(() => {
-    const p = playerPayment(registration, player);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPaid(p.paid);
-    setMethod((p.paymentMethod as PaymentMethod | null | undefined) ?? "");
-    setPaidAt(toDateInput(p.paidAt));
-    setNote(p.paymentNote ?? "");
-  }, [registration, player]);
-
-  const playerId   = player === "titular" ? registration.userId : registration.partnerId ?? "";
-  const playerName = player === "titular" ? registration.user.name : registration.partner?.name ?? "Compañero";
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -49,19 +42,23 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
         paidAt:        paidAt || undefined,
         paymentNote:   note.trim() || undefined,
         player,
-        playerId,
+        playerId:      who?.id ?? "",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
       toast.success("Pago actualizado");
       onClose();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err?.response?.data?.message ?? "Error al actualizar el pago");
-      // Si la pareja cambió entretanto (400), la lista vieja confundiría
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+    onError: (err: Error) => {
+      toast.error(err.message || "Error al actualizar el pago");
+      // Se cierra y se recarga la lista: si la pareja cambió entretanto, el
+      // modal sigue con la de antes y cada reintento fallaría igual
+      qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
+      onClose();
     },
   });
+
+  const playerName = who?.name ?? "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -87,7 +84,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
                 setPaid((v) => {
                   const next = !v;
                   // Auto-fill today as default when marking paid for the first time
-                  if (next && !paidAt) setPaidAt(new Date().toISOString().slice(0, 10));
+                  if (next && !paidAt) setPaidAt(localDate(new Date()));
                   return next;
                 });
               }}

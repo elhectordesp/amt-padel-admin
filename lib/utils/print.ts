@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
+import type { Tournament, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
-import { playerPayment } from "@/lib/utils/registration-pairs";
+import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -21,12 +21,7 @@ function safeColor(c: unknown): string {
   return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
 }
 
-interface PairReg {
-  pairKey: string;
-  ids:     string[];
-  primary: AdminRegistration;
-  status:  RegistrationStatus;
-}
+type PairReg = Pick<PairRegistration, "pairKey" | "ids" | "primary" | "status">;
 
 const STATUS_ES: Record<RegistrationStatus, string> = {
   CONFIRMED: "Confirmado",

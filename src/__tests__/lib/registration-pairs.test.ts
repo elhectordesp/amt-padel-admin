@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
-import { groupByPair, pairKeyOf, pairPlayers, playerPayment } from '../../../lib/utils/registration-pairs';
+import { groupByPair, pairKeyOf, pairPlayers, paymentCsvColumns, playerPayment } from '../../../lib/utils/registration-pairs';
 
 let seq = 0;
 const reg = (overrides: any = {}): any => ({
@@ -76,6 +76,20 @@ describe('groupByPair', () => {
     expect(pairs[1].ids).toEqual([bx.id]);
   });
 
+  it('pareja espejo antigua con la disponibilidad en una sola fila: la principal es esa (el aviso y el modal miran la principal)', () => {
+    const without = reg({ hasAvailability: false });
+    const withIt  = reg({ userId: 'b', partnerId: 'a', hasAvailability: true });
+    const [pair] = groupByPair([without, withIt]);
+    expect(pair.primary).toBe(withIt);
+    expect(pair.ids).toEqual([without.id, withIt.id]);
+  });
+
+  it('la disponibilidad de una cancelada no la hace principal', () => {
+    const live      = reg({ hasAvailability: false });
+    const cancelled = reg({ userId: 'b', partnerId: 'a', status: 'CANCELLED', hasAvailability: true });
+    expect(groupByPair([live, cancelled])[0].primary).toBe(live);
+  });
+
   it('la misma pareja en dos categorías: dos parejas', () => {
     const pairs = groupByPair([reg(), reg({ categoryId: 'cat-2' })]);
     expect(pairs.map((p) => p.categoryId)).toEqual(['cat-1', 'cat-2']);
@@ -110,6 +124,18 @@ describe('playerPayment', () => {
   it('compañero sin partnerPayment (fila de otro endpoint) o sin pareja: sin pagar', () => {
     expect(playerPayment(reg({ paid: true }), 'partner').paid).toBe(false);
     expect(playerPayment(reg({ partnerId: null, partner: null, paid: true }), 'partner').paid).toBe(false);
+  });
+});
+
+describe('paymentCsvColumns', () => {
+  it('una columna por jugador', () => {
+    expect(paymentCsvColumns(reg({ paid: true, partnerPayment: { paid: false } }))).toEqual({
+      'Pago J1': 'Sí', 'Pago J2': 'No',
+    });
+  });
+
+  it('sin pareja, la del compañero vacía', () => {
+    expect(paymentCsvColumns(reg({ partnerId: null, partner: null }))).toEqual({ 'Pago J1': 'No', 'Pago J2': '' });
   });
 });
 

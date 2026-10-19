@@ -35,10 +35,10 @@ import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-di
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
-import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
+import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
-import { groupByPair, playerPayment, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
   REGISTRATION_STATUS_CONFIG,
@@ -1489,7 +1489,7 @@ export default function TorneoDetailPage() {
   const {
     data: registrations = [], isLoading: loadingRegs, isError: isErrorRegs, refetch: refetchRegs,
   } = useQuery({
-    queryKey:  ["registrations", id],
+    queryKey:  registrationsQK.list(id),
     queryFn:   () => adminService.registrations.list(id),
     enabled:   tab === "inscripciones" || (tab === "cuadro" && manualMode),
     staleTime: 60_000,
@@ -1549,7 +1549,7 @@ export default function TorneoDetailPage() {
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
     onSuccess: (res: any, { ids }) => {
-      qc.invalidateQueries({ queryKey: ["registrations", id] });
+      invalidateRegistrations(qc, id);
       setSelectedKeys(new Set());
       setUpdatingIds(new Set());
       const updated = res?.count ?? res?.updated ?? ids.length;
@@ -1730,7 +1730,7 @@ export default function TorneoDetailPage() {
     mutationFn: ({ registrationId, newCategoryId }: { registrationId: string; newCategoryId: string }) =>
       adminService.registrations.moveCategory(registrationId, newCategoryId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["registrations", id] });
+      invalidateRegistrations(qc, id);
       toast.success("Inscripción movida a la nueva categoría");
       setMovePair(null);
     },
@@ -2466,9 +2466,9 @@ export default function TorneoDetailPage() {
                                 </button>
                                 <button
                                   onClick={() => setDeleteCatId(cat.id)}
-                                  disabled={pairCount > 0}
+                                  disabled={cat.confirmedCount > 0}
                                   className="p-2 sm:p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed"
-                                  title={pairCount > 0 ? "No se puede eliminar: hay inscripciones" : "Eliminar categoría"}
+                                  title={cat.confirmedCount > 0 ? "No se puede eliminar: hay parejas confirmadas" : "Eliminar categoría"}
                                   aria-label="Eliminar categoría"
                                 >
                                   <Trash2 size={12} />
@@ -2690,8 +2690,7 @@ export default function TorneoDetailPage() {
                       "SPA J2":   p.primary.partner?.spaPoints ?? "",
                       Categoría:  `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
                       Estado:     p.status,
-                      "Pago J1":  playerPayment(p.primary, "titular").paid ? "Sí" : "No",
-                      "Pago J2":  p.primary.partnerId ? (playerPayment(p.primary, "partner").paid ? "Sí" : "No") : "",
+                      ...paymentCsvColumns(p.primary),
                       Fecha:      p.primary.createdAt,
                     }));
                     downloadCsv(`inscripciones-${id}`, rows);
@@ -4257,7 +4256,7 @@ export default function TorneoDetailPage() {
         onEnrolled={(regId) => { setAvailRegId(regId); }}
         onClose={() => {
           setEnrollOpen(false);
-          qc.invalidateQueries({ queryKey: ["registrations", id] });
+          invalidateRegistrations(qc, id);
         }}
       />
     )}

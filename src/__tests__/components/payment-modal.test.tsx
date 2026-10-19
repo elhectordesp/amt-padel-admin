@@ -16,12 +16,14 @@ vi.mock('@/lib/services/admin', () => ({
   adminService: {
     registrations: { updatePayment: vi.fn().mockResolvedValue({}) },
   },
+  registrationsQK: { list: (tournamentId: string) => ['registrations', tournamentId] },
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import PaymentModal from '../../../components/admin/payment-modal';
 import { adminService } from '@/lib/services/admin';
+import { toast } from 'sonner';
 
 const registration: any = {
   id:            'reg-1',
@@ -90,11 +92,32 @@ describe('PaymentModal (pago por jugador)', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('si falla (p. ej. la pareja cambió), avisa y recarga la lista sin cerrar', () => {
+  it('si falla (p. ej. la pareja cambió), enseña el mensaje del back, recarga la lista y cierra (con la pareja vieja, cada reintento fallaría)', () => {
     const onClose = vi.fn();
     render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={onClose} />);
-    mutationOptions.onError({ response: { data: { message: 'La inscripción acaba de cambiar: vuelve a cargarla.' } } });
+    // Como rechaza el interceptor de lib/api.ts: Error con el mensaje del back
+    mutationOptions.onError(new Error('La inscripción acaba de cambiar: vuelve a cargarla.'));
+    expect(toast.error).toHaveBeenCalledWith('La inscripción acaba de cambiar: vuelve a cargarla.');
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['registrations', 't1'] });
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('al marcar pagado sin fecha, pone la de hoy en hora local', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 4, 3, 0, 30)); // 00:30 locales del 3 de mayo
+    try {
+      render(
+        <PaymentModal
+          registration={{ ...registration, partnerPayment: { paid: false, paymentMethod: null, paidAt: null, paymentNote: null } }}
+          player="partner"
+          tournamentId="t1"
+          onClose={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByText('Pagado').parentElement!.querySelector('button')!);
+      expect(screen.getByDisplayValue('2026-05-03')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

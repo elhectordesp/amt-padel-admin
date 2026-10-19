@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
-import { adminService } from "@/lib/services/admin";
+import { adminService, invalidateRegistrations } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS } from "@/lib/constants";
 import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
 
@@ -301,7 +301,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
     mutationFn: (data: AdminEnrollTeamPayload) =>
       adminService.registrations.enroll(tournament.id, data),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["admin", "registrations", tournament.id] });
+      invalidateRegistrations(qc, tournament.id);
       const hasSchedule = (tournament.schedule?.length ?? 0) > 0;
       const regId = res.registration1.id;
       const action = hasSchedule && onEnrolled
@@ -309,15 +309,15 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
         : undefined;
 
       if (res.movedToWaitlist) {
-        toast.warning("La categoría estaba llena. La pareja ha sido añadida a la lista de espera.", { action });
+        toast.warning("La categoría está llena o tiene cola: la pareja va a la lista de espera.", { action });
       } else {
         toast.success("Pareja inscrita correctamente.", { action });
       }
       onClose();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      const msg = err?.response?.data?.message ?? "Error al inscribir la pareja";
-      toast.error(msg);
+    // El interceptor de la API rechaza con Error(mensaje del back)
+    onError: (err: Error) => {
+      toast.error(err.message || "Error al inscribir la pareja");
     },
   });
 
@@ -442,7 +442,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               <label className="flex items-center gap-2 cursor-pointer select-none mt-5">
                 <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)}
                   className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
-                <span className="text-sm text-foreground">Pago recibido (de los dos)</span>
+                <span className="text-sm text-foreground">{noPartner ? "Pago recibido" : "Pago recibido (de los dos)"}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={forceEnroll} onChange={(e) => setForceEnroll(e.target.checked)}

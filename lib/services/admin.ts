@@ -13,7 +13,31 @@ import type {
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry,
 } from "@/types";
+import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
+
+/**
+ * Claves de caché de las inscripciones de un torneo, en un solo sitio: tres
+ * modales invalidaban claves que no usaba ninguna página y la lista no se
+ * refrescaba (o tardaba hasta 30 s).
+ */
+export const registrationsQK = {
+  all:  ["registrations"] as const,
+  list: (tournamentId: string) => ["registrations", tournamentId] as const,
+};
+
+/**
+ * Tras dar de alta, cambiar de estado o mover inscripciones: la lista y las
+ * plazas del torneo (ocupadas, confirmadas, en espera), que van en el torneo
+ * y con las que se genera el cuadro.
+ */
+export function invalidateRegistrations(qc: QueryClient, tournamentId: string): void {
+  qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
+  qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });        // ficha del torneo
+  qc.invalidateQueries({ queryKey: ["tournament-detail", tournamentId] }); // Inscripciones
+  qc.invalidateQueries({ queryKey: ["admin-tournament", tournamentId] });  // Editar torneo
+  qc.invalidateQueries({ queryKey: ["tournaments"] });                     // listados y alta manual
+}
 
 export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED' | 'AVAILABILITY_VIOLATION';
 export interface ScheduleConflict {

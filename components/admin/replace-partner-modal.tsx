@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, UserCheck, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { adminService } from "@/lib/services/admin";
+import { adminService, registrationsQK } from "@/lib/services/admin";
 import type { AdminRegistration, Player } from "@/types";
 
 interface Props {
@@ -46,12 +46,15 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const replaceMut = useMutation({
     mutationFn: () => adminService.registrations.replacePartner(registration.id, selected!.id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-registrations", tournamentId] });
+      // Antes invalidaba una clave que no usaba ninguna página: la lista
+      // seguía con el compañero viejo (y su pago, con el que ya no está)
+      qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
       toast.success(`Pareja actualizada a ${selected!.name}`);
       onClose();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err?.response?.data?.message ?? "Error al cambiar la pareja");
+    // El interceptor de la API rechaza con Error(mensaje del back)
+    onError: (err: Error) => {
+      toast.error(err.message || "Error al cambiar la pareja");
     },
   });
 

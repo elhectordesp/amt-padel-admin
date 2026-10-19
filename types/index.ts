@@ -351,8 +351,8 @@ export interface FinanceStats {
     vatAmount: number;
   };
   chart: { month: string; revenue: number; profit: number }[];
-  /** `registrations`: parejas confirmadas (el precio es por pareja). */
-  byTournament?: { tournamentId: string; name: string; revenue: number; registrations: number }[];
+  /** `id`: el del torneo. `registrations`: parejas confirmadas (el precio es por pareja). */
+  byTournament?: { id: string; name: string; revenue: number; registrations: number }[];
 }
 
 export interface CategoryChange {

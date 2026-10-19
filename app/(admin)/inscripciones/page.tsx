@@ -14,9 +14,9 @@ import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
-import { adminService } from "@/lib/services/admin";
+import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG } from "@/lib/constants";
-import { groupByPair, playerPayment, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { groupByPair, paymentCsvColumns, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration, CategoryLevel, RegistrationStatus, Tournament } from "@/types";
 
 // Tooltip del botón confirmar según el estado actual de la inscripción
@@ -56,7 +56,7 @@ export default function InscripcionesPage() {
   });
 
   const { data: registrations = [], isLoading } = useQuery({
-    queryKey:  ["registrations", tournamentId],
+    queryKey:  registrationsQK.list(tournamentId),
     queryFn:   () => adminService.registrations.list(tournamentId),
     enabled:   !!tournamentId,
     staleTime:       60_000,
@@ -74,7 +74,7 @@ export default function InscripcionesPage() {
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
     onSuccess: (res: { count?: number; updated?: number }, vars) => {
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      invalidateRegistrations(qc, tournamentId);
       const updated = res?.count ?? res?.updated ?? vars.ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
       setSelected(new Set());
@@ -87,7 +87,7 @@ export default function InscripcionesPage() {
     mutationFn: ({ registrationId, newCategoryId }: { registrationId: string; newCategoryId: string }) =>
       adminService.registrations.moveCategory(registrationId, newCategoryId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      invalidateRegistrations(qc, tournamentId);
       toast.success("Inscripción movida a la nueva categoría");
       setMovePair(null);
     },
@@ -184,7 +184,7 @@ export default function InscripcionesPage() {
           onEnrolled={(regId) => { setAvailRegId(regId); setAvailEditMode(true); }}
           onClose={() => {
             setEnrollOpen(false);
-            qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+            invalidateRegistrations(qc, tournamentId);
           }}
         />
       )}
@@ -357,8 +357,7 @@ export default function InscripcionesPage() {
                   "SPA J2":         p.primary.partner?.spaPoints ?? "",
                   "Categoría":      `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
                   "Estado":         p.status,
-                  "Pago J1":        playerPayment(p.primary, "titular").paid ? "Sí" : "No",
-                  "Pago J2":        p.primary.partnerId ? (playerPayment(p.primary, "partner").paid ? "Sí" : "No") : "",
+                  ...paymentCsvColumns(p.primary),
                   "Fecha":          new Date(p.primary.createdAt).toLocaleDateString("es-ES"),
                 })))}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors ml-auto"

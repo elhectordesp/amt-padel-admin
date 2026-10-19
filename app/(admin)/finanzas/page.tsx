@@ -369,7 +369,7 @@ export default function FinanzasPage() {
                 </thead>
                 <tbody>
                   {data.byTournament.map((t) => (
-                    <tr key={t.tournamentId} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                    <tr key={t.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                       <td className="px-5 py-3 text-sm text-foreground">{t.name}</td>
                       <td className="px-5 py-3 text-sm text-right text-muted-foreground">{t.registrations}</td>
                       <td className="px-5 py-3 text-sm text-right text-[#D4AF37] font-medium">{fmt(t.revenue)} €</td>
