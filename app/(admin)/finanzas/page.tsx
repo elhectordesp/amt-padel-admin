@@ -360,7 +360,7 @@ export default function FinanzasPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-secondary/50">
-                    {["TORNEO", "INSCRIPCIONES", "RECAUDADO"].map((h) => (
+                    {["TORNEO", "PAREJAS", "RECAUDADO"].map((h) => (
                       <th key={h} className={`px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${h === "TORNEO" ? "text-left" : "text-right"}`}>
                         {h}
                       </th>

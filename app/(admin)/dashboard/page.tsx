@@ -246,7 +246,7 @@ export default function DashboardPage() {
                 : <div className="space-y-0">
                     {activeTournaments.slice(0, 5).map((t) => {
                       const totalSpots      = t.categories.reduce((s, c) => s + c.totalSpots, 0);
-                      const totalRegistered = t.categories.reduce((s, c) => s + c.registeredCount, 0);
+                      const totalRegistered = t.categories.reduce((s, c) => s + c.occupiedCount, 0);
                       const st = t.status?.toLowerCase();
                       const statusColor = st === "open" ? "text-green-400" : st === "draw" ? "text-purple-400" : st === "scheduled" ? "text-cyan-400" : st === "ongoing" ? "text-yellow-400" : st === "draft" ? "text-blue-400" : "text-muted-foreground";
                       const statusLabel = st === "open" ? "Abierto" : st === "draw" ? "Sorteo" : st === "scheduled" ? "Programado" : st === "ongoing" ? "En curso" : st === "draft" ? "Borrador" : st === "cancelled" ? "Cancelado" : "Finalizado";

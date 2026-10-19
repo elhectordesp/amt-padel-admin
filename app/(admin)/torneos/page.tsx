@@ -200,7 +200,7 @@ export default function TorneosPage() {
       ),
       cell: ({ row }) => {
         const total = row.original.categories.reduce((s, c) => s + c.totalSpots, 0);
-        const reg   = row.original.categories.reduce((s, c) => s + c.registeredCount, 0);
+        const reg   = row.original.categories.reduce((s, c) => s + c.occupiedCount, 0);
         const pct   = total > 0 ? Math.round((reg / total) * 100) : 0;
         return (
           <div className="space-y-1 w-24">
@@ -367,7 +367,7 @@ export default function TorneosPage() {
                   const t = row.original;
                   const tierDisplay = resolveTier(t.spaTier, t.tier);
                   const total = t.categories.reduce((s, c) => s + c.totalSpots, 0);
-                  const reg   = t.categories.reduce((s, c) => s + c.registeredCount, 0);
+                  const reg   = t.categories.reduce((s, c) => s + c.occupiedCount, 0);
                   const pct   = total > 0 ? Math.round((reg / total) * 100) : 0;
                   return (
                     <div

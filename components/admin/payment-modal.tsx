@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { adminService } from "@/lib/services/admin";
+import { playerPayment, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
 
 const PAYMENT_METHODS = ["Efectivo", "Transferencia", "TPV", "Online"] as const;
@@ -12,24 +13,33 @@ type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 interface Props {
   registration: AdminRegistration;
+  /** De quién es el pago: el titular de la inscripción o su compañero. */
+  player:       PaymentPlayer;
   tournamentId: string;
   onClose: () => void;
 }
 
-export default function PaymentModal({ registration, tournamentId, onClose }: Props) {
-  const [paid,   setPaid]   = useState(registration.paid);
-  const [method, setMethod] = useState<PaymentMethod | "">((registration.paymentMethod as PaymentMethod | undefined) ?? "");
-  const [paidAt, setPaidAt] = useState<string>(registration.paidAt ? new Date(registration.paidAt).toISOString().slice(0, 10) : "");
-  const [note,   setNote]   = useState<string>(registration.paymentNote ?? "");
+const toDateInput = (d: string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+
+export default function PaymentModal({ registration, player, tournamentId, onClose }: Props) {
+  const current = playerPayment(registration, player);
+  const [paid,   setPaid]   = useState(current.paid);
+  const [method, setMethod] = useState<PaymentMethod | "">((current.paymentMethod as PaymentMethod | null | undefined) ?? "");
+  const [paidAt, setPaidAt] = useState<string>(toDateInput(current.paidAt));
+  const [note,   setNote]   = useState<string>(current.paymentNote ?? "");
   const qc = useQueryClient();
 
   useEffect(() => {
+    const p = playerPayment(registration, player);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPaid(registration.paid);
-    setMethod((registration.paymentMethod as PaymentMethod | undefined) ?? "");
-    setPaidAt(registration.paidAt ? new Date(registration.paidAt).toISOString().slice(0, 10) : "");
-    setNote(registration.paymentNote ?? "");
-  }, [registration]);
+    setPaid(p.paid);
+    setMethod((p.paymentMethod as PaymentMethod | null | undefined) ?? "");
+    setPaidAt(toDateInput(p.paidAt));
+    setNote(p.paymentNote ?? "");
+  }, [registration, player]);
+
+  const playerId   = player === "titular" ? registration.userId : registration.partnerId ?? "";
+  const playerName = player === "titular" ? registration.user.name : registration.partner?.name ?? "Compañero";
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -38,18 +48,20 @@ export default function PaymentModal({ registration, tournamentId, onClose }: Pr
         paymentMethod: method || undefined,
         paidAt:        paidAt || undefined,
         paymentNote:   note.trim() || undefined,
+        player,
+        playerId,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-registrations", tournamentId] });
+      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
       toast.success("Pago actualizado");
       onClose();
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err?.response?.data?.message ?? "Error al actualizar el pago");
+      // Si la pareja cambió entretanto (400), la lista vieja confundiría
+      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
     },
   });
-
-  const playerName = registration.user.name;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

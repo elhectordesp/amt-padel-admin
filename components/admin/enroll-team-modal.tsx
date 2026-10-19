@@ -377,7 +377,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               {(tournament.categories ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.gender === "M" ? "Masculina" : c.gender === "F" ? "Femenina" : "Mixta"} · {LEVEL_LABEL[c.level] ?? c.level}
-                  {" "}({c.registeredCount ?? 0}/{c.totalSpots} plazas)
+                  {" "}({c.occupiedCount}/{c.totalSpots} plazas{c.waitlistCount > 0 ? `, ${c.waitlistCount} en espera` : ""})
                 </option>
               ))}
             </select>
@@ -442,7 +442,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               <label className="flex items-center gap-2 cursor-pointer select-none mt-5">
                 <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)}
                   className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
-                <span className="text-sm text-foreground">Pago recibido</span>
+                <span className="text-sm text-foreground">Pago recibido (de los dos)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={forceEnroll} onChange={(e) => setForceEnroll(e.target.checked)}
@@ -455,8 +455,10 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
           {/* Spot indicator */}
           {selectedCategory && (
             <p className="text-xs text-muted-foreground">
-              Plazas ocupadas: {selectedCategory.registeredCount ?? "?"} / {selectedCategory.totalSpots}
-              {(selectedCategory.registeredCount ?? 0) >= selectedCategory.totalSpots && !forceEnroll
+              Plazas ocupadas: {selectedCategory.occupiedCount} / {selectedCategory.totalSpots}
+              {selectedCategory.waitlistCount > 0 && ` (${selectedCategory.waitlistCount} en espera)`}
+              {/* La cola pasa antes: con ella, aunque quede una plaza libre, el alta espera su turno */}
+              {selectedCategory.occupiedCount + selectedCategory.waitlistCount >= selectedCategory.totalSpots && !forceEnroll
                 ? " — la inscripción irá a lista de espera"
                 : ""}
             </p>

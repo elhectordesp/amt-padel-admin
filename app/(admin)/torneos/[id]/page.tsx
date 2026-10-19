@@ -24,6 +24,7 @@ import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
+import { PairPayment } from "@/components/admin/pair-payment";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
@@ -37,6 +38,7 @@ import { CustomSelect } from "@/components/admin/form";
 import { adminService, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
+import { groupByPair, playerPayment, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
   REGISTRATION_STATUS_CONFIG,
@@ -102,30 +104,6 @@ function AuditActionBadge({ action, resource }: { action: string; resource: stri
       {action} <span className="ml-1 opacity-50">({resource})</span>
     </span>
   );
-}
-
-// ── Pair grouping (1 fila por pareja+categoría) ───────────────────────────
-interface PairReg {
-  pairKey: string;
-  ids:     string[];
-  primary: AdminRegistration;
-  status:  RegistrationStatus;
-}
-
-function groupByPair(regs: AdminRegistration[]): PairReg[] {
-  const seen: Set<string> = new Set();
-  const result: PairReg[] = [];
-  for (const reg of regs) {
-    const sorted = [reg.userId, reg.partnerId ?? ""].sort().join(":");
-    const key    = `${sorted}::${reg.categoryId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const partnerReg = reg.partnerId
-      ? regs.find((r) => r.userId === reg.partnerId && r.categoryId === reg.categoryId)
-      : null;
-    result.push({ pairKey: key, ids: partnerReg ? [reg.id, partnerReg.id] : [reg.id], primary: reg, status: reg.status });
-  }
-  return result;
 }
 
 // ── Orden de fases para listar partidos (Grupos → … → Final → Consolación) ──────
@@ -1464,7 +1442,7 @@ export default function TorneoDetailPage() {
   const [enrollOpen,         setEnrollOpen]         = useState(false);
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
   const [replaceReg,         setReplaceReg]         = useState<AdminRegistration | null>(null);
-  const [paymentReg,         setPaymentReg]         = useState<AdminRegistration | null>(null);
+  const [paymentOf,          setPaymentOf]          = useState<{ reg: AdminRegistration; player: PaymentPlayer } | null>(null);
   const [confirmCancel,      setConfirmCancel]      = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,        setConfirmBulk]        = useState<{ ids: string[]; status: string; count: number } | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
@@ -2080,7 +2058,9 @@ export default function TorneoDetailPage() {
   }
 
   const totalSpots      = tournament.categories.reduce((s, c) => s + c.totalSpots, 0);
-  const totalRegistered = tournament.categories.reduce((s, c) => s + c.registeredCount, 0);
+  // Las que ocupan plaza (pendientes y confirmadas); la espera va aparte
+  const totalRegistered = tournament.categories.reduce((s, c) => s + c.occupiedCount, 0);
+  const totalWaitlist   = tournament.categories.reduce((s, c) => s + c.waitlistCount, 0);
   const fillPct         = totalSpots > 0 ? Math.round((totalRegistered / totalSpots) * 100) : 0;
   const tierDisplay     = resolveTier(tournament.spaTier, tournament.tier);
 
@@ -2216,6 +2196,9 @@ export default function TorneoDetailPage() {
             <div className="text-center">
               <p className="text-2xl font-heading text-[#D4AF37]">{totalRegistered}</p>
               <p className="text-xs text-muted-foreground mt-0.5">Parejas inscritas</p>
+              {totalWaitlist > 0 && (
+                <p className="text-[10px] text-blue-400 mt-0.5">+{totalWaitlist} en espera</p>
+              )}
             </div>
             <div className="text-center">
               <p className="text-2xl font-heading text-foreground">{totalSpots}</p>
@@ -2391,7 +2374,8 @@ export default function TorneoDetailPage() {
                 <tbody>
                   {tournament.categories.map((cat) => {
                     const pairSpots = cat.totalSpots;
-                    const pairCount = cat.registeredCount;
+                    // Ocupan plaza las pendientes y las confirmadas (la espera, aparte)
+                    const pairCount = cat.occupiedCount;
                     const pct = pairSpots > 0 ? Math.round((pairCount / pairSpots) * 100) : 0;
                     const isEditing = editCatId === cat.id;
                     return (
@@ -2430,7 +2414,12 @@ export default function TorneoDetailPage() {
                             </div>
                           ) : <span className="text-muted-foreground">{cat.price ?? 0}€</span>}
                         </td>
-                        <td className="px-4 py-3 text-sm text-foreground">{pairCount}</td>
+                        <td className="px-4 py-3 text-sm text-foreground">
+                          {pairCount}
+                          {cat.waitlistCount > 0 && (
+                            <span className="block text-[10px] text-blue-400">+{cat.waitlistCount} en espera</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 min-w-[60px] h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -2701,7 +2690,8 @@ export default function TorneoDetailPage() {
                       "SPA J2":   p.primary.partner?.spaPoints ?? "",
                       Categoría:  `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
                       Estado:     p.status,
-                      Pago:       p.primary.paid ? "Sí" : "No",
+                      "Pago J1":  playerPayment(p.primary, "titular").paid ? "Sí" : "No",
+                      "Pago J2":  p.primary.partnerId ? (playerPayment(p.primary, "partner").paid ? "Sí" : "No") : "",
                       Fecha:      p.primary.createdAt,
                     }));
                     downloadCsv(`inscripciones-${id}`, rows);
@@ -2849,13 +2839,10 @@ export default function TorneoDetailPage() {
                             <StatusBadge status={pair.status} />
                           </td>
                           <td className="px-5 py-3.5">
-                            <button
-                              onClick={() => setPaymentReg(reg)}
-                              title="Ver / editar pago"
-                              className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
-                            >
-                              {reg.paid ? "Pagado" : "Pendiente"}
-                            </button>
+                            <PairPayment
+                              registration={reg}
+                              onEdit={(player) => setPaymentOf({ reg, player })}
+                            />
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-1.5 sm:gap-1">
@@ -3000,7 +2987,7 @@ export default function TorneoDetailPage() {
                 ? tournament.categories.find((c) => c.id === bracketCatId)
                 : null;
 
-              const confirmedPairs = selectedCat?.registeredCount ?? null;
+              const confirmedPairs = selectedCat?.confirmedCount ?? null;
 
               // Default format selector value: param > category.format > tournament.format
               const defaultFormat = bracketFormat || selectedCat?.format || tournament.format || "";
@@ -4009,7 +3996,7 @@ export default function TorneoDetailPage() {
         }
         totalConfirmedPairs={
           tournament.categories.find((c) => c.id === bracketCatId)
-            ?.registeredCount ?? 0
+            ?.confirmedCount ?? 0
         }
         alreadyHasBracket={bracketMatches.some(
           (m: any) => m.categoryId === bracketCatId,
@@ -4143,7 +4130,7 @@ export default function TorneoDetailPage() {
     {/* Bloque 5 — Dialog Reestructurar grupos */}
     {restructureOpen && bracketCatId && tournament && (() => {
       const cat = tournament.categories.find((c) => c.id === bracketCatId);
-      const totalPairs = cat?.registeredCount ?? 0;
+      const totalPairs = cat?.confirmedCount ?? 0;
       const currentGroups = ((allStandings as any)[bracketCatId]?.length ?? 0);
       const finishedInGroups = bracketMatches.filter(
         (m: any) => m.categoryId === bracketCatId && m.phase === "GROUPS" && m.isResult,
@@ -4295,11 +4282,12 @@ export default function TorneoDetailPage() {
       />
     )}
 
-    {paymentReg && (
+    {paymentOf && (
       <PaymentModal
-        registration={paymentReg}
+        registration={paymentOf.reg}
+        player={paymentOf.player}
         tournamentId={id}
-        onClose={() => setPaymentReg(null)}
+        onClose={() => setPaymentOf(null)}
       />
     )}
 

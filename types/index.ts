@@ -19,7 +19,13 @@ export interface TournamentCategory {
   currentPhase:     string;
   currentPhaseLabel?: string;
   totalSpots:       number;
-  registeredCount:  number;
+  // En parejas (una pareja en dos filas espejo cuenta una vez)
+  /** Las que ocupan plaza (pendientes y confirmadas): con ellas se llena la categoría. */
+  occupiedCount:    number;
+  /** Las confirmadas: las que entran en el cuadro. */
+  confirmedCount:   number;
+  /** Las que esperan plaza. */
+  waitlistCount:    number;
   myTeamRegistered: boolean;
   price?:           number;
   minPairs?:        number;
@@ -179,6 +185,14 @@ export interface AdminRegistrationUser {
   spaPoints?:    number | null;
 }
 
+/** El pago de un jugador (se cobra por jugador, no por pareja). */
+export interface PlayerPayment {
+  paid:           boolean;
+  paymentMethod?: string | null;
+  paidAt?:        string | null;
+  paymentNote?:   string | null;
+}
+
 export interface AdminRegistration {
   id:             string;
   tournamentId:   string;
@@ -189,13 +203,17 @@ export interface AdminRegistration {
   partner?:       AdminRegistrationUser | null;
   category:       { gender: string; level: string; price: number };
   status:         RegistrationStatus;
+  // El pago del titular (userId)
   paid:           boolean;
   paymentMethod?: string | null;
   paidAt?:        string | null;
   paymentNote?:   string | null;
+  /** El del compañero, ya resuelto por el back (null sin pareja). Solo en el listado. */
+  partnerPayment?: PlayerPayment | null;
+  /** Si la pareja ha dado su disponibilidad. Solo en el listado. */
+  hasAvailability?: boolean;
   enrolledByAdmin?: boolean;
   createdAt:      string;
-  availability?:  { sat: string; sun: string };
 }
 
 export interface Player {
@@ -241,7 +259,8 @@ export interface AdminEnrollTeamPayload {
 
 export interface AdminEnrollResult {
   registration1:  AdminRegistration;
-  registration2:  AdminRegistration | null;
+  /** Siempre null: la pareja va en una sola fila (antes, la fila espejo del compañero). */
+  registration2:  null;
   status:         string;
   movedToWaitlist: boolean;
 }
@@ -332,6 +351,7 @@ export interface FinanceStats {
     vatAmount: number;
   };
   chart: { month: string; revenue: number; profit: number }[];
+  /** `registrations`: parejas confirmadas (el precio es por pareja). */
   byTournament?: { tournamentId: string; name: string; revenue: number; registrations: number }[];
 }
 

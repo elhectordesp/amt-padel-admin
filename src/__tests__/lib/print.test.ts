@@ -136,6 +136,27 @@ describe('printRegistrations', () => {
     printRegistrations(makeTournament(), [makePair()]);
     expect(mockData.getHtml()).toContain('Sin pareja');
   });
+
+  it('el pago, por jugador: el del titular y debajo el del compañero', () => {
+    const pair = makePair();
+    pair.primary = {
+      ...pair.primary,
+      partnerId: 'u2',
+      partner: { name: 'Bea Ruiz', spaPoints: null, categoryLevel: '4a' },
+      paid: false,
+      partnerPayment: { paid: true },
+    };
+    printRegistrations(makeTournament(), [pair]);
+    const html = mockData.getHtml();
+    expect(html).toMatch(/<span class="cross">✗<\/span>\s*<br><span class="check">✓<\/span>/);
+    expect(html).toContain('1 pareja<');
+  });
+
+  it('sin pareja, un solo pago', () => {
+    printRegistrations(makeTournament(), [makePair()]);
+    const html = mockData.getHtml();
+    expect(html.match(/class="(check|cross)">/g)).toHaveLength(1);
+  });
 });
 
 // ── printSchedule ──────────────────────────────────────────────────────────

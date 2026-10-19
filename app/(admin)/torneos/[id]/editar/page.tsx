@@ -80,11 +80,12 @@ export default function EditarTorneoPage() {
     enabled:  isClubUser && !!myClubId,
   });
 
-  const { data: activeRegistrations = 0 } = useQuery({
-    queryKey: ["admin-tournament-reg-count", id],
-    queryFn:  () => adminService.registrations.count(id),
-    enabled:  !!id,
-  });
+  // Parejas con inscripción viva (ocupan plaza o esperan una): antes se
+  // contaban filas, también las canceladas y las dos de una pareja espejo
+  const activeRegistrations = (tournament?.categories ?? []).reduce(
+    (s, c) => s + c.occupiedCount + c.waitlistCount,
+    0,
+  );
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -197,7 +198,7 @@ export default function EditarTorneoPage() {
           <div className="flex items-center gap-3 rounded-lg border border-amber-800/40 bg-amber-950/20 px-4 py-3 text-sm text-amber-400">
             <AlertTriangle size={16} className="shrink-0" />
             <span>
-              Este torneo tiene <strong>{activeRegistrations} inscripciones activas</strong>. Los cambios en fechas o formato pueden afectarles.
+              Este torneo tiene <strong>{activeRegistrations} {activeRegistrations === 1 ? "pareja inscrita" : "parejas inscritas"}</strong>. Los cambios en fechas o formato pueden afectarles.
             </span>
           </div>
         )}
