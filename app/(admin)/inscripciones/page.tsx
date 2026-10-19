@@ -13,8 +13,10 @@ import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
-import { adminService } from "@/lib/services/admin";
+import { PairPayment } from "@/components/admin/pair-payment";
+import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG } from "@/lib/constants";
+import { groupByPair, paymentCsvColumns, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration, CategoryLevel, RegistrationStatus, Tournament } from "@/types";
 
 // Tooltip del botón confirmar según el estado actual de la inscripción
@@ -28,43 +30,6 @@ function confirmTitle(status: RegistrationStatus): string {
 type StatusFilter = "all" | RegistrationStatus;
 
 const PAGE_SIZE = 20;
-
-// Agrupa inscripciones por pareja+categoría — muestra 1 fila por pareja
-interface PairRegistration {
-  ids:        string[];          // IDs de ambas inscripciones (1 si sin pareja)
-  primary:    AdminRegistration; // inscripción del jugador principal (para mostrar datos)
-  status:     RegistrationStatus;
-  categoryId: string;
-  pairKey:    string;
-}
-
-function groupByPair(regs: AdminRegistration[]): PairRegistration[] {
-  const seen  = new Set<string>();
-  const pairs: PairRegistration[] = [];
-
-  for (const reg of regs) {
-    // Clave canónica: ordenar userId y partnerId para que A+B === B+A
-    const sorted  = [reg.userId, reg.partnerId ?? ""].sort().join(":");
-    const key     = `${sorted}::${reg.categoryId}`;
-
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    // Buscar la inscripción del otro miembro de la pareja
-    const partner = reg.partnerId
-      ? regs.find((r) => r.userId === reg.partnerId && r.categoryId === reg.categoryId)
-      : null;
-
-    pairs.push({
-      ids:        partner ? [reg.id, partner.id] : [reg.id],
-      primary:    reg,
-      status:     reg.status,
-      categoryId: reg.categoryId,
-      pairKey:    key,
-    });
-  }
-  return pairs;
-}
 
 export default function InscripcionesPage() {
   const qc = useQueryClient();
@@ -83,7 +48,7 @@ export default function InscripcionesPage() {
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
   const [enrollOpen,       setEnrollOpen]       = useState(false);
   const [replaceReg,       setReplaceReg]       = useState<AdminRegistration | null>(null);
-  const [paymentReg,       setPaymentReg]       = useState<AdminRegistration | null>(null);
+  const [paymentOf,        setPaymentOf]        = useState<{ reg: AdminRegistration; player: PaymentPlayer } | null>(null);
 
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
@@ -91,7 +56,7 @@ export default function InscripcionesPage() {
   });
 
   const { data: registrations = [], isLoading } = useQuery({
-    queryKey:  ["registrations", tournamentId],
+    queryKey:  registrationsQK.list(tournamentId),
     queryFn:   () => adminService.registrations.list(tournamentId),
     enabled:   !!tournamentId,
     staleTime:       60_000,
@@ -109,7 +74,7 @@ export default function InscripcionesPage() {
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
       adminService.registrations.bulkStatus(ids, status),
     onSuccess: (res: { count?: number; updated?: number }, vars) => {
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      invalidateRegistrations(qc, tournamentId);
       const updated = res?.count ?? res?.updated ?? vars.ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
       setSelected(new Set());
@@ -122,7 +87,7 @@ export default function InscripcionesPage() {
     mutationFn: ({ registrationId, newCategoryId }: { registrationId: string; newCategoryId: string }) =>
       adminService.registrations.moveCategory(registrationId, newCategoryId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
+      invalidateRegistrations(qc, tournamentId);
       toast.success("Inscripción movida a la nueva categoría");
       setMovePair(null);
     },
@@ -181,7 +146,7 @@ export default function InscripcionesPage() {
   const filtered = useMemo(() =>
     pairs
       .filter((p) => statusFilter === "all" || p.status === statusFilter)
-      .filter((p) => catFilter === "all" || p.categoryId === catFilter)
+      .filter((p) => catFilter === "all" || p.primary.categoryId === catFilter)
       .filter((p) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
@@ -217,10 +182,7 @@ export default function InscripcionesPage() {
         <EnrollTeamModal
           tournament={selectedTournament}
           onEnrolled={(regId) => { setAvailRegId(regId); setAvailEditMode(true); }}
-          onClose={() => {
-            setEnrollOpen(false);
-            qc.invalidateQueries({ queryKey: ["registrations", tournamentId] });
-          }}
+          onClose={() => setEnrollOpen(false)}
         />
       )}
 
@@ -244,11 +206,12 @@ export default function InscripcionesPage() {
         />
       )}
 
-      {paymentReg && (
+      {paymentOf && (
         <PaymentModal
-          registration={paymentReg}
+          registration={paymentOf.reg}
+          player={paymentOf.player}
           tournamentId={tournamentId}
-          onClose={() => setPaymentReg(null)}
+          onClose={() => setPaymentOf(null)}
         />
       )}
 
@@ -391,7 +354,7 @@ export default function InscripcionesPage() {
                   "SPA J2":         p.primary.partner?.spaPoints ?? "",
                   "Categoría":      `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
                   "Estado":         p.status,
-                  "Pago":           p.primary.paid ? "Sí" : "No",
+                  ...paymentCsvColumns(p.primary),
                   "Fecha":          new Date(p.primary.createdAt).toLocaleDateString("es-ES"),
                 })))}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] transition-colors ml-auto"
@@ -491,7 +454,7 @@ export default function InscripcionesPage() {
                       const scfg       = STATUS_CFG[pair.status];
                       const isSelected = selected.has(pair.pairKey);
                       const isUpdating = pair.ids.some((id) => updatingIds.has(id));
-                      const noAvail    = tournamentHasSchedule && !reg.availability;
+                      const noAvail    = tournamentHasSchedule && !reg.hasAvailability;
                       return (
                         <div
                           key={pair.pairKey}
@@ -541,13 +504,12 @@ export default function InscripcionesPage() {
 
                           {/* Payment + actions row */}
                           <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60">
-                            <button
-                              onClick={() => setPaymentReg(reg)}
-                              className={`text-xs font-medium underline decoration-dotted underline-offset-2 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
-                            >
-                              {reg.paid ? "Pagado" : "Pendiente"}
-                            </button>
-                            <div className="flex items-center gap-1">
+                            <PairPayment
+                              registration={reg}
+                              onEdit={(player) => setPaymentOf({ reg, player })}
+                              withNames
+                            />
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
                                 title={noAvail ? "Sin disponibilidad" : "Disponibilidad"}
@@ -702,18 +664,15 @@ export default function InscripcionesPage() {
                                   </span>
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <button
-                                    onClick={() => setPaymentReg(reg)}
-                                    title="Ver / editar pago"
-                                    className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${reg.paid ? "text-green-400" : "text-yellow-400"}`}
-                                  >
-                                    {reg.paid ? "Pagado" : "Pendiente"}
-                                  </button>
+                                  <PairPayment
+                                    registration={reg}
+                                    onEdit={(player) => setPaymentOf({ reg, player })}
+                                  />
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1.5 sm:gap-1">
                                     {(() => {
-                                      const noAvail = tournamentHasSchedule && !reg.availability;
+                                      const noAvail = tournamentHasSchedule && !reg.hasAvailability;
                                       return (
                                         <button
                                           onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}

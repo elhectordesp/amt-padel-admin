@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CalendarDays, Save, Check } from "lucide-react";
 import { toast } from "sonner";
-import { adminService } from "@/lib/services/admin";
+import { adminService, registrationsQK } from "@/lib/services/admin";
 
 interface Props {
   registrationId: string;
@@ -65,10 +65,13 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reg-availability", registrationId] });
+      // Las listas dicen si la pareja dio su disponibilidad (hasAvailability)
+      qc.invalidateQueries({ queryKey: registrationsQK.all });
       toast.success("Disponibilidad guardada");
       setEditing(false);
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => toast.error(err?.response?.data?.message ?? "Error al guardar"),
+    // El interceptor de la API rechaza con Error(mensaje del back)
+    onError: (err: Error) => toast.error(err.message || "Error al guardar"),
   });
 
   const toggleSlot = (dayIdx: number, slot: string) => {

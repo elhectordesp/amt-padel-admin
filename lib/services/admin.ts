@@ -13,6 +13,31 @@ import type {
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry,
 } from "@/types";
+import type { QueryClient } from "@tanstack/react-query";
+import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
+
+/**
+ * Claves de caché de las inscripciones de un torneo, en un solo sitio: tres
+ * modales invalidaban claves que no usaba ninguna página y la lista no se
+ * refrescaba (o tardaba hasta 30 s).
+ */
+export const registrationsQK = {
+  all:  ["registrations"] as const,
+  list: (tournamentId: string) => ["registrations", tournamentId] as const,
+};
+
+/**
+ * Tras dar de alta, cambiar de estado o mover inscripciones: la lista y las
+ * plazas del torneo (ocupadas, confirmadas, en espera), que van en el torneo
+ * y con las que se genera el cuadro.
+ */
+export function invalidateRegistrations(qc: QueryClient, tournamentId: string): void {
+  qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
+  qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });        // ficha del torneo
+  qc.invalidateQueries({ queryKey: ["tournament-detail", tournamentId] }); // Inscripciones
+  qc.invalidateQueries({ queryKey: ["admin-tournament", tournamentId] });  // Editar torneo
+  qc.invalidateQueries({ queryKey: ["tournaments"] });                     // listados y alta manual
+}
 
 export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED' | 'AVAILABILITY_VIOLATION';
 export interface ScheduleConflict {
@@ -317,7 +342,6 @@ export const adminService = {
   registrations: {
     // Todas: el back pagina (máx. 200 por página).
     list:         (tournamentId: string)               => fetchAllPages<AdminRegistration>(`/admin/tournaments/${tournamentId}/registrations`, {}, 200),
-    count:        (tournamentId: string)               => api.get<{ total: number }>(`/admin/tournaments/${tournamentId}/registrations`, { params: { pageSize: 1 } }).then((r) => (r.data as any)?.total ?? 0),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
     bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
     moveCategory: (registrationId: string, newCategoryId: string) => api.patch(`/admin/registrations/${registrationId}/category`, { newCategoryId }).then((r) => r.data),
@@ -325,7 +349,15 @@ export const adminService = {
       api.post<AdminEnrollResult>(`/admin/tournaments/${tournamentId}/enrollments`, data).then((r) => r.data),
     replacePartner: (registrationId: string, newPartnerId: string) =>
       api.patch(`/admin/registrations/${registrationId}/partner`, { newPartnerId }).then((r) => r.data),
-    updatePayment: (registrationId: string, data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string }) =>
+    /**
+     * El pago de un jugador: `player` dice de qué lado de la inscripción y
+     * `playerId` quién cree el panel que está en él (si le cambiaron la
+     * pareja entretanto, el back da 400 en vez de marcárselo a otro).
+     */
+    updatePayment: (
+      registrationId: string,
+      data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
+    ) =>
       api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
   },
 

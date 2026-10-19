@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Tournament, AdminRegistration, RegistrationStatus, MatchResult } from "@/types";
+import type { Tournament, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -20,12 +21,7 @@ function safeColor(c: unknown): string {
   return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
 }
 
-interface PairReg {
-  pairKey: string;
-  ids:     string[];
-  primary: AdminRegistration;
-  status:  RegistrationStatus;
-}
+type PairReg = PairRegistration;
 
 const STATUS_ES: Record<RegistrationStatus, string> = {
   CONFIRMED: "Confirmado",
@@ -55,7 +51,10 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
       const spa1     = reg.user.spaPoints != null ? Math.round(Number(reg.user.spaPoints)) : "—";
       const spa2     = reg.partner?.spaPoints != null ? Math.round(Number(reg.partner.spaPoints)) : "—";
       const statusOk = pair.status === "CONFIRMED";
-      const paid     = reg.paid;
+      // Se cobra por jugador: uno debajo del otro, como el nivel y el SPA
+      const mark     = (paid: boolean) => `<span class="${paid ? "check" : "cross"}">${paid ? "✓" : "✗"}</span>`;
+      const paid1    = playerPayment(reg, "titular").paid;
+      const paid2    = playerPayment(reg, "partner").paid;
       return `
         <tr class="${i % 2 === 0 ? "row-alt" : ""}">
           <td class="num">${i + 1}</td>
@@ -75,7 +74,8 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
             <span class="badge ${statusOk ? "badge-ok" : "badge-pend"}">${STATUS_ES[pair.status]}</span>
           </td>
           <td class="center">
-            <span class="${paid ? "check" : "cross"}">${paid ? "✓" : "✗"}</span>
+            ${mark(paid1)}
+            ${reg.partnerId ? `<br>${mark(paid2)}` : ""}
           </td>
           <td class="notes"></td>
         </tr>`;
@@ -85,7 +85,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
       <div class="category-block">
         <div class="category-header">
           <span>${genderLabel} · ${esc(level)}</span>
-          <span class="cat-count">${catPairs.length} inscripciones</span>
+          <span class="cat-count">${catPairs.length} ${catPairs.length === 1 ? "pareja" : "parejas"}</span>
         </div>
         <table>
           <thead>

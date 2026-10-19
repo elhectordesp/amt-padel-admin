@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Loader2, X, ArrowRight } from "lucide-react";
 import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
-import type { AdminRegistration, CategoryLevel, Gender } from "@/types";
+import type { PairRegistration } from "@/lib/utils/registration-pairs";
+import type { CategoryLevel, Gender } from "@/types";
 
 interface Category {
   id:     string;
@@ -11,10 +12,6 @@ interface Category {
   level:  string;
 }
 
-interface PairRegistration {
-  ids:     string[];
-  primary: AdminRegistration;
-}
 
 export function MoveCategoryModal({
   pair,
@@ -23,7 +20,7 @@ export function MoveCategoryModal({
   onSave,
   onClose,
 }: {
-  pair:       PairRegistration;
+  pair:       Pick<PairRegistration, "ids" | "primary">;
   categories: Category[];
   saving:     boolean;
   onSave:     (newCategoryId: string) => void;
