@@ -4,10 +4,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 const invalidateQueries = vi.fn();
 let mutationOptions: any;
+let pending = false;
 vi.mock('@tanstack/react-query', () => ({
   useMutation:    vi.fn((opts: any) => {
     mutationOptions = opts;
-    return { mutate: vi.fn(), isPending: false };
+    return { mutate: vi.fn(), isPending: pending };
   }),
   useQueryClient: vi.fn(() => ({ invalidateQueries })),
 }));
@@ -23,6 +24,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import PaymentModal from '../../../components/admin/payment-modal';
 import { adminService } from '@/lib/services/admin';
+import { ApiError } from '@/lib/api';
 import { toast } from 'sonner';
 
 const registration: any = {
@@ -47,6 +49,7 @@ describe('PaymentModal (pago por jugador)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mutationOptions = undefined;
+    pending = false;
   });
 
   it('del compañero: su nombre y su pago (no el del titular)', () => {
@@ -92,14 +95,33 @@ describe('PaymentModal (pago por jugador)', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('si falla (p. ej. la pareja cambió), enseña el mensaje del back, recarga la lista y cierra (con la pareja vieja, cada reintento fallaría)', () => {
+  it('si la inscripción cambió entretanto, enseña el mensaje del back, recarga la lista y cierra (con la pareja vieja, cada reintento fallaría)', () => {
     const onClose = vi.fn();
     render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={onClose} />);
-    // Como rechaza el interceptor de lib/api.ts: Error con el mensaje del back
-    mutationOptions.onError(new Error('La inscripción acaba de cambiar: vuelve a cargarla.'));
+    // Como rechaza el interceptor de lib/api.ts
+    mutationOptions.onError(
+      new ApiError('La inscripción acaba de cambiar: vuelve a cargarla.', 400, 'REGISTRATION_INVALID_TRANSITION'),
+    );
     expect(toast.error).toHaveBeenCalledWith('La inscripción acaba de cambiar: vuelve a cargarla.');
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['registrations', 't1'] });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('con otro error (red, validación), avisa y sigue abierto con lo escrito', () => {
+    const onClose = vi.fn();
+    render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={onClose} />);
+    mutationOptions.onError(new ApiError('Error de conexión'));
+    expect(toast.error).toHaveBeenCalledWith('Error de conexión');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('nota de Bea')).toBeInTheDocument();
+  });
+
+  it('mientras guarda no se cierra (la respuesta cerraría el modal que se abriera después)', () => {
+    pending = true;
+    const onClose = vi.fn();
+    render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={onClose} />);
+    fireEvent.click(screen.getByText('Cancelar'));
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('al marcar pagado sin fecha, pone la de hoy en hora local', () => {

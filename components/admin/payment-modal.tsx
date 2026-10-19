@@ -4,12 +4,17 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
+import { ApiError } from "@/lib/api";
 import { adminService, registrationsQK } from "@/lib/services/admin";
+import { localDayKey } from "@/lib/utils/date-keys";
 import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
 
 const PAYMENT_METHODS = ["Efectivo", "Transferencia", "TPV", "Online"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** Lo que dice la API cuando la inscripción cambió desde que se abrió el modal. */
+const CHANGED_MEANWHILE = new Set(["REGISTRATION_INVALID_TRANSITION", "PARTNER_NOT_FOUND", "REGISTRATION_NOT_FOUND"]);
 
 interface Props {
   /** Se monta al abrirlo, con la inscripción de ese momento. */
@@ -20,10 +25,9 @@ interface Props {
   onClose: () => void;
 }
 
-/** La fecha local (YYYY-MM-DD): toISOString da la de UTC (de madrugada en Madrid, la del día anterior). */
-const localDate = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const toDateInput = (d: string | null | undefined) => (d ? localDate(new Date(d)) : "");
+// La fecha de pago se guarda como día (medianoche UTC): se lee en UTC para
+// que salga el mismo día en cualquier zona. Hoy, en cambio, es el día local
+const toDateInput = (d: string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 
 export default function PaymentModal({ registration, player, tournamentId, onClose }: Props) {
   const who = pairPlayers(registration).find((p) => p.player === player);
@@ -51,18 +55,24 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
     },
     onError: (err: Error) => {
       toast.error(err.message || "Error al actualizar el pago");
-      // Se cierra y se recarga la lista: si la pareja cambió entretanto, el
-      // modal sigue con la de antes y cada reintento fallaría igual
-      qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
-      onClose();
+      // Si la inscripción cambió entretanto (otra pareja, sin pareja o ya no
+      // está), con la de antes cada reintento fallaría igual: se cierra y se
+      // recarga la lista. Con otros errores (red, validación) sigue abierto
+      if (err instanceof ApiError && err.code && CHANGED_MEANWHILE.has(err.code)) {
+        qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
+        onClose();
+      }
     },
   });
 
   const playerName = who?.name ?? "";
+  // Mientras guarda no se cierra: la respuesta cerraría el modal que se
+  // abriera después (el de otro jugador)
+  const close = () => { if (!saveMut.isPending) onClose(); };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
       <div className="relative w-full max-w-sm bg-card border border-border rounded-xl shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -70,7 +80,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
             <h2 className="font-heading text-lg text-foreground">Estado de pago</h2>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">{playerName}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground">
+          <button onClick={close} disabled={saveMut.isPending} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-40">
             <X size={15} />
           </button>
         </div>
@@ -84,7 +94,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
                 setPaid((v) => {
                   const next = !v;
                   // Auto-fill today as default when marking paid for the first time
-                  if (next && !paidAt) setPaidAt(localDate(new Date()));
+                  if (next && !paidAt) setPaidAt(localDayKey(new Date()));
                   return next;
                 });
               }}
@@ -137,6 +147,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
+                  maxLength={500}
                   rows={2}
                   placeholder="Observaciones opcionales…"
                   className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -149,8 +160,9 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
         {/* Footer */}
         <div className="flex gap-3 px-5 pb-5">
           <button
-            onClick={onClose}
-            className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            onClick={close}
+            disabled={saveMut.isPending}
+            className="flex-1 py-2 rounded-md border border-border text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors disabled:opacity-40"
           >
             Cancelar
           </button>

@@ -21,7 +21,6 @@ export interface PairRegistration {
    */
   primary:    AdminRegistration;
   status:     RegistrationStatus;
-  categoryId: string;
 }
 
 /** La misma clave para A+B y B+A en la misma categoría. */
@@ -51,7 +50,6 @@ export function groupByPair(regs: AdminRegistration[]): PairRegistration[] {
       ids:        live.length > 0 ? live.map((r) => r.id) : [primary.id],
       primary,
       status:     primary.status,
-      categoryId: primary.categoryId,
     };
   });
 }

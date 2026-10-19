@@ -146,7 +146,7 @@ export default function InscripcionesPage() {
   const filtered = useMemo(() =>
     pairs
       .filter((p) => statusFilter === "all" || p.status === statusFilter)
-      .filter((p) => catFilter === "all" || p.categoryId === catFilter)
+      .filter((p) => catFilter === "all" || p.primary.categoryId === catFilter)
       .filter((p) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
@@ -182,10 +182,7 @@ export default function InscripcionesPage() {
         <EnrollTeamModal
           tournament={selectedTournament}
           onEnrolled={(regId) => { setAvailRegId(regId); setAvailEditMode(true); }}
-          onClose={() => {
-            setEnrollOpen(false);
-            invalidateRegistrations(qc, tournamentId);
-          }}
+          onClose={() => setEnrollOpen(false)}
         />
       )}
 

@@ -36,7 +36,7 @@ describe('groupByPair', () => {
     const r = reg();
     const [pair, ...rest] = groupByPair([r]);
     expect(rest).toHaveLength(0);
-    expect(pair).toMatchObject({ ids: [r.id], primary: r, status: 'CONFIRMED', categoryId: 'cat-1' });
+    expect(pair).toMatchObject({ ids: [r.id], primary: r, status: 'CONFIRMED' });
   });
 
   it('pareja espejo con las dos filas vivas: una pareja, las dos filas para cambiar el estado', () => {
@@ -92,7 +92,7 @@ describe('groupByPair', () => {
 
   it('la misma pareja en dos categorías: dos parejas', () => {
     const pairs = groupByPair([reg(), reg({ categoryId: 'cat-2' })]);
-    expect(pairs.map((p) => p.categoryId)).toEqual(['cat-1', 'cat-2']);
+    expect(pairs.map((p) => p.primary.categoryId)).toEqual(['cat-1', 'cat-2']);
   });
 
   it('respeta el orden de llegada (de la más reciente a la más antigua)', () => {

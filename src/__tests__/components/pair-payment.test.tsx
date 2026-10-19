@@ -37,8 +37,17 @@ describe('PairPayment', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
-  it('con withNames, cada uno con su nombre de pila', () => {
-    render(<PairPayment registration={registration()} onEdit={vi.fn()} withNames />);
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Ana: Pagado', 'Bea: Pendiente']);
+  it('con withNames, cada uno con su nombre entero (dos compañeros pueden llamarse igual)', () => {
+    render(
+      <PairPayment
+        registration={registration({ user: { name: 'Ana López' }, partner: { name: 'Ana Ruiz' } })}
+        onEdit={vi.fn()}
+        withNames
+      />,
+    );
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Ana López: Pagado',
+      'Ana Ruiz: Pendiente',
+    ]);
   });
 });

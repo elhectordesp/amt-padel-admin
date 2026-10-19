@@ -6,7 +6,7 @@ import type { AdminRegistration } from "@/types";
 /**
  * El pago de cada jugador de la pareja (se cobra por jugador): uno debajo
  * del otro, en el orden de la columna de la pareja. Con `withNames`, cada uno
- * con su nombre de pila (para las tarjetas del móvil, sin esa columna al lado).
+ * con su nombre (para las tarjetas del móvil, sin esa columna al lado).
  */
 export function PairPayment({
   registration,
@@ -24,10 +24,11 @@ export function PairPayment({
           key={player}
           onClick={() => onEdit(player)}
           title={`Pago de ${name}: ver / editar`}
-          className={`text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${payment.paid ? "text-green-400" : "text-yellow-400"}`}
+          className={`flex max-w-full text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70 ${payment.paid ? "text-green-400" : "text-yellow-400"}`}
         >
-          {withNames && <span className="text-muted-foreground font-normal">{name.split(" ")[0]}: </span>}
-          {payment.paid ? "Pagado" : "Pendiente"}
+          {/* El nombre entero (dos compañeros pueden llamarse igual), cortado si no cabe */}
+          {withNames && <span className="truncate text-muted-foreground font-normal">{name.trim()}:&nbsp;</span>}
+          <span className="shrink-0">{payment.paid ? "Pagado" : "Pendiente"}</span>
         </button>
       ))}
     </div>

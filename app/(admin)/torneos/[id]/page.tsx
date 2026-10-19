@@ -4254,10 +4254,7 @@ export default function TorneoDetailPage() {
       <EnrollTeamModal
         tournament={tournament}
         onEnrolled={(regId) => { setAvailRegId(regId); }}
-        onClose={() => {
-          setEnrollOpen(false);
-          invalidateRegistrations(qc, id);
-        }}
+        onClose={() => setEnrollOpen(false)}
       />
     )}
 

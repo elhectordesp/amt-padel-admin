@@ -383,6 +383,7 @@ export interface GrowthStats {
     gender:         string;
     level:          string;
     totalSpots:     number;
+    // En parejas: las que ocupan plaza más las que esperan, y las que pasan del aforo
     registered:     number;
     overflow:       number;
   }[];

@@ -12,6 +12,18 @@ export const api = axios.create({
   timeout: 10_000,
 });
 
+/**
+ * Con lo que se rechazan las peticiones que fallan: el mensaje del back y,
+ * si los hay, el estado HTTP y su código de error (`code`), para distinguir
+ * un error concreto sin comparar textos.
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status?: number, readonly code?: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 // ── Token helpers ──────────────────────────────────────────────────────────
 const SECURE_COOKIE = process.env.NODE_ENV === "production";
 
@@ -124,7 +136,14 @@ api.interceptors.response.use(
       err.response?.data?.message ??
       err.response?.data?.error ??
       "Error de conexión";
-    return Promise.reject(new Error(Array.isArray(message) ? message[0] : message));
+    const code = err.response?.data?.code;
+    return Promise.reject(
+      new ApiError(
+        Array.isArray(message) ? message[0] : message,
+        err.response?.status,
+        typeof code === "string" ? code : undefined,
+      ),
+    );
   },
 );
 

@@ -301,6 +301,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
     mutationFn: (data: AdminEnrollTeamPayload) =>
       adminService.registrations.enroll(tournament.id, data),
     onSuccess: (res) => {
+      // La lista y las plazas (las páginas ya no lo hacen al cerrar)
       invalidateRegistrations(qc, tournament.id);
       const hasSchedule = (tournament.schedule?.length ?? 0) > 0;
       const regId = res.registration1.id;
@@ -457,7 +458,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
             <p className="text-xs text-muted-foreground">
               Plazas ocupadas: {selectedCategory.occupiedCount} / {selectedCategory.totalSpots}
               {selectedCategory.waitlistCount > 0 && ` (${selectedCategory.waitlistCount} en espera)`}
-              {/* La cola pasa antes: con ella, aunque quede una plaza libre, el alta espera su turno */}
+              {/* Antes del alta, la cola sube a las plazas libres; el alta espera si después no queda plaza o sigue habiendo cola */}
               {selectedCategory.occupiedCount + selectedCategory.waitlistCount >= selectedCategory.totalSpots && !forceEnroll
                 ? " — la inscripción irá a lista de espera"
                 : ""}
