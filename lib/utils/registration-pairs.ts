@@ -73,8 +73,8 @@ export function playerPayment(reg: AdminRegistration, player: PaymentPlayer): Pl
       paymentNote:   reg.paymentNote ?? null,
     };
   }
-  if (!reg.partnerId) return UNPAID;
-  return reg.partnerPayment ?? UNPAID;
+  if (!reg.partnerId) return { ...UNPAID };
+  return reg.partnerPayment ?? { ...UNPAID };
 }
 
 /** Las columnas de pago del CSV: una por jugador (la del compañero, vacía sin pareja). */

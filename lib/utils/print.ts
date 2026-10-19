@@ -21,7 +21,7 @@ function safeColor(c: unknown): string {
   return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
 }
 
-type PairReg = Pick<PairRegistration, "pairKey" | "ids" | "primary" | "status">;
+type PairReg = PairRegistration;
 
 const STATUS_ES: Record<RegistrationStatus, string> = {
   CONFIRMED: "Confirmado",

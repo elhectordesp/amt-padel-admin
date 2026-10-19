@@ -124,6 +124,28 @@ describe('PaymentModal (pago por jugador)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('sin pagar, la nota se ve; al desmarcar un pago no manda su método ni su fecha', async () => {
+    render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('Pagado').parentElement!.querySelector('button')!);
+    expect(screen.getByDisplayValue('nota de Bea')).toBeInTheDocument();
+    await mutationOptions.mutationFn();
+    expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', expect.objectContaining({
+      paid: false, paymentMethod: undefined, paidAt: undefined, paymentNote: 'nota de Bea',
+    }));
+  });
+
+  it('el pago del compañero de una inscripción sin pareja no se puede guardar', () => {
+    render(
+      <PaymentModal
+        registration={{ ...registration, partnerId: null, partner: null }}
+        player="partner"
+        tournamentId="t1"
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Guardar').closest('button')).toBeDisabled();
+  });
+
   it('al marcar pagado sin fecha, pone la de hoy en hora local', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 4, 3, 0, 30)); // 00:30 locales del 3 de mayo

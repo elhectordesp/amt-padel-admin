@@ -42,8 +42,9 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
     mutationFn: () =>
       adminService.registrations.updatePayment(registration.id, {
         paid,
-        paymentMethod: method || undefined,
-        paidAt:        paidAt || undefined,
+        // Sin pagar, sin método ni fecha (no los de un pago que se desmarca)
+        paymentMethod: (paid && method) || undefined,
+        paidAt:        (paid && paidAt) || undefined,
         paymentNote:   note.trim() || undefined,
         player,
         playerId:      who?.id ?? "",
@@ -140,21 +141,21 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
                   className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
               </div>
-
-              {/* Note */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Nota</label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  maxLength={500}
-                  rows={2}
-                  placeholder="Observaciones opcionales…"
-                  className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                />
-              </div>
             </>
           )}
+
+          {/* Note: también sin pagar ("paga el sábado"); se guarda siempre */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Nota</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Observaciones opcionales…"
+              className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:ring-1 focus:ring-[#D4AF37]"
+            />
+          </div>
         </div>
 
         {/* Footer */}
@@ -168,7 +169,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
           </button>
           <button
             onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
+            disabled={saveMut.isPending || !who}
             className="flex-1 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {saveMut.isPending ? (

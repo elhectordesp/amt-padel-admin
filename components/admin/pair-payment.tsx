@@ -18,7 +18,8 @@ export function PairPayment({
   withNames?:   boolean;
 }) {
   return (
-    <div className="flex flex-col items-start gap-0.5">
+    // min-w-0: dentro de una fila flex, sin él no se recorta el nombre y empuja lo de al lado
+    <div className="flex flex-col items-start gap-0.5 min-w-0">
       {pairPlayers(registration).map(({ player, name, payment }) => (
         <button
           key={player}

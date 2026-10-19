@@ -509,7 +509,7 @@ export default function InscripcionesPage() {
                               onEdit={(player) => setPaymentOf({ reg, player })}
                               withNames
                             />
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
                                 title={noAvail ? "Sin disponibilidad" : "Disponibilidad"}
