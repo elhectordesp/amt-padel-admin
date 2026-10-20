@@ -7,6 +7,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
+import { localDateTimeToIso, toLocalDateTimeInput } from "@/lib/utils/date-keys";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -34,7 +35,8 @@ const schema = z.object({
   maxUnavailableTotalHours:  z.number().min(0).optional(),
   hasShirts:                 z.boolean().optional(),
   useSeeding:                z.boolean().optional(),
-  registrationDeadline:      z.string().optional(),
+  // Obligatorio, como al crearlo: vacío, el back lo rechazaba con un error confuso
+  registrationDeadline:      z.string().min(1, "El cierre de inscripciones es obligatorio"),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
@@ -104,15 +106,11 @@ export default function EditarTorneoPage() {
       return `${y}-${m}-${day}`;
     };
 
-    // Convierte a string YYYY-MM-DDTHH:mm en UTC para evitar drift de timezone en cada edición
-    const toDateTimeInput = (val: string | null | undefined): string => {
-      if (!val) return "";
-      return new Date(val).toISOString().slice(0, 16);
-    };
-
     const startStr   = toDateInput(tournament.startDate);
     const endStr     = toDateInput(tournament.endDate);
-    const regDeadline = toDateTimeInput(tournament.registrationDeadline);
+    // En hora local, y al guardar se manda con su zona (localDateTimeToIso):
+    // en UTC, cada guardado lo movía 1-2 h según la hora del servidor
+    const regDeadline = toLocalDateTimeInput(tournament.registrationDeadline);
 
     reset({
       name:                 tournament.name,
@@ -136,7 +134,12 @@ export default function EditarTorneoPage() {
   }, [tournament, reset]);
 
   const save = useMutation({
-    mutationFn: (data: FormData & { force?: boolean }) => adminService.tournaments.update(id, data),
+    mutationFn: (data: FormData & { force?: boolean }) =>
+      adminService.tournaments.update(id, {
+        ...data,
+        // Con su zona: sin ella, el back lo leía en la hora del servidor
+        registrationDeadline: localDateTimeToIso(data.registrationDeadline),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -377,7 +380,7 @@ export default function EditarTorneoPage() {
                   onChange={(v) => setValue("maxMatchesPerPlayerPerDay", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
-              <Field label="Cierre de inscripciones">
+              <Field label="Cierre de inscripciones" error={errors.registrationDeadline?.message}>
                 <Input {...register("registrationDeadline")} type="datetime-local" />
               </Field>
               <Field label="Máx. horas no disponibles (total)">
