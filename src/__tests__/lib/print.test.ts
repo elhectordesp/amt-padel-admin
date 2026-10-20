@@ -263,6 +263,12 @@ describe('printSchedule', () => {
     expect(html).toContain('7-5');
   });
 
+  it('muestra el resultado con el estado tal como lo manda el back (FINISHED)', () => {
+    const match = makeMatch({ status: 'FINISHED', isResult: true, sets1: [6, 7], sets2: [3, 5], winner: 'team1' });
+    printSchedule(makeTournament(), [match], {});
+    expect(mockData.getHtml()).toContain('6-3');
+  });
+
   it('muestra "Pendiente" cuando el partido no está FINISHED', () => {
     printSchedule(makeTournament(), [makeMatch({ status: 'pending' })], {});
     expect(mockData.getHtml()).toContain('Pendiente');
@@ -298,9 +304,25 @@ describe('printTournamentReport', () => {
     winner: 'team1',
   };
 
-  it('usa el color del torneo si es #rrggbb', () => {
+  it('usa el color del torneo si es #rrggbb y se lee sobre la cabecera oscura', () => {
+    printTournamentReport(makeTournament({ imageColor: '#3B82F6' }), [finalMatch]);
+    expect(mockData.getHtml()).toContain('border-bottom: 3px solid #3B82F6');
+  });
+
+  it('un color oscuro (el #1A1400 por defecto del torneo) no se leería: usa el dorado', () => {
     printTournamentReport(makeTournament({ imageColor: '#1A1400' }), [finalMatch]);
-    expect(mockData.getHtml()).toContain('border-bottom: 3px solid #1A1400');
+    const html = mockData.getHtml();
+    expect(html).toContain('border-bottom: 3px solid #D4AF37');
+    expect(html).not.toContain('#1A1400');
+  });
+
+  it('cuenta como finalizados los partidos con el estado del back (FINISHED en mayúsculas)', () => {
+    const fromBack = { ...finalMatch, status: 'FINISHED', isResult: true };
+    const pending = { ...finalMatch, id: 'm2', status: 'SCHEDULED', isResult: false, winner: undefined, sets1: [], sets2: [] };
+    printTournamentReport(makeTournament({ categories: [{ id: 'cat-1', gender: 'M', level: '4a' }] }), [fromBack, pending]);
+    const html = mockData.getHtml();
+    expect(html).toContain('<strong>1</strong> finalizados');
+    expect(html).toContain('6-4');
   });
 
   it('un color que no es #rrggbb no llega al CSS: usa el de por defecto', () => {

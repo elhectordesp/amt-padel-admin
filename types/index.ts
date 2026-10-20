@@ -323,7 +323,8 @@ export interface MatchResult {
   winner?:       "team1" | "team2";
   referee?:      string;
   scoringFormat?: "BEST_OF_3" | "BEST_OF_2_SUPERTB";
-  status:      "pending" | "finished";
+  /** El del back, en mayúsculas (SCHEDULED, ONGOING, FINISHED…). Para saber si tiene resultado, isMatchFinished. */
+  status:      string;
 }
 
 export interface AdminAlert {

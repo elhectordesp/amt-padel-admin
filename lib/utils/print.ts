@@ -2,6 +2,7 @@
 import type { Tournament, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
+import { isMatchFinished } from "@/lib/utils/match-status";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -19,6 +20,19 @@ const DEFAULT_ACCENT = "#D4AF37";
 /** El color va dentro de <style>: solo #rrggbb, si no el de por defecto. */
 function safeColor(c: unknown): string {
   return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
+}
+
+/**
+ * El color del torneo como acento de texto sobre la cabecera oscura del
+ * informe. `imageColor` es un color de fondo (por defecto #1A1400, casi negro):
+ * así, el logo, los números y las categorías no se leían. Si es oscuro, el
+ * dorado de siempre.
+ */
+function readableAccent(c: unknown): string {
+  const color = safeColor(c);
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return brightness < 0.35 ? DEFAULT_ACCENT : color;
 }
 
 type PairReg = PairRegistration;
@@ -181,7 +195,7 @@ export function printTournamentReport(
   tournament: Tournament,
   matches:    MatchResult[],
 ): void {
-  const accent = safeColor((tournament as any).imageColor);
+  const accent = readableAccent((tournament as any).imageColor);
 
   const catMap: Record<string, string> = {};
   for (const c of tournament.categories ?? []) {
@@ -189,7 +203,7 @@ export function printTournamentReport(
   }
 
   const finals        = matches.filter((m) => m.phase === "FINAL" && m.winner);
-  const finishedCount = matches.filter((m) => m.status === "finished").length;
+  const finishedCount = matches.filter(isMatchFinished).length;
   const now           = new Date().toLocaleString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const club          = (tournament as any).club;
   const meta          = [club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
@@ -239,7 +253,7 @@ export function printTournamentReport(
           a.date && b.date ? new Date(a.date).getTime() - new Date(b.date).getTime() : 0,
         );
         const rows = phMatches.map((m, i) => {
-          const done  = m.status === "finished";
+          const done  = isMatchFinished(m);
           const score = done && m.sets1?.length
             ? m.sets1.map((s, j) => `${s}-${m.sets2?.[j] ?? 0}`).join(", ")
             : "";
@@ -273,7 +287,7 @@ export function printTournamentReport(
           </div>`;
       }).join("");
 
-    const done = catMatches.filter((m) => m.status === "finished").length;
+    const done = catMatches.filter(isMatchFinished).length;
     return `
       <div class="cat-block">
         <div class="cat-header">
@@ -445,7 +459,7 @@ export function printSchedule(
       const phase   = esc(PHASE_LABEL[m.phase] ?? m.phase);
       const t1      = m.team1.map(esc).join(" / ") || "—";
       const t2      = m.team2.map(esc).join(" / ") || "—";
-      const done    = m.status === "finished";
+      const done    = isMatchFinished(m);
       const score   = done && m.sets1?.length
         ? m.sets1.map((s, j) => `${s}-${m.sets2?.[j] ?? 0}`).join(", ")
         : "";

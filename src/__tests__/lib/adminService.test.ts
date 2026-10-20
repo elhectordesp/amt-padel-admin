@@ -105,6 +105,24 @@ describe('adminService', () => {
 
   // ── Matches — lógica de transformación ──────────────────────────────
 
+  describe('matches.setResult', () => {
+    it('un walkover manda la pareja ganadora como winnerTeam (con walkoverWinnerTeam, el back la descartaba y daba 400)', async () => {
+      mockPatch.mockResolvedValueOnce({ data: {} });
+      await adminService.matches.setResult('m1', [], [], true, 2);
+      expect(mockPatch).toHaveBeenCalledWith('/admin/matches/m1/result', {
+        sets1: [], sets2: [], walkover: true, winnerTeam: 2,
+      });
+    });
+
+    it('un resultado normal no manda walkover ni winnerTeam; force solo si se pide', async () => {
+      mockPatch.mockResolvedValueOnce({ data: {} });
+      await adminService.matches.setResult('m1', [6, 6], [3, 4], undefined, undefined, true);
+      expect(mockPatch).toHaveBeenCalledWith('/admin/matches/m1/result', {
+        sets1: [6, 6], sets2: [3, 4], force: true,
+      });
+    });
+  });
+
   describe('matches.list', () => {
     it('extrae team1/team2 desde el array players', async () => {
       mockGet.mockResolvedValueOnce({

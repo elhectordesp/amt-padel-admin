@@ -428,7 +428,9 @@ export const adminService = {
       });
     },
     setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
-      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
+      // El back espera `winnerTeam`: con `walkoverWinnerTeam` lo descartaba
+      // (whitelist) y todo walkover daba 400 «Debes indicar qué equipo gana»
+      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, winnerTeam: walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
   },
 
   players: {
