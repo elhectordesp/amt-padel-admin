@@ -7,6 +7,8 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
+import { localDateTimeToIso, localDayKey, toLocalDateTimeInput } from "@/lib/utils/date-keys";
+import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -40,12 +42,13 @@ const schema = z.object({
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
   }
-  if (data.startDate && data.registrationDeadline) {
-    const deadlineDate = data.registrationDeadline.split("T")[0];
-    if (deadlineDate > data.startDate) {
-      ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: "El cierre de inscripciones debe ser antes del inicio del torneo" });
-    }
-  }
+  // La regla del asistente y del back, sin exigir que sea futuro (un torneo
+  // pasado se tiene que poder guardar). Comparando solo el día se dejaba
+  // pasar un cierre a cualquier hora del día de inicio, y el back lo rechazaba
+  const issue = data.registrationDeadline
+    ? registrationDeadlineIssue(data.registrationDeadline, data.startDate)
+    : null;
+  if (issue) ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: issue });
 });
 
 type FormData = z.infer<typeof schema>;
@@ -87,32 +90,22 @@ export default function EditarTorneoPage() {
     0,
   );
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isDirty, dirtyFields } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
   useEffect(() => {
     if (!tournament) return;
 
-    // Convierte una fecha a string YYYY-MM-DD en hora local (no UTC)
-    const toDateInput = (val: string | null | undefined): string => {
-      if (!val) return "";
-      const d = new Date(val);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    };
-
-    // Convierte a string YYYY-MM-DDTHH:mm en UTC para evitar drift de timezone en cada edición
-    const toDateTimeInput = (val: string | null | undefined): string => {
-      if (!val) return "";
-      return new Date(val).toISOString().slice(0, 16);
-    };
+    // YYYY-MM-DD en hora local (no UTC)
+    const toDateInput = (val: string | null | undefined): string =>
+      val ? localDayKey(new Date(val)) : "";
 
     const startStr   = toDateInput(tournament.startDate);
     const endStr     = toDateInput(tournament.endDate);
-    const regDeadline = toDateTimeInput(tournament.registrationDeadline);
+    // En hora local, y al guardar se manda con su zona (localDateTimeToIso):
+    // en UTC, cada guardado lo movía 1-2 h según la hora del servidor
+    const regDeadline = toLocalDateTimeInput(tournament.registrationDeadline);
 
     reset({
       name:                 tournament.name,
@@ -136,7 +129,16 @@ export default function EditarTorneoPage() {
   }, [tournament, reset]);
 
   const save = useMutation({
-    mutationFn: (data: FormData & { force?: boolean }) => adminService.tournaments.update(id, data),
+    mutationFn: (data: FormData & { force?: boolean }) =>
+      adminService.tournaments.update(id, {
+        ...data,
+        // Solo si se ha tocado (al mostrarlo se pierden los segundos y, en la
+        // hora repetida del cambio de otoño, cuál de las dos era), y con su
+        // zona: sin ella, el back lo leía en la hora del servidor
+        registrationDeadline: dirtyFields.registrationDeadline
+          ? localDateTimeToIso(data.registrationDeadline)
+          : undefined,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -215,6 +217,12 @@ export default function EditarTorneoPage() {
 
         <form
           onSubmit={handleSubmit((data) => {
+            // Un cierre que había no se puede quitar desde aquí (vacío no se
+            // manda y el back conserva el de antes): mejor decirlo
+            if (!data.registrationDeadline && tournament?.registrationDeadline) {
+              setError("registrationDeadline", { message: "No se puede quitar el cierre de inscripciones: pon una fecha" });
+              return;
+            }
             // Backend valida imageUrl con @IsUrl() — "" lo rechaza con 400.
             // Convertimos a null para que el endpoint la limpie correctamente
             // (semántica de "quitar imagen" del uploader).
@@ -277,7 +285,8 @@ export default function EditarTorneoPage() {
                 <Input {...register("prize")} placeholder="5.000 € + trofeo" />
               </Field>
               <Field label="Fecha de inicio" error={errors.startDate?.message}>
-                <Input {...register("startDate")} type="date" />
+                {/* deps: el error del cierre depende del inicio y se revalida al cambiarlo */}
+                <Input {...register("startDate", { deps: ["registrationDeadline"] })} type="date" />
               </Field>
               <Field label="Fecha de fin" error={errors.endDate?.message}>
                 <Input {...register("endDate")} type="date" />
@@ -377,7 +386,7 @@ export default function EditarTorneoPage() {
                   onChange={(v) => setValue("maxMatchesPerPlayerPerDay", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
-              <Field label="Cierre de inscripciones">
+              <Field label="Cierre de inscripciones" error={errors.registrationDeadline?.message}>
                 <Input {...register("registrationDeadline")} type="datetime-local" />
               </Field>
               <Field label="Máx. horas no disponibles (total)">

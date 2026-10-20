@@ -99,6 +99,28 @@ describe('LoginForm', () => {
     });
   });
 
+  it('vuelve a la ruta del panel de ?from= tras entrar', async () => {
+    mockUseSearchParams.mockReturnValue({ get: () => '/torneos?status=OPEN' } as any);
+    render(<LoginForm />);
+    await userEvent.type(screen.getByPlaceholderText('admin@amptournaments.com'), 'admin@test.com');
+    await userEvent.type(screen.getByPlaceholderText('••••••••••'), 'mipassword');
+    submitForm();
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/torneos?status=OPEN');
+    });
+  });
+
+  it('con ?from= de otra web va al dashboard (antes llevaba a esa web: redirección abierta)', async () => {
+    mockUseSearchParams.mockReturnValue({ get: () => 'https://web-ajena.example/login' } as any);
+    render(<LoginForm />);
+    await userEvent.type(screen.getByPlaceholderText('admin@amptournaments.com'), 'admin@test.com');
+    await userEvent.type(screen.getByPlaceholderText('••••••••••'), 'mipassword');
+    submitForm();
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
   it('muestra el error de la API cuando login falla', async () => {
     mockLogin.mockRejectedValueOnce(new Error('Credenciales incorrectas'));
     render(<LoginForm />);

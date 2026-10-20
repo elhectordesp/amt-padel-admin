@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { login } from "@/lib/auth";
+import { safeRedirectPath } from "@/lib/utils/safe-redirect";
 
 const schema = z.object({
   email:    z.string().email("Email inválido"),
@@ -18,7 +19,7 @@ type FormData = z.infer<typeof schema>;
 export function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const from         = searchParams.get("from") ?? "/dashboard";
+  const from         = safeRedirectPath(searchParams.get("from"));
 
   const [showPass, setShowPass] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);

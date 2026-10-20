@@ -87,11 +87,11 @@ describe('adminService', () => {
   });
 
   describe('tournaments.create', () => {
-    it('llama a POST /admin/tournaments con el payload', async () => {
+    it('llama a POST /admin/tournaments con el payload y 30 s de espera (crearlo tarda)', async () => {
       const payload = { name: 'Nuevo torneo' } as any;
       mockPost.mockResolvedValueOnce({ data: { id: 't2', ...payload } });
       await adminService.tournaments.create(payload);
-      expect(mockPost).toHaveBeenCalledWith('/admin/tournaments', payload);
+      expect(mockPost).toHaveBeenCalledWith('/admin/tournaments', payload, { timeout: 30_000 });
     });
   });
 

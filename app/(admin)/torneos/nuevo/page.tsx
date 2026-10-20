@@ -4,9 +4,12 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
+import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
+import { localDateTimeToIso } from "@/lib/utils/date-keys";
+import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import type { CategoryLevel, Gender } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,8 +37,9 @@ const catSchema = z.object({
   categories: z.array(z.object({
     gender:            z.enum(["M", "F"]),
     level:             z.string().min(1),
-    totalSpots:        z.number().min(4).max(128),
-    price:             z.number().min(0),
+    // Enteros: el back los guarda así y rechaza los decimales al crear
+    totalSpots:        z.number({ error: "Pon el número de plazas" }).int("Las plazas son un número entero").min(4, "Mínimo 4 plazas").max(128, "Máximo 128 plazas"),
+    price:             z.number({ error: "Pon el precio (0 si es gratis)" }).int("El precio va en euros, sin céntimos").min(0, "El precio no puede ser negativo"),
     prizeChampion:     z.string().optional(),
     prizeRunnerUp:     z.string().optional(),
     prizeConsolation:  z.string().optional(),
@@ -128,6 +132,9 @@ const SCORING_LABEL: Record<string, string> = {
   "ELO":         "Solo ELO",
 };
 
+/** Etiqueta de cada campo de una categoría en móvil (en escritorio la da la cabecera). */
+const MOBILE_LABEL = "sm:hidden text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1";
+
 
 const STEPS = [
   { num: 1, label: "Información"  },
@@ -145,6 +152,10 @@ export default function NuevoTorneoPage() {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [confirmRemoveCatIdx, setConfirmRemoveCatIdx] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  // El último intento de crear no tuvo respuesta clara (red, 10 s, 5xx):
+  // puede haberse creado, y antes de reintentar se pide confirmación
+  const [maybeCreated, setMaybeCreated] = useState(false);
+  const [confirmRetry, setConfirmRetry] = useState(false);
 
   // Accumulated form data
   const [infoData,     setInfoData]     = useState<InfoData     | null>(null);
@@ -203,6 +214,10 @@ export default function NuevoTorneoPage() {
   // ── Step 2: Categories ────────────────────────────────────────────────
   const catForm = useForm<CatData>({
     resolver:      zodResolver(catSchema),
+    // Revalida al cambiar un campo ya tocado: el mensaje de un valor no
+    // válido se va al corregirlo (con trigger() solo se iba al volver a
+    // pulsar "Siguiente")
+    mode:          "onTouched",
     defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
   });
   const { fields, append, remove } = useFieldArray({ control: catForm.control, name: "categories" });
@@ -260,7 +275,9 @@ export default function NuevoTorneoPage() {
       format:      configData!.format,
       scoringSystem: configData!.scoringSystem,
       matchDuration: configData!.matchDuration,
-      registrationDeadline: configData!.registrationDeadline || undefined,
+      // Con su zona: sin ella, el back lo leía en la hora del servidor (UTC en
+      // producción) y el cierre quedaba 1-2 h más tarde de lo escrito
+      registrationDeadline: localDateTimeToIso(configData!.registrationDeadline),
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
       categories: catData!.categories.map((c) => ({
@@ -287,8 +304,44 @@ export default function NuevoTorneoPage() {
       toast.success("Torneo creado correctamente");
       router.push(`/torneos/${t.id}`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      // El botón se vuelve a habilitar siempre (antes había que recargar y
+      // perder lo escrito). Con un 4xx el back lo rechazó y no se creó nada.
+      // Sin respuesta (red, 30 s de espera) o con un 5xx puede haberse creado
+      // (las pistas se asignan después de crearlo): reintentar pide confirmar,
+      // y la lista de torneos se refresca para poder comprobarlo
+      setSubmitted(false);
+      const status = err instanceof ApiError ? err.status : undefined;
+      if (status && status < 500) {
+        toast.error(err.message);
+      } else {
+        setMaybeCreated(true);
+        qc.invalidateQueries({ queryKey: ["tournaments"] });
+        toast.error(`${status ? `${err.message}. ` : ""}No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo`);
+      }
+    },
   });
+
+  // El cierre: la regla de Editar y del back, y además futuro (el fin es
+  // posterior al inicio: no hace falta comprobarlo aparte)
+  const deadlineIssue = (value: string) =>
+    registrationDeadlineIssue(value, infoData?.startDate ?? "", { requireFuture: true });
+
+  /**
+   * Crea el torneo. El cierre se comprobó en el paso 3; si se ha quedado en el
+   * pasado mientras tanto (el torneo nacería con las inscripciones cerradas),
+   * vuelve al paso 3 con el aviso.
+   */
+  const submitCreate = () => {
+    const issue = deadlineIssue(configData!.registrationDeadline);
+    if (issue) {
+      setStep(3);
+      configForm.setError("registrationDeadline", { message: issue });
+      return;
+    }
+    setSubmitted(true);
+    create.mutate();
+  };
 
   const goNext = async () => {
     if (step === 1) {
@@ -305,30 +358,10 @@ export default function NuevoTorneoPage() {
       const ok = await configForm.trigger();
       if (!ok) return;
       const cfg = configForm.getValues();
-      if (cfg.registrationDeadline) {
-        const deadline = new Date(cfg.registrationDeadline);
-        const now      = new Date();
-        const startDate = infoData?.startDate ? new Date(infoData.startDate) : null;
-        const endDate   = infoData?.endDate   ? new Date(infoData.endDate)   : null;
-
-        if (deadline <= now) {
-          configForm.setError("registrationDeadline", {
-            message: "El cierre de inscripciones debe ser una fecha futura",
-          });
-          return;
-        }
-        if (startDate && deadline >= startDate) {
-          configForm.setError("registrationDeadline", {
-            message: "El cierre de inscripciones debe ser anterior al inicio del torneo",
-          });
-          return;
-        }
-        if (endDate && deadline > endDate) {
-          configForm.setError("registrationDeadline", {
-            message: "El cierre de inscripciones no puede ser posterior a la fecha fin del torneo",
-          });
-          return;
-        }
+      const issue = deadlineIssue(cfg.registrationDeadline);
+      if (issue) {
+        configForm.setError("registrationDeadline", { message: issue });
+        return;
       }
       setConfigData(cfg);
       setStep(4);
@@ -339,8 +372,11 @@ export default function NuevoTorneoPage() {
       setStep(5);
     } else if (step === 5) {
       if (submitted) return;
-      setSubmitted(true);
-      create.mutate();
+      if (maybeCreated) {
+        setConfirmRetry(true);
+        return;
+      }
+      submitCreate();
     }
   };
 
@@ -495,40 +531,39 @@ export default function NuevoTorneoPage() {
                   const genderVal       = catForm.watch(`categories.${index}.gender`);
                   const levelVal        = catForm.watch(`categories.${index}.level`);
                   const hasConsolation  = catForm.watch(`categories.${index}.hasConsolation`);
+                  const rowErrors       = catForm.formState.errors.categories?.[index];
                   return (
                     <div key={field.id} className="p-3 bg-secondary/50 rounded-md border border-border space-y-3">
-                      {/* Fila principal — desktop: 5 cols / mobile: 2 rows */}
-                      <div className="hidden sm:grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 items-center">
-                        <CustomSelect compact options={[{ value: "M", label: "Masculino" }, { value: "F", label: "Femenino" }]} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")} />
-                        <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
-                        <Input type="number" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
-                        <Input type="number" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={0.5} />
-                        <button type="button" onClick={() => tryRemoveCategory(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
-                      </div>
-                      {/* Mobile layout */}
-                      <div className="sm:hidden space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Género</p>
-                            <CustomSelect compact options={[{ value: "M", label: "Masculino" }, { value: "F", label: "Femenino" }]} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")} />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Nivel</p>
-                            <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
-                          </div>
+                      {/* Fila principal: cada campo una sola vez. Antes había
+                          una fila para escritorio y otra para móvil con los
+                          mismos campos registrados dos veces, y el input oculto
+                          pisaba al visible: en escritorio se guardaban las
+                          plazas y el precio por defecto. Escritorio: 5
+                          columnas; móvil: género y nivel arriba, plazas,
+                          precio y borrar debajo */}
+                      <div className="grid grid-cols-[1fr_1fr_36px] sm:grid-cols-[1fr_1fr_100px_100px_36px] gap-2 sm:gap-3 items-end sm:items-center">
+                        <div>
+                          <p className={MOBILE_LABEL}>Género</p>
+                          <CustomSelect compact options={[{ value: "M", label: "Masculino" }, { value: "F", label: "Femenino" }]} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")} />
                         </div>
-                        <div className="grid grid-cols-[1fr_1fr_36px] gap-2 items-end">
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Plazas</p>
-                            <Input type="number" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Precio (€)</p>
-                            <Input type="number" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={0.5} />
-                          </div>
-                          <button type="button" onClick={() => tryRemoveCategory(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
+                        <div className="col-span-2 sm:col-span-1">
+                          <p className={MOBILE_LABEL}>Nivel</p>
+                          <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
                         </div>
+                        <div>
+                          <p className={MOBILE_LABEL}>Plazas</p>
+                          <Input type="number" aria-label="Plazas" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
+                        </div>
+                        <div>
+                          <p className={MOBILE_LABEL}>Precio (€)</p>
+                          <Input type="number" aria-label="Precio (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={1} />
+                        </div>
+                        <button type="button" aria-label="Quitar categoría" onClick={() => tryRemoveCategory(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
                       </div>
+                      {/* Sin esto, con un valor no válido "Siguiente" no hacía nada y no se sabía por qué */}
+                      {[rowErrors?.totalSpots?.message, rowErrors?.price?.message].filter(Boolean).map((msg) => (
+                        <p key={msg} className="text-xs text-destructive">{msg}</p>
+                      ))}
 
                       {/* Premios por categoría */}
                       <div className="border-t border-border/50 pt-2.5 space-y-2">
@@ -936,6 +971,19 @@ export default function NuevoTorneoPage() {
         danger
         onClose={() => setShowLeaveModal(false)}
         onConfirm={() => router.push("/torneos")}
+      />
+
+      <ConfirmModal
+        open={confirmRetry}
+        title="¿Volver a intentarlo?"
+        description="El intento anterior no tuvo una respuesta clara y puede que el torneo ya se haya creado. Revisa la lista de torneos: si está, volver a crearlo lo duplicaría."
+        confirmLabel="Crear de todos modos"
+        onClose={() => setConfirmRetry(false)}
+        onConfirm={() => {
+          setConfirmRetry(false);
+          setMaybeCreated(false);
+          submitCreate();
+        }}
       />
 
       <ConfirmModal
