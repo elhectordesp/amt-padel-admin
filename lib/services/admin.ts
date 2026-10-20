@@ -11,7 +11,7 @@ import type {
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
-  AuditLogEntry, PlayerRegistrationEntry,
+  AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
 } from "@/types";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
@@ -210,7 +210,7 @@ export const adminService = {
             : {}),
         })
         .then((r) => r.data),
-    registrationAvailability: (regId: string) => api.get(`/admin/registrations/${regId}/availability`).then((r) => r.data),
+    registrationAvailability: (regId: string) => api.get<RegistrationAvailability>(`/admin/registrations/${regId}/availability`).then((r) => r.data),
     updateAvailability: (regId: string, availability: { dayId: string; fullAvailability: boolean; unavailableSlots?: string[] }[]) =>
       api.patch(`/admin/registrations/${regId}/availability`, { availability }).then((r) => r.data),
     /**

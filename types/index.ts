@@ -329,6 +329,30 @@ export interface MatchResult {
   status:      string;
 }
 
+/** Una jornada del torneo, con sus franjas. `date` puede faltar. */
+export interface ScheduleDay {
+  dayId:    string;
+  label:    string;
+  date:     string | null;
+  allSlots: string[];
+}
+
+/** La disponibilidad que una pareja ha dado para una jornada. */
+export interface GivenAvailabilityDay extends ScheduleDay {
+  fullAvailability:  boolean;
+  unavailableSlots?: string[];
+}
+
+/** GET /admin/registrations/:id/availability. */
+export interface RegistrationAvailability {
+  player1: string;
+  player2: string | null;
+  /** Lo que ha dado la pareja. */
+  days: GivenAvailabilityDay[];
+  /** Todas las jornadas del torneo (back #65; antes no venía). */
+  tournamentDays?: ScheduleDay[];
+}
+
 export interface AdminAlert {
   id:      string;
   type:    "match" | "player" | "registration" | "payment" | "system";
