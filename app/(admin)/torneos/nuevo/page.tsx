@@ -4,10 +4,12 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
+import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
 import { localDateTimeToIso } from "@/lib/utils/date-keys";
+import { isValidDateTime, registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import type { CategoryLevel, Gender } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,7 +52,7 @@ const configSchema = z.object({
   format:              z.string().min(1),
   scoringSystem:       z.string().min(1),
   matchDuration:       z.number().int().min(10).max(180),
-  registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
+  registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria").refine(isValidDateTime, "Fecha no válida"),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
 });
@@ -208,6 +210,10 @@ export default function NuevoTorneoPage() {
   // ── Step 2: Categories ────────────────────────────────────────────────
   const catForm = useForm<CatData>({
     resolver:      zodResolver(catSchema),
+    // Revalida al cambiar un campo ya tocado: el mensaje de un valor no
+    // válido se va al corregirlo (con trigger() solo se iba al volver a
+    // pulsar "Siguiente")
+    mode:          "onTouched",
     defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
   });
   const { fields, append, remove } = useFieldArray({ control: catForm.control, name: "categories" });
@@ -294,11 +300,17 @@ export default function NuevoTorneoPage() {
       toast.success("Torneo creado correctamente");
       router.push(`/torneos/${t.id}`);
     },
-    // Sin volver a habilitar el botón, tras un error el asistente se quedaba
-    // bloqueado y había que recargar y perder lo escrito
     onError: (err: Error) => {
-      setSubmitted(false);
-      toast.error(err.message);
+      // Si el back respondió, el torneo no se creó: se habilita el botón para
+      // corregir y reintentar (antes había que recargar y perder lo escrito).
+      // Sin respuesta (red, 10 s de espera) puede haberse creado igualmente,
+      // y reintentar lo duplicaría
+      if (err instanceof ApiError && err.status) {
+        setSubmitted(false);
+        toast.error(err.message);
+      } else {
+        toast.error("No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo");
+      }
     },
   });
 
@@ -317,30 +329,12 @@ export default function NuevoTorneoPage() {
       const ok = await configForm.trigger();
       if (!ok) return;
       const cfg = configForm.getValues();
-      if (cfg.registrationDeadline) {
-        const deadline = new Date(cfg.registrationDeadline);
-        const now      = new Date();
-        const startDate = infoData?.startDate ? new Date(infoData.startDate) : null;
-        const endDate   = infoData?.endDate   ? new Date(infoData.endDate)   : null;
-
-        if (deadline <= now) {
-          configForm.setError("registrationDeadline", {
-            message: "El cierre de inscripciones debe ser una fecha futura",
-          });
-          return;
-        }
-        if (startDate && deadline >= startDate) {
-          configForm.setError("registrationDeadline", {
-            message: "El cierre de inscripciones debe ser anterior al inicio del torneo",
-          });
-          return;
-        }
-        if (endDate && deadline > endDate) {
-          configForm.setError("registrationDeadline", {
-            message: "El cierre de inscripciones no puede ser posterior a la fecha fin del torneo",
-          });
-          return;
-        }
+      // La regla de Editar y del back, y además futuro (el fin es posterior
+      // al inicio: no hace falta comprobarlo aparte)
+      const issue = registrationDeadlineIssue(cfg.registrationDeadline, infoData?.startDate ?? "", { requireFuture: true });
+      if (issue) {
+        configForm.setError("registrationDeadline", { message: issue });
+        return;
       }
       setConfigData(cfg);
       setStep(4);

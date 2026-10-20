@@ -2,9 +2,10 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-// Los tests corren en la hora de Madrid, la del panel. En UTC (la del CI), la
-// hora local y la UTC coinciden y los fallos de zona horaria no se ven
-process.env.TZ = 'Europe/Madrid';
+// Los tests corren en la hora de Madrid, la del panel, salvo que se pida otra
+// (TZ=… npm test). En UTC (la del CI), la hora local y la UTC coinciden y los
+// fallos de zona horaria no se ven
+process.env.TZ ??= 'Europe/Madrid';
 
 export default defineConfig({
   plugins: [react()],

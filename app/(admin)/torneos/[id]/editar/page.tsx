@@ -8,6 +8,7 @@ import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog"
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { localDateTimeToIso, localDayKey, toLocalDateTimeInput } from "@/lib/utils/date-keys";
+import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -41,14 +42,13 @@ const schema = z.object({
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
   }
-  // El instante del cierre (en hora local) antes del día de inicio, como lo
-  // comprueban el asistente y el back. Comparando solo el día dejaba pasar un
-  // cierre a cualquier hora del día de inicio, y el back lo rechazaba
-  if (data.startDate && data.registrationDeadline) {
-    if (new Date(data.registrationDeadline) >= new Date(data.startDate)) {
-      ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: "El cierre de inscripciones debe ser antes del inicio del torneo" });
-    }
-  }
+  // La regla del asistente y del back, sin exigir que sea futuro (un torneo
+  // pasado se tiene que poder guardar). Comparando solo el día se dejaba
+  // pasar un cierre a cualquier hora del día de inicio, y el back lo rechazaba
+  const issue = data.registrationDeadline
+    ? registrationDeadlineIssue(data.registrationDeadline, data.startDate)
+    : null;
+  if (issue) ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: issue });
 });
 
 type FormData = z.infer<typeof schema>;
