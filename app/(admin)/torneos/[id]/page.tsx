@@ -38,6 +38,7 @@ import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
+import { hasDate, isMatchFinished } from "@/lib/utils/match-status";
 import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
@@ -394,7 +395,7 @@ function CalendarTab({
 
   const exportCsv = () => {
     const rows = [...matches]
-      .filter((m) => !!m.date)
+      .filter(hasDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((m) => {
         const d = new Date(m.date);
@@ -406,7 +407,7 @@ function CalendarTab({
           Fase:       phaseLabel(m.phase),
           "Equipo 1": m.team1.join(" / "),
           "Equipo 2": m.team2.join(" / "),
-          Estado:     m.status === "finished" ? "Finalizado" : "Pendiente",
+          Estado:     isMatchFinished(m) ? "Finalizado" : "Pendiente",
         };
       });
 
@@ -1085,7 +1086,7 @@ function CourtBoard({
   });
 
   const scheduled = useMemo(
-    () => allMatches.filter((m) => !!m.date),
+    () => allMatches.filter(hasDate),
     [allMatches],
   );
 

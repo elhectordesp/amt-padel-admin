@@ -25,9 +25,9 @@ export function ResultModal({
   isCorrection?: boolean;
 }) {
   // Detectar si el partido EXISTENTE es walkover (al corregir) — preseleccionar tab.
-  const initialMode: ResultMode = isCorrection && (match as any).isWalkover ? "walkover" : "score";
+  const initialMode: ResultMode = isCorrection && match.isWalkover ? "walkover" : "score";
   const initialWalkoverWinner: 1 | 2 | null =
-    isCorrection && (match as any).isWalkover && (match as any).winner === "team2" ? 2 : null;
+    isCorrection && match.isWalkover && match.winner === "team2" ? 2 : null;
 
   const [mode, setMode] = useState<ResultMode>(initialMode);
   const [walkoverWinner, setWalkoverWinner] = useState<1 | 2 | null>(
@@ -183,9 +183,9 @@ export function ResultModal({
                 <AlertTriangle size={11} /> Walkover (W.O.)
               </p>
               <p>
-                Marca cuál de las 2 parejas <strong>no se presentó</strong>. La otra
-                gana automáticamente con marcador <span className="font-mono">6-0 6-0</span>.
-                El partido queda registrado como W.O. en el historial.
+                Marca la pareja que <strong>gana</strong>: la otra no se presentó.
+                Gana con marcador <span className="font-mono">6-0 6-0</span> y el
+                partido queda registrado como W.O. en el historial.
               </p>
             </div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">¿Quién ganó?</p>

@@ -245,7 +245,6 @@ describe('ResultModal', () => {
         sets1: [6, 6], sets2: [0, 0],
         isResult: true,
         winner: 'team1',
-        // @ts-expect-error — campo extra del backend no tipado en MatchResult
         isWalkover: true,
       });
       render(<ResultModal {...baseProps({ match, isCorrection: true })} />);

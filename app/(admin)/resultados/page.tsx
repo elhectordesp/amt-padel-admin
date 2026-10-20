@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trophy, Search, CheckCircle, Clock, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import { toast } from "sonner";
@@ -11,10 +11,16 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { adminService } from "@/lib/services/admin";
 import { phaseLabel } from "@/lib/constants";
+import { hasBothPairs } from "@/lib/utils/match-status";
 import type { MatchResult, Tournament } from "@/types";
 
 const PAGE_SIZE = 30;
 
+/** El marcador para la lista y el CSV, con la marca W.O. si fue walkover. */
+const scoreText = (m: MatchResult) => {
+  const sets = (m.sets1 ?? []).map((s, i) => `${s}-${m.sets2?.[i] ?? 0}`).join(", ");
+  return m.isWalkover ? `W.O. ${sets}`.trim() : sets;
+};
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function ResultadosPage() {
@@ -41,30 +47,51 @@ export default function ResultadosPage() {
     enabled:  !!tournamentId,
   });
 
-  const saveResult = useMutation({
-    mutationFn: ({ id, sets1, sets2 }: { id: string; sets1: number[]; sets2: number[] }) =>
-      adminService.matches.setResult(id, sets1, sets2),
-    onSuccess: () => {
+  // Como en la ficha del torneo: también walkover, y la convención
+  // "Confirma para…" del back (torneo que no está en curso, siguiente ronda ya
+  // jugada) se puede forzar. Antes aquí solo salía el toast, sin salida
+  const saveResult = async (
+    match: MatchResult,
+    sets1: number[],
+    sets2: number[],
+    opts?: { walkover?: boolean; walkoverWinnerTeam?: 1 | 2 },
+    force = false,
+  ): Promise<void> => {
+    setSavingId(match.id);
+    try {
+      await adminService.matches.setResult(match.id, sets1, sets2, opts?.walkover, opts?.walkoverWinnerTeam, force);
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
-      toast.success("Resultado guardado");
+      // La última final cierra el torneo (FINISHED): el selector y la ficha
+      // tienen que enterarse
+      qc.invalidateQueries({ queryKey: ["tournaments"] });
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
       setSelectedMatch(null);
-    },
-    onError:   (err: Error) => toast.error(err.message),
-    onSettled: () => setSavingId(null),
-  });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (!force && /Confirma para/i.test(msg) &&
+          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
+        return await saveResult(match, sets1, sets2, opts, true);
+      }
+      toast.error(msg || "Error al guardar resultado");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
-  const pendingMatches  = matches.filter((m: MatchResult) => !m.isResult);
-  const finishedMatches = matches.filter((m: MatchResult) =>  m.isResult);
+  const pendingMatches  = useMemo(() => matches.filter((m: MatchResult) => !m.isResult), [matches]);
+  const finishedMatches = useMemo(() => matches.filter((m: MatchResult) =>  m.isResult), [matches]);
 
   const filtered = useMemo(() =>
     [...pendingMatches, ...finishedMatches].filter((m: MatchResult) => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
+      // Los partidos sin pista asignada llegan con court null (rompía la página)
       return m.team1.some((p) => p.toLowerCase().includes(q)) ||
              m.team2.some((p) => p.toLowerCase().includes(q)) ||
-             m.court.toLowerCase().includes(q);
+             (m.court ?? "").toLowerCase().includes(q);
     }),
   [pendingMatches, finishedMatches, search]);
 
@@ -124,13 +151,11 @@ export default function ResultadosPage() {
                     `resultados-${tournamentId}`,
                     filtered.map((m: MatchResult) => ({
                       Fase:       phaseLabel(m.phase),
-                      Pista:      m.court,
+                      Pista:      m.court ?? "",
                       "Pareja 1": m.team1.join(" / "),
                       "Pareja 2": m.team2.join(" / "),
                       Estado:     m.isResult ? "Completado" : "Pendiente",
-                      Resultado:  m.isResult && m.sets1
-                        ? m.sets1.map((s, i) => `${s}-${m.sets2?.[i] ?? 0}`).join(", ")
-                        : "",
+                      Resultado:  m.isResult ? scoreText(m) : "",
                     }))
                   )}
                   disabled={filtered.length === 0}
@@ -206,22 +231,26 @@ export default function ResultadosPage() {
                         {/* Result + action */}
                         <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60">
                           {match.isResult && match.sets1 && match.sets2 ? (
-                            <span className="text-xs text-foreground font-mono">
-                              {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
-                            </span>
+                            <span className="text-xs text-foreground font-mono">{scoreText(match)}</span>
                           ) : (
                             <span className="text-[11px] text-muted-foreground italic">Sin resultado</span>
                           )}
-                          <button
-                            onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
-                              match.isResult
-                                ? "border border-border text-muted-foreground hover:text-foreground"
-                                : "bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]"
-                            }`}
-                          >
-                            {match.isResult ? "Editar" : "Introducir"}
-                          </button>
+                          {!hasBothPairs(match) ? (
+                            <span className="text-[11px] text-muted-foreground italic">
+                              {match.isResult ? "Pase directo" : "Faltan parejas"}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
+                                match.isResult
+                                  ? "border border-border text-muted-foreground hover:text-foreground"
+                                  : "bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]"
+                              }`}
+                            >
+                              {match.isResult ? "Editar" : "Introducir"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -260,9 +289,7 @@ export default function ResultadosPage() {
                               {match.isResult && match.sets1 && match.sets2 ? (
                                 <div className="flex items-center gap-1.5">
                                   <CheckCircle size={13} className="text-green-400" />
-                                  <span className="text-xs text-foreground font-mono">
-                                    {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
-                                  </span>
+                                  <span className="text-xs text-foreground font-mono">{scoreText(match)}</span>
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1.5 text-xs text-yellow-400">
@@ -272,14 +299,20 @@ export default function ResultadosPage() {
                               )}
                             </td>
                             <td className="px-5 py-3.5">
-                              <button
-                                onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
-                                className={`text-xs font-medium transition-colors hover:underline ${
-                                  match.isResult ? "text-muted-foreground" : "text-[#D4AF37]"
-                                }`}
-                              >
-                                {match.isResult ? "Editar" : "Introducir"}
-                              </button>
+                              {!hasBothPairs(match) ? (
+                                <span className="text-xs text-muted-foreground italic">
+                                  {match.isResult ? "Pase directo" : "Faltan parejas"}
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
+                                  className={`text-xs font-medium transition-colors hover:underline ${
+                                    match.isResult ? "text-muted-foreground" : "text-[#D4AF37]"
+                                  }`}
+                                >
+                                  {match.isResult ? "Editar" : "Introducir"}
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -335,10 +368,7 @@ export default function ResultadosPage() {
           onClose={() => setSelectedMatch(null)}
           saving={savingId === selectedMatch.id}
           isCorrection={selectedMatch.isResult}
-          onSave={(s1, s2) => {
-            setSavingId(selectedMatch.id);
-            saveResult.mutate({ id: selectedMatch.id, sets1: s1, sets2: s2 });
-          }}
+          onSave={(s1, s2, opts) => { void saveResult(selectedMatch, s1, s2, opts); }}
         />
       )}
     </>

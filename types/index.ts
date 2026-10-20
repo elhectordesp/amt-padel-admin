@@ -313,17 +313,20 @@ export interface MatchResult {
   tournamentId?: string;
   categoryId?:   string;
   phase:         string;
-  date:          string;
-  court:         string;
+  /** null mientras el partido no tiene fecha ni pista (p. ej. una ronda del cuadro aún por jugar). */
+  date:          string | null;
+  court:         string | null;
   team1:         string[];
   team2:         string[];
   isResult:      boolean;
+  isWalkover?:   boolean;
   sets1?:        number[];
   sets2?:        number[];
   winner?:       "team1" | "team2";
   referee?:      string;
   scoringFormat?: "BEST_OF_3" | "BEST_OF_2_SUPERTB";
-  status:      "pending" | "finished";
+  /** El del back, en mayúsculas (SCHEDULED, ONGOING, FINISHED…). Para saber si tiene resultado, isMatchFinished. */
+  status:      string;
 }
 
 export interface AdminAlert {

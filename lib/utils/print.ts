@@ -2,6 +2,7 @@
 import type { Tournament, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
+import { hasDate, isMatchFinished, type DatedMatch } from "@/lib/utils/match-status";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -15,11 +16,6 @@ function esc(s: string | number | null | undefined): string {
 }
 
 const DEFAULT_ACCENT = "#D4AF37";
-
-/** El color va dentro de <style>: solo #rrggbb, si no el de por defecto. */
-function safeColor(c: unknown): string {
-  return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
-}
 
 type PairReg = PairRegistration;
 
@@ -181,7 +177,11 @@ export function printTournamentReport(
   tournament: Tournament,
   matches:    MatchResult[],
 ): void {
-  const accent = safeColor((tournament as any).imageColor);
+  // El dorado de la marca. Antes salía del imageColor del torneo, un color de
+  // fondo (#1A1400 por defecto, casi negro, y no se puede cambiar desde el
+  // panel): sobre la cabecera oscura no se leían el logo, los números ni las
+  // categorías
+  const accent = DEFAULT_ACCENT;
 
   const catMap: Record<string, string> = {};
   for (const c of tournament.categories ?? []) {
@@ -189,7 +189,7 @@ export function printTournamentReport(
   }
 
   const finals        = matches.filter((m) => m.phase === "FINAL" && m.winner);
-  const finishedCount = matches.filter((m) => m.status === "finished").length;
+  const finishedCount = matches.filter(isMatchFinished).length;
   const now           = new Date().toLocaleString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const club          = (tournament as any).club;
   const meta          = [club?.name, club?.city].filter(Boolean).map(esc).join(" · ");
@@ -239,7 +239,7 @@ export function printTournamentReport(
           a.date && b.date ? new Date(a.date).getTime() - new Date(b.date).getTime() : 0,
         );
         const rows = phMatches.map((m, i) => {
-          const done  = m.status === "finished";
+          const done  = isMatchFinished(m);
           const score = done && m.sets1?.length
             ? m.sets1.map((s, j) => `${s}-${m.sets2?.[j] ?? 0}`).join(", ")
             : "";
@@ -273,7 +273,7 @@ export function printTournamentReport(
           </div>`;
       }).join("");
 
-    const done = catMatches.filter((m) => m.status === "finished").length;
+    const done = catMatches.filter(isMatchFinished).length;
     return `
       <div class="cat-block">
         <div class="cat-header">
@@ -422,12 +422,12 @@ export function printSchedule(
   catMap:     Record<string, string>,
 ): void {
   const scheduled = [...matches]
-    .filter((m) => !!m.date)
+    .filter(hasDate)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   if (scheduled.length === 0) return;
 
-  const byDate = new Map<string, MatchResult[]>();
+  const byDate = new Map<string, DatedMatch[]>();
   for (const m of scheduled) {
     const key = new Date(m.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     (byDate.get(key) ?? byDate.set(key, []).get(key)!).push(m);
@@ -445,7 +445,7 @@ export function printSchedule(
       const phase   = esc(PHASE_LABEL[m.phase] ?? m.phase);
       const t1      = m.team1.map(esc).join(" / ") || "—";
       const t2      = m.team2.map(esc).join(" / ") || "—";
-      const done    = m.status === "finished";
+      const done    = isMatchFinished(m);
       const score   = done && m.sets1?.length
         ? m.sets1.map((s, j) => `${s}-${m.sets2?.[j] ?? 0}`).join(", ")
         : "";
