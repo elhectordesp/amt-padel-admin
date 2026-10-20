@@ -13,7 +13,7 @@ vi.mock('@/lib/services/admin', () => ({
   },
 }));
 
-import { AvailabilityModal, editableDays } from '../../../components/admin/availability-modal';
+import { AvailabilityModal } from '../../../components/admin/availability-modal';
 import { useQuery } from '@tanstack/react-query';
 
 const mockUseQuery = useQuery as ReturnType<typeof vi.fn>;
@@ -127,25 +127,42 @@ describe('AvailabilityModal', () => {
   });
 });
 
-describe('editableDays', () => {
+describe('AvailabilityModal con las jornadas del torneo', () => {
   const tournamentDays = [
-    { dayId: 'd1', label: 'Sábado', date: '2026-07-04', allSlots: ['10:00', '11:00'] },
+    { dayId: 'd1', label: 'Sábado', date: '2026-07-04', allSlots: ['10:00'] },
     { dayId: 'd2', label: 'Domingo', date: '2026-07-05', allSlots: ['10:00'] },
   ];
 
-  it('todas las jornadas del torneo; las que la pareja no dio, disponibles todo el día', () => {
-    const days = editableDays({
-      days: [makeDay({ dayId: 'd2', label: 'Domingo', unavailableSlots: ['10:00'] })],
-      tournamentDays,
+  it('en lectura salen todas las jornadas: las no dadas, «Sin indicar»', () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        player1: 'Ana', player2: null, tournamentDays,
+        days: [makeDay({ dayId: 'd2', label: 'Domingo', allSlots: ['10:00'], fullAvailability: true })],
+      },
+      isLoading: false,
     });
-    expect(days.map((d) => [d.dayId, d.fullAvailability, [...d.unavailableSlots]])).toEqual([
-      ['d1', true, []],
-      ['d2', false, ['10:00']],
-    ]);
+    render(<AvailabilityModal registrationId="reg-1" onClose={vi.fn()} />);
+    expect(screen.getByText('Sábado')).toBeInTheDocument();
+    expect(screen.getByText('Sin indicar')).toBeInTheDocument();
+    expect(screen.getByText('Disponible todo el día')).toBeInTheDocument();
   });
 
-  it('sin tournamentDays (un back anterior): las guardadas, como antes', () => {
-    const days = editableDays({ days: [makeDay()] });
-    expect(days.map((d) => d.dayId)).toEqual(['day-1']);
+  it('con todo dado, al editar «Guardar» está desactivado hasta que se cambie algo', () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        player1: 'Ana', player2: null, tournamentDays,
+        // Al revés que tournamentDays: compara por jornada, no por posición
+        days: [
+          makeDay({ dayId: 'd2', label: 'Domingo', allSlots: ['10:00'], fullAvailability: true }),
+          makeDay({ dayId: 'd1', label: 'Sábado', allSlots: ['10:00'], fullAvailability: true }),
+        ],
+      },
+      isLoading: false,
+    });
+    render(<AvailabilityModal registrationId="reg-1" onClose={vi.fn()} editMode />);
+    const guardar = screen.getByRole('button', { name: /Guardar/ });
+    expect(guardar).toBeDisabled();
+    fireEvent.click(screen.getAllByRole('button', { name: /Disponible todo el día/ })[0]);
+    expect(guardar).toBeEnabled();
   });
 });

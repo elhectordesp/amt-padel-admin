@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CalendarDays, Save, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, registrationsQK } from "@/lib/services/admin";
+import {
+  availabilityChanged,
+  availabilityDays,
+  type AvailabilityDayState,
+} from "@/lib/utils/registration-availability";
 
 interface Props {
   registrationId: string;
@@ -13,65 +18,26 @@ interface Props {
   editMode?: boolean;
 }
 
-interface DayState {
-  dayId:            string;
-  label:            string;
-  date:             string;
-  allSlots:         string[];
-  fullAvailability: boolean;
-  unavailableSlots: Set<string>;
-}
-
-interface AvailabilityDay {
-  dayId: string; label: string; date: string;
-  allSlots: string[]; fullAvailability: boolean; unavailableSlots?: string[];
-}
-
-/** Una jornada del torneo, sin la disponibilidad de la pareja. */
-interface TournamentDay {
-  dayId: string; label: string; date: string; allSlots: string[];
-}
-
-function buildDayState(day: AvailabilityDay): DayState {
-  return {
-    dayId:            day.dayId,
-    label:            day.label,
-    date:             day.date,
-    allSlots:         day.allSlots,
-    fullAvailability: day.fullAvailability,
-    unavailableSlots: new Set(day.unavailableSlots ?? []),
-  };
-}
-
-/**
- * Las jornadas para editar: todas las del torneo, con lo que la pareja ya
- * dio, y las que no dio, disponibles todo el día. Con solo las guardadas, una
- * pareja sin disponibilidad (las inscritas desde el panel) no tenía nada que
- * rellenar: «Este torneo no tiene días de horario configurados». Sin
- * `tournamentDays` (un back anterior), las guardadas.
- */
-export function editableDays(data: { days?: AvailabilityDay[]; tournamentDays?: TournamentDay[] }): DayState[] {
-  if (!data.tournamentDays) return (data.days ?? []).map(buildDayState);
-  const saved = new Map((data.days ?? []).map((d) => [d.dayId, d]));
-  return data.tournamentDays.map((day) =>
-    buildDayState(saved.get(day.dayId) ?? { ...day, fullAvailability: true, unavailableSlots: [] }),
-  );
-}
-
 export function AvailabilityModal({ registrationId, onClose, editMode = false }: Props) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(editMode);
-  const [days,    setDays]    = useState<DayState[]>([]);
+  const [days,    setDays]    = useState<AvailabilityDayState[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["reg-availability", registrationId],
     queryFn:  () => adminService.tournaments.registrationAvailability(registrationId),
+    // Una recarga a mitad de edición no tiene que pisar lo editado
+    refetchOnWindowFocus: false,
   });
 
+  // Lo guardado, por jornada: lo mismo para leer, para editar y para comparar
+  const baseline = useMemo(() => (data ? availabilityDays(data) : []), [data]);
+
   useEffect(() => {
+    // Solo la primera vez: lo que ya se está editando no se pisa
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (data?.days) setDays(editableDays(data));
-  }, [data]);
+    setDays((prev) => (prev.length ? prev : baseline));
+  }, [baseline]);
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -113,23 +79,9 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
     );
   };
 
-  const hasDays  = (data?.days?.length ?? 0) > 0;
-  // True only when local state actually differs from server data —
-  // prevents enabling Save on a noop click.
-  const hasUnsavedChanges = (() => {
-    if (!editing || !data?.days || days.length === 0) return false;
-    const original = (data.days as AvailabilityDay[]);
-    if (original.length !== days.length) return true;
-    return days.some((d, i) => {
-      const o = original[i];
-      if (!o) return true;
-      if (!!o.fullAvailability !== !!d.fullAvailability) return true;
-      const oSlots = new Set(o.unavailableSlots ?? []);
-      if (oSlots.size !== d.unavailableSlots.size) return true;
-      for (const s of d.unavailableSlots) if (!oSlots.has(s)) return true;
-      return false;
-    });
-  })();
+  // Si la pareja ha dado alguna jornada (si no, en lectura sale el aviso)
+  const hasGiven = baseline.some((d) => d.given);
+  const hasUnsavedChanges = editing && days.length > 0 && availabilityChanged(days, baseline);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -157,18 +109,22 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
             <div className="flex items-center justify-center py-8">
               <Loader2 size={20} className="animate-spin text-muted-foreground" />
             </div>
-          ) : !hasDays && !editing ? (
+          ) : !hasGiven && !editing ? (
             <div className="text-center py-6 space-y-2">
               <p className="text-sm text-muted-foreground">Este jugador no ha indicado su disponibilidad.</p>
-              {data?.days !== undefined && (
+              {data && (
                 <p className="text-xs text-muted-foreground">
-                  {data.days.length === 0 && "El torneo no tiene horario definido, o la disponibilidad está vacía."}
+                  {data.tournamentDays && baseline.length === 0
+                    ? "El torneo no tiene horario definido."
+                    : data.tournamentDays
+                      ? "Para el horario cuenta como disponible todo el día. Puedes meterla con «Editar disponibilidad»."
+                      : data.days.length === 0 && "El torneo no tiene horario definido, o la disponibilidad está vacía."}
                 </p>
               )}
             </div>
           ) : editing ? (
             /* ── Modo edición ── */
-            days.length === 0 ? (
+            baseline.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">
                 Este torneo no tiene días de horario configurados.
               </p>
@@ -215,10 +171,19 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
               ))
             )
           ) : (
-            /* ── Modo lectura ── */
-            (data!.days as AvailabilityDay[]).map((day) => {
-              const unavailable   = new Set(day.unavailableSlots ?? []);
+            /* ── Modo lectura: todas las jornadas, las no dadas como «Sin indicar» ── */
+            baseline.map((day) => {
+              const unavailable   = day.unavailableSlots;
               const allUnavail    = !day.fullAvailability && day.allSlots.every((s: string) => unavailable.has(s));
+              if (!day.given)
+                return (
+                  <div key={day.dayId} className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-foreground">{day.label}</p>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+                      Sin indicar
+                    </span>
+                  </div>
+                );
               return (
                 <div key={day.dayId} className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -265,7 +230,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
           {!editing ? (
             <>
               <button
-                onClick={() => { setEditing(true); if (data?.days) setDays(editableDays(data)); }}
+                onClick={() => { setEditing(true); setDays(baseline); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-xs font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors"
               >
                 <CalendarDays size={12} />
