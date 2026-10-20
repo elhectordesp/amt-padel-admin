@@ -9,7 +9,7 @@ import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
 import { localDateTimeToIso } from "@/lib/utils/date-keys";
-import { isValidDateTime, registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
+import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import type { CategoryLevel, Gender } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,7 +52,7 @@ const configSchema = z.object({
   format:              z.string().min(1),
   scoringSystem:       z.string().min(1),
   matchDuration:       z.number().int().min(10).max(180),
-  registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria").refine(isValidDateTime, "Fecha no válida"),
+  registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
 });
@@ -152,6 +152,10 @@ export default function NuevoTorneoPage() {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [confirmRemoveCatIdx, setConfirmRemoveCatIdx] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  // El último intento de crear no tuvo respuesta clara (red, 10 s, 5xx):
+  // puede haberse creado, y antes de reintentar se pide confirmación
+  const [maybeCreated, setMaybeCreated] = useState(false);
+  const [confirmRetry, setConfirmRetry] = useState(false);
 
   // Accumulated form data
   const [infoData,     setInfoData]     = useState<InfoData     | null>(null);
@@ -301,14 +305,16 @@ export default function NuevoTorneoPage() {
       router.push(`/torneos/${t.id}`);
     },
     onError: (err: Error) => {
-      // Si el back respondió, el torneo no se creó: se habilita el botón para
-      // corregir y reintentar (antes había que recargar y perder lo escrito).
-      // Sin respuesta (red, 10 s de espera) puede haberse creado igualmente,
-      // y reintentar lo duplicaría
-      if (err instanceof ApiError && err.status) {
-        setSubmitted(false);
+      // El botón se vuelve a habilitar siempre (antes había que recargar y
+      // perder lo escrito). Con un 4xx el back lo rechazó y no se creó nada.
+      // Sin respuesta (red, 10 s de espera) o con un 5xx puede haberse creado
+      // (las pistas se asignan después de crearlo): reintentar pide confirmar
+      setSubmitted(false);
+      const status = err instanceof ApiError ? err.status : undefined;
+      if (status && status < 500) {
         toast.error(err.message);
       } else {
+        setMaybeCreated(true);
         toast.error("No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo");
       }
     },
@@ -345,6 +351,19 @@ export default function NuevoTorneoPage() {
       setStep(5);
     } else if (step === 5) {
       if (submitted) return;
+      // El cierre se comprobó en el paso 3; si se ha quedado en el pasado
+      // mientras tanto, el torneo nacería con las inscripciones cerradas
+      const issue = registrationDeadlineIssue(configData!.registrationDeadline, infoData?.startDate ?? "", { requireFuture: true });
+      if (issue) {
+        configForm.reset(configData!);
+        setStep(3);
+        configForm.setError("registrationDeadline", { message: issue });
+        return;
+      }
+      if (maybeCreated) {
+        setConfirmRetry(true);
+        return;
+      }
       setSubmitted(true);
       create.mutate();
     }
@@ -941,6 +960,20 @@ export default function NuevoTorneoPage() {
         danger
         onClose={() => setShowLeaveModal(false)}
         onConfirm={() => router.push("/torneos")}
+      />
+
+      <ConfirmModal
+        open={confirmRetry}
+        title="¿Volver a intentarlo?"
+        description="El intento anterior no tuvo una respuesta clara y puede que el torneo ya se haya creado. Revisa la lista de torneos: si está, volver a crearlo lo duplicaría."
+        confirmLabel="Crear de todos modos"
+        onClose={() => setConfirmRetry(false)}
+        onConfirm={() => {
+          setConfirmRetry(false);
+          setMaybeCreated(false);
+          setSubmitted(true);
+          create.mutate();
+        }}
       />
 
       <ConfirmModal

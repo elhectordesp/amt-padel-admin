@@ -90,7 +90,7 @@ export default function EditarTorneoPage() {
     0,
   );
 
-  const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isDirty } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isDirty, dirtyFields } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
@@ -132,8 +132,12 @@ export default function EditarTorneoPage() {
     mutationFn: (data: FormData & { force?: boolean }) =>
       adminService.tournaments.update(id, {
         ...data,
-        // Con su zona: sin ella, el back lo leía en la hora del servidor
-        registrationDeadline: localDateTimeToIso(data.registrationDeadline),
+        // Solo si se ha tocado (al mostrarlo se pierden los segundos y, en la
+        // hora repetida del cambio de otoño, cuál de las dos era), y con su
+        // zona: sin ella, el back lo leía en la hora del servidor
+        registrationDeadline: dirtyFields.registrationDeadline
+          ? localDateTimeToIso(data.registrationDeadline)
+          : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
@@ -281,7 +285,8 @@ export default function EditarTorneoPage() {
                 <Input {...register("prize")} placeholder="5.000 € + trofeo" />
               </Field>
               <Field label="Fecha de inicio" error={errors.startDate?.message}>
-                <Input {...register("startDate")} type="date" />
+                {/* deps: el error del cierre depende del inicio y se revalida al cambiarlo */}
+                <Input {...register("startDate", { deps: ["registrationDeadline"] })} type="date" />
               </Field>
               <Field label="Fecha de fin" error={errors.endDate?.message}>
                 <Input {...register("endDate")} type="date" />

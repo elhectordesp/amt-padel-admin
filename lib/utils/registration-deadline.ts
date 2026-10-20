@@ -1,4 +1,8 @@
-/** Si el valor de un `datetime-local` es una fecha que existe. */
+/**
+ * Si el valor de un `datetime-local` se puede leer como fecha (no detecta un
+ * 30 de febrero, que `Date` pasa al 2 de marzo, pero el campo no lo deja
+ * escribir; sí un año de 5 cifras, que el campo sí deja).
+ */
 export function isValidDateTime(value: string): boolean {
   return !Number.isNaN(new Date(value).getTime());
 }
