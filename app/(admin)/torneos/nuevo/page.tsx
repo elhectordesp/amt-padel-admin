@@ -35,8 +35,9 @@ const catSchema = z.object({
   categories: z.array(z.object({
     gender:            z.enum(["M", "F"]),
     level:             z.string().min(1),
-    totalSpots:        z.number().min(4).max(128),
-    price:             z.number().min(0),
+    // Enteros: el back los guarda así y rechaza los decimales al crear
+    totalSpots:        z.number({ error: "Pon el número de plazas" }).int("Las plazas son un número entero").min(4, "Mínimo 4 plazas").max(128, "Máximo 128 plazas"),
+    price:             z.number({ error: "Pon el precio (0 si es gratis)" }).int("El precio va en euros, sin céntimos").min(0, "El precio no puede ser negativo"),
     prizeChampion:     z.string().optional(),
     prizeRunnerUp:     z.string().optional(),
     prizeConsolation:  z.string().optional(),
@@ -293,7 +294,12 @@ export default function NuevoTorneoPage() {
       toast.success("Torneo creado correctamente");
       router.push(`/torneos/${t.id}`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    // Sin volver a habilitar el botón, tras un error el asistente se quedaba
+    // bloqueado y había que recargar y perder lo escrito
+    onError: (err: Error) => {
+      setSubmitted(false);
+      toast.error(err.message);
+    },
   });
 
   const goNext = async () => {
@@ -501,6 +507,7 @@ export default function NuevoTorneoPage() {
                   const genderVal       = catForm.watch(`categories.${index}.gender`);
                   const levelVal        = catForm.watch(`categories.${index}.level`);
                   const hasConsolation  = catForm.watch(`categories.${index}.hasConsolation`);
+                  const rowErrors       = catForm.formState.errors.categories?.[index];
                   return (
                     <div key={field.id} className="p-3 bg-secondary/50 rounded-md border border-border space-y-3">
                       {/* Fila principal: cada campo una sola vez. Antes había
@@ -525,10 +532,14 @@ export default function NuevoTorneoPage() {
                         </div>
                         <div>
                           <p className={MOBILE_LABEL}>Precio (€)</p>
-                          <Input type="number" aria-label="Precio (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={0.5} />
+                          <Input type="number" aria-label="Precio (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={1} />
                         </div>
                         <button type="button" aria-label="Quitar categoría" onClick={() => tryRemoveCategory(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
                       </div>
+                      {/* Sin esto, con un valor no válido "Siguiente" no hacía nada y no se sabía por qué */}
+                      {[rowErrors?.totalSpots?.message, rowErrors?.price?.message].filter(Boolean).map((msg) => (
+                        <p key={msg} className="text-xs text-destructive">{msg}</p>
+                      ))}
 
                       {/* Premios por categoría */}
                       <div className="border-t border-border/50 pt-2.5 space-y-2">

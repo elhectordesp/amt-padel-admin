@@ -14,7 +14,10 @@ export function safeRedirectPath(
   if (!from || !from.startsWith("/")) return fallback;
   try {
     const url = new URL(from, PANEL_ORIGIN);
-    if (url.origin !== PANEL_ORIGIN) return fallback;
+    // Con segmentos de punto (`/..//web`, `/%2e%2e//web`) se queda en el
+    // panel al resolverlo, pero la ruta resultante empieza por `//`, y el
+    // router la vuelve a leer como otra web
+    if (url.origin !== PANEL_ORIGIN || url.pathname.startsWith("//")) return fallback;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return fallback;

@@ -7,7 +7,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
-import { localDateTimeToIso, toLocalDateTimeInput } from "@/lib/utils/date-keys";
+import { localDateTimeToIso, localDayKey, toLocalDateTimeInput } from "@/lib/utils/date-keys";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -35,16 +35,17 @@ const schema = z.object({
   maxUnavailableTotalHours:  z.number().min(0).optional(),
   hasShirts:                 z.boolean().optional(),
   useSeeding:                z.boolean().optional(),
-  // Obligatorio, como al crearlo: vacío, el back lo rechazaba con un error confuso
-  registrationDeadline:      z.string().min(1, "El cierre de inscripciones es obligatorio"),
+  registrationDeadline:      z.string().optional(),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
   }
+  // El instante del cierre (en hora local) antes del día de inicio, como lo
+  // comprueban el asistente y el back. Comparando solo el día dejaba pasar un
+  // cierre a cualquier hora del día de inicio, y el back lo rechazaba
   if (data.startDate && data.registrationDeadline) {
-    const deadlineDate = data.registrationDeadline.split("T")[0];
-    if (deadlineDate > data.startDate) {
+    if (new Date(data.registrationDeadline) >= new Date(data.startDate)) {
       ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: "El cierre de inscripciones debe ser antes del inicio del torneo" });
     }
   }
@@ -89,22 +90,16 @@ export default function EditarTorneoPage() {
     0,
   );
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isDirty } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
   useEffect(() => {
     if (!tournament) return;
 
-    // Convierte una fecha a string YYYY-MM-DD en hora local (no UTC)
-    const toDateInput = (val: string | null | undefined): string => {
-      if (!val) return "";
-      const d = new Date(val);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    };
+    // YYYY-MM-DD en hora local (no UTC)
+    const toDateInput = (val: string | null | undefined): string =>
+      val ? localDayKey(new Date(val)) : "";
 
     const startStr   = toDateInput(tournament.startDate);
     const endStr     = toDateInput(tournament.endDate);
@@ -218,6 +213,12 @@ export default function EditarTorneoPage() {
 
         <form
           onSubmit={handleSubmit((data) => {
+            // Un cierre que había no se puede quitar desde aquí (vacío no se
+            // manda y el back conserva el de antes): mejor decirlo
+            if (!data.registrationDeadline && tournament?.registrationDeadline) {
+              setError("registrationDeadline", { message: "No se puede quitar el cierre de inscripciones: pon una fecha" });
+              return;
+            }
             // Backend valida imageUrl con @IsUrl() — "" lo rechaza con 400.
             // Convertimos a null para que el endpoint la limpie correctamente
             // (semántica de "quitar imagen" del uploader).

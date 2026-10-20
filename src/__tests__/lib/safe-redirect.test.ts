@@ -21,7 +21,15 @@ describe("safeRedirectPath", () => {
     ["con tabulador en medio (el navegador lo quita)", "/\t/web-ajena.example"],
     ["javascript:", "javascript:alert(1)"],
     ["relativa sin barra", "web-ajena.example"],
+    ["con /.. delante", "/..//web-ajena.example"],
+    ["con /. delante", "/.//web-ajena.example"],
+    ["con /.. codificado", "/%2e%2e//web-ajena.example"],
+    ["con /.. tras una ruta del panel", "/torneos/..//web-ajena.example"],
   ])("otra web, %s: al dashboard", (_caso, from) => {
     expect(safeRedirectPath(from)).toBe("/dashboard");
+  });
+
+  it("una ruta del panel con segmentos de punto se normaliza y se respeta", () => {
+    expect(safeRedirectPath("/torneos/../jugadores")).toBe("/jugadores");
   });
 });
