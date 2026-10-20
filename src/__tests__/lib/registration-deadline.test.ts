@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isValidDateTime, registrationDeadlineIssue } from "../../../lib/utils/registration-deadline";
+import { registrationDeadlineIssue } from "../../../lib/utils/registration-deadline";
 import { toLocalDateTimeInput } from "../../../lib/utils/date-keys";
 
 describe("registrationDeadlineIssue", () => {
@@ -23,7 +23,6 @@ describe("registrationDeadlineIssue", () => {
   });
 
   it("fecha que no existe (año de 5 cifras): error, no se ignora", () => {
-    expect(isValidDateTime("20266-10-31T20:00")).toBe(false);
     expect(registrationDeadlineIssue("20266-10-31T20:00", "2026-11-20")).toBe("Fecha no válida");
   });
 });

@@ -307,18 +307,41 @@ export default function NuevoTorneoPage() {
     onError: (err: Error) => {
       // El botón se vuelve a habilitar siempre (antes había que recargar y
       // perder lo escrito). Con un 4xx el back lo rechazó y no se creó nada.
-      // Sin respuesta (red, 10 s de espera) o con un 5xx puede haberse creado
-      // (las pistas se asignan después de crearlo): reintentar pide confirmar
+      // Sin respuesta (red, 30 s de espera) o con un 5xx puede haberse creado
+      // (las pistas se asignan después de crearlo): reintentar pide confirmar,
+      // y la lista de torneos se refresca para poder comprobarlo
       setSubmitted(false);
       const status = err instanceof ApiError ? err.status : undefined;
       if (status && status < 500) {
         toast.error(err.message);
       } else {
         setMaybeCreated(true);
-        toast.error("No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo");
+        qc.invalidateQueries({ queryKey: ["tournaments"] });
+        toast.error(`${status ? `${err.message}. ` : ""}No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo`);
       }
     },
   });
+
+  // El cierre: la regla de Editar y del back, y además futuro (el fin es
+  // posterior al inicio: no hace falta comprobarlo aparte)
+  const deadlineIssue = (value: string) =>
+    registrationDeadlineIssue(value, infoData?.startDate ?? "", { requireFuture: true });
+
+  /**
+   * Crea el torneo. El cierre se comprobó en el paso 3; si se ha quedado en el
+   * pasado mientras tanto (el torneo nacería con las inscripciones cerradas),
+   * vuelve al paso 3 con el aviso.
+   */
+  const submitCreate = () => {
+    const issue = deadlineIssue(configData!.registrationDeadline);
+    if (issue) {
+      setStep(3);
+      configForm.setError("registrationDeadline", { message: issue });
+      return;
+    }
+    setSubmitted(true);
+    create.mutate();
+  };
 
   const goNext = async () => {
     if (step === 1) {
@@ -335,9 +358,7 @@ export default function NuevoTorneoPage() {
       const ok = await configForm.trigger();
       if (!ok) return;
       const cfg = configForm.getValues();
-      // La regla de Editar y del back, y además futuro (el fin es posterior
-      // al inicio: no hace falta comprobarlo aparte)
-      const issue = registrationDeadlineIssue(cfg.registrationDeadline, infoData?.startDate ?? "", { requireFuture: true });
+      const issue = deadlineIssue(cfg.registrationDeadline);
       if (issue) {
         configForm.setError("registrationDeadline", { message: issue });
         return;
@@ -351,21 +372,11 @@ export default function NuevoTorneoPage() {
       setStep(5);
     } else if (step === 5) {
       if (submitted) return;
-      // El cierre se comprobó en el paso 3; si se ha quedado en el pasado
-      // mientras tanto, el torneo nacería con las inscripciones cerradas
-      const issue = registrationDeadlineIssue(configData!.registrationDeadline, infoData?.startDate ?? "", { requireFuture: true });
-      if (issue) {
-        configForm.reset(configData!);
-        setStep(3);
-        configForm.setError("registrationDeadline", { message: issue });
-        return;
-      }
       if (maybeCreated) {
         setConfirmRetry(true);
         return;
       }
-      setSubmitted(true);
-      create.mutate();
+      submitCreate();
     }
   };
 
@@ -971,8 +982,7 @@ export default function NuevoTorneoPage() {
         onConfirm={() => {
           setConfirmRetry(false);
           setMaybeCreated(false);
-          setSubmitted(true);
-          create.mutate();
+          submitCreate();
         }}
       />
 

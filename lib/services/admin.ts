@@ -160,7 +160,9 @@ export const adminService = {
       api.get<Tournament>(`/admin/tournaments/${id}`).then((r) =>
         r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
       ),
-    create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data).then((r) => r.data),
+    // 30 s en vez de los 10 de siempre: con jornadas y pistas tarda más, y
+    // si se corta antes el torneo se crea igual sin que el panel lo sepa
+    create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data, { timeout: 30_000 }).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     /** Editar jornadas/tramos horarios (solo durante el montaje). Reemplaza todas las jornadas. */
     updateSchedule:  (id: string, schedule: { date: string; type?: string; isFinal?: boolean; maxUnavailableSlots?: number; blocks: { start: string; end: string }[] }[]) =>

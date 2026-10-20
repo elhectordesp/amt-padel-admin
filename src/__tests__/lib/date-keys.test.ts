@@ -18,6 +18,15 @@ describe("toLocalDateTimeInput / localDateTimeToIso (datetime-local)", () => {
     );
   });
 
+  it("instantes absolutos en hora de Madrid (vitest corre en Europe/Madrid)", () => {
+    // Verano (+2) e invierno (+1). Con toISOString().slice(0, 16), la versión
+    // con el fallo, el campo enseñaría 21:00 y 19:00
+    expect(localDateTimeToIso("2026-07-06T23:00")).toBe("2026-07-06T21:00:00.000Z");
+    expect(toLocalDateTimeInput("2026-07-06T21:00:00.000Z")).toBe("2026-07-06T23:00");
+    expect(localDateTimeToIso("2026-11-15T20:00")).toBe("2026-11-15T19:00:00.000Z");
+    expect(toLocalDateTimeInput("2026-11-15T19:00:00.000Z")).toBe("2026-11-15T20:00");
+  });
+
   it("guardar varias veces no mueve la hora (antes se adelantaba 1-2 h en cada guardado)", () => {
     let value = "2026-10-25T23:59"; // la noche del cambio de hora, además
     for (let i = 0; i < 3; i++) value = toLocalDateTimeInput(localDateTimeToIso(value));
