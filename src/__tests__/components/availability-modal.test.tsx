@@ -13,7 +13,7 @@ vi.mock('@/lib/services/admin', () => ({
   },
 }));
 
-import { AvailabilityModal } from '../../../components/admin/availability-modal';
+import { AvailabilityModal, editableDays } from '../../../components/admin/availability-modal';
 import { useQuery } from '@tanstack/react-query';
 
 const mockUseQuery = useQuery as ReturnType<typeof vi.fn>;
@@ -22,6 +22,7 @@ function makeDay(overrides: Record<string, unknown> = {}) {
   return {
     dayId:           'day-1',
     label:           'Sábado',
+    date:            '2026-07-04',
     allSlots:        ['10:00', '11:00', '12:00'],
     unavailableSlots: [],
     fullAvailability: false,
@@ -106,5 +107,45 @@ describe('AvailabilityModal', () => {
     render(<AvailabilityModal registrationId="reg-1" onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('pareja sin disponibilidad (alta desde el panel): al editar salen todas las jornadas del torneo, no «no tiene días»', () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        player1: 'Ana', player2: 'Bea', days: [],
+        tournamentDays: [
+          { dayId: 'd1', label: 'Sábado', date: '2026-07-04', allSlots: ['10:00'] },
+          { dayId: 'd2', label: 'Domingo', date: '2026-07-05', allSlots: ['10:00'] },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<AvailabilityModal registrationId="reg-1" onClose={vi.fn()} editMode />);
+    expect(screen.getByText('Sábado')).toBeInTheDocument();
+    expect(screen.getByText('Domingo')).toBeInTheDocument();
+    expect(screen.queryByText(/no tiene días de horario/)).not.toBeInTheDocument();
+  });
+});
+
+describe('editableDays', () => {
+  const tournamentDays = [
+    { dayId: 'd1', label: 'Sábado', date: '2026-07-04', allSlots: ['10:00', '11:00'] },
+    { dayId: 'd2', label: 'Domingo', date: '2026-07-05', allSlots: ['10:00'] },
+  ];
+
+  it('todas las jornadas del torneo; las que la pareja no dio, disponibles todo el día', () => {
+    const days = editableDays({
+      days: [makeDay({ dayId: 'd2', label: 'Domingo', unavailableSlots: ['10:00'] })],
+      tournamentDays,
+    });
+    expect(days.map((d) => [d.dayId, d.fullAvailability, [...d.unavailableSlots]])).toEqual([
+      ['d1', true, []],
+      ['d2', false, ['10:00']],
+    ]);
+  });
+
+  it('sin tournamentDays (un back anterior): las guardadas, como antes', () => {
+    const days = editableDays({ days: [makeDay()] });
+    expect(days.map((d) => d.dayId)).toEqual(['day-1']);
   });
 });

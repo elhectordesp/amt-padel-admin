@@ -27,6 +27,11 @@ interface AvailabilityDay {
   allSlots: string[]; fullAvailability: boolean; unavailableSlots?: string[];
 }
 
+/** Una jornada del torneo, sin la disponibilidad de la pareja. */
+interface TournamentDay {
+  dayId: string; label: string; date: string; allSlots: string[];
+}
+
 function buildDayState(day: AvailabilityDay): DayState {
   return {
     dayId:            day.dayId,
@@ -36,6 +41,21 @@ function buildDayState(day: AvailabilityDay): DayState {
     fullAvailability: day.fullAvailability,
     unavailableSlots: new Set(day.unavailableSlots ?? []),
   };
+}
+
+/**
+ * Las jornadas para editar: todas las del torneo, con lo que la pareja ya
+ * dio, y las que no dio, disponibles todo el día. Con solo las guardadas, una
+ * pareja sin disponibilidad (las inscritas desde el panel) no tenía nada que
+ * rellenar: «Este torneo no tiene días de horario configurados». Sin
+ * `tournamentDays` (un back anterior), las guardadas.
+ */
+export function editableDays(data: { days?: AvailabilityDay[]; tournamentDays?: TournamentDay[] }): DayState[] {
+  if (!data.tournamentDays) return (data.days ?? []).map(buildDayState);
+  const saved = new Map((data.days ?? []).map((d) => [d.dayId, d]));
+  return data.tournamentDays.map((day) =>
+    buildDayState(saved.get(day.dayId) ?? { ...day, fullAvailability: true, unavailableSlots: [] }),
+  );
 }
 
 export function AvailabilityModal({ registrationId, onClose, editMode = false }: Props) {
@@ -50,7 +70,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (data?.days) setDays((data.days as AvailabilityDay[]).map(buildDayState));
+    if (data?.days) setDays(editableDays(data));
   }, [data]);
 
   const saveMut = useMutation({
@@ -245,7 +265,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
           {!editing ? (
             <>
               <button
-                onClick={() => { setEditing(true); if (data?.days) setDays(data.days.map(buildDayState)); }}
+                onClick={() => { setEditing(true); if (data?.days) setDays(editableDays(data)); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-xs font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors"
               >
                 <CalendarDays size={12} />
