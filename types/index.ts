@@ -313,11 +313,13 @@ export interface MatchResult {
   tournamentId?: string;
   categoryId?:   string;
   phase:         string;
-  date:          string;
-  court:         string;
+  /** null mientras el partido no tiene fecha ni pista (p. ej. una ronda del cuadro aún por jugar). */
+  date:          string | null;
+  court:         string | null;
   team1:         string[];
   team2:         string[];
   isResult:      boolean;
+  isWalkover?:   boolean;
   sets1?:        number[];
   sets2?:        number[];
   winner?:       "team1" | "team2";

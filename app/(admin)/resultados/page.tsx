@@ -11,13 +11,16 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { adminService } from "@/lib/services/admin";
 import { phaseLabel } from "@/lib/constants";
+import { hasBothPairs } from "@/lib/utils/match-status";
 import type { MatchResult, Tournament } from "@/types";
 
 const PAGE_SIZE = 30;
 
-/** Un partido de un cuadro aún sin rellenar (p. ej. una semifinal) no se puede jugar todavía. */
-const hasBothPairs = (m: MatchResult) => m.team1.length > 0 && m.team2.length > 0;
-
+/** El marcador para la lista y el CSV, con la marca W.O. si fue walkover. */
+const scoreText = (m: MatchResult) => {
+  const sets = (m.sets1 ?? []).map((s, i) => `${s}-${m.sets2?.[i] ?? 0}`).join(", ");
+  return m.isWalkover ? `W.O. ${sets}`.trim() : sets;
+};
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function ResultadosPage() {
@@ -60,6 +63,10 @@ export default function ResultadosPage() {
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
+      // La última final cierra el torneo (FINISHED): el selector y la ficha
+      // tienen que enterarse
+      qc.invalidateQueries({ queryKey: ["tournaments"] });
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
       toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
       setSelectedMatch(null);
     } catch (err: unknown) {
@@ -74,8 +81,8 @@ export default function ResultadosPage() {
     }
   };
 
-  const pendingMatches  = matches.filter((m: MatchResult) => !m.isResult);
-  const finishedMatches = matches.filter((m: MatchResult) =>  m.isResult);
+  const pendingMatches  = useMemo(() => matches.filter((m: MatchResult) => !m.isResult), [matches]);
+  const finishedMatches = useMemo(() => matches.filter((m: MatchResult) =>  m.isResult), [matches]);
 
   const filtered = useMemo(() =>
     [...pendingMatches, ...finishedMatches].filter((m: MatchResult) => {
@@ -148,9 +155,7 @@ export default function ResultadosPage() {
                       "Pareja 1": m.team1.join(" / "),
                       "Pareja 2": m.team2.join(" / "),
                       Estado:     m.isResult ? "Completado" : "Pendiente",
-                      Resultado:  m.isResult && m.sets1
-                        ? m.sets1.map((s, i) => `${s}-${m.sets2?.[i] ?? 0}`).join(", ")
-                        : "",
+                      Resultado:  m.isResult ? scoreText(m) : "",
                     }))
                   )}
                   disabled={filtered.length === 0}
@@ -226,14 +231,14 @@ export default function ResultadosPage() {
                         {/* Result + action */}
                         <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/60">
                           {match.isResult && match.sets1 && match.sets2 ? (
-                            <span className="text-xs text-foreground font-mono">
-                              {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
-                            </span>
+                            <span className="text-xs text-foreground font-mono">{scoreText(match)}</span>
                           ) : (
                             <span className="text-[11px] text-muted-foreground italic">Sin resultado</span>
                           )}
-                          {!match.isResult && !hasBothPairs(match) ? (
-                            <span className="text-[11px] text-muted-foreground italic">Faltan parejas</span>
+                          {!hasBothPairs(match) ? (
+                            <span className="text-[11px] text-muted-foreground italic">
+                              {match.isResult ? "Pase directo" : "Faltan parejas"}
+                            </span>
                           ) : (
                             <button
                               onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
@@ -284,9 +289,7 @@ export default function ResultadosPage() {
                               {match.isResult && match.sets1 && match.sets2 ? (
                                 <div className="flex items-center gap-1.5">
                                   <CheckCircle size={13} className="text-green-400" />
-                                  <span className="text-xs text-foreground font-mono">
-                                    {match.sets1.map((s, i) => `${s}-${match.sets2![i]}`).join(", ")}
-                                  </span>
+                                  <span className="text-xs text-foreground font-mono">{scoreText(match)}</span>
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1.5 text-xs text-yellow-400">
@@ -296,8 +299,10 @@ export default function ResultadosPage() {
                               )}
                             </td>
                             <td className="px-5 py-3.5">
-                              {!match.isResult && !hasBothPairs(match) ? (
-                                <span className="text-xs text-muted-foreground italic">Faltan parejas</span>
+                              {!hasBothPairs(match) ? (
+                                <span className="text-xs text-muted-foreground italic">
+                                  {match.isResult ? "Pase directo" : "Faltan parejas"}
+                                </span>
                               ) : (
                                 <button
                                   onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}

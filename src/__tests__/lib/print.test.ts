@@ -304,12 +304,7 @@ describe('printTournamentReport', () => {
     winner: 'team1',
   };
 
-  it('usa el color del torneo si es #rrggbb y se lee sobre la cabecera oscura', () => {
-    printTournamentReport(makeTournament({ imageColor: '#3B82F6' }), [finalMatch]);
-    expect(mockData.getHtml()).toContain('border-bottom: 3px solid #3B82F6');
-  });
-
-  it('un color oscuro (el #1A1400 por defecto del torneo) no se leería: usa el dorado', () => {
+  it('el acento es el dorado, no el imageColor del torneo (#1A1400 por defecto, casi negro: no se leía)', () => {
     printTournamentReport(makeTournament({ imageColor: '#1A1400' }), [finalMatch]);
     const html = mockData.getHtml();
     expect(html).toContain('border-bottom: 3px solid #D4AF37');
@@ -325,7 +320,7 @@ describe('printTournamentReport', () => {
     expect(html).toContain('6-4');
   });
 
-  it('un color que no es #rrggbb no llega al CSS: usa el de por defecto', () => {
+  it('el imageColor no llega al CSS, ni uno con código', () => {
     const evil = 'red}</style><script>alert(1)</script><style>';
     printTournamentReport(makeTournament({ imageColor: evil }), [finalMatch]);
     const html = mockData.getHtml();

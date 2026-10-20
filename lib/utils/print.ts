@@ -2,7 +2,7 @@
 import type { Tournament, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
-import { isMatchFinished } from "@/lib/utils/match-status";
+import { hasDate, isMatchFinished, type DatedMatch } from "@/lib/utils/match-status";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -16,24 +16,6 @@ function esc(s: string | number | null | undefined): string {
 }
 
 const DEFAULT_ACCENT = "#D4AF37";
-
-/** El color va dentro de <style>: solo #rrggbb, si no el de por defecto. */
-function safeColor(c: unknown): string {
-  return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : DEFAULT_ACCENT;
-}
-
-/**
- * El color del torneo como acento de texto sobre la cabecera oscura del
- * informe. `imageColor` es un color de fondo (por defecto #1A1400, casi negro):
- * así, el logo, los números y las categorías no se leían. Si es oscuro, el
- * dorado de siempre.
- */
-function readableAccent(c: unknown): string {
-  const color = safeColor(c);
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
-  const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return brightness < 0.35 ? DEFAULT_ACCENT : color;
-}
 
 type PairReg = PairRegistration;
 
@@ -195,7 +177,11 @@ export function printTournamentReport(
   tournament: Tournament,
   matches:    MatchResult[],
 ): void {
-  const accent = readableAccent((tournament as any).imageColor);
+  // El dorado de la marca. Antes salía del imageColor del torneo, un color de
+  // fondo (#1A1400 por defecto, casi negro, y no se puede cambiar desde el
+  // panel): sobre la cabecera oscura no se leían el logo, los números ni las
+  // categorías
+  const accent = DEFAULT_ACCENT;
 
   const catMap: Record<string, string> = {};
   for (const c of tournament.categories ?? []) {
@@ -436,12 +422,12 @@ export function printSchedule(
   catMap:     Record<string, string>,
 ): void {
   const scheduled = [...matches]
-    .filter((m) => !!m.date)
+    .filter(hasDate)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   if (scheduled.length === 0) return;
 
-  const byDate = new Map<string, MatchResult[]>();
+  const byDate = new Map<string, DatedMatch[]>();
   for (const m of scheduled) {
     const key = new Date(m.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     (byDate.get(key) ?? byDate.set(key, []).get(key)!).push(m);
