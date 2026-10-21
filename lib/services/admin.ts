@@ -457,7 +457,8 @@ export const adminService = {
         return {
           data: (raw.data ?? []).map((u: any): Player => ({
             ...u,
-            level: u.level ?? "4a",
+            // Sin categoría: null («Sin categoría»), nunca 4ª por defecto
+            level: u.level ?? null,
             spa: u.spa ?? undefined,
           })),
           total:    raw.total,
@@ -473,7 +474,8 @@ export const adminService = {
         return {
           ...d,
           name:  d.name ?? `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim(),
-          level: d.level ?? d.spaLevel ?? "4a",
+          // Sin categoría: null. Ni 4ª ni el nivel SPA, que es otra cosa
+          level: d.level ?? null,
           spa:   d.spa ?? (d.spaPoints != null ? {
             spaPoints:      Math.round(Number(d.spaPoints)),
             spaLevel:       d.spaLevel ?? "iniciacion",
@@ -603,7 +605,7 @@ export const adminService = {
       }).then((r) =>
         (r.data ?? []).map((u: any): Player => ({
           ...u,
-          level:        u.level ?? u.categoryLevel ?? "4a",
+          level:        u.level ?? u.categoryLevel ?? null,
           points:       u.points ?? u.circuitPoints ?? u.spaPoints ?? 0,
           wins:         u.wins   ?? 0,
           played:       u.played ?? 0,

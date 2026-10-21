@@ -20,9 +20,12 @@ export async function login(email: string, password: string): Promise<AdminUser>
   try {
     res = await api.post("/auth/login", { email, password });
   } catch (err: unknown) {
-    const e = err as { response?: { status?: number; data?: { message?: string } } };
+    const e = err as { response?: { status?: number; data?: { code?: string; message?: string } } };
     const status = e?.response?.status;
     const serverMsg = e?.response?.data?.message;
+    // Admin de un club que AMT desactivó: no entra hasta que AMT lo reactive
+    if (e?.response?.data?.code === "CLUB_DEACTIVATED")
+      throw new Error("Tu club está desactivado. Contacta con AMT para reactivarlo.");
     if (status === 401) throw new Error("Email o contraseña incorrectos.");
     if (status === 403) throw new Error("No tienes permisos para acceder.");
     throw new Error(serverMsg ?? "Error al conectar con el servidor. Inténtalo de nuevo.");

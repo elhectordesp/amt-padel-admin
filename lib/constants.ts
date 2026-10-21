@@ -25,6 +25,17 @@ export const CATEGORY_LABEL_SHORT: Record<CategoryLevel, string> = {
   "iniciacion":"Inic.",
 };
 
+/** Jugador sin categoría asignada: así se enseña, nunca como una por defecto. */
+export const NO_CATEGORY_LABEL = "Sin categoría";
+
+/** Categoría de un jugador para pantalla (`labels`: la etiqueta larga o la corta). */
+export function levelLabel(
+  level: CategoryLevel | null | undefined,
+  labels: Record<CategoryLevel, string> = CATEGORY_LABEL,
+): string {
+  return level ? (labels[level] ?? level) : NO_CATEGORY_LABEL;
+}
+
 export const GENDER_LABEL: Record<Gender, { full: string; short: string }> = {
   M: { full: "Masculino", short: "Masc." },
   F: { full: "Femenino",  short: "Fem."  },

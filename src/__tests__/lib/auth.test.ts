@@ -54,6 +54,17 @@ describe('auth helpers', () => {
       expect(setRefreshToken).toHaveBeenCalledWith('admin-ref');
       expect(user).toHaveProperty('role', 'admin');
     });
+
+    it('al admin de un club desactivado por AMT le dice por qué no entra', async () => {
+      (api.post as any).mockRejectedValueOnce({
+        response: { status: 403, data: { success: false, code: 'CLUB_DEACTIVATED', error: 'Tu club está desactivado.' } },
+      });
+
+      await expect(login('club@test.com', 'pass')).rejects.toThrow(
+        'Tu club está desactivado. Contacta con AMT para reactivarlo.',
+      );
+      expect(setToken).not.toHaveBeenCalled();
+    });
   });
 
   describe('logout', () => {

@@ -24,7 +24,8 @@ vi.mock('@/components/admin/search-context', () => ({
   useSearch: vi.fn(),
 }));
 
-vi.mock('@/lib/constants', () => ({
+vi.mock('@/lib/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/constants')>()),
   CATEGORY_LABEL_SHORT: { '4a': '4ª', '3a': '3ª' },
   GENDER_LABEL:         { M: { short: 'Masc.' }, F: { short: 'Fem.' } },
 }));
@@ -41,6 +42,7 @@ const fakeTournaments = [
 ];
 const fakePlayers = [
   { id: 'p-1', name: 'Carlos García', gender: 'M', level: '4a', points: 1200 },
+  { id: 'p-2', name: 'Carlos Nuevo', gender: 'M', level: null, points: 0 },
 ];
 
 function setupOpen() {
@@ -93,6 +95,15 @@ describe('SearchModal', () => {
     render(<SearchModal />);
     fireEvent.change(screen.getByPlaceholderText(/buscar torneos/i), { target: { value: 'carlos' } });
     expect(screen.getByText('Carlos García')).toBeInTheDocument();
+    expect(screen.getByText(/Masc\. 4ª · 1/)).toBeInTheDocument();
+  });
+
+  it('un jugador sin categoría sale como «Sin categoría», no como 4ª (D6)', () => {
+    setupOpen();
+    render(<SearchModal />);
+    fireEvent.change(screen.getByPlaceholderText(/buscar torneos/i), { target: { value: 'nuevo' } });
+    expect(screen.getByText('Carlos Nuevo')).toBeInTheDocument();
+    expect(screen.getByText('Masc. Sin categoría · 0 pts')).toBeInTheDocument();
   });
 
   it('llama a router.push y close() al hacer clic en un resultado', () => {

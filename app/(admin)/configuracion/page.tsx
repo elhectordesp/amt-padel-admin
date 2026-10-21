@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
+import { canManageAdmins, roleLabel, useMe } from "@/lib/use-me";
 import type {
   SpaConfig,
   AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
@@ -869,11 +870,27 @@ function TabAdministradores() {
   const qc = useQueryClient();
   const [showInvite,  setShowInvite]  = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<AdminMember | null>(null);
+  const [roleTarget,   setRoleTarget]   = useState<AdminMember | null>(null);
   const [inviteForm, setInviteForm]   = useState({ email: "", firstName: "", lastName: "", role: "ADMIN" as "ADMIN" | "SUPERADMIN" });
 
   const { data: admins = [], isLoading } = useQuery({
     queryKey: ["admin-members"],
     queryFn:  adminService.admins.list,
+  });
+
+  // Invitar, cambiar el rol y revocar: solo un Super Admin (el back lo exige)
+  const { data: me } = useMe();
+  const canManage = canManageAdmins(me);
+  const otherRole = (role: AdminMember["role"]) => (role === "SUPERADMIN" ? "ADMIN" : "SUPERADMIN");
+
+  const changeRole = useMutation({
+    mutationFn: () => adminService.admins.updateRole(roleTarget!.id, otherRole(roleTarget!.role)),
+    onSuccess: () => {
+      toast.success(`${roleTarget!.name} ahora es ${roleLabel(otherRole(roleTarget!.role))}`);
+      setRoleTarget(null);
+      qc.invalidateQueries({ queryKey: ["admin-members"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const invite = useMutation({
@@ -897,23 +914,26 @@ function TabAdministradores() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const roleLabel = (role: string) =>
-    role === "SUPERADMIN" ? "Super Admin" : "Admin";
-
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">{admins.length} administrador{admins.length !== 1 ? "es" : ""}</p>
-        <button
-          onClick={() => setShowInvite(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] transition-colors"
-        >
-          <UserPlus size={13} />
-          Invitar administrador
-        </button>
+        {canManage ? (
+          <button
+            onClick={() => setShowInvite(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] transition-colors"
+          >
+            <UserPlus size={13} />
+            Invitar administrador
+          </button>
+        ) : me && (
+          <p className="text-xs text-muted-foreground">
+            Solo un Super Admin puede invitar, cambiar el rol o revocar administradores.
+          </p>
+        )}
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="bg-card border border-border rounded-lg overflow-x-auto">
         {isLoading ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Cargando…</div>
         ) : admins.length === 0 ? (
@@ -933,24 +953,39 @@ function TabAdministradores() {
                 <tr key={admin.id} className="border-b border-border last:border-0 hover:bg-secondary/10 transition-colors">
                   <td className="px-4 py-3 font-medium text-foreground">
                     {admin.name}
-                    {admin.managedByAdmin && (
-                      <span className="ml-2 text-xs text-muted-foreground">(gestionado)</span>
+                    {admin.id === me?.id && (
+                      <span className="ml-2 text-xs text-muted-foreground">(tú)</span>
+                    )}
+                    {admin.pendingActivation && (
+                      <span className="ml-2 text-xs text-muted-foreground">(pendiente de activar)</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{admin.email}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${admin.role === "SUPERADMIN" ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]" : "bg-secondary text-muted-foreground"}`}>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${admin.role === "SUPERADMIN" ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]" : "bg-secondary text-muted-foreground"}`}>
                       {roleLabel(admin.role)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setRevokeTarget(admin)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-destructive hover:bg-destructive/10 transition-colors ml-auto"
-                    >
-                      <Trash2 size={12} />
-                      Revocar
-                    </button>
+                    {/* Ni sobre uno mismo: el back no deja cambiarse el rol ni revocarse */}
+                    {canManage && admin.id !== me?.id && (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setRoleTarget(admin)}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors whitespace-nowrap"
+                        >
+                          <Shield size={12} />
+                          Cambiar rol
+                        </button>
+                        <button
+                          onClick={() => setRevokeTarget(admin)}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs text-destructive hover:bg-destructive/10 transition-colors whitespace-nowrap"
+                        >
+                          <Trash2 size={12} />
+                          Revocar
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1022,6 +1057,18 @@ function TabAdministradores() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!roleTarget}
+        title={`¿Cambiar el rol de ${roleTarget?.name} a ${roleTarget ? roleLabel(otherRole(roleTarget.role)) : ""}?`}
+        description={roleTarget?.role === "SUPERADMIN"
+          ? "Dejará de poder invitar, cambiar el rol o revocar administradores. Lo demás del panel lo sigue haciendo igual."
+          : "Podrá invitar, cambiar el rol y revocar administradores, también el tuyo."}
+        confirmLabel="Cambiar rol"
+        loading={changeRole.isPending}
+        onClose={() => setRoleTarget(null)}
+        onConfirm={() => changeRole.mutate()}
+      />
 
       <ConfirmModal
         open={!!revokeTarget}
