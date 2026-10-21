@@ -5,20 +5,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Save, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp,
-  Settings, Calendar, Trophy, Mail, Bell, Layers, Users, Shield,
-  Plus, Trash2, UserPlus, X, ChevronRight, MessageCircleQuestion,
+  Settings, Calendar, Trophy, Mail, Bell, Layers, Users,
+  Plus, Trash2, X, ChevronRight, MessageCircleQuestion,
   GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
+import { AdminsTab } from "@/components/admin/admins-tab";
 import type {
   SpaConfig,
   AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults,
   AppConfigFaqs, FaqCategory, FaqEntry,
-  AdminMember,
 } from "@/types";
 
 // ── Shared UI primitives ────────────────────────────────────────────────────
@@ -865,177 +865,7 @@ function TabSpa() {
 
 // ── Tab: Administradores ──────────────────────────────────────────────────────
 
-function TabAdministradores() {
-  const qc = useQueryClient();
-  const [showInvite,  setShowInvite]  = useState(false);
-  const [revokeTarget, setRevokeTarget] = useState<AdminMember | null>(null);
-  const [inviteForm, setInviteForm]   = useState({ email: "", firstName: "", lastName: "", role: "ADMIN" as "ADMIN" | "SUPERADMIN" });
-
-  const { data: admins = [], isLoading } = useQuery({
-    queryKey: ["admin-members"],
-    queryFn:  adminService.admins.list,
-  });
-
-  const invite = useMutation({
-    mutationFn: () => adminService.admins.invite(inviteForm),
-    onSuccess: () => {
-      toast.success(`Invitación enviada a ${inviteForm.email}`);
-      setShowInvite(false);
-      setInviteForm({ email: "", firstName: "", lastName: "", role: "ADMIN" });
-      qc.invalidateQueries({ queryKey: ["admin-members"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const revoke = useMutation({
-    mutationFn: () => adminService.admins.revoke(revokeTarget!.id),
-    onSuccess: () => {
-      toast.success(`Acceso de ${revokeTarget!.name} revocado`);
-      setRevokeTarget(null);
-      qc.invalidateQueries({ queryKey: ["admin-members"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const roleLabel = (role: string) =>
-    role === "SUPERADMIN" ? "Super Admin" : "Admin";
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{admins.length} administrador{admins.length !== 1 ? "es" : ""}</p>
-        <button
-          onClick={() => setShowInvite(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] transition-colors"
-        >
-          <UserPlus size={13} />
-          Invitar administrador
-        </button>
-      </div>
-
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Cargando…</div>
-        ) : admins.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">No hay administradores registrados</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary/20">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nombre</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rol</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {admins.map((admin) => (
-                <tr key={admin.id} className="border-b border-border last:border-0 hover:bg-secondary/10 transition-colors">
-                  <td className="px-4 py-3 font-medium text-foreground">
-                    {admin.name}
-                    {admin.managedByAdmin && (
-                      <span className="ml-2 text-xs text-muted-foreground">(gestionado)</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{admin.email}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${admin.role === "SUPERADMIN" ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37]" : "bg-secondary text-muted-foreground"}`}>
-                      {roleLabel(admin.role)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setRevokeTarget(admin)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-destructive hover:bg-destructive/10 transition-colors ml-auto"
-                    >
-                      <Trash2 size={12} />
-                      Revocar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Invite modal */}
-      {showInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Shield size={16} className="text-[#D4AF37]" />
-                Invitar administrador
-              </h2>
-              <button onClick={() => setShowInvite(false)} className="text-muted-foreground hover:text-foreground">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Nombre</label>
-                  <input value={inviteForm.firstName} onChange={(e) => setInviteForm((p) => ({ ...p, firstName: e.target.value }))}
-                    className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                    placeholder="Nombre"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Apellidos</label>
-                  <input value={inviteForm.lastName} onChange={(e) => setInviteForm((p) => ({ ...p, lastName: e.target.value }))}
-                    className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                    placeholder="Apellidos"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Email</label>
-                <input type="email" value={inviteForm.email} onChange={(e) => setInviteForm((p) => ({ ...p, email: e.target.value }))}
-                  className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                  placeholder="admin@email.com"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Rol</label>
-                <select value={inviteForm.role} onChange={(e) => setInviteForm((p) => ({ ...p, role: e.target.value as "ADMIN" | "SUPERADMIN" }))}
-                  className="w-full h-9 px-3 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                >
-                  <option value="ADMIN">Admin</option>
-                  <option value="SUPERADMIN">Super Admin</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowInvite(false)} className="px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:bg-secondary transition-colors">
-                Cancelar
-              </button>
-              <button
-                onClick={() => invite.mutate()}
-                disabled={!inviteForm.email || !inviteForm.firstName || !inviteForm.lastName || invite.isPending}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-50 transition-colors"
-              >
-                {invite.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                Invitar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmModal
-        open={!!revokeTarget}
-        title={`¿Revocar acceso de ${revokeTarget?.name}?`}
-        description="El usuario perderá todos los permisos de administración. Su cuenta de jugador (si existe) se mantendrá."
-        confirmLabel="Revocar acceso"
-        danger
-        loading={revoke.isPending}
-        onClose={() => setRevokeTarget(null)}
-        onConfirm={() => revoke.mutate()}
-      />
-    </div>
-  );
-}
+// En su componente: components/admin/admins-tab.tsx
 
 // ── Tab: FAQs ─────────────────────────────────────────────────────────────────
 
@@ -1234,7 +1064,7 @@ function ConfiguracionContent() {
     torneos:         <TabTorneos />,
     spa:             <TabSpa />,
     faqs:            <TabFaqs />,
-    administradores: <TabAdministradores />,
+    administradores: <AdminsTab />,
   };
 
   return (

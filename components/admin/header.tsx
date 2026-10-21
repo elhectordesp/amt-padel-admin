@@ -7,16 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import { adminService } from "@/lib/services/admin";
 import { useSearch } from "@/components/admin/search-context";
 import { LogoutModal } from "@/components/admin/logout-modal";
-import { api } from "@/lib/api";
+import { roleLabel, useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
-
-function useAdminUser() {
-  return useQuery({
-    queryKey: ["admin-me"],
-    queryFn:  () => api.get<{ name: string; email: string }>("/auth/me").then((r) => r.data),
-    staleTime: Infinity,
-  });
-}
 
 interface HeaderProps { title: string }
 
@@ -54,7 +46,7 @@ export function Header({ title }: HeaderProps) {
     staleTime:       30_000,
   });
 
-  const { data: me } = useAdminUser();
+  const { data: me } = useMe();
   const { role } = useRole();
   const isClubRole = isClub(role);
 
@@ -162,7 +154,7 @@ export function Header({ title }: HeaderProps) {
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{me?.email ?? "Super Admin"}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{me?.email ?? roleLabel(me?.role)}</p>
               </div>
               <ChevronDown size={12} className={`text-muted-foreground transition-transform ${menuOpen ? "rotate-180" : ""}`} />
             </button>
@@ -181,7 +173,9 @@ export function Header({ title }: HeaderProps) {
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground truncate">{me?.email ?? "Super Admin"}</p>
+                  {me?.email && <p className="text-[10px] text-muted-foreground truncate">{me.email}</p>}
+                  {/* El rol real (el token dice «admin» tanto a Admin como a Super Admin) */}
+                  {me?.role && <p className="text-[10px] font-semibold text-[#D4AF37] mt-0.5">{roleLabel(me.role)}</p>}
                 </div>
                 <button
                   type="button"

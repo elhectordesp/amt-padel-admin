@@ -10,7 +10,9 @@ vi.mock('js-cookie', () => ({
   },
 }));
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async (importOriginal) => ({
+  // ApiError real: es lo que deja el interceptor en las rutas que no son de login
+  ApiError: (await importOriginal<typeof import('../../../lib/api')>()).ApiError,
   api: {
     post: vi.fn(),
     get:  vi.fn(),
@@ -22,8 +24,8 @@ vi.mock('../../../lib/api', () => ({
   getRefreshToken: vi.fn(),
 }));
 
-import { login, logout } from '../../../lib/auth';
-import { api, setToken, setRefreshToken, removeTokens, getRefreshToken } from '../../../lib/api';
+import { acceptClubInvite, login, logout } from '../../../lib/auth';
+import { api, ApiError, setToken, setRefreshToken, removeTokens, getRefreshToken } from '../../../lib/api';
 
 describe('auth helpers', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -53,6 +55,45 @@ describe('auth helpers', () => {
       expect(setToken).toHaveBeenCalledWith(ADMIN_JWT);
       expect(setRefreshToken).toHaveBeenCalledWith('admin-ref');
       expect(user).toHaveProperty('role', 'admin');
+    });
+
+    it('al admin de un club desactivado por AMT le dice por qué no entra', async () => {
+      (api.post as any).mockRejectedValueOnce({
+        response: { status: 403, data: { success: false, code: 'CLUB_DEACTIVATED', error: 'Tu club está desactivado.' } },
+      });
+
+      await expect(login('club@test.com', 'pass')).rejects.toThrow(
+        'Tu club está desactivado. Contacta con AMT para reactivarlo.',
+      );
+      expect(setToken).not.toHaveBeenCalled();
+    });
+
+    it('con otro error del back enseña su texto (`error`, no `message`)', async () => {
+      (api.post as any).mockRejectedValueOnce({
+        response: { status: 429, data: { success: false, error: 'Demasiados intentos' } },
+      });
+
+      await expect(login('x@x.com', 'pass')).rejects.toThrow('Demasiados intentos');
+    });
+  });
+
+  describe('acceptClubInvite', () => {
+    // El interceptor de api.ts convierte el error en ApiError(texto, estado, código)
+    it.each([
+      ['CLUB_INVITATION_INVALID', 400, 'La invitación es inválida o ha caducado.'],
+      ['CLUB_INVITATION_EMAIL_TAKEN', 409, 'Ese email ya está registrado en la plataforma.'],
+      ['CLUB_DEACTIVATED', 403, 'Tu club está desactivado. Contacta con AMT para reactivarlo.'],
+    ])('%s: su mensaje, no el genérico', async (code, status, message) => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('texto del back', status, code));
+
+      await expect(acceptClubInvite('tok', 'Nombre', 'Clave123!')).rejects.toThrow(message);
+      expect(setToken).not.toHaveBeenCalled();
+    });
+
+    it('otro error: el texto del back', async () => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('Algo concreto', 400, 'OTRO'));
+
+      await expect(acceptClubInvite('tok', 'Nombre', 'Clave123!')).rejects.toThrow('Algo concreto');
     });
   });
 

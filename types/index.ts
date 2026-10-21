@@ -230,7 +230,8 @@ export interface Player {
   bio?:           string | null;
   photoUrl?:      string | null;
   gender:         Gender;
-  level:          CategoryLevel;
+  // null: sin categoría asignada (nunca se toma una por defecto)
+  level:          CategoryLevel | null;
   played:         number;
   wins:           number;
   points:         number;
@@ -239,7 +240,8 @@ export interface Player {
   status?:        "active" | "inactive" | "suspended";
   createdAt?:     string;
   globalRank?:    number;
-  categoryRank?:  number;
+  // null: sin categoría, no tiene puesto en ninguna
+  categoryRank?:  number | null;
   matches?:       PlayerMatch[];
   managedByAdmin?:   boolean;
   invitedAt?:        string | null;
@@ -287,7 +289,8 @@ export interface UpdatePlayerPayload {
   email?:        string;
   phone?:        string;
   city?:         string;
-  categoryLevel?: CategoryLevel;
+  // null: le quita la categoría («Sin asignar»)
+  categoryLevel?: CategoryLevel | null;
   position?:     "reves" | "drive" | "indiferente";
   hand?:         "diestro" | "zurdo" | "ambidiestro";
   playsMasc?:    boolean;
@@ -385,8 +388,9 @@ export interface FinanceStats {
 export interface CategoryChange {
   id:        string;
   date:      string;
-  from:      CategoryLevel;
-  to:        CategoryLevel;
+  // null: no tenía categoría / se la quitaron
+  from:      CategoryLevel | null;
+  to:        CategoryLevel | null;
   reason:    string;
   adminName: string;
 }
@@ -565,7 +569,8 @@ export interface AdminMember {
   email:          string;
   role:           "ADMIN" | "SUPERADMIN";
   createdAt:      string;
-  managedByAdmin: boolean;
+  // Aún no ha puesto su contraseña: volver a invitarle le reenvía el enlace
+  pendingActivation?: boolean;
 }
 
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";

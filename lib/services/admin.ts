@@ -57,7 +57,20 @@ export interface ScheduleConflict {
   description:      string;
 }
 
-export interface AdminUser { name: string; email: string }
+/**
+ * Rol de la cuenta tal como está en la BD. El del token (useRole) es 'admin'
+ * tanto para ADMIN como para SUPERADMIN: para distinguirlos hay que leer este.
+ */
+export type AccountRole = "PLAYER" | "ADMIN" | "SUPERADMIN" | "CLUB";
+
+/** La cuenta con la que se ha entrado (/auth/me). */
+export interface AdminUser {
+  id:     string;
+  name:   string;
+  // Opcionales: una versión anterior del back no los devuelve
+  email?: string | null;
+  role?:  AccountRole;
+}
 
 /**
  * Opciones avanzadas para generación/preview del cuadro (Bloque 1).
@@ -457,7 +470,8 @@ export const adminService = {
         return {
           data: (raw.data ?? []).map((u: any): Player => ({
             ...u,
-            level: u.level ?? "4a",
+            // Sin categoría: null («Sin categoría»), nunca 4ª por defecto
+            level: u.level ?? null,
             spa: u.spa ?? undefined,
           })),
           total:    raw.total,
@@ -473,7 +487,8 @@ export const adminService = {
         return {
           ...d,
           name:  d.name ?? `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim(),
-          level: d.level ?? d.spaLevel ?? "4a",
+          // Sin categoría: null. Ni 4ª ni el nivel SPA, que es otra cosa
+          level: d.level ?? null,
           spa:   d.spa ?? (d.spaPoints != null ? {
             spaPoints:      Math.round(Number(d.spaPoints)),
             spaLevel:       d.spaLevel ?? "iniciacion",
@@ -603,7 +618,7 @@ export const adminService = {
       }).then((r) =>
         (r.data ?? []).map((u: any): Player => ({
           ...u,
-          level:        u.level ?? u.categoryLevel ?? "4a",
+          level:        u.level ?? u.categoryLevel ?? null,
           points:       u.points ?? u.circuitPoints ?? u.spaPoints ?? 0,
           wins:         u.wins   ?? 0,
           played:       u.played ?? 0,
@@ -643,7 +658,9 @@ export const adminService = {
     list:       ()                                                        => api.get<AdminMember[]>("/admin/admins").then((r) => r.data ?? []),
     invite:     (data: { email: string; firstName: string; lastName: string; role?: "ADMIN" | "SUPERADMIN" }) =>
       api.post<AdminMember>("/admin/admins/invite", data).then((r) => r.data),
-    updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               => api.patch(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
+    // Devuelve el rol con el que queda (el toast lo enseña)
+    updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               =>
+      api.patch<{ id: string; role: "ADMIN" | "SUPERADMIN" }>(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
     revoke:     (id: string)                                              => api.delete(`/admin/admins/${id}`).then((r) => r.data),
   },
 

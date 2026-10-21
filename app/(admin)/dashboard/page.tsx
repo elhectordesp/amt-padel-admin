@@ -7,6 +7,7 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { useRole, isClub } from "@/lib/use-role";
+import { useMe } from "@/lib/use-me";
 
 function StatCard({
   label, value, sub, icon: Icon, loading,
@@ -65,19 +66,11 @@ function AlertItem({ text, href, icon: Icon }: { text: string; href?: string; ic
   return href ? <a href={href}>{inner}</a> : inner;
 }
 
-function useAdminUser() {
-  return useQuery({
-    queryKey:  ["admin-me"],
-    queryFn:   adminService.me,
-    staleTime: Infinity,
-  });
-}
-
 export default function DashboardPage() {
   const { role } = useRole();
   const isClubUser = isClub(role);
 
-  const { data: adminUser } = useAdminUser();
+  const { data: adminUser } = useMe();
 
   const { data: stats, isLoading, isError: statsError } = useQuery({
     queryKey:        ["admin-stats"],

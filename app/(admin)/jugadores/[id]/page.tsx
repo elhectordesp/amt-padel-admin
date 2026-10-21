@@ -19,7 +19,8 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG } from "@/lib/constants";
+import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, levelLabel } from "@/lib/constants";
+import { playerUpdatePayload } from "@/lib/player-edit";
 import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -158,7 +159,8 @@ export default function JugadorDetailPage() {
       email:         player.email  ?? "",
       phone:         player.phone  ?? "",
       city:          player.city   ?? "",
-      categoryLevel: player.level,
+      // Sin categoría: el selector queda en «Sin asignar»
+      categoryLevel: player.level ?? null,
       bio:           player.bio    ?? "",
     });
     setShowEdit(true);
@@ -258,7 +260,7 @@ export default function JugadorDetailPage() {
                 <div className="flex items-center gap-3 flex-wrap">
                   <h2 className="font-heading text-xl text-foreground">{player.name}</h2>
                   <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
-                    {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
+                    {player.gender === "M" ? "Masc." : "Fem."} {levelLabel(player.level)}
                   </span>
                   {player.managedByAdmin && (() => {
                     const cfg = {
@@ -374,7 +376,7 @@ export default function JugadorDetailPage() {
               <StatBox label="Partidos"      value={player.played} />
               <StatBox label="% Victorias"   value={`${winRate}%`} sub={`${player.wins} ganados`} />
               <StatBox label="Ranking global"   value={player.globalRank   ? `#${player.globalRank}`   : "—"} sub={player.gender === "M" ? "Masc." : "Fem."} />
-              <StatBox label="Ranking categoría" value={player.categoryRank ? `#${player.categoryRank}` : "—"} sub={CATEGORY_LABEL[player.level]} />
+              <StatBox label="Ranking categoría" value={player.categoryRank ? `#${player.categoryRank}` : "—"} sub={levelLabel(player.level)} />
             </div>
           </div>
 
@@ -402,7 +404,7 @@ export default function JugadorDetailPage() {
               { label: "Victorias",  value: player.wins,              icon: TrendingUp,  color: "text-green-400" },
               { label: "Derrotas",   value: player.played - player.wins, icon: TrendingDown, color: "text-destructive" },
               { label: "% Win",      value: `${winRate}%`,            icon: BarChart3,   color: "text-[#D4AF37]" },
-              { label: "Categoría",  value: CATEGORY_LABEL[player.level], icon: Trophy,   color: "text-[#D4AF37]" },
+              { label: "Categoría",  value: levelLabel(player.level), icon: Trophy,   color: "text-[#D4AF37]" },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
                 <div className="p-2 rounded-md bg-secondary">
@@ -645,12 +647,12 @@ export default function JugadorDetailPage() {
                       </td>
                       <td className="px-5 py-3">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
-                          {CATEGORY_LABEL[ch.from]}
+                          {levelLabel(ch.from)}
                         </span>
                       </td>
                       <td className="px-5 py-3">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
-                          {CATEGORY_LABEL[ch.to]}
+                          {levelLabel(ch.to)}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-xs text-muted-foreground max-w-xs truncate">{ch.reason}</td>
@@ -720,7 +722,7 @@ export default function JugadorDetailPage() {
                   <label className="text-xs font-medium text-muted-foreground">Categoría</label>
                   <select
                     value={editForm.categoryLevel ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, categoryLevel: (e.target.value || undefined) as CategoryLevel | undefined }))}
+                    onChange={(e) => setEditForm((f) => ({ ...f, categoryLevel: (e.target.value || null) as CategoryLevel | null }))}
                     className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                   >
                     <option value="">Sin asignar</option>
@@ -809,13 +811,7 @@ export default function JugadorDetailPage() {
               </button>
               <button
                 disabled={editMutation.isPending}
-                onClick={() => editMutation.mutate({
-                  ...editForm,
-                  email: editForm.email?.trim() || undefined,
-                  phone: editForm.phone?.trim() || undefined,
-                  city:  editForm.city?.trim()  || undefined,
-                  bio:   editForm.bio?.trim()   || undefined,
-                })}
+                onClick={() => editMutation.mutate(playerUpdatePayload(editForm, player.level))}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-[#D4AF37] text-black hover:bg-[#C9A227] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {editMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Edit2 size={13} />}
@@ -933,7 +929,7 @@ export default function JugadorDetailPage() {
             <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-md border border-border">
               <span className="text-xs text-muted-foreground">Categoría actual</span>
               <span className="ml-auto font-semibold text-sm text-foreground">
-                {player.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[player.level]}
+                {player.gender === "M" ? "Masc." : "Fem."} {levelLabel(player.level)}
               </span>
             </div>
 

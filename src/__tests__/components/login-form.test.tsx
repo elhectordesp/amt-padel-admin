@@ -8,8 +8,16 @@ vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(),
 }));
 
-vi.mock('@/lib/auth', () => ({
+vi.mock('@/lib/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth')>()),
   login: vi.fn(),
+}));
+
+// La caché de React Query: el login la vacía (nada de la cuenta anterior)
+const mockClearCache = vi.fn();
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  useQueryClient: () => ({ clear: mockClearCache }),
 }));
 
 vi.mock('sonner', () => ({
@@ -89,7 +97,7 @@ describe('LoginForm', () => {
     });
   });
 
-  it('redirige a /dashboard tras login exitoso', async () => {
+  it('redirige a /dashboard tras login exitoso, con la caché vacía', async () => {
     render(<LoginForm />);
     await userEvent.type(screen.getByPlaceholderText('admin@amptournaments.com'), 'admin@test.com');
     await userEvent.type(screen.getByPlaceholderText('••••••••••'), 'mipassword');
@@ -97,6 +105,17 @@ describe('LoginForm', () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/dashboard');
     });
+    expect(mockClearCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('si le echaron porque AMT desactivó su club (?motivo=club-desactivado), lo explica', () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => (key === 'motivo' ? 'club-desactivado' : null),
+    } as any);
+    render(<LoginForm />);
+    expect(
+      screen.getByText('Tu club está desactivado. Contacta con AMT para reactivarlo.'),
+    ).toBeInTheDocument();
   });
 
   it('vuelve a la ruta del panel de ?from= tras entrar', async () => {
