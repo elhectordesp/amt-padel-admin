@@ -19,7 +19,8 @@ const LEVEL_COLOR: Record<string, string> = {
 
 async function getPlayer(id: string) {
   try {
-    const res = await fetch(`${API_URL}/players/${id}/profile`, { cache: "no-store" });
+    // La misma caché que la página del jugador
+    const res = await fetch(`${API_URL}/players/${id}/profile`, { next: { revalidate: 300 } });
     if (!res.ok) return null;
     const json = await res.json();
     return json.data ?? json;
@@ -65,9 +66,12 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   const player     = data?.player ?? null;
   const winRate    = player && player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
   const spaPoints  = player?.spa ? Math.round(Number(player.spa.spaPoints)) : null;
-  const spaLevel   = player?.spa?.spaLevel ?? player?.level;
-  const color      = LEVEL_COLOR[spaLevel ?? ""] ?? "#D4AF37";
-  const catLabel   = CATEGORY_LABEL[spaLevel ?? ""] ?? "";
+  // Su categoría oficial (la del circuito, la del «#N Circuito»), no la del
+  // SPA; un jugador nuevo no tiene: «Sin categoría», como la app
+  const category: string | null = player?.level ?? null;
+  const color      = (category && LEVEL_COLOR[category]) || "#D4AF37";
+  const catLabel   = category ? (CATEGORY_LABEL[category] ?? category) : "SIN CATEGORÍA";
+  const catColor   = category ? color : "#888888";
   const initials   = player
     ? player.name.split(" ").map((n: string) => n[0] ?? "").join("").slice(0, 2).toUpperCase()
     : "?";
@@ -152,14 +156,14 @@ export default async function Image({ params }: { params: Promise<{ id: string }
 
             {/* Badges row */}
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              {catLabel && (
+              {player && (
                 <div style={{
                   display: "flex",
                   padding: "5px 16px",
                   borderRadius: 24,
-                  border: `1.5px solid ${color}88`,
-                  background: color + "22",
-                  color,
+                  border: `1.5px solid ${catColor}88`,
+                  background: catColor + "22",
+                  color: catColor,
                   fontSize: 16,
                   fontWeight: 700,
                   letterSpacing: 1.5,

@@ -48,9 +48,18 @@ function isExpValid(payload: JwtPayload | null): boolean {
   );
 }
 
+/**
+ * Si `pathname` es la ruta `base` o cuelga de ella. Con startsWith pelado,
+ * "/torneo" (el visor público) dejaba pasar sin sesión "/torneos" y
+ * "/torneos/:id" (páginas del admin).
+ */
+function isUnder(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const isPublic = PUBLIC_PATHS.some((p) => isUnder(pathname, p));
   const token = request.cookies.get(TOKEN_KEY)?.value;
   const payload = token ? decodePayload(token) : null;
 
@@ -69,7 +78,7 @@ export function middleware(request: NextRequest) {
   if (
     !isPublic &&
     payload?.role === "club" &&
-    CLUB_BLOCKED_PREFIXES.some((p) => pathname.startsWith(p))
+    CLUB_BLOCKED_PREFIXES.some((p) => isUnder(pathname, p))
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

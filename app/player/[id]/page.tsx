@@ -16,13 +16,19 @@ const LEVEL_COLOR: Record<string, string> = {
   iniciacion: "#607D8B",
 };
 
+// Un fallo de red o una respuesta que no es JSON es «no encontrado» (404),
+// como en la imagen OG, no un 500
 async function getPlayer(id: string) {
-  const res = await fetch(`${API_URL}/players/${id}/profile`, {
-    next: { revalidate: 300 },
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.data ?? json;
+  try {
+    const res = await fetch(`${API_URL}/players/${id}/profile`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? json;
+  } catch {
+    return null;
+  }
 }
 
 // En Next 16 params es una promesa: con params.id (síncrono) llegaba undefined
@@ -51,6 +57,10 @@ export default async function PublicPlayerPage({ params }: { params: Promise<{ i
   const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
   const spaLevel = player.spa?.spaLevel;
   const levelColor = spaLevel ? (LEVEL_COLOR[spaLevel] ?? "#D4AF37") : "#D4AF37";
+  // El distintivo, con su categoría oficial (no la del SPA); un jugador nuevo
+  // no tiene: «Sin categoría», como la app
+  const category: string | null = player.level ?? null;
+  const categoryColor = category ? (LEVEL_COLOR[category] ?? "#D4AF37") : "#71717A";
 
   const TrendIcon = player.trend === "up" ? TrendingUp : player.trend === "down" ? TrendingDown : Minus;
   const trendColor = player.trend === "up" ? "text-green-400" : player.trend === "down" ? "text-red-400" : "text-zinc-500";
@@ -80,11 +90,9 @@ export default async function PublicPlayerPage({ params }: { params: Promise<{ i
           <div>
             <h1 className="text-2xl font-serif font-bold">{player.name}</h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {spaLevel && (
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full border" style={{ color: levelColor, borderColor: levelColor + "66", backgroundColor: levelColor + "22" }}>
-                  {CATEGORY_LABEL[spaLevel] ?? spaLevel}
-                </span>
-              )}
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full border" style={{ color: categoryColor, borderColor: categoryColor + "66", backgroundColor: categoryColor + "22" }}>
+                {category ? (CATEGORY_LABEL[category] ?? category) : "Sin categoría"}
+              </span>
               {player.city && <span className="text-xs text-zinc-500">{player.city}</span>}
               <span className="text-xs text-zinc-500">{player.gender === "M" ? "Masculino" : "Femenino"}</span>
             </div>
