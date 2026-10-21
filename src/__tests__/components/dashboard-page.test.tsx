@@ -114,7 +114,10 @@ describe("DashboardPage — tarjetas y lista de torneos", () => {
     expect(await screen.findByText("Únicos · temporada 2026")).toBeInTheDocument();
   });
 
-  it("«Torneos activos y próximos»: primero el en curso, sin borradores", async () => {
+  it("«Torneos activos y próximos»: primero el en curso, sin borradores ni «próximos» ya pasados", async () => {
+    // Solo la fecha: los temporizadores (react-query, findBy) siguen reales
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 21, 10, 0));
     const t = (id: string, status: string, startDate: string) => ({
       id,
       name: `Torneo ${id}`,
@@ -127,16 +130,23 @@ describe("DashboardPage — tarjetas y lista de torneos", () => {
     vi.mocked(adminService.tournaments.list).mockResolvedValueOnce([
       ...["b1", "b2", "b3", "b4", "b5"].map((id) => t(id, "DRAFT", "2026-11-01")),
       t("abierto", "OPEN", "2026-12-01"),
+      t("abierto-pasado", "OPEN", "2026-10-01"),
       t("en-curso", "ONGOING", "2026-10-20"),
     ] as never);
 
-    renderWithClient(<DashboardPage />);
+    try {
+      renderWithClient(<DashboardPage />);
 
-    await screen.findByText("Torneo en-curso");
-    const names = screen
-      .getAllByText(/^Torneo /)
-      .map((el) => el.textContent);
-    expect(names).toEqual(["Torneo en-curso", "Torneo abierto"]);
-    expect(screen.queryByText("Borrador")).not.toBeInTheDocument();
+      await screen.findByText("Torneo en-curso");
+      const names = screen
+        .getAllByText(/^Torneo /)
+        .map((el) => el.textContent);
+      expect(names).toEqual(["Torneo en-curso", "Torneo abierto"]);
+      expect(screen.getByText("En curso")).toBeInTheDocument();
+      expect(screen.getByText("Abierto")).toBeInTheDocument();
+      expect(screen.queryByText("Borrador")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

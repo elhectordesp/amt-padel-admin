@@ -44,6 +44,14 @@ function ErrorCard({ message = "Error al cargar los datos" }: { message?: string
   );
 }
 
+/** La etiqueta y el color de los estados que salen en «Torneos activos y próximos». */
+const ACTIVE_STATUS_STYLE: Record<string, { label: string; color: string }> = {
+  ONGOING:   { label: "En curso",   color: "text-yellow-400" },
+  OPEN:      { label: "Abierto",    color: "text-green-400" },
+  DRAW:      { label: "Sorteo",     color: "text-purple-400" },
+  SCHEDULED: { label: "Programado", color: "text-cyan-400" },
+};
+
 const ALERT_ICON: Record<string, React.ElementType> = {
   match:        Calendar,
   player:       Users,
@@ -250,9 +258,7 @@ export default function DashboardPage() {
                     {activeTournaments.map((t) => {
                       const totalSpots      = t.categories.reduce((s, c) => s + c.totalSpots, 0);
                       const totalRegistered = t.categories.reduce((s, c) => s + c.occupiedCount, 0);
-                      const st = t.status?.toLowerCase();
-                      const statusColor = st === "open" ? "text-green-400" : st === "draw" ? "text-purple-400" : st === "scheduled" ? "text-cyan-400" : st === "ongoing" ? "text-yellow-400" : st === "draft" ? "text-blue-400" : "text-muted-foreground";
-                      const statusLabel = st === "open" ? "Abierto" : st === "draw" ? "Sorteo" : st === "scheduled" ? "Programado" : st === "ongoing" ? "En curso" : st === "draft" ? "Borrador" : st === "cancelled" ? "Cancelado" : "Finalizado";
+                      const { label: statusLabel, color: statusColor } = ACTIVE_STATUS_STYLE[(t.status ?? "").toUpperCase()] ?? ACTIVE_STATUS_STYLE.OPEN;
                       return (
                         <Link
                           key={t.id}

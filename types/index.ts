@@ -388,6 +388,9 @@ export interface FinanceStats {
   costs: {
     operational: number;
     total:       number;
+    /** Base y cuota de los gastos (negativas, como `total`). */
+    withoutVat?: number;
+    vatAmount?:  number;
   };
   profit: {
     gross:     number;

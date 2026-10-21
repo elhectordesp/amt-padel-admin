@@ -8,17 +8,20 @@ import {
 } from "recharts";
 import { TrendingUp, DollarSign, Receipt, PieChart, Download, Wallet, Hourglass } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
-import { DEFAULT_VAT_RATE, splitVat } from "@/lib/utils/finance";
+import { DEFAULT_VAT_RATE, splitVat, vatSplitOf, type VatSplit } from "@/lib/utils/finance";
 import { Header } from "@/components/admin/header";
+import { ErrorState } from "@/components/admin/error-state";
 import { adminService } from "@/lib/services/admin";
 
+const EUR = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function fmt(n: number) {
-  return new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  return EUR.format(n);
 }
 
 /** Un importe, o «—» si el back todavía no lo manda. */
-function fmtOrDash(n: number | undefined) {
-  return n === undefined ? "—" : `${fmt(n)} €`;
+function fmtOrDash(n: number | null | undefined) {
+  return n == null ? "—" : `${fmt(n)} €`;
 }
 
 function StatCard({
@@ -89,23 +92,39 @@ function BreakdownBar({ items }: { items: { label: string; value: number; total:
 export default function FinanzasPage() {
   const [period, setPeriod] = useState<"month" | "year">("month");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["finance", period],
     queryFn:  () => adminService.finance.stats(period),
   });
 
-  // El IVA va incluido en los precios: sin IVA = importe ÷ (1 + IVA) en cada
-  // cifra (tarjetas, tabla y CSV), con el mismo tipo que usa el back
+  const periodText = period === "month" ? "este mes" : "este año";
+  // El IVA va incluido en los precios: sin IVA = importe ÷ (1 + IVA). La base
+  // y la cuota, las que manda el back; splitVat solo si no vienen
   const vatRate = data?.vatRate ?? DEFAULT_VAT_RATE;
   const vatPct  = Math.round(vatRate * 100);
   // Devengado: el precio de cada pareja confirmada, haya pagado o no
-  const accrued     = splitVat(data?.revenue.total ?? 0, vatRate);
+  const accrued     = data?.revenue.registrations ?? 0;
   // Cobrado: la mitad del precio por jugador que ha pagado; pendiente: lo que falta
   const collected   = data?.revenue.collected;
   const outstanding = data?.revenue.outstanding;
   const confirmedPairs = (data?.byTournament ?? []).reduce((s, t) => s + t.registrations, 0);
-  const costs  = splitVat(Math.abs(data?.costs.total ?? 0), vatRate);
-  const profit = splitVat(data?.profit.gross ?? 0, vatRate);
+  // Total de ingresos (inscripciones + patrocinios + otros), gastos y beneficio
+  const income = vatSplitOf(data?.revenue.total ?? 0, data?.revenue, vatRate);
+  const costsTotal = Math.abs(data?.costs.total ?? 0);
+  const costs = vatSplitOf(
+    costsTotal,
+    data?.costs.withoutVat != null && data.costs.vatAmount != null
+      ? { withoutVat: Math.abs(data.costs.withoutVat), vatAmount: Math.abs(data.costs.vatAmount) }
+      : undefined,
+    vatRate,
+  );
+  const profit = vatSplitOf(
+    data?.profit.gross ?? 0,
+    data ? { withoutVat: data.profit.net, vatAmount: data.profit.vatAmount } : undefined,
+    vatRate,
+  );
+  // Una fila igual al total (lo normal: solo hay inscripciones) usa la misma base y cuota
+  const rowVat = (amount: number): VatSplit => (amount === income.withVat ? income : splitVat(amount, vatRate));
 
   const tableRows = [
     { concept: "Inscripciones (devengado)", withVat: data?.revenue.registrations ?? 0 },
@@ -114,29 +133,26 @@ export default function FinanzasPage() {
   ];
 
   const breakdownItems = [
-    { label: "Inscripciones (devengado)", value: data?.revenue.registrations ?? 0, total: accrued.withVat, color: "#D4AF37" },
-    { label: "Patrocinios",               value: data?.revenue.sponsorships  ?? 0, total: accrued.withVat, color: "#888880" },
-    { label: "Merchandising / Otros",     value: data?.revenue.merchandise   ?? 0, total: accrued.withVat, color: "#CD7F32" },
-    { label: "Gastos operativos",         value: costs.withVat,                     total: accrued.withVat, color: "#EB5757" },
+    { label: "Inscripciones (devengado)", value: data?.revenue.registrations ?? 0, total: income.withVat, color: "#D4AF37" },
+    { label: "Patrocinios",               value: data?.revenue.sponsorships  ?? 0, total: income.withVat, color: "#888880" },
+    { label: "Merchandising / Otros",     value: data?.revenue.merchandise   ?? 0, total: income.withVat, color: "#CD7F32" },
+    { label: "Gastos operativos",         value: costs.withVat,                     total: income.withVat, color: "#EB5757" },
   ].filter((i) => i.value > 0);
 
   const exportCsv = () => {
-    const line = (concept: string, amount: number, sign = 1) => {
-      const v = splitVat(amount, vatRate);
-      return {
-        Concepto:      concept,
-        "Con IVA (€)": fmt(sign * v.withVat),
-        "Sin IVA (€)": fmt(sign * v.withoutVat),
-        "IVA (€)":     fmt(sign * v.vat),
-      };
-    };
+    const line = (concept: string, v: VatSplit, sign = 1) => ({
+      Concepto:      concept,
+      "Con IVA (€)": fmt(sign * v.withVat),
+      "Sin IVA (€)": fmt(sign * v.withoutVat),
+      "IVA (€)":     fmt(sign * v.vat),
+    });
     downloadCsv(`finanzas-${period}`, [
-      ...tableRows.map((r) => line(r.concept, r.withVat)),
-      line("TOTAL INGRESOS (devengado)", accrued.withVat),
-      line("Gastos operativos", costs.withVat, -1),
-      line("BENEFICIO NETO", profit.withVat),
-      ...(collected   !== undefined ? [line("Cobrado", collected)] : []),
-      ...(outstanding !== undefined ? [line("Pendiente de cobro", outstanding)] : []),
+      ...tableRows.map((r) => line(r.concept, rowVat(r.withVat))),
+      line("TOTAL INGRESOS", income),
+      line("Gastos operativos", costs, -1),
+      line("BENEFICIO NETO", profit),
+      ...(collected   != null ? [line("Cobrado (inscripciones del periodo)", splitVat(collected, vatRate))] : []),
+      ...(outstanding != null ? [line("Pendiente de cobro (inscripciones del periodo)", splitVat(outstanding, vatRate))] : []),
     ]);
   };
 
@@ -169,52 +185,63 @@ export default function FinanzasPage() {
 
           <button
             onClick={exportCsv}
-            disabled={isLoading}
+            disabled={!data}
             className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#D4AF37] disabled:opacity-40 transition-colors"
           >
             <Download size={13} /> Exportar P&L
           </button>
         </div>
 
+        {isError ? (
+          <div className="bg-card border border-border rounded-lg">
+            <ErrorState message="No se pudieron cargar las finanzas." onRetry={() => refetch()} />
+          </div>
+        ) : (
+        <>
         {/* KPI cards: cobrado, pendiente de cobro y devengado; luego el P&L */}
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-          <StatCard
-            label="Cobrado"
-            value={isLoading ? "—" : fmtOrDash(collected)}
-            sub={`De ${fmt(accrued.withVat)} € devengados`}
-            icon={Wallet}
-          />
-          <StatCard
-            label="Pendiente de cobro"
-            value={isLoading ? "—" : fmtOrDash(outstanding)}
-            sub="De las parejas confirmadas"
-            icon={Hourglass}
-          />
-          <StatCard
-            label="Devengado (con IVA)"
-            value={isLoading ? "—" : `${fmt(accrued.withVat)} €`}
-            sub={`${confirmedPairs} pareja${confirmedPairs === 1 ? "" : "s"} confirmada${confirmedPairs === 1 ? "" : "s"} × precio`}
-            icon={DollarSign}
-          />
-          <StatCard
-            label="Devengado (sin IVA)"
-            value={isLoading ? "—" : `${fmt(accrued.withoutVat)} €`}
-            sub={`IVA: ${fmt(accrued.vat)} €`}
-            icon={Receipt}
-          />
-          <StatCard
-            label="Beneficio bruto"
-            value={isLoading ? "—" : `${fmt(profit.withVat)} €`}
-            icon={TrendingUp}
-            positive
-          />
-          <StatCard
-            label="Beneficio neto"
-            value={isLoading ? "—" : `${fmt(profit.withoutVat)} €`}
-            sub="Sin IVA"
-            icon={PieChart}
-            positive
-          />
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+            <StatCard
+              label="Cobrado"
+              value={isLoading ? "—" : fmtOrDash(collected)}
+              sub={data ? `De ${fmt(accrued)} € devengados` : undefined}
+              icon={Wallet}
+            />
+            <StatCard
+              label="Pendiente de cobro"
+              value={isLoading ? "—" : fmtOrDash(outstanding)}
+              sub={data ? "De las parejas confirmadas" : undefined}
+              icon={Hourglass}
+            />
+            <StatCard
+              label="Devengado"
+              value={isLoading ? "—" : `${fmt(accrued)} €`}
+              sub={data ? `${confirmedPairs} pareja${confirmedPairs === 1 ? "" : "s"} confirmada${confirmedPairs === 1 ? "" : "s"} × precio` : undefined}
+              icon={DollarSign}
+            />
+            <StatCard
+              label="Ingresos (sin IVA)"
+              value={isLoading ? "—" : `${fmt(income.withoutVat)} €`}
+              sub={data ? `IVA: ${fmt(income.vat)} €` : undefined}
+              icon={Receipt}
+            />
+            <StatCard
+              label="Beneficio bruto"
+              value={isLoading ? "—" : `${fmt(profit.withVat)} €`}
+              icon={TrendingUp}
+              positive
+            />
+            <StatCard
+              label="Beneficio neto"
+              value={isLoading ? "—" : `${fmt(profit.withoutVat)} €`}
+              sub={data ? "Sin IVA" : undefined}
+              icon={PieChart}
+              positive
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cifras de las inscripciones dadas de alta {periodText} (por su fecha de inscripción): lo cobrado y lo pendiente son de esas parejas, no lo que ha entrado en caja {periodText}. Importes con IVA incluido.
+          </p>
         </div>
 
         {/* Chart + Breakdown */}
@@ -294,8 +321,8 @@ export default function FinanzasPage() {
 
             <div className="mt-5 pt-4 border-t border-border space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Devengado total</span>
-                <span className="text-foreground font-medium">{fmt(accrued.withVat)} €</span>
+                <span className="text-muted-foreground">Ingresos totales</span>
+                <span className="text-foreground font-medium">{fmt(income.withVat)} €</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Gastos operativos</span>
@@ -329,7 +356,7 @@ export default function FinanzasPage() {
             </thead>
             <tbody>
               {tableRows.map((row) => {
-                const { withoutVat, vat } = splitVat(row.withVat, vatRate);
+                const { withoutVat, vat } = rowVat(row.withVat);
                 return (
                   <tr key={row.concept} className="border-b border-border hover:bg-secondary/30 transition-colors">
                     <td className="px-5 py-3 text-sm text-muted-foreground">{row.concept}</td>
@@ -343,9 +370,9 @@ export default function FinanzasPage() {
               {/* Total ingresos */}
               <tr className="border-b border-border bg-[rgba(212,175,55,0.04)]">
                 <td className="px-5 py-3 text-sm font-bold text-[#D4AF37]">TOTAL INGRESOS</td>
-                <td className="px-5 py-3 text-sm font-bold text-right text-[#D4AF37]">{fmt(accrued.withVat)} €</td>
-                <td className="px-5 py-3 text-sm font-bold text-right text-[#D4AF37]">{fmt(accrued.withoutVat)} €</td>
-                <td className="px-5 py-3 text-sm font-bold text-right text-[#D4AF37]">{fmt(accrued.vat)} €</td>
+                <td className="px-5 py-3 text-sm font-bold text-right text-[#D4AF37]">{fmt(income.withVat)} €</td>
+                <td className="px-5 py-3 text-sm font-bold text-right text-[#D4AF37]">{fmt(income.withoutVat)} €</td>
+                <td className="px-5 py-3 text-sm font-bold text-right text-[#D4AF37]">{fmt(income.vat)} €</td>
               </tr>
 
               {/* Gastos */}
@@ -373,6 +400,7 @@ export default function FinanzasPage() {
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="px-5 py-3 border-b border-border">
               <h3 className="text-sm font-semibold text-foreground">Desglose por torneo</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Parejas confirmadas inscritas {periodText}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -399,6 +427,8 @@ export default function FinanzasPage() {
               </table>
             </div>
           </div>
+        )}
+        </>
         )}
 
       </div>
