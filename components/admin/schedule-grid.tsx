@@ -16,6 +16,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { phaseLabel, GENDER_LABEL, CATEGORY_LABEL_SHORT } from "@/lib/constants";
+import { isByeMatch } from "@/lib/utils/match-status";
 import type { MatchResult, Gender, CategoryLevel } from "@/types";
 
 const ROW_H = 64; // px per 30-min slot
@@ -333,7 +334,8 @@ export function ScheduleGrid({
     return { minMin: lo, slots: s };
   }, [range, dayMatches, duration]);
 
-  const unscheduled = matches.filter((m) => !(m as any).date);
+  // Un bye no se juega: no está «sin programar» aunque no tenga hora.
+  const unscheduled = matches.filter((m) => !m.date && !isByeMatch(m));
 
   // ── Drag & drop ────────────────────────────────────────────────────────────
   const canMove   = !!onMove;
@@ -352,7 +354,7 @@ export function ScheduleGrid({
     setActiveMatch(null);
     const m = (e.active?.data?.current as any)?.match as MatchResult | undefined;
     const over = e.over?.data?.current as { slotMin: number; court: string } | undefined;
-    if (!m || !over || !onMove) return;
+    if (!m || !over || !onMove || isByeMatch(m)) return;
     if (over.court === "Sin pista") return;
     // Construye la fecha destino conservando el día del partido y cambiando
     // solo la hora — mismo formato "datetime-local" que el editor inline, para
@@ -545,7 +547,7 @@ export function ScheduleGrid({
                     colIdx={colIdx}
                     rowStart={rowStart}
                     rowSpan={rowSpan}
-                    draggable={canMove && !isFinished}
+                    draggable={canMove && !isFinished && !isByeMatch(m)}
                     onMatchClick={onMatchClick}
                     onCorrectClick={onCorrectClick}
                     onDelete={onDelete}

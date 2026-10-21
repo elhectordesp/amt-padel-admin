@@ -117,35 +117,24 @@ const hasBothTeams = (m: { team1?: unknown[]; team2?: unknown[] }) =>
   (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0;
 
 // ── Conflict labels ───────────────────────────────────────────────────────────
-const CONFLICT_LABEL: Record<ConflictType, string> = {
-  MISSING_ASSIGNMENT:    "Sin horario",
-  COURT_OVERLAP:         "Pista solapada",
-  PLAYER_DOUBLE_BOOKED:  "Jugador doblado",
-  AVAILABILITY_VIOLATION: "Disponibilidad",
-  OUTSIDE_SCHEDULE:      "Fuera de jornada",
-  PHASE_ORDER:           "Orden de rondas",
-  BYE_SCHEDULED:         "Bye con pista",
+// Una tabla por tipo para el aviso de publicar y para «Validar» (antes eran
+// dos, con nombres distintos, y lo que «Validar» no conocía salía «SIN ASIGNAR»).
+// La etiqueta se pinta en mayúsculas con CSS.
+interface ConflictStyle { label: string; text: string; chip: string }
+const CONFLICT_STYLE: Record<ConflictType, ConflictStyle> = {
+  MISSING_ASSIGNMENT:     { label: "Sin horario",      text: "text-yellow-400", chip: "border-yellow-400/40 text-yellow-400 bg-yellow-400/10" },
+  COURT_OVERLAP:          { label: "Pista ocupada",    text: "text-orange-400", chip: "border-orange-400/40 text-orange-400 bg-orange-400/10" },
+  PLAYER_DOUBLE_BOOKED:   { label: "Jugador doblado",  text: "text-red-400",    chip: "border-red-400/40 text-red-400 bg-red-400/10" },
+  AVAILABILITY_VIOLATION: { label: "Disponibilidad",   text: "text-blue-400",   chip: "border-blue-400/40 text-blue-400 bg-blue-400/10" },
+  OUTSIDE_SCHEDULE:       { label: "Fuera de jornada", text: "text-red-400",    chip: "border-red-400/40 text-red-400 bg-red-400/10" },
+  PHASE_ORDER:            { label: "Orden de rondas",  text: "text-red-400",    chip: "border-red-400/40 text-red-400 bg-red-400/10" },
+  BYE_SCHEDULED:          { label: "Bye con pista",    text: "text-purple-400", chip: "border-purple-400/40 text-purple-400 bg-purple-400/10" },
 };
-const CONFLICT_COLOR: Record<ConflictType, string> = {
-  MISSING_ASSIGNMENT:    "text-destructive",
-  COURT_OVERLAP:         "text-yellow-400",
-  PLAYER_DOUBLE_BOOKED:  "text-orange-400",
-  AVAILABILITY_VIOLATION: "text-blue-400",
-  OUTSIDE_SCHEDULE:      "text-red-400",
-  PHASE_ORDER:           "text-red-400",
-  BYE_SCHEDULED:         "text-purple-400",
+const UNKNOWN_CONFLICT_STYLE: ConflictStyle = {
+  label: "Conflicto", text: "text-yellow-400", chip: "border-yellow-400/40 text-yellow-400 bg-yellow-400/10",
 };
-// Etiqueta de «Validar» por tipo (antes, lo que no conocía salía como «SIN ASIGNAR»).
-const CONFLICT_CHIP: Record<ConflictType, { label: string; className: string }> = {
-  MISSING_ASSIGNMENT:     { label: "SIN ASIGNAR",      className: "border-yellow-400/40 text-yellow-400 bg-yellow-400/10" },
-  COURT_OVERLAP:          { label: "PISTA OCUPADA",    className: "border-orange-400/40 text-orange-400 bg-orange-400/10" },
-  PLAYER_DOUBLE_BOOKED:   { label: "DOBLE RESERVA",    className: "border-red-400/40 text-red-400 bg-red-400/10" },
-  AVAILABILITY_VIOLATION: { label: "DISPONIBILIDAD",   className: "border-blue-400/40 text-blue-400 bg-blue-400/10" },
-  OUTSIDE_SCHEDULE:       { label: "FUERA DE JORNADA", className: "border-red-400/40 text-red-400 bg-red-400/10" },
-  PHASE_ORDER:            { label: "ORDEN DE RONDAS",  className: "border-red-400/40 text-red-400 bg-red-400/10" },
-  BYE_SCHEDULED:          { label: "BYE CON PISTA",    className: "border-purple-400/40 text-purple-400 bg-purple-400/10" },
-};
-const UNKNOWN_CHIP = { label: "CONFLICTO", className: "border-yellow-400/40 text-yellow-400 bg-yellow-400/10" };
+const conflictStyle = (type: ConflictType): ConflictStyle =>
+  CONFLICT_STYLE[type] ?? UNKNOWN_CONFLICT_STYLE;
 
 // ── ConflictModal ─────────────────────────────────────────────────────────────
 function ConflictModal({
@@ -169,8 +158,8 @@ function ConflictModal({
         <div className="p-5 space-y-2 max-h-72 overflow-y-auto">
           {conflicts.map((c, i) => (
             <div key={i} className="flex items-start gap-2">
-              <span className={`text-[10px] font-bold uppercase shrink-0 mt-0.5 ${CONFLICT_COLOR[c.type] ?? "text-yellow-400"}`}>
-                {CONFLICT_LABEL[c.type] ?? "Conflicto"}
+              <span className={`text-[10px] font-bold uppercase shrink-0 mt-0.5 ${conflictStyle(c.type).text}`}>
+                {conflictStyle(c.type).label}
               </span>
               <span className="text-xs text-muted-foreground">{c.description}</span>
             </div>
@@ -3546,11 +3535,11 @@ export default function TorneoDetailPage() {
                               {conflictsByCat[cat.id].length} conflicto{conflictsByCat[cat.id].length !== 1 ? "s" : ""} detectado{conflictsByCat[cat.id].length !== 1 ? "s" : ""}
                             </div>
                             {conflictsByCat[cat.id].map((c, i) => {
-                              const chip = CONFLICT_CHIP[c.type] ?? UNKNOWN_CHIP;
+                              const style = conflictStyle(c.type);
                               return (
                                 <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                                  <span className={`mt-0.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${chip.className}`}>
-                                    {chip.label}
+                                  <span className={`mt-0.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase border ${style.chip}`}>
+                                    {style.label}
                                   </span>
                                   <span>{c.description}</span>
                                 </div>
