@@ -54,9 +54,11 @@ async function toDataUrl(url: string): Promise<string | null> {
   }
 }
 
-export default async function Image({ params }: { params: { id: string } }) {
+// En Next 16 params es una promesa: con params.id (síncrono) llegaba undefined
+export default async function Image({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const [data, fontData] = await Promise.all([
-    getPlayer(params.id),
+    getPlayer(id),
     loadInterFont(),
   ]);
 
@@ -179,9 +181,11 @@ export default async function Image({ params }: { params: { id: string } }) {
                   {player.gender === "M" ? "MASCULINO" : "FEMENINO"}
                 </div>
               )}
-              {player?.globalRank && (
+              {/* Su puesto en el circuito de la temporada, como «#N Circuito» de la
+                  app (la página pública de ranking es la de SPA) */}
+              {player?.categoryRank != null && (
                 <div style={{ color: "#888", fontSize: 16 }}>
-                  · Ranking #{player.globalRank}
+                  {`· #${player.categoryRank} Circuito`}
                 </div>
               )}
             </div>

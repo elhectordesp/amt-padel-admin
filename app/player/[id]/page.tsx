@@ -25,12 +25,16 @@ async function getPlayer(id: string) {
   return json.data ?? json;
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const player = await getPlayer(params.id);
+// En Next 16 params es una promesa: con params.id (síncrono) llegaba undefined
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const player = await getPlayer(id);
   if (!player) return { title: "Jugador no encontrado · AMT Pádel" };
+  const level: string | null = player.player.level;
   return {
     title: `${player.player.name} · AMT Pádel`,
-    description: `Perfil de ${player.player.name} en el circuito AMT Pádel. Categoría ${CATEGORY_LABEL[player.player.level] ?? player.player.level}.`,
+    // Un jugador nuevo no tiene categoría (antes la API decía 4ª)
+    description: `Perfil de ${player.player.name} en el circuito AMT Pádel. ${level ? `Categoría ${CATEGORY_LABEL[level] ?? level}` : "Sin categoría"}.`,
     openGraph: {
       title: `${player.player.name} · AMT Pádel`,
       images: player.player.photoUrl ? [player.player.photoUrl] : [],
@@ -38,8 +42,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function PublicPlayerPage({ params }: { params: { id: string } }) {
-  const data = await getPlayer(params.id);
+export default async function PublicPlayerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await getPlayer(id);
   if (!data) notFound();
 
   const { player, tournaments } = data;
