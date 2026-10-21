@@ -38,7 +38,7 @@ import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
-import { hasDate, isMatchFinished } from "@/lib/utils/match-status";
+import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
 import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
@@ -707,6 +707,8 @@ function CalendarTab({
                                       {m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")}
                                     </span>
                                   </div>
+                                  {/* Un bye (una sola pareja) no se corrige ni se reabre: el back lo rechaza */}
+                                  {hasBothPairs(m) && (<>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
                                     className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
@@ -727,6 +729,7 @@ function CalendarTab({
                                   >
                                     <Clock size={11} />
                                   </button>
+                                  </>)}
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0 ml-auto sm:ml-0">

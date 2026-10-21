@@ -318,6 +318,24 @@ describe("GenerateBracketDialog", () => {
       // Antes: «→ Semifinales · 2 byes»
       expect(screen.queryByText(/bye/)).not.toBeInTheDocument();
     });
+
+    it("2 grupos y top 1 → también la final directa", async () => {
+      (adminService.tournaments.previewBracket as ReturnType<typeof vi.fn>).mockResolvedValue({
+        isGroups: true,
+        groups: [
+          { name: "Grupo A", pairs: Array.from({ length: 3 }) },
+          { name: "Grupo B", pairs: Array.from({ length: 3 }) },
+        ],
+        totalPairs: 6,
+        totalMatches: 6,
+      });
+      wrap(<GenerateBracketDialog {...baseProps({ totalConfirmedPairs: 6 })} />);
+      fireEvent.click(screen.getByText("Top 1"));
+      await waitFor(() => {
+        expect(screen.getByText(/2 clasificados \(Top 1 × 2\) → Final/)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/bye/)).not.toBeInTheDocument();
+    });
   });
 
   // ── Bloque 3 ─────────────────────────────────────────────────────────────
