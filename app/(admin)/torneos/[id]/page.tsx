@@ -352,6 +352,8 @@ function CalendarTab({
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
+      // Reabrir una final (o lo que había detrás) reabre el torneo cerrado
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
     },
     onError: (e: unknown, variables) => {
       const msg =
@@ -4001,6 +4003,11 @@ export default function TorneoDetailPage() {
         alreadyHasBracket={bracketMatches.some(
           (m: any) => m.categoryId === bracketCatId,
         )}
+        currentFormat={
+          tournament.categories.find((c) => c.id === bracketCatId)?.format ??
+          tournament.format ??
+          null
+        }
         registrationsOpenReason={
           tournament.status === "OPEN" &&
           (!tournament.registrationDeadline ||
