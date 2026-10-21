@@ -237,6 +237,107 @@ describe("GenerateBracketDialog", () => {
     });
   });
 
+  // ── P2-3: regenerar con el formato elegido ───────────────────────────────
+
+  describe("Regenerar (P2-3)", () => {
+    beforeEach(() => {
+      (adminService.tournaments.getBracketStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+        exists: true,
+        totalMatches: 7,
+        finishedMatches: 0, // los byes ya no cuentan como resultados
+        hasGroupResults: false,
+        hasElimResults: false,
+      });
+      (adminService.tournaments.regenerateBracket as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+      });
+    });
+
+    it("parte del formato actual del cuadro y lo manda al regenerar", async () => {
+      wrap(
+        <GenerateBracketDialog
+          {...baseProps({ alreadyHasBracket: true, currentFormat: "eliminatoria" })}
+        />,
+      );
+      // Solo eliminatoria marcado: sin opciones de grupos
+      expect(screen.queryByText("Distribución de grupos")).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/ninguno con resultado/)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
+      await waitFor(() => {
+        expect(adminService.tournaments.regenerateBracket).toHaveBeenCalledWith(
+          "tour-1",
+          "cat-1",
+          expect.any(Object),
+          "solo-eliminatoria",
+        );
+      });
+    });
+
+    it("manda el formato elegido en el diálogo (antes se perdía)", async () => {
+      wrap(
+        <GenerateBracketDialog
+          {...baseProps({ alreadyHasBracket: true, currentFormat: "solo-eliminatoria" })}
+        />,
+      );
+      fireEvent.click(screen.getByText("Grupos + Eliminatoria"));
+      await waitFor(() => {
+        expect(screen.getByText(/ninguno con resultado/)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
+      await waitFor(() => {
+        expect(adminService.tournaments.regenerateBracket).toHaveBeenCalledWith(
+          "tour-1",
+          "cat-1",
+          expect.objectContaining({ topNPerGroup: 2 }),
+          "grupos+eliminatoria",
+        );
+      });
+    });
+  });
+
+  // ── E05 / I04: vista previa de cuadros pequeños ─────────────────────────
+
+  describe("Vista previa de un solo grupo (E05, I04)", () => {
+    const oneGroupOf = (n: number) => ({
+      isGroups: true,
+      groups: [{ name: "Grupo A", pairs: Array.from({ length: n }) }],
+      totalPairs: n,
+      totalMatches: (n * (n - 1)) / 2,
+    });
+
+    it.each([3, 5])("1 grupo de %i y top 2 → final directa, sin byes", async (n) => {
+      (adminService.tournaments.previewBracket as ReturnType<typeof vi.fn>).mockResolvedValue(
+        oneGroupOf(n),
+      );
+      wrap(<GenerateBracketDialog {...baseProps({ totalConfirmedPairs: n })} />);
+      await waitFor(() => {
+        expect(screen.getByText(/2 clasificados \(Top 2 × 1\) → Final/)).toBeInTheDocument();
+      });
+      // Antes: «→ Semifinales · 2 byes»
+      expect(screen.queryByText(/bye/)).not.toBeInTheDocument();
+    });
+
+    it("2 grupos y top 1 → también la final directa", async () => {
+      (adminService.tournaments.previewBracket as ReturnType<typeof vi.fn>).mockResolvedValue({
+        isGroups: true,
+        groups: [
+          { name: "Grupo A", pairs: Array.from({ length: 3 }) },
+          { name: "Grupo B", pairs: Array.from({ length: 3 }) },
+        ],
+        totalPairs: 6,
+        totalMatches: 6,
+      });
+      wrap(<GenerateBracketDialog {...baseProps({ totalConfirmedPairs: 6 })} />);
+      fireEvent.click(screen.getByText("Top 1"));
+      await waitFor(() => {
+        expect(screen.getByText(/2 clasificados \(Top 1 × 2\) → Final/)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/bye/)).not.toBeInTheDocument();
+    });
+  });
+
   // ── Bloque 3 ─────────────────────────────────────────────────────────────
 
   describe("Bloque 3 — modo manual (crear grupos vacíos)", () => {
