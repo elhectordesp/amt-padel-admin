@@ -20,6 +20,7 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
 import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, levelLabel } from "@/lib/constants";
+import { playerUpdatePayload } from "@/lib/player-edit";
 import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -158,8 +159,8 @@ export default function JugadorDetailPage() {
       email:         player.email  ?? "",
       phone:         player.phone  ?? "",
       city:          player.city   ?? "",
-      // Sin categoría: el selector queda en «Sin asignar» y no se manda nada
-      categoryLevel: player.level ?? undefined,
+      // Sin categoría: el selector queda en «Sin asignar»
+      categoryLevel: player.level ?? null,
       bio:           player.bio    ?? "",
     });
     setShowEdit(true);
@@ -651,7 +652,7 @@ export default function JugadorDetailPage() {
                       </td>
                       <td className="px-5 py-3">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
-                          {CATEGORY_LABEL[ch.to]}
+                          {levelLabel(ch.to)}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-xs text-muted-foreground max-w-xs truncate">{ch.reason}</td>
@@ -721,7 +722,7 @@ export default function JugadorDetailPage() {
                   <label className="text-xs font-medium text-muted-foreground">Categoría</label>
                   <select
                     value={editForm.categoryLevel ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, categoryLevel: (e.target.value || undefined) as CategoryLevel | undefined }))}
+                    onChange={(e) => setEditForm((f) => ({ ...f, categoryLevel: (e.target.value || null) as CategoryLevel | null }))}
                     className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                   >
                     <option value="">Sin asignar</option>
@@ -810,17 +811,7 @@ export default function JugadorDetailPage() {
               </button>
               <button
                 disabled={editMutation.isPending}
-                onClick={() => editMutation.mutate({
-                  ...editForm,
-                  // La categoría, solo si se cambia aquí
-                  categoryLevel: editForm.categoryLevel !== (player.level ?? undefined)
-                    ? editForm.categoryLevel
-                    : undefined,
-                  email: editForm.email?.trim() || undefined,
-                  phone: editForm.phone?.trim() || undefined,
-                  city:  editForm.city?.trim()  || undefined,
-                  bio:   editForm.bio?.trim()   || undefined,
-                })}
+                onClick={() => editMutation.mutate(playerUpdatePayload(editForm, player.level))}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-[#D4AF37] text-black hover:bg-[#C9A227] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {editMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Edit2 size={13} />}

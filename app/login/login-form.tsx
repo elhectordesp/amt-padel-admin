@@ -7,7 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { login } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { CLUB_DEACTIVATED_MESSAGE, login } from "@/lib/auth";
+import { LOGIN_REASON_CLUB_DEACTIVATED } from "@/lib/api";
 import { safeRedirectPath } from "@/lib/utils/safe-redirect";
 
 const schema = z.object({
@@ -20,9 +22,13 @@ export function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const from         = safeRedirectPath(searchParams.get("from"));
+  const queryClient  = useQueryClient();
 
   const [showPass, setShowPass] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  // Si le echaron a mitad de sesión porque AMT desactivó su club, se lo dice
+  const [apiError, setApiError] = useState<string | null>(() =>
+    searchParams.get("motivo") === LOGIN_REASON_CLUB_DEACTIVATED ? CLUB_DEACTIVATED_MESSAGE : null,
+  );
 
   const {
     register,
@@ -34,6 +40,8 @@ export function LoginForm() {
     setApiError(null);
     try {
       await login(data.email, data.password);
+      // Nada de la cuenta anterior (p. ej. su rol en ["admin-me"])
+      queryClient.clear();
       router.replace(from);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al iniciar sesión";

@@ -57,7 +57,20 @@ export interface ScheduleConflict {
   description:      string;
 }
 
-export interface AdminUser { name: string; email: string }
+/**
+ * Rol de la cuenta tal como está en la BD. El del token (useRole) es 'admin'
+ * tanto para ADMIN como para SUPERADMIN: para distinguirlos hay que leer este.
+ */
+export type AccountRole = "PLAYER" | "ADMIN" | "SUPERADMIN" | "CLUB";
+
+/** La cuenta con la que se ha entrado (/auth/me). */
+export interface AdminUser {
+  id:     string;
+  name:   string;
+  // Opcionales: una versión anterior del back no los devuelve
+  email?: string | null;
+  role?:  AccountRole;
+}
 
 /**
  * Opciones avanzadas para generación/preview del cuadro (Bloque 1).
@@ -645,7 +658,9 @@ export const adminService = {
     list:       ()                                                        => api.get<AdminMember[]>("/admin/admins").then((r) => r.data ?? []),
     invite:     (data: { email: string; firstName: string; lastName: string; role?: "ADMIN" | "SUPERADMIN" }) =>
       api.post<AdminMember>("/admin/admins/invite", data).then((r) => r.data),
-    updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               => api.patch(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
+    // Devuelve el rol con el que queda (el toast lo enseña)
+    updateRole: (id: string, role: "ADMIN" | "SUPERADMIN")               =>
+      api.patch<{ id: string; role: "ADMIN" | "SUPERADMIN" }>(`/admin/admins/${id}/role`, { role }).then((r) => r.data),
     revoke:     (id: string)                                              => api.delete(`/admin/admins/${id}`).then((r) => r.data),
   },
 

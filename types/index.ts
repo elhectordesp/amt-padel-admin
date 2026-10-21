@@ -289,7 +289,8 @@ export interface UpdatePlayerPayload {
   email?:        string;
   phone?:        string;
   city?:         string;
-  categoryLevel?: CategoryLevel;
+  // null: le quita la categoría («Sin asignar»)
+  categoryLevel?: CategoryLevel | null;
   position?:     "reves" | "drive" | "indiferente";
   hand?:         "diestro" | "zurdo" | "ambidiestro";
   playsMasc?:    boolean;
@@ -387,9 +388,9 @@ export interface FinanceStats {
 export interface CategoryChange {
   id:        string;
   date:      string;
-  // null: no tenía categoría
+  // null: no tenía categoría / se la quitaron
   from:      CategoryLevel | null;
-  to:        CategoryLevel;
+  to:        CategoryLevel | null;
   reason:    string;
   adminName: string;
 }

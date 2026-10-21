@@ -1,4 +1,7 @@
-import { api, setToken, setRefreshToken, removeTokens, getRefreshToken } from "./api";
+import { api, ApiError, setToken, setRefreshToken, removeTokens, getRefreshToken } from "./api";
+
+/** El admin de un club que AMT desactivó no entra hasta que AMT lo reactive. */
+export const CLUB_DEACTIVATED_MESSAGE = "Tu club está desactivado. Contacta con AMT para reactivarlo.";
 
 export interface AdminUser {
   id:    string;
@@ -20,12 +23,15 @@ export async function login(email: string, password: string): Promise<AdminUser>
   try {
     res = await api.post("/auth/login", { email, password });
   } catch (err: unknown) {
-    const e = err as { response?: { status?: number; data?: { code?: string; message?: string } } };
+    // /auth/login no pasa por el interceptor: llega el error de axios tal cual
+    // ({ success, code, error } del back)
+    const e = err as {
+      response?: { status?: number; data?: { code?: string; error?: string; message?: string } };
+    };
     const status = e?.response?.status;
-    const serverMsg = e?.response?.data?.message;
-    // Admin de un club que AMT desactivó: no entra hasta que AMT lo reactive
+    const serverMsg = e?.response?.data?.error ?? e?.response?.data?.message;
     if (e?.response?.data?.code === "CLUB_DEACTIVATED")
-      throw new Error("Tu club está desactivado. Contacta con AMT para reactivarlo.");
+      throw new Error(CLUB_DEACTIVATED_MESSAGE);
     if (status === 401) throw new Error("Email o contraseña incorrectos.");
     if (status === 403) throw new Error("No tienes permisos para acceder.");
     throw new Error(serverMsg ?? "Error al conectar con el servidor. Inténtalo de nuevo.");
@@ -61,16 +67,16 @@ export async function acceptClubInvite(
   try {
     res = await api.post("/auth/accept-club-invite", { token, name, password });
   } catch (err: unknown) {
-    const e = err as {
-      response?: { status?: number; data?: { code?: string; message?: string } };
-    };
-    const code = e?.response?.data?.code;
+    // El interceptor de api.ts ya lo ha convertido en ApiError, con el código
+    // y el texto del back (antes se buscaba en err.response y no estaba)
+    const code = err instanceof ApiError ? err.code : undefined;
     if (code === "CLUB_INVITATION_INVALID")
       throw new Error("La invitación es inválida o ha caducado.");
     if (code === "CLUB_INVITATION_EMAIL_TAKEN")
       throw new Error("Ese email ya está registrado en la plataforma.");
+    if (code === "CLUB_DEACTIVATED") throw new Error(CLUB_DEACTIVATED_MESSAGE);
     throw new Error(
-      e?.response?.data?.message ?? "Error al aceptar la invitación.",
+      err instanceof ApiError && err.message ? err.message : "Error al aceptar la invitación.",
     );
   }
   const data = res.data as unknown as {

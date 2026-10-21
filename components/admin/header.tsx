@@ -154,7 +154,7 @@ export function Header({ title }: HeaderProps) {
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{roleLabel(me?.role)}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{me?.email ?? roleLabel(me?.role)}</p>
               </div>
               <ChevronDown size={12} className={`text-muted-foreground transition-transform ${menuOpen ? "rotate-180" : ""}`} />
             </button>
@@ -173,7 +173,9 @@ export function Header({ title }: HeaderProps) {
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground truncate">{roleLabel(me?.role)}</p>
+                  {me?.email && <p className="text-[10px] text-muted-foreground truncate">{me.email}</p>}
+                  {/* El rol real (el token dice «admin» tanto a Admin como a Super Admin) */}
+                  {me?.role && <p className="text-[10px] font-semibold text-[#D4AF37] mt-0.5">{roleLabel(me.role)}</p>}
                 </div>
                 <button
                   type="button"
