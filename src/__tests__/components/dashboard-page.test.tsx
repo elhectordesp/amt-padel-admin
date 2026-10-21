@@ -34,6 +34,7 @@ vi.mock("@/lib/services/admin", () => ({
       activeTournaments: 2,
       registeredPlayers: 12,
       scheduledMatches: 1,
+      season: 2026,
     }),
     alerts: vi.fn().mockResolvedValue([]),
     activity: vi.fn().mockResolvedValue([]),
@@ -42,6 +43,7 @@ vi.mock("@/lib/services/admin", () => ({
 }));
 
 import DashboardPage from "../../../app/(admin)/dashboard/page";
+import { adminService } from "@/lib/services/admin";
 
 function renderWithClient(ui: React.ReactElement) {
   const qc = new QueryClient({
@@ -87,5 +89,64 @@ describe("DashboardPage — role gating", () => {
     ).toBeInTheDocument();
     // No debe colarse la etiqueta CLUB
     expect(screen.queryByText("Mis torneos activos")).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage — tarjetas y lista de torneos", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useRoleMock.mockReturnValue({ role: "admin", clubId: null });
+  });
+
+  it("«Jugadores inscritos» dice que son los inscritos de la temporada", async () => {
+    renderWithClient(<DashboardPage />);
+
+    expect(
+      await screen.findByText("Con inscripción en la temporada 2026"),
+    ).toBeInTheDocument();
+  });
+
+  it("CLUB: únicos y de la temporada", async () => {
+    useRoleMock.mockReturnValue({ role: "club", clubId: "club-1" });
+
+    renderWithClient(<DashboardPage />);
+
+    expect(await screen.findByText("Únicos · temporada 2026")).toBeInTheDocument();
+  });
+
+  it("«Torneos activos y próximos»: primero el en curso, sin borradores ni «próximos» ya pasados", async () => {
+    // Solo la fecha: los temporizadores (react-query, findBy) siguen reales
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 21, 10, 0));
+    const t = (id: string, status: string, startDate: string) => ({
+      id,
+      name: `Torneo ${id}`,
+      status,
+      startDate,
+      endDate: startDate,
+      club: { name: "Club" },
+      categories: [],
+    });
+    vi.mocked(adminService.tournaments.list).mockResolvedValueOnce([
+      ...["b1", "b2", "b3", "b4", "b5"].map((id) => t(id, "DRAFT", "2026-11-01")),
+      t("abierto", "OPEN", "2026-12-01"),
+      t("abierto-pasado", "OPEN", "2026-10-01"),
+      t("en-curso", "ONGOING", "2026-10-20"),
+    ] as never);
+
+    try {
+      renderWithClient(<DashboardPage />);
+
+      await screen.findByText("Torneo en-curso");
+      const names = screen
+        .getAllByText(/^Torneo /)
+        .map((el) => el.textContent);
+      expect(names).toEqual(["Torneo en-curso", "Torneo abierto"]);
+      expect(screen.getByText("En curso")).toBeInTheDocument();
+      expect(screen.getByText("Abierto")).toBeInTheDocument();
+      expect(screen.queryByText("Borrador")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

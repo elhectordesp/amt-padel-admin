@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import { activeAndUpcomingTournaments } from "@/lib/utils/dashboard-tournaments";
 import { useRole, isClub } from "@/lib/use-role";
 
 function StatCard({
@@ -42,6 +43,14 @@ function ErrorCard({ message = "Error al cargar los datos" }: { message?: string
     </div>
   );
 }
+
+/** La etiqueta y el color de los estados que salen en «Torneos activos y próximos». */
+const ACTIVE_STATUS_STYLE: Record<string, { label: string; color: string }> = {
+  ONGOING:   { label: "En curso",   color: "text-yellow-400" },
+  OPEN:      { label: "Abierto",    color: "text-green-400" },
+  DRAW:      { label: "Sorteo",     color: "text-purple-400" },
+  SCHEDULED: { label: "Programado", color: "text-cyan-400" },
+};
 
 const ALERT_ICON: Record<string, React.ElementType> = {
   match:        Calendar,
@@ -106,10 +115,8 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
-  const activeTournaments = tournaments.filter((t) => {
-    const st = t.status?.toUpperCase();
-    return st !== "FINISHED" && st !== "CANCELLED";
-  });
+  const activeTournaments = activeAndUpcomingTournaments(tournaments);
+  const season = stats?.season ? `temporada ${stats.season}` : null;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -143,7 +150,11 @@ export default function DashboardPage() {
                 isClubUser ? "Jugadores en mis torneos" : "Jugadores inscritos"
               }
               value={stats?.registeredPlayers ?? "—"}
-              sub={isClubUser ? "Únicos" : undefined}
+              sub={
+                isClubUser
+                  ? ["Únicos", season].filter(Boolean).join(" · ")
+                  : season ? `Con inscripción en la ${season}` : undefined
+              }
               icon={Users}
               loading={isLoading}
             />
@@ -244,12 +255,10 @@ export default function DashboardPage() {
               : activeTournaments.length === 0
                 ? <p className="text-sm text-muted-foreground py-6 text-center">No hay torneos activos</p>
                 : <div className="space-y-0">
-                    {activeTournaments.slice(0, 5).map((t) => {
+                    {activeTournaments.map((t) => {
                       const totalSpots      = t.categories.reduce((s, c) => s + c.totalSpots, 0);
                       const totalRegistered = t.categories.reduce((s, c) => s + c.occupiedCount, 0);
-                      const st = t.status?.toLowerCase();
-                      const statusColor = st === "open" ? "text-green-400" : st === "draw" ? "text-purple-400" : st === "scheduled" ? "text-cyan-400" : st === "ongoing" ? "text-yellow-400" : st === "draft" ? "text-blue-400" : "text-muted-foreground";
-                      const statusLabel = st === "open" ? "Abierto" : st === "draw" ? "Sorteo" : st === "scheduled" ? "Programado" : st === "ongoing" ? "En curso" : st === "draft" ? "Borrador" : st === "cancelled" ? "Cancelado" : "Finalizado";
+                      const { label: statusLabel, color: statusColor } = ACTIVE_STATUS_STYLE[(t.status ?? "").toUpperCase()] ?? ACTIVE_STATUS_STYLE.OPEN;
                       return (
                         <Link
                           key={t.id}
