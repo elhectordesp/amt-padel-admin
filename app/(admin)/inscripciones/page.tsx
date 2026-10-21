@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight, UserPlus } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
@@ -31,10 +32,33 @@ type StatusFilter = "all" | RegistrationStatus;
 
 const PAGE_SIZE = 20;
 
-export default function InscripcionesPage() {
-  const qc = useQueryClient();
+/** La URL de Inscripciones con el torneo elegido (el dashboard enlaza así). */
+function inscripcionesHref(tournamentId: string): string {
+  return tournamentId ? `/inscripciones?torneo=${encodeURIComponent(tournamentId)}` : "/inscripciones";
+}
 
-  const [tournamentId, setTournamentId] = useState("");
+export default function InscripcionesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-full">
+        <Header title="Inscripciones" />
+        <div className="p-6">
+          <div className="h-9 w-[280px] rounded-md bg-secondary animate-pulse" />
+        </div>
+      </div>
+    }>
+      <InscripcionesContent />
+    </Suspense>
+  );
+}
+
+function InscripcionesContent() {
+  const qc = useQueryClient();
+  const router = useRouter();
+
+  // El torneo elegido va en la URL (?torneo=): las alertas y la actividad del
+  // dashboard abren la página con él, y sobrevive a recargar y volver atrás
+  const tournamentId = useSearchParams().get("torneo") ?? "";
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [catFilter,    setCatFilter]    = useState("all");
   const [search,       setSearch]       = useState("");
@@ -124,7 +148,7 @@ export default function InscripcionesPage() {
     );
 
   const handleTournamentChange = (id: string) => {
-    setTournamentId(id);
+    router.replace(inscripcionesHref(id), { scroll: false });
     setStatusFilter("all");
     setCatFilter("all");
     setSearch("");

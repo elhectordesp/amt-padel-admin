@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import { activeAndUpcomingTournaments } from "@/lib/utils/dashboard-tournaments";
 import { useRole, isClub } from "@/lib/use-role";
 
 function StatCard({
@@ -106,10 +107,8 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
-  const activeTournaments = tournaments.filter((t) => {
-    const st = t.status?.toUpperCase();
-    return st !== "FINISHED" && st !== "CANCELLED";
-  });
+  const activeTournaments = activeAndUpcomingTournaments(tournaments);
+  const season = stats?.season ? `temporada ${stats.season}` : null;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -143,7 +142,11 @@ export default function DashboardPage() {
                 isClubUser ? "Jugadores en mis torneos" : "Jugadores inscritos"
               }
               value={stats?.registeredPlayers ?? "—"}
-              sub={isClubUser ? "Únicos" : undefined}
+              sub={
+                isClubUser
+                  ? ["Únicos", season].filter(Boolean).join(" · ")
+                  : season ? `Con inscripción en la ${season}` : undefined
+              }
               icon={Users}
               loading={isLoading}
             />
@@ -244,7 +247,7 @@ export default function DashboardPage() {
               : activeTournaments.length === 0
                 ? <p className="text-sm text-muted-foreground py-6 text-center">No hay torneos activos</p>
                 : <div className="space-y-0">
-                    {activeTournaments.slice(0, 5).map((t) => {
+                    {activeTournaments.map((t) => {
                       const totalSpots      = t.categories.reduce((s, c) => s + c.totalSpots, 0);
                       const totalRegistered = t.categories.reduce((s, c) => s + c.occupiedCount, 0);
                       const st = t.status?.toLowerCase();

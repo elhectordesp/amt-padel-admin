@@ -8,8 +8,12 @@ export type RankingType        = "spa" | "circuit";
 
 export interface AdminStats {
   activeTournaments: number;
+  /** Jugadores distintos con una inscripción viva en torneos de la temporada. */
   registeredPlayers: number;
+  /** Partidos por jugar programados para hoy (el día de España). */
   scheduledMatches:  number;
+  /** La temporada de `registeredPlayers` (falta con un back anterior). */
+  season?:           number;
 }
 
 export interface TournamentCategory {
@@ -360,13 +364,26 @@ export interface AdminAlert {
   href?:   string;
 }
 
+/**
+ * Finanzas de las inscripciones del periodo. Con las parejas confirmadas: el
+ * devengado (`registrations`/`total`: precio por pareja, paguen o no), lo
+ * cobrado (`collected`: la mitad del precio por jugador que ha pagado) y lo
+ * pendiente de cobro (`outstanding`). Los importes llevan el IVA incluido.
+ * Los campos opcionales faltan con un back anterior.
+ */
 export interface FinanceStats {
   period: "month" | "year";
+  /** El IVA incluido en los precios (0.21). */
+  vatRate?: number;
   revenue: {
     registrations: number;
     sponsorships:  number;
     merchandise:   number;
     total:         number;
+    collected?:    number;
+    outstanding?:  number;
+    withoutVat?:   number;
+    vatAmount?:    number;
   };
   costs: {
     operational: number;
@@ -378,8 +395,19 @@ export interface FinanceStats {
     vatAmount: number;
   };
   chart: { month: string; revenue: number; profit: number }[];
-  /** `id`: el del torneo. `registrations`: parejas confirmadas (el precio es por pareja). */
-  byTournament?: { id: string; name: string; revenue: number; registrations: number }[];
+  /**
+   * `id`: el del torneo. `registrations`: parejas confirmadas (el precio es
+   * por pareja). `revenue`: lo devengado; `collected` y `outstanding`: lo
+   * cobrado y lo pendiente de cobro.
+   */
+  byTournament?: {
+    id: string;
+    name: string;
+    revenue: number;
+    registrations: number;
+    collected?: number;
+    outstanding?: number;
+  }[];
 }
 
 export interface CategoryChange {
