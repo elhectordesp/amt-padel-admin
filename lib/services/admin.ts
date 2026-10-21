@@ -39,7 +39,17 @@ export function invalidateRegistrations(qc: QueryClient, tournamentId: string): 
   qc.invalidateQueries({ queryKey: ["tournaments"] });                     // listados y alta manual
 }
 
-export type ConflictType = 'MISSING_ASSIGNMENT' | 'COURT_OVERLAP' | 'PLAYER_DOUBLE_BOOKED' | 'AVAILABILITY_VIOLATION';
+export type ConflictType =
+  | 'MISSING_ASSIGNMENT'
+  | 'COURT_OVERLAP'
+  | 'PLAYER_DOUBLE_BOOKED'
+  | 'AVAILABILITY_VIOLATION'
+  /** No cabe en los tramos de su jornada (o ese día no hay jornada). */
+  | 'OUTSIDE_SCHEDULE'
+  /** Empieza antes de que acabe una ronda anterior de su categoría. */
+  | 'PHASE_ORDER'
+  /** Un bye (pase directo) con pista u hora: no se juega. */
+  | 'BYE_SCHEDULED';
 export interface ScheduleConflict {
   type:             ConflictType;
   matchId:          string;

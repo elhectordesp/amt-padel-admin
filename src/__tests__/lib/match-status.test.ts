@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { isMatchFinished } from "../../../lib/utils/match-status";
+import { isByeMatch, isMatchFinished } from "../../../lib/utils/match-status";
+
+describe("isByeMatch", () => {
+  it("W.O. con una sola pareja: es un bye", () => {
+    expect(isByeMatch({ isWalkover: true, team1: ["Ana"], team2: [] })).toBe(true);
+    expect(isByeMatch({ isWalkover: true, team1: [], team2: ["Bea"] })).toBe(true);
+  });
+
+  it("W.O. con las dos parejas, o un partido por definir: no", () => {
+    expect(isByeMatch({ isWalkover: true, team1: ["Ana"], team2: ["Bea"] })).toBe(false);
+    expect(isByeMatch({ isWalkover: false, team1: [], team2: [] })).toBe(false);
+    expect(isByeMatch({ team1: ["Ana"], team2: [] })).toBe(false);
+  });
+});
 
 describe("isMatchFinished", () => {
   it("con resultado (isResult): finalizado", () => {
