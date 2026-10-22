@@ -41,6 +41,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
 import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { needsForce } from "@/lib/utils/registration-force";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
   REGISTRATION_STATUS_CONFIG,
@@ -1458,6 +1459,8 @@ export default function TorneoDetailPage() {
   const [paymentOf,          setPaymentOf]          = useState<{ reg: AdminRegistration; player: PaymentPlayer } | null>(null);
   const [confirmCancel,      setConfirmCancel]      = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,        setConfirmBulk]        = useState<{ ids: string[]; status: string; count: number } | null>(null);
+  // Categoría llena o con cola: el aviso del back y el cambio a repetir con force
+  const [forcePrompt,        setForcePrompt]        = useState<{ ids: string[]; status: string; message: string } | null>(null);
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
@@ -1559,8 +1562,8 @@ export default function TorneoDetailPage() {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const bulkStatus = useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
-      adminService.registrations.bulkStatus(ids, status),
+    mutationFn: ({ ids, status, force }: { ids: string[]; status: string; force?: boolean }) =>
+      adminService.registrations.bulkStatus(ids, status, force),
     onSuccess: (res: any, { ids }) => {
       invalidateRegistrations(qc, id);
       setSelectedKeys(new Set());
@@ -1568,7 +1571,15 @@ export default function TorneoDetailPage() {
       const updated = res?.count ?? res?.updated ?? ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
     },
-    onError: (err: Error) => { toast.error(err.message); setUpdatingIds(new Set()); },
+    onError: (err: Error, vars) => {
+      setUpdatingIds(new Set());
+      // Llena o con cola: se pregunta antes de pasarla por encima (como el alta manual)
+      if (needsForce(err) && !vars.force) {
+        setForcePrompt({ ids: vars.ids, status: vars.status, message: err.message });
+        return;
+      }
+      toast.error(err.message);
+    },
   });
 
   const duplicate = useMutation({
@@ -4350,6 +4361,21 @@ export default function TorneoDetailPage() {
         setConfirmBulk(null);
       }}
       onClose={() => setConfirmBulk(null)}
+    />
+
+    <ConfirmModal
+      open={!!forcePrompt}
+      title="¿Forzar el cambio?"
+      description={forcePrompt?.message ?? ""}
+      confirmLabel="Forzar"
+      onConfirm={() => {
+        if (forcePrompt) {
+          setUpdatingIds(new Set(forcePrompt.ids));
+          bulkStatus.mutate({ ids: forcePrompt.ids, status: forcePrompt.status, force: true });
+        }
+        setForcePrompt(null);
+      }}
+      onClose={() => setForcePrompt(null)}
     />
 
     <ConfirmModal
