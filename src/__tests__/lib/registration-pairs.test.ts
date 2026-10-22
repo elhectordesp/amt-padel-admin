@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
-import { groupByPair, pairKeyOf, pairPlayers, paymentCsvColumns, playerPayment } from '../../../lib/utils/registration-pairs';
+import { compareWaitlist, groupByPair, pairKeyOf, pairPlayers, paymentCsvColumns, playerPayment, waitlistPositions } from '../../../lib/utils/registration-pairs';
+import { needsForce } from '../../../lib/utils/registration-force';
+import { ApiError } from '../../../lib/api';
 
 let seq = 0;
 const reg = (overrides: any = {}): any => ({
@@ -150,5 +152,44 @@ describe('pairPlayers', () => {
 
   it('sin pareja, solo el titular', () => {
     expect(pairPlayers(reg({ partnerId: null, partner: null })).map((p) => p.player)).toEqual(['titular']);
+  });
+});
+
+describe('cola de espera (compareWaitlist, waitlistPositions)', () => {
+  it('manda la fecha de entrada en la cola, no la de inscripción: quien bajó a la espera va detrás', () => {
+    const oldButDemoted = reg({ userId: 'a', status: 'WAITLIST', createdAt: '2026-05-01T10:00:00Z', waitlistedAt: '2026-05-05T10:00:00Z' });
+    const waiting       = reg({ userId: 'c', status: 'WAITLIST', createdAt: '2026-05-03T10:00:00Z', waitlistedAt: '2026-05-03T10:00:00Z' });
+    expect([oldButDemoted, waiting].sort(compareWaitlist)).toEqual([waiting, oldButDemoted]);
+  });
+
+  it('sin fecha de cola (filas de antes, seeds), cuenta su inscripción; empate, por id', () => {
+    const noDate = reg({ id: 'r-a', createdAt: '2026-05-03T10:00:00Z', waitlistedAt: null });
+    const later  = reg({ id: 'r-c', createdAt: '2026-05-01T10:00:00Z', waitlistedAt: '2026-05-04T10:00:00Z' });
+    const tieB   = reg({ id: 'r-e', createdAt: '2026-05-01T09:00:00Z', waitlistedAt: '2026-05-02T10:00:00Z' });
+    const tieA   = reg({ id: 'r-d', createdAt: '2026-05-01T08:00:00Z', waitlistedAt: '2026-05-02T10:00:00Z' });
+    expect([noDate, later, tieB, tieA].sort(compareWaitlist)).toEqual([tieA, tieB, noDate, later]);
+  });
+
+  it('puesto en la cola de su categoría, solo las parejas en espera', () => {
+    const pairs = groupByPair([
+      reg({ userId: 'a', partnerId: 'b', status: 'WAITLIST', waitlistedAt: '2026-05-05T10:00:00Z' }),
+      reg({ userId: 'c', partnerId: 'd', status: 'WAITLIST', waitlistedAt: '2026-05-03T10:00:00Z' }),
+      reg({ userId: 'e', partnerId: 'f', status: 'WAITLIST', categoryId: 'cat-2', waitlistedAt: '2026-05-09T10:00:00Z' }),
+      reg({ userId: 'g', partnerId: 'h', status: 'CONFIRMED' }),
+    ]);
+    const positions = waitlistPositions(pairs);
+    expect(positions.get(pairKeyOf({ userId: 'c', partnerId: 'd', categoryId: 'cat-1' }))).toBe(1);
+    expect(positions.get(pairKeyOf({ userId: 'a', partnerId: 'b', categoryId: 'cat-1' }))).toBe(2);
+    expect(positions.get(pairKeyOf({ userId: 'e', partnerId: 'f', categoryId: 'cat-2' }))).toBe(1);
+    expect(positions.has(pairKeyOf({ userId: 'g', partnerId: 'h', categoryId: 'cat-1' }))).toBe(false);
+  });
+});
+
+describe('needsForce', () => {
+  it('solo los códigos de categoría llena o con cola piden forzar', () => {
+    expect(needsForce(new ApiError('llena', 409, 'CATEGORY_FULL'))).toBe(true);
+    expect(needsForce(new ApiError('cola', 409, 'CATEGORY_WAITLIST_AHEAD'))).toBe(true);
+    expect(needsForce(new ApiError('ya inscrito', 409, 'ALREADY_REGISTERED'))).toBe(false);
+    expect(needsForce(new Error('red'))).toBe(false);
   });
 });

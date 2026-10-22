@@ -374,6 +374,16 @@ describe('adminService', () => {
         status: 'CONFIRMED',
       });
     });
+
+    it('con force (categoría llena o con cola, tras preguntar), lo manda', async () => {
+      mockPatch.mockResolvedValueOnce({ data: {} });
+      await adminService.registrations.bulkStatus(['r1'], 'CONFIRMED', true);
+      expect(mockPatch).toHaveBeenCalledWith('/admin/registrations/bulk-status', {
+        ids: ['r1'],
+        status: 'CONFIRMED',
+        force: true,
+      });
+    });
   });
 
   // ── categories.updatePrizes ──────────────────────────────────────────

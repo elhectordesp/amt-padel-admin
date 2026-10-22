@@ -16,13 +16,14 @@ import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG } from "@/lib/constants";
-import { groupByPair, paymentCsvColumns, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { compareWaitlist, groupByPair, paymentCsvColumns, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { needsForce } from "@/lib/utils/registration-force";
 import type { AdminRegistration, CategoryLevel, RegistrationStatus, Tournament } from "@/types";
 
 // Tooltip del botón confirmar según el estado actual de la inscripción
 function confirmTitle(status: RegistrationStatus): string {
   if (status === "WAITLIST") {
-    return "Confirmar directamente (salta la cola automática — útil si has hablado con ellos y confirman su asistencia)";
+    return "Confirmar directamente (si no hay plaza o hay parejas antes en la cola, pedirá forzar)";
   }
   return "Confirmar";
 }
@@ -43,6 +44,8 @@ export default function InscripcionesPage() {
   const [page,          setPage]        = useState(0);
   const [confirmCancel,    setConfirmCancel]    = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
+  // Categoría llena o con cola: el aviso del back y el cambio a repetir con force
+  const [forcePrompt,      setForcePrompt]      = useState<{ ids: string[]; status: string; message: string } | null>(null);
   const [availRegId,       setAvailRegId]       = useState<string | null>(null);
   const [availEditMode,    setAvailEditMode]    = useState(false);
   const [movePair,         setMovePair]         = useState<PairRegistration | null>(null);
@@ -71,8 +74,8 @@ export default function InscripcionesPage() {
   });
 
   const bulkStatus = useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
-      adminService.registrations.bulkStatus(ids, status),
+    mutationFn: ({ ids, status, force }: { ids: string[]; status: string; force?: boolean }) =>
+      adminService.registrations.bulkStatus(ids, status, force),
     onSuccess: (res: { count?: number; updated?: number }, vars) => {
       invalidateRegistrations(qc, tournamentId);
       const updated = res?.count ?? res?.updated ?? vars.ids.length;
@@ -80,7 +83,15 @@ export default function InscripcionesPage() {
       setSelected(new Set());
       setUpdatingIds(new Set());
     },
-    onError: (err: Error) => { toast.error(err.message); setUpdatingIds(new Set()); },
+    onError: (err: Error, vars) => {
+      setUpdatingIds(new Set());
+      // Llena o con cola: se pregunta antes de pasarla por encima (como el alta manual)
+      if (needsForce(err) && !vars.force) {
+        setForcePrompt({ ids: vars.ids, status: vars.status, message: err.message });
+        return;
+      }
+      toast.error(err.message);
+    },
   });
 
   const moveCategory = useMutation({
@@ -143,8 +154,8 @@ export default function InscripcionesPage() {
     return [...seen.values()];
   }, [registrations]);
 
-  const filtered = useMemo(() =>
-    pairs
+  const filtered = useMemo(() => {
+    const list = pairs
       .filter((p) => statusFilter === "all" || p.status === statusFilter)
       .filter((p) => catFilter === "all" || p.primary.categoryId === catFilter)
       .filter((p) => {
@@ -154,9 +165,17 @@ export default function InscripcionesPage() {
         return reg.user.name.toLowerCase().includes(q) ||
                (reg.partner?.name ?? "").toLowerCase().includes(q) ||
                `${reg.category.gender} ${reg.category.level}`.toLowerCase().includes(q);
-      }),
-    [pairs, statusFilter, catFilter, search],
-  );
+      });
+    // «En espera»: en el orden de la cola de cada categoría (el de subir)
+    return statusFilter === "WAITLIST"
+      ? [...list].sort((a, b) =>
+          a.primary.categoryId.localeCompare(b.primary.categoryId) ||
+          compareWaitlist(a.primary, b.primary))
+      : list;
+  }, [pairs, statusFilter, catFilter, search]);
+
+  // Puesto en la cola de su categoría de cada pareja en espera
+  const queuePosition = useMemo(() => waitlistPositions(pairs), [pairs]);
 
   const counts = {
     all:       pairs.length,
@@ -244,6 +263,21 @@ export default function InscripcionesPage() {
           setConfirmBulk(null);
         }}
         onClose={() => setConfirmBulk(null)}
+      />
+
+      <ConfirmModal
+        open={!!forcePrompt}
+        title="¿Forzar el cambio?"
+        description={forcePrompt?.message ?? ""}
+        confirmLabel="Forzar"
+        onConfirm={() => {
+          if (forcePrompt) {
+            setUpdatingIds(new Set(forcePrompt.ids));
+            bulkStatus.mutate({ ids: forcePrompt.ids, status: forcePrompt.status, force: true });
+          }
+          setForcePrompt(null);
+        }}
+        onClose={() => setForcePrompt(null)}
       />
 
       <Header title="Inscripciones" />
@@ -485,7 +519,7 @@ export default function InscripcionesPage() {
                               }
                             </div>
                             <span className={`inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
-                              {scfg.label}
+                              {scfg.label}{queuePosition.has(pair.pairKey) ? ` · ${queuePosition.get(pair.pairKey)}º` : ""}
                             </span>
                           </div>
 
@@ -659,8 +693,11 @@ export default function InscripcionesPage() {
                                   </span>
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
-                                    {scfg.label}
+                                  <span
+                                    className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}
+                                    title={queuePosition.has(pair.pairKey) ? "Puesto en la lista de espera de su categoría" : undefined}
+                                  >
+                                    {scfg.label}{queuePosition.has(pair.pairKey) ? ` · ${queuePosition.get(pair.pairKey)}º` : ""}
                                   </span>
                                 </td>
                                 <td className="px-5 py-3.5">
