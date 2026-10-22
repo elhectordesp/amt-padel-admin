@@ -85,19 +85,17 @@ export function paymentCsvColumns(reg: AdminRegistration): { "Pago J1": string; 
 
 /**
  * El orden de la lista de espera, el mismo que usa el back para subir a la
- * siguiente: quien entró antes en ella (`waitlistedAt`; quien baja a la espera
- * va al final, y las que no tienen fecha, detrás), luego la fecha de
- * inscripción y el id.
+ * siguiente: cuándo entró en ella (`waitlistedAt`: quien baja a la espera va
+ * al final; si no la tiene, la fecha de inscripción) y, de desempate, el id.
  */
 export function compareWaitlist(
   a: Pick<AdminRegistration, "id" | "createdAt" | "waitlistedAt">,
   b: Pick<AdminRegistration, "id" | "createdAt" | "waitlistedAt">,
 ): number {
-  const time = (s?: string | null) => (s ? new Date(s).getTime() : Infinity);
-  const byQueue = time(a.waitlistedAt) - time(b.waitlistedAt);
+  const at = (r: Pick<AdminRegistration, "createdAt" | "waitlistedAt">) =>
+    new Date(r.waitlistedAt ?? r.createdAt).getTime();
+  const byQueue = at(a) - at(b);
   if (byQueue) return byQueue;
-  const byCreated = time(a.createdAt) - time(b.createdAt);
-  if (byCreated) return byCreated;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 

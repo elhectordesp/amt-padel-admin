@@ -162,11 +162,12 @@ describe('cola de espera (compareWaitlist, waitlistPositions)', () => {
     expect([oldButDemoted, waiting].sort(compareWaitlist)).toEqual([waiting, oldButDemoted]);
   });
 
-  it('sin fecha de cola, detrás; empate, por inscripción', () => {
-    const noDate = reg({ userId: 'a', createdAt: '2026-05-01T10:00:00Z', waitlistedAt: null });
-    const sameA  = reg({ userId: 'c', createdAt: '2026-05-02T10:00:00Z', waitlistedAt: '2026-05-04T10:00:00Z' });
-    const sameB  = reg({ userId: 'e', createdAt: '2026-05-01T09:00:00Z', waitlistedAt: '2026-05-04T10:00:00Z' });
-    expect([noDate, sameA, sameB].sort(compareWaitlist)).toEqual([sameB, sameA, noDate]);
+  it('sin fecha de cola (filas de antes, seeds), cuenta su inscripción; empate, por id', () => {
+    const noDate = reg({ id: 'r-a', createdAt: '2026-05-03T10:00:00Z', waitlistedAt: null });
+    const later  = reg({ id: 'r-c', createdAt: '2026-05-01T10:00:00Z', waitlistedAt: '2026-05-04T10:00:00Z' });
+    const tieB   = reg({ id: 'r-e', createdAt: '2026-05-01T09:00:00Z', waitlistedAt: '2026-05-02T10:00:00Z' });
+    const tieA   = reg({ id: 'r-d', createdAt: '2026-05-01T08:00:00Z', waitlistedAt: '2026-05-02T10:00:00Z' });
+    expect([noDate, later, tieB, tieA].sort(compareWaitlist)).toEqual([tieA, tieB, noDate, later]);
   });
 
   it('puesto en la cola de su categoría, solo las parejas en espera', () => {
