@@ -12,6 +12,7 @@ import { ResultModal } from "@/components/admin/result-modal";
 import { adminService } from "@/lib/services/admin";
 import { phaseLabel } from "@/lib/constants";
 import { hasBothPairs } from "@/lib/utils/match-status";
+import { isActiveTournamentStatus } from "@/lib/utils/dashboard-tournaments";
 import type { MatchResult, Tournament } from "@/types";
 
 const PAGE_SIZE = 30;
@@ -37,7 +38,7 @@ export default function ResultadosPage() {
     queryFn:  adminService.tournaments.list,
   });
 
-  const ongoingTournaments = tournaments.filter((t: Tournament) => ["ONGOING", "SCHEDULED", "OPEN", "DRAW"].includes(t.status));
+  const ongoingTournaments = tournaments.filter((t: Tournament) => isActiveTournamentStatus(t.status));
 
   const {
     data: matches = [], isLoading, isError, refetch,
