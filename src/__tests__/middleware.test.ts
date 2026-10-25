@@ -59,6 +59,28 @@ describe("middleware — auth gate", () => {
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
+  it("el visor público (/torneo y lo que cuelga) pasa sin token", () => {
+    for (const path of ["/torneo", "/torneo/x", "/torneo/x/live"]) {
+      nextMock.mockClear();
+      redirectMock.mockClear();
+      middleware(makeRequest(path));
+      expect(nextMock).toHaveBeenCalled();
+      expect(redirectMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("las páginas del admin que empiezan igual (/torneos, /torneos/x) no son públicas: sin token → /login", () => {
+    for (const path of ["/torneos", "/torneos/x", "/torneos/x/editar", "/loginx"]) {
+      redirectMock.mockClear();
+      nextMock.mockClear();
+      middleware(makeRequest(path));
+      expect(redirectMock).toHaveBeenCalled();
+      expect(redirectMock.mock.calls[0][0].pathname).toBe("/login");
+      expect(redirectMock.mock.calls[0][0].searchParams.get("from")).toBe(path);
+      expect(nextMock).not.toHaveBeenCalled();
+    }
+  });
+
   it("ruta protegida sin token → redirige a /login", () => {
     middleware(makeRequest("/dashboard"));
     expect(redirectMock).toHaveBeenCalled();
