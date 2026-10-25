@@ -83,6 +83,40 @@ export function paymentCsvColumns(reg: AdminRegistration): { "Pago J1": string; 
   return { "Pago J1": yesNo("titular"), "Pago J2": reg.partnerId ? yesNo("partner") : "" };
 }
 
+/**
+ * El orden de la lista de espera, el mismo que usa el back para subir a la
+ * siguiente: cuándo entró en ella (`waitlistedAt`: quien baja a la espera va
+ * al final; si no la tiene, la fecha de inscripción) y, de desempate, el id.
+ */
+export function compareWaitlist(
+  a: Pick<AdminRegistration, "id" | "createdAt" | "waitlistedAt">,
+  b: Pick<AdminRegistration, "id" | "createdAt" | "waitlistedAt">,
+): number {
+  const at = (r: Pick<AdminRegistration, "createdAt" | "waitlistedAt">) =>
+    new Date(r.waitlistedAt ?? r.createdAt).getTime();
+  const byQueue = at(a) - at(b);
+  if (byQueue) return byQueue;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** El puesto de cada pareja en espera en la cola de su categoría (1 = la siguiente en subir). */
+export function waitlistPositions(pairs: PairRegistration[]): Map<string, number> {
+  const byCategory = new Map<string, PairRegistration[]>();
+  for (const p of pairs) {
+    if (p.status !== "WAITLIST") continue;
+    const list = byCategory.get(p.primary.categoryId);
+    if (list) list.push(p);
+    else byCategory.set(p.primary.categoryId, [p]);
+  }
+  const positions = new Map<string, number>();
+  for (const list of byCategory.values()) {
+    [...list]
+      .sort((a, b) => compareWaitlist(a.primary, b.primary))
+      .forEach((p, i) => positions.set(p.pairKey, i + 1));
+  }
+  return positions;
+}
+
 /** Los jugadores de la inscripción con su pago: el titular y, si lo hay, el compañero. */
 export function pairPlayers(reg: AdminRegistration): { player: PaymentPlayer; id: string; name: string; payment: PlayerPayment }[] {
   return [

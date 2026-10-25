@@ -372,7 +372,13 @@ export const adminService = {
     // Todas: el back pagina (máx. 200 por página).
     list:         (tournamentId: string)               => fetchAllPages<AdminRegistration>(`/admin/tournaments/${tournamentId}/registrations`, {}, 200),
     updateStatus: (registrationId: string, status: string) => api.patch(`/admin/registrations/${registrationId}/status`, { status }).then((r) => r.data),
-    bulkStatus:   (ids: string[], status: string)      => api.patch("/admin/registrations/bulk-status", { ids, status }).then((r) => r.data),
+    /**
+     * `force`: pasar a pendiente o confirmada canceladas o en espera aunque la
+     * categoría esté llena o haya cola (sin él, el back responde
+     * CATEGORY_FULL o CATEGORY_WAITLIST_AHEAD; ver needsForce).
+     */
+    bulkStatus:   (ids: string[], status: string, force?: boolean) =>
+      api.patch("/admin/registrations/bulk-status", { ids, status, ...(force ? { force: true } : {}) }).then((r) => r.data),
     moveCategory: (registrationId: string, newCategoryId: string) => api.patch(`/admin/registrations/${registrationId}/category`, { newCategoryId }).then((r) => r.data),
     enroll:       (tournamentId: string, data: AdminEnrollTeamPayload) =>
       api.post<AdminEnrollResult>(`/admin/tournaments/${tournamentId}/enrollments`, data).then((r) => r.data),

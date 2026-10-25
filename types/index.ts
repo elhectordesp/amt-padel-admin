@@ -218,6 +218,8 @@ export interface AdminRegistration {
   hasAvailability?: boolean;
   enrolledByAdmin?: boolean;
   createdAt:      string;
+  /** Cuándo entró en la lista de espera (su puesto en la cola). */
+  waitlistedAt?:  string | null;
 }
 
 export interface Player {
