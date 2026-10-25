@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, UserCheck, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, registrationsQK } from "@/lib/services/admin";
+import { levelLabel } from "@/lib/constants";
 import type { AdminRegistration, Player } from "@/types";
 
 interface Props {
@@ -126,7 +127,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
                         {p.email && <span className="text-muted-foreground ml-2 text-xs">{p.email}</span>}
                       </span>
                       <span className="text-[10px] text-muted-foreground shrink-0">
-                        {p.level} · {p.gender === "M" ? "Masc" : "Fem"}
+                        {levelLabel(p.level)} · {p.gender === "M" ? "Masc" : "Fem"}
                         {isCurrentPartner && " · (pareja actual)"}
                         {isCurrentPlayer  && " · (jugador)"}
                       </span>
@@ -143,7 +144,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
               <UserCheck size={16} className="text-[#D4AF37] shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{selected.name}</p>
-                <p className="text-xs text-muted-foreground">{selected.level} · {selected.gender === "M" ? "Masculino" : "Femenino"}</p>
+                <p className="text-xs text-muted-foreground">{levelLabel(selected.level)} · {selected.gender === "M" ? "Masculino" : "Femenino"}</p>
               </div>
               <button
                 onClick={() => { setSelected(null); setQuery(""); }}

@@ -18,7 +18,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, levelLabel } from "@/lib/constants";
 import type { Player, Gender, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 const PAGE_SIZE = 50;
@@ -194,7 +194,7 @@ export default function JugadoresPage() {
       header: ({ column }) => <SortBtn column={column} label="Categoría" />,
       cell:   ({ getValue }) => (
         <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
-          {CATEGORY_LABEL[getValue() as CategoryLevel]}
+          {levelLabel(getValue() as CategoryLevel | null, CATEGORY_LABEL)}
         </span>
       ),
     },
@@ -369,7 +369,7 @@ export default function JugadoresPage() {
                   Jugador:      row.original.name,
                   Compañero:    row.original.partner ?? "",
                   Género:       row.original.gender === "M" ? "Masculino" : "Femenino",
-                  Categoría:    CATEGORY_LABEL[row.original.level] ?? row.original.level,
+                  Categoría:    levelLabel(row.original.level, CATEGORY_LABEL),
                   Puntos:       row.original.points,
                   "SPA Pts":    row.original.spa?.spaPoints?.toFixed(0) ?? "",
                   "SPA Nivel":  row.original.spa ? CATEGORY_LABEL[row.original.spa.spaLevel] : "",
@@ -443,7 +443,7 @@ export default function JugadoresPage() {
                         <p className="text-[10px] text-muted-foreground">{p.gender === "M" ? "Masc." : "Fem."}</p>
                       </div>
                       <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
-                        {CATEGORY_LABEL[p.level]}
+                        {levelLabel(p.level, CATEGORY_LABEL)}
                       </span>
                     </div>
                     <AccessWarning status={p.activationStatus} />

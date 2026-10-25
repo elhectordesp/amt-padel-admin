@@ -11,7 +11,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT, levelLabel } from "@/lib/constants";
 import { downloadCsv } from "@/lib/utils/csv";
 import type { CategoryLevel, Gender, Player, RankingType } from "@/types";
 
@@ -136,7 +136,7 @@ export default function RankingsPage() {
                 "#Global":    p.globalRank   ?? i + 1,
                 "#Categoría": p.categoryRank ?? "—",
                 Jugador:      p.name,
-                Categoría:    CATEGORY_LABEL[p.level],
+                Categoría:    levelLabel(p.level, CATEGORY_LABEL),
                 Puntos:       p.points,
                 "% Victorias": p.played > 0 ? Math.round((p.wins / p.played) * 100) + "%" : "0%",
                 Tendencia:    p.trend,
@@ -196,7 +196,7 @@ export default function RankingsPage() {
                   </div>
                   <div className="text-center">
                     <p className="text-xs font-semibold text-foreground">{p.name.split(" ")[0]}</p>
-                    <p className="text-[10px] text-muted-foreground">{CATEGORY_LABEL[p.level]}</p>
+                    <p className="text-[10px] text-muted-foreground">{levelLabel(p.level, CATEGORY_LABEL)}</p>
                     <p className="text-[10px] font-medium text-[#D4AF37]">{pts}</p>
                   </div>
                   <div className={`w-full rounded-md flex items-end justify-center ${heights[i]} ${colors[i]}`}>
@@ -251,7 +251,7 @@ export default function RankingsPage() {
                 const secRank    = catFilter !== "global" ? (player.globalRank ?? "—") : (player.categoryRank ?? "—");
                 const trend      = TREND[player.trend as keyof typeof TREND] ?? TREND.stable;
                 const TIcon      = trend.icon;
-                const levelColor = LEVEL_COLOR[player.level] ?? "#94A3B8";
+                const levelColor = LEVEL_COLOR[player.level ?? ""] ?? "#94A3B8";
                 return (
                   <Link
                     key={player.id}
@@ -312,7 +312,7 @@ export default function RankingsPage() {
                             className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border"
                             style={{ color: levelColor, backgroundColor: levelColor + "18", borderColor: levelColor + "44" }}
                           >
-                            {CATEGORY_LABEL[player.level]}
+                            {levelLabel(player.level, CATEGORY_LABEL)}
                           </span>
                           <span className="text-sm font-bold text-foreground tabular-nums">
                             {(player.points ?? 0).toLocaleString()} pts
@@ -368,7 +368,7 @@ export default function RankingsPage() {
                       const secRank    = catFilter !== "global" ? (player.globalRank ?? "—") : (player.categoryRank ?? "—");
                       const trend      = TREND[player.trend as keyof typeof TREND] ?? TREND.stable;
                       const TIcon      = trend.icon;
-                      const levelColor = LEVEL_COLOR[player.level] ?? "#94A3B8";
+                      const levelColor = LEVEL_COLOR[player.level ?? ""] ?? "#94A3B8";
 
                       return (
                         <tr key={player.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
@@ -451,7 +451,7 @@ export default function RankingsPage() {
                                     borderColor: levelColor + "44",
                                   }}
                                 >
-                                  {CATEGORY_LABEL[player.level]}
+                                  {levelLabel(player.level, CATEGORY_LABEL)}
                                 </span>
                               </td>
                               <td className="px-4 py-3.5">

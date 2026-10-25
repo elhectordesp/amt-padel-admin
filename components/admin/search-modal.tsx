@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Trophy, Users, X } from "lucide-react";
 import { adminService } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT, GENDER_LABEL, levelLabel } from "@/lib/constants";
 import { useSearch } from "@/components/admin/search-context";
 import type { Tournament, Player } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
@@ -73,7 +73,7 @@ export function SearchModal() {
       .map((p: Player) => ({
         type: "player", id: p.id,
         title: p.name,
-        sub:   `${GENDER_LABEL[p.gender].short} ${CATEGORY_LABEL_SHORT[p.level]} · ${p.points.toLocaleString()} pts`,
+        sub:   `${GENDER_LABEL[p.gender].short} ${levelLabel(p.level, CATEGORY_LABEL_SHORT)} · ${p.points.toLocaleString()} pts`,
         href:  `/jugadores/${p.id}`,
       }));
 

@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, levelLabel } from "@/lib/constants";
 import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 interface Props {
@@ -104,7 +104,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
         name:  `${payload.firstName} ${payload.lastName}`,
         email: created.email ?? null,
         gender: payload.gender,
-        level: (payload.categoryLevel ?? "4a") as Player["level"],
+        level: payload.categoryLevel ?? null,
         played: 0, wins: 0, points: 0, trend: "stable",
         managedByAdmin: true,
       };
@@ -162,7 +162,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
                     <div className="min-w-0">
                       <p className="text-sm text-foreground font-medium truncate">{p.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {p.gender} · {LEVEL_LABEL[p.level] ?? p.level}
+                        {p.gender} · {levelLabel(p.level, LEVEL_LABEL)}
                         {p.email ? ` · ${p.email}` : ""}
                       </p>
                     </div>
@@ -181,7 +181,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
               <div className="min-w-0">
                 <p className="text-sm text-foreground font-medium truncate">{slot.player.name}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {slot.player.gender} · {LEVEL_LABEL[slot.player.level] ?? slot.player.level}
+                  {slot.player.gender} · {levelLabel(slot.player.level, LEVEL_LABEL)}
                   {slot.player.email ? ` · ${slot.player.email}` : ""}
                   {slot.player.managedByAdmin && " · creado por admin"}
                 </p>

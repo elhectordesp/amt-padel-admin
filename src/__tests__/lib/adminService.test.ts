@@ -264,12 +264,12 @@ describe('adminService', () => {
   // ── Players — lógica de transformación ──────────────────────────────
 
   describe('players.list', () => {
-    it('usa "4a" como level por defecto si falta', async () => {
+    it('sin categoría: level null, nunca 4ª por defecto (D6)', async () => {
       mockGet.mockResolvedValueOnce({
-        data: { data: [{ id: 'p1', name: 'Ana' }], total: 1, page: 1, pageSize: 50 },
+        data: { data: [{ id: 'p1', name: 'Ana', level: null }], total: 1, page: 1, pageSize: 50 },
       });
       const result = await adminService.players.list();
-      expect(result.data[0].level).toBe('4a');
+      expect(result.data[0].level).toBeNull();
     });
 
     it('preserva el level si viene en la respuesta', async () => {
@@ -289,6 +289,14 @@ describe('adminService', () => {
   });
 
   describe('players.detail', () => {
+    it('sin categoría: level null, aunque tenga nivel SPA (D6)', async () => {
+      mockGet.mockResolvedValueOnce({
+        data: { id: 'p1', name: 'Ana', level: null, spaLevel: '3a' },
+      });
+      const result = await adminService.players.detail('p1');
+      expect(result?.level).toBeNull();
+    });
+
     it('construye name desde firstName + lastName si name falta', async () => {
       mockGet.mockResolvedValueOnce({
         data: { id: 'p1', firstName: 'Ana', lastName: 'García', level: '2a' },
