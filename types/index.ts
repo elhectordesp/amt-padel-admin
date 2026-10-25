@@ -71,6 +71,8 @@ export interface Club {
   contactEmail?:        string | null;
   isAmtPartner?:        boolean;
   active?:              boolean;
+  // Cuándo lo desactivó AMT (null: no lo está). No viene con un back anterior
+  deactivatedAt?:       string | null;
   tournamentCount?:     number;
   lat?:                 number | null;
   lng?:                 number | null;

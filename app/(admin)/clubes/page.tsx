@@ -12,7 +12,9 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
+import { clubStatus, clubToggle, type ClubStatus, type ClubToggle } from "@/lib/club-status";
 import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
 import type { Club } from "@/types";
 
@@ -194,6 +196,7 @@ function ClubModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {club && <ClubStatusNote club={club} />}
           {/* Name + City */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="space-y-1.5">
@@ -410,23 +413,99 @@ function ClubModal({
 
 // ── ClubCard ───────────────────────────────────────────────────────────────
 
+/** Etiqueta del estado de un club inactivo (en la tarjeta y en la ficha). */
+function ClubStatusBadge({ status }: { status: ClubStatus }) {
+  if (status === "deactivated")
+    return (
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 border border-destructive/30 text-destructive whitespace-nowrap">
+        Desactivado
+      </span>
+    );
+  if (status === "pending")
+    return (
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 whitespace-nowrap">
+        Por configurar
+      </span>
+    );
+  return null;
+}
+
+/** En la ficha: por qué está inactivo (se cambia desde la tarjeta). */
+function ClubStatusNote({ club }: { club: Club }) {
+  const status = clubStatus(club);
+  if (status !== "deactivated" && status !== "pending") return null;
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+      <ClubStatusBadge status={status} />
+      <p>
+        {status === "deactivated"
+          ? `AMT lo desactivó${club.deactivatedAt ? ` el ${new Date(club.deactivatedAt).toLocaleDateString("es-ES")}` : ""}: no sale en la app y su admin no puede entrar al panel. Se reactiva desde la tarjeta.`
+          : "Alta rápida: su admin aún no ha puesto el nombre y la ciudad reales. Se activará solo cuando lo haga."}
+      </p>
+    </div>
+  );
+}
+
+const TOGGLE_TEXT: Record<ClubToggle, { label: string; title: string; description: string; confirm: string }> = {
+  deactivate: {
+    label:       "Desactivar",
+    title:       "¿Desactivar el club?",
+    description: "Dejará de salir en la app y su admin no podrá entrar al panel hasta que lo reactives. Sus torneos se quedan como están.",
+    confirm:     "Desactivar",
+  },
+  reactivate: {
+    label:       "Reactivar",
+    title:       "¿Reactivar el club?",
+    description: "Su admin podrá volver a entrar al panel. Si aún está por configurar, no saldrá en la app hasta que su admin ponga el nombre y la ciudad reales.",
+    confirm:     "Reactivar",
+  },
+  activate: {
+    label:       "Activar",
+    title:       "¿Activar el club?",
+    description: "Volverá a salir en la app.",
+    confirm:     "Activar",
+  },
+};
+
 function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) => void; onCourts: (c: Club) => void }) {
   const qc = useQueryClient();
+  const status = clubStatus(club);
+  const action = clubToggle(status);
+  const text = TOGGLE_TEXT[action];
+  const [confirming, setConfirming] = useState(false);
 
+  // El club y la acción van en las variables: la tarjeta se repinta al acabar
   const toggle = useMutation({
-    mutationFn: () =>
-      club.active
-        ? adminService.clubs.deactivate(club.id)
-        : adminService.clubs.update(club.id, { active: true }),
-    onSuccess: () => {
+    mutationFn: ({ id, action }: { id: string; action: ClubToggle }): Promise<Club | undefined> =>
+      action === "deactivate"
+        ? adminService.clubs.deactivate(id)
+        : adminService.clubs.update(id, { active: true }),
+    onSuccess: (updated, { action }) => {
       qc.invalidateQueries({ queryKey: ["admin-clubs"] });
-      toast.success(club.active ? "Club desactivado" : "Club activado");
+      setConfirming(false);
+      if (action === "deactivate") toast.success("Club desactivado");
+      // Reactivado pero aún por configurar: no sale en la app todavía
+      else if (updated && updated.active === false)
+        toast.success("Club reactivado. Sigue por configurar: saldrá en la app cuando su admin ponga sus datos.");
+      else toast.success(action === "reactivate" ? "Club reactivado" : "Club activado");
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   return (
-    <div className={`bg-card border rounded-lg p-5 space-y-3 transition-opacity ${!club.active ? "opacity-50" : ""}`}>
+    <>
+    {/* Fuera de la tarjeta: la opacidad del club inactivo no le llega */}
+    <ConfirmModal
+      open={confirming}
+      title={text.title}
+      description={text.description}
+      confirmLabel={text.confirm}
+      danger={action === "deactivate"}
+      loading={toggle.isPending}
+      onClose={() => { if (!toggle.isPending) setConfirming(false); }}
+      onConfirm={() => toggle.mutate({ id: club.id, action })}
+    />
+    <div className={`bg-card border rounded-lg p-5 space-y-3 transition-opacity ${status !== "active" ? "opacity-60" : ""}`}>
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -452,6 +531,7 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          <ClubStatusBadge status={status} />
           {club.isAmtPartner && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] text-[#D4AF37]">
               AMT
@@ -474,15 +554,15 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
             <Pencil size={13} />
           </button>
           <button
-            onClick={() => toggle.mutate()}
+            onClick={() => setConfirming(true)}
             disabled={toggle.isPending}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
-            title={club.active ? "Desactivar" : "Activar"}
-            aria-label={club.active ? "Desactivar club" : "Activar club"}
+            title={text.label}
+            aria-label={`${text.label} club`}
           >
             {toggle.isPending
               ? <Loader2 size={13} className="animate-spin" />
-              : club.active
+              : action === "deactivate"
                 ? <Power size={13} className="text-green-400" />
                 : <PowerOff size={13} className="text-destructive" />
             }
@@ -525,6 +605,7 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
         </p>
       )}
     </div>
+    </>
   );
 }
 
