@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight, UserPlus } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
@@ -32,10 +33,58 @@ type StatusFilter = "all" | RegistrationStatus;
 
 const PAGE_SIZE = 20;
 
+/** La URL de Inscripciones con el torneo elegido (el dashboard enlaza así). */
+function inscripcionesHref(tournamentId: string): string {
+  return tournamentId ? `/inscripciones?torneo=${encodeURIComponent(tournamentId)}` : "/inscripciones";
+}
+
+function InscripcionesSkeleton() {
+  return (
+    <div className="flex flex-col min-h-full">
+      <Header title="Inscripciones" />
+      <div className="p-6">
+        <div className="h-9 w-[280px] rounded-md bg-secondary animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 export default function InscripcionesPage() {
+  return (
+    <Suspense fallback={<InscripcionesSkeleton />}>
+      <InscripcionesRoute />
+    </Suspense>
+  );
+}
+
+/**
+ * El torneo elegido va en la URL (?torneo=): las alertas y la actividad del
+ * dashboard abren la página con él, y sobrevive a recargar y volver atrás.
+ * Uno que no está en la lista (borrado, mal copiado) cuenta como ninguno y
+ * se quita de la URL. El contenido se monta de nuevo al cambiar de torneo
+ * (también por la URL): filtros, selección y página empiezan de cero.
+ */
+function InscripcionesRoute() {
+  const param = useSearchParams().get("torneo") ?? "";
+  const { data: tournaments, isPending } = useQuery({
+    queryKey: ["tournaments"],
+    queryFn:  adminService.tournaments.list,
+  });
+  const unknown = !!param && !!tournaments && !tournaments.some((t: Tournament) => t.id === param);
+
+  useEffect(() => {
+    if (unknown) window.history.replaceState(null, "", inscripcionesHref(""));
+  }, [unknown]);
+
+  // Sin la lista no se sabe si el torneo existe: no se piden sus inscripciones
+  if (param && isPending) return <InscripcionesSkeleton />;
+  const tournamentId = unknown ? "" : param;
+  return <InscripcionesContent key={tournamentId} tournamentId={tournamentId} />;
+}
+
+function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
   const qc = useQueryClient();
 
-  const [tournamentId, setTournamentId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [catFilter,    setCatFilter]    = useState("all");
   const [search,       setSearch]       = useState("");
@@ -134,13 +183,10 @@ export default function InscripcionesPage() {
       keys.every((k) => prev.has(k)) ? new Set() : new Set(keys),
     );
 
+  // Sin ir al servidor: Next sincroniza useSearchParams con replaceState, e
+  // InscripcionesRoute monta el contenido de nuevo con el torneo elegido
   const handleTournamentChange = (id: string) => {
-    setTournamentId(id);
-    setStatusFilter("all");
-    setCatFilter("all");
-    setSearch("");
-    setSelected(new Set());
-    setPage(0);
+    window.history.replaceState(null, "", inscripcionesHref(id));
   };
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization

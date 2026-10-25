@@ -8,8 +8,12 @@ export type RankingType        = "spa" | "circuit";
 
 export interface AdminStats {
   activeTournaments: number;
+  /** Jugadores distintos con una inscripción viva en torneos de la temporada. */
   registeredPlayers: number;
+  /** Partidos por jugar programados para hoy (el día de España). */
   scheduledMatches:  number;
+  /** La temporada de `registeredPlayers` (falta con un back anterior). */
+  season?:           number;
 }
 
 export interface TournamentCategory {
@@ -232,7 +236,8 @@ export interface Player {
   bio?:           string | null;
   photoUrl?:      string | null;
   gender:         Gender;
-  level:          CategoryLevel;
+  // null: sin categoría asignada (nunca se toma una por defecto)
+  level:          CategoryLevel | null;
   played:         number;
   wins:           number;
   points:         number;
@@ -241,7 +246,8 @@ export interface Player {
   status?:        "active" | "inactive" | "suspended";
   createdAt?:     string;
   globalRank?:    number;
-  categoryRank?:  number;
+  // null: sin categoría, no tiene puesto en ninguna
+  categoryRank?:  number | null;
   matches?:       PlayerMatch[];
   managedByAdmin?:   boolean;
   invitedAt?:        string | null;
@@ -289,7 +295,8 @@ export interface UpdatePlayerPayload {
   email?:        string;
   phone?:        string;
   city?:         string;
-  categoryLevel?: CategoryLevel;
+  // null: le quita la categoría («Sin asignar»)
+  categoryLevel?: CategoryLevel | null;
   position?:     "reves" | "drive" | "indiferente";
   hand?:         "diestro" | "zurdo" | "ambidiestro";
   playsMasc?:    boolean;
@@ -362,17 +369,33 @@ export interface AdminAlert {
   href?:   string;
 }
 
+/**
+ * Finanzas de las inscripciones del periodo. Con las parejas confirmadas: el
+ * devengado (`registrations`/`total`: precio por pareja, paguen o no), lo
+ * cobrado (`collected`: la mitad del precio por jugador que ha pagado) y lo
+ * pendiente de cobro (`outstanding`). Los importes llevan el IVA incluido.
+ * Los campos opcionales faltan con un back anterior.
+ */
 export interface FinanceStats {
   period: "month" | "year";
+  /** El IVA incluido en los precios (0.21). */
+  vatRate?: number;
   revenue: {
     registrations: number;
     sponsorships:  number;
     merchandise:   number;
     total:         number;
+    collected?:    number;
+    outstanding?:  number;
+    withoutVat?:   number;
+    vatAmount?:    number;
   };
   costs: {
     operational: number;
     total:       number;
+    /** Base y cuota de los gastos (negativas, como `total`). */
+    withoutVat?: number;
+    vatAmount?:  number;
   };
   profit: {
     gross:     number;
@@ -380,15 +403,27 @@ export interface FinanceStats {
     vatAmount: number;
   };
   chart: { month: string; revenue: number; profit: number }[];
-  /** `id`: el del torneo. `registrations`: parejas confirmadas (el precio es por pareja). */
-  byTournament?: { id: string; name: string; revenue: number; registrations: number }[];
+  /**
+   * `id`: el del torneo. `registrations`: parejas confirmadas (el precio es
+   * por pareja). `revenue`: lo devengado; `collected` y `outstanding`: lo
+   * cobrado y lo pendiente de cobro.
+   */
+  byTournament?: {
+    id: string;
+    name: string;
+    revenue: number;
+    registrations: number;
+    collected?: number;
+    outstanding?: number;
+  }[];
 }
 
 export interface CategoryChange {
   id:        string;
   date:      string;
-  from:      CategoryLevel;
-  to:        CategoryLevel;
+  // null: no tenía categoría / se la quitaron
+  from:      CategoryLevel | null;
+  to:        CategoryLevel | null;
   reason:    string;
   adminName: string;
 }
@@ -567,7 +602,8 @@ export interface AdminMember {
   email:          string;
   role:           "ADMIN" | "SUPERADMIN";
   createdAt:      string;
-  managedByAdmin: boolean;
+  // Aún no ha puesto su contraseña: volver a invitarle le reenvía el enlace
+  pendingActivation?: boolean;
 }
 
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";

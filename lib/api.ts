@@ -65,13 +65,22 @@ function processQueue(error: unknown, token: string | null = null) {
   failedQueue = [];
 }
 
-function forceLogout() {
+/** Motivo con el que se manda a /login (?motivo=…): el formulario lo explica. */
+export const LOGIN_REASON_CLUB_DEACTIVATED = "club-desactivado";
+
+/** El back corta la sesión del admin de un club que AMT desactivó. */
+function isClubDeactivated(err: unknown): boolean {
+  return (err as { response?: { data?: { code?: string } } })?.response?.data?.code === "CLUB_DEACTIVATED";
+}
+
+function forceLogout(reason?: string) {
   removeTokens();
+  const target = reason ? `/login?motivo=${reason}` : "/login";
   try {
-    window.location.href = "/login";
+    window.location.href = target;
   } catch {
     // Fallback si window no está disponible (SSR edge case)
-    if (typeof window !== "undefined") window.location.replace("/login");
+    if (typeof window !== "undefined") window.location.replace(target);
   }
 }
 
@@ -84,6 +93,12 @@ api.interceptors.response.use(
     // No interceptar 401 en rutas de autenticación — dejar pasar el error original
     const isAuthRoute = original.url?.includes('/auth/login') || original.url?.includes('/auth/refresh');
     if (isAuthRoute) return Promise.reject(err);
+
+    // AMT ha desactivado su club: tampoco tendrá sesión nueva, fuera ya
+    if (err.response?.status === 401 && isClubDeactivated(err)) {
+      forceLogout(LOGIN_REASON_CLUB_DEACTIVATED);
+      return Promise.reject(err);
+    }
 
     if (err.response?.status === 401 && !original._retry) {
       const refreshToken = getRefreshToken();
@@ -125,7 +140,7 @@ api.interceptors.response.use(
         return api(original);
       } catch (refreshErr) {
         processQueue(refreshErr, null);
-        forceLogout();
+        forceLogout(isClubDeactivated(refreshErr) ? LOGIN_REASON_CLUB_DEACTIVATED : undefined);
         return Promise.reject(refreshErr);
       } finally {
         isRefreshing = false;
