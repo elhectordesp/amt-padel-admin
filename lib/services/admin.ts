@@ -244,10 +244,14 @@ export const adminService = {
       id: string,
       categoryId: string,
       options?: BracketGenerationOptions,
+      // El formato elegido en el diálogo: sin él, el back rehacía el cuadro
+      // con el de antes
+      format?: string,
     ) =>
       api
         .post(`/admin/tournaments/${id}/bracket/regenerate`, {
           categoryId,
+          ...(format !== undefined ? { format } : {}),
           ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
           ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
           ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),

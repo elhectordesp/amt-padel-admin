@@ -8,7 +8,7 @@ import {
   Trophy, Calendar, ChevronLeft, MapPin,
   Check, X, Clock, Download, Search, Loader2,
   GitBranch, CheckCircle, Copy, Trash2, ChevronRight,
-  Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer, Tv2,
+  Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
   Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
   ArrowLeftRight, Users, Plus,
@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ShareViewerModal } from "@/components/admin/share-viewer-modal";
+import { PublicViewerActions } from "@/components/admin/public-viewer-actions";
 import { Header } from "@/components/admin/header";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AvailabilityModal } from "@/components/admin/availability-modal";
@@ -38,7 +39,7 @@ import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
-import { hasDate, isMatchFinished } from "@/lib/utils/match-status";
+import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
 import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
@@ -358,6 +359,8 @@ function CalendarTab({
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
+      // Reabrir una final (o lo que había detrás) reabre el torneo cerrado
+      qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
     },
     onError: (e: unknown, variables) => {
       const msg =
@@ -711,6 +714,8 @@ function CalendarTab({
                                       {m.sets1.map((s: number, i: number) => `${s}-${m.sets2![i]}`).join(" / ")}
                                     </span>
                                   </div>
+                                  {/* Un bye (una sola pareja) no se corrige ni se reabre: el back lo rechaza */}
+                                  {hasBothPairs(m) && (<>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
                                     className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
@@ -731,6 +736,7 @@ function CalendarTab({
                                   >
                                     <Clock size={11} />
                                   </button>
+                                  </>)}
                                 </div>
                               ) : (
                                 <span className="flex items-center gap-1 text-xs text-yellow-400 shrink-0 ml-auto sm:ml-0">
@@ -2166,27 +2172,11 @@ export default function TorneoDetailPage() {
               >
                 <Trash2 size={15} />
               </button>
-              <Link
-                href={`/torneo/${id}/live`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Abrir widget de resultados en vivo (para TV o pantalla grande)"
-                aria-label="Widget TV"
-                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
-              >
-                <Tv2 size={14} />
-                <span className="hidden sm:inline">Widget TV</span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setShowShare(true)}
-                title="Compartir el visor público (QR y enlace) para jugadores y espectadores, sin login"
-                aria-label="Compartir visor público"
-                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors"
-              >
-                <Copy size={14} />
-                <span className="hidden sm:inline">Visor público</span>
-              </button>
+              <PublicViewerActions
+                tournamentId={id}
+                isDraft={tournament.status === "DRAFT"}
+                onShare={() => setShowShare(true)}
+              />
               <Link
                 href={`/torneos/${id}/editar`}
                 aria-label="Editar torneo"
@@ -4002,6 +3992,11 @@ export default function TorneoDetailPage() {
         alreadyHasBracket={bracketMatches.some(
           (m: any) => m.categoryId === bracketCatId,
         )}
+        currentFormat={
+          tournament.categories.find((c) => c.id === bracketCatId)?.format ??
+          tournament.format ??
+          null
+        }
         registrationsOpenReason={
           tournament.status === "OPEN" &&
           (!tournament.registrationDeadline ||

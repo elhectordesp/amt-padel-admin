@@ -50,6 +50,12 @@ interface Props {
   /** True si la categoría ya tiene cuadro generado → usaremos regenerateBracket */
   alreadyHasBracket?: boolean;
   /**
+   * Formato con el que está el cuadro (el de la categoría o, si no tiene, el del
+   * torneo). Al regenerar, el diálogo parte de él: regenerar ya manda el
+   * formato elegido y, si partiera de otro, cambiaría el cuadro sin querer.
+   */
+  currentFormat?: string | null;
+  /**
    * Bloque 2: si las inscripciones siguen abiertas, el dialog entra en
    * modo read-only. Permite explorar opciones pero el botón Generar queda
    * deshabilitado con motivo claro.
@@ -81,12 +87,15 @@ export function GenerateBracketDialog({
   categoryLabel,
   totalConfirmedPairs,
   alreadyHasBracket = false,
+  currentFormat = null,
   registrationsOpenReason = null,
   onGenerated,
 }: Props) {
   const [genMode, setGenMode] = useState<GenerationMode>("auto"); // Bloque 3
   const [manualNumGroups, setManualNumGroups] = useState<number>(2);
-  const [format, setFormat] = useState<Format>("grupos+eliminatoria");
+  const [format, setFormat] = useState<Format>(() =>
+    alreadyHasBracket && currentFormat ? toDialogFormat(currentFormat) : "grupos+eliminatoria",
+  );
   const [distMode, setDistMode] = useState<DistMode>("byCount");
   const [numGroups, setNumGroups] = useState<AutoOrNumber>("auto");
   const [groupSize, setGroupSize] = useState<number | "">("");
@@ -167,9 +176,10 @@ export function GenerateBracketDialog({
         eliminationStartRound: elimRound === "auto" ? undefined : elimRound,
       };
       // Si ya hay cuadro generado, usamos regenerateBracket (que pasa force=true
-      // en el backend). Si no, generateBracket normal.
+      // en el backend). Si no, generateBracket normal. Los dos con el formato
+      // elegido: al regenerar se perdía y salía el cuadro de antes.
       return alreadyHasBracket
-        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts)
+        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts, format)
         : adminService.tournaments.generateBracket(
             tournamentId,
             categoryId,
@@ -664,9 +674,11 @@ function PreviewSummary({
     .join(" + ");
 
   const qualifiers = G * topN + extraN;
+  // Mismo tamaño que el back: con 2 clasificados, la final directa (antes
+  // salían semifinales con 2 byes)
   const bracketSize =
     elimRound === "auto"
-      ? Math.max(4, nextPow2Client(qualifiers))
+      ? Math.max(2, nextPow2Client(qualifiers))
       : ROUND_SIZES[elimRound];
   const byes = Math.max(0, bracketSize - qualifiers);
   const elimLabel = bracketRoundLabel(bracketSize);
@@ -691,6 +703,14 @@ function PreviewSummary({
       </p>
     </div>
   );
+}
+
+/** El formato guardado («eliminatoria», «grupos+eliminatoria»…), como lo lee el back. */
+function toDialogFormat(stored: string): Format {
+  const f = stored.toLowerCase();
+  return f.includes("grupos") || f.includes("round-robin")
+    ? "grupos+eliminatoria"
+    : "solo-eliminatoria";
 }
 
 function nextPow2Client(n: number): number {
