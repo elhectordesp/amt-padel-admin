@@ -71,6 +71,12 @@ export interface Club {
   contactEmail?:        string | null;
   isAmtPartner?:        boolean;
   active?:              boolean;
+  // Cuándo lo desactivó AMT (null: no lo está). No viene con un back anterior
+  deactivatedAt?:       string | null;
+  // Su estado, calculado por el back (no se deduce aquí). No viene con un back anterior
+  status?:              "active" | "pending" | "deactivated";
+  // Aún con el nombre o la ciudad de relleno del alta rápida (lo calcula el back)
+  pendingSetup?:        boolean;
   tournamentCount?:     number;
   lat?:                 number | null;
   lng?:                 number | null;
