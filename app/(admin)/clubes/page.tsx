@@ -14,7 +14,9 @@ import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
-import { clubStatus, clubToggle, type ClubStatus, type ClubToggle } from "@/lib/club-status";
+import {
+  clubStatus, toggleConfirm, type ClubStatus, type ClubToggle, type ToggleConfirm,
+} from "@/lib/utils/club-status";
 import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
 import type { Club } from "@/types";
 
@@ -157,9 +159,12 @@ function ClubModal({
         ? adminService.clubs.update(club!.id, payload)
         : adminService.clubs.create(payload);
     },
-    onSuccess: () => {
+    onSuccess: (saved: Club | undefined) => {
       qc.invalidateQueries({ queryKey: ["admin-clubs"] });
-      toast.success(isEditing ? "Club actualizado" : "Club creado");
+      // Un club por configurar se activa solo al guardar sus datos reales
+      if (isEditing && club?.active === false && saved?.active === true)
+        toast.success("Club actualizado y publicado en la app");
+      else toast.success(isEditing ? "Club actualizado" : "Club creado");
       onClose();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -433,59 +438,52 @@ function ClubStatusBadge({ status }: { status: ClubStatus }) {
 /** En la ficha: por qué está inactivo (se cambia desde la tarjeta). */
 function ClubStatusNote({ club }: { club: Club }) {
   const status = clubStatus(club);
-  if (status !== "deactivated" && status !== "pending") return null;
-  return (
-    <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
-      <ClubStatusBadge status={status} />
-      <p>
-        {status === "deactivated"
-          ? `AMT lo desactivó${club.deactivatedAt ? ` el ${new Date(club.deactivatedAt).toLocaleDateString("es-ES")}` : ""}: no sale en la app y su admin no puede entrar al panel. Se reactiva desde la tarjeta.`
-          : "Alta rápida: su admin aún no ha puesto el nombre y la ciudad reales. Se activará solo cuando lo haga."}
-      </p>
-    </div>
-  );
+  if (status === "deactivated" && club.deactivatedAt)
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+        <ClubStatusBadge status={status} />
+        <p>
+          {`AMT lo desactivó el ${new Date(club.deactivatedAt).toLocaleDateString("es-ES")}: no sale en la app y su admin no puede entrar al panel. Se reactiva desde la tarjeta.`}
+        </p>
+      </div>
+    );
+  if (status === "pending")
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+        <ClubStatusBadge status={status} />
+        <p>Se activará y saldrá en la app en cuanto se guarden su nombre y su ciudad reales (también si lo haces tú aquí).</p>
+      </div>
+    );
+  return null;
 }
 
-const TOGGLE_TEXT: Record<ClubToggle, { label: string; title: string; description: string; confirm: string }> = {
-  deactivate: {
-    label:       "Desactivar",
-    title:       "¿Desactivar el club?",
-    description: "Dejará de salir en la app y su admin no podrá entrar al panel hasta que lo reactives. Sus torneos se quedan como están.",
-    confirm:     "Desactivar",
-  },
-  reactivate: {
-    label:       "Reactivar",
-    title:       "¿Reactivar el club?",
-    description: "Su admin podrá volver a entrar al panel. Si aún está por configurar, no saldrá en la app hasta que su admin ponga el nombre y la ciudad reales.",
-    confirm:     "Reactivar",
-  },
-  activate: {
-    label:       "Activar",
-    title:       "¿Activar el club?",
-    description: "Volverá a salir en la app.",
-    confirm:     "Activar",
-  },
-};
+/** El botón refleja cómo está el club: encendido solo si está activo. */
+function PowerIcon({ active }: { active: boolean }) {
+  return active
+    ? <Power size={13} className="text-green-400" />
+    : <PowerOff size={13} className="text-destructive" />;
+}
 
 function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) => void; onCourts: (c: Club) => void }) {
   const qc = useQueryClient();
   const status = clubStatus(club);
-  const action = clubToggle(status);
-  const text = TOGGLE_TEXT[action];
-  const [confirming, setConfirming] = useState(false);
+  const button = toggleConfirm(club);
+  // La confirmación se queda como era al abrirla: un refresco de la lista no la cambia
+  const [confirm, setConfirm] = useState<ToggleConfirm | null>(null);
 
-  // El club y la acción van en las variables: la tarjeta se repinta al acabar
+  // El club y la acción van en las variables. El modal sigue en carga hasta
+  // que la lista vuelve a pedirse (se espera al invalidateQueries)
   const toggle = useMutation({
     mutationFn: ({ id, action }: { id: string; action: ClubToggle }): Promise<Club | undefined> =>
       action === "deactivate"
         ? adminService.clubs.deactivate(id)
         : adminService.clubs.update(id, { active: true }),
-    onSuccess: (updated, { action }) => {
-      qc.invalidateQueries({ queryKey: ["admin-clubs"] });
-      setConfirming(false);
+    onSuccess: async (updated, { action }) => {
+      await qc.invalidateQueries({ queryKey: ["admin-clubs"] });
+      setConfirm(null);
       if (action === "deactivate") toast.success("Club desactivado");
       // Reactivado pero aún por configurar: no sale en la app todavía
-      else if (updated && updated.active === false)
+      else if (updated?.status === "pending")
         toast.success("Club reactivado. Sigue por configurar: saldrá en la app cuando su admin ponga sus datos.");
       else toast.success(action === "reactivate" ? "Club reactivado" : "Club activado");
     },
@@ -495,20 +493,22 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
   return (
     <>
     {/* Fuera de la tarjeta: la opacidad del club inactivo no le llega */}
-    <ConfirmModal
-      open={confirming}
-      title={text.title}
-      description={text.description}
-      confirmLabel={text.confirm}
-      danger={action === "deactivate"}
-      loading={toggle.isPending}
-      onClose={() => { if (!toggle.isPending) setConfirming(false); }}
-      onConfirm={() => toggle.mutate({ id: club.id, action })}
-    />
+    {confirm && (
+      <ConfirmModal
+        open
+        title={confirm.title}
+        description={confirm.description}
+        confirmLabel={confirm.label}
+        danger={confirm.danger}
+        loading={toggle.isPending}
+        onClose={() => { if (!toggle.isPending) setConfirm(null); }}
+        onConfirm={() => toggle.mutate({ id: club.id, action: confirm.action })}
+      />
+    )}
     <div className={`bg-card border rounded-lg p-5 space-y-3 transition-opacity ${status !== "active" ? "opacity-60" : ""}`}>
-      {/* Header row */}
+      {/* Header row: el nombre se lleva el ancho; la etiqueta de estado, debajo */}
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           {club.logoUrl ? (
             <Image
               src={club.logoUrl}
@@ -524,19 +524,26 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
             </div>
           )}
           <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{club.name}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <MapPin size={10} /> {club.city}{club.autonomousCommunity ? ` · ${club.autonomousCommunity}` : ""}
+            {/* Hasta dos líneas: en la rejilla de 3 columnas el nombre no se queda en nada */}
+            <p className="font-semibold text-sm line-clamp-2 break-words" title={club.name}>{club.name}</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
+              <MapPin size={10} className="shrink-0" />
+              <span className="truncate">{club.city}{club.autonomousCommunity ? ` · ${club.autonomousCommunity}` : ""}</span>
             </p>
+            {/* Las etiquetas, debajo del nombre: a la derecha solo los botones */}
+            {(status === "deactivated" || status === "pending" || club.isAmtPartner) && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <ClubStatusBadge status={status} />
+                {club.isAmtPartner && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] text-[#D4AF37]">
+                    AMT
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <ClubStatusBadge status={status} />
-          {club.isAmtPartner && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] text-[#D4AF37]">
-              AMT
-            </span>
-          )}
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={() => onCourts(club)}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
@@ -554,17 +561,15 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
             <Pencil size={13} />
           </button>
           <button
-            onClick={() => setConfirming(true)}
+            onClick={() => setConfirm(button)}
             disabled={toggle.isPending}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
-            title={text.label}
-            aria-label={`${text.label} club`}
+            title={button.label}
+            aria-label={`${button.label} club`}
           >
             {toggle.isPending
               ? <Loader2 size={13} className="animate-spin" />
-              : action === "deactivate"
-                ? <Power size={13} className="text-green-400" />
-                : <PowerOff size={13} className="text-destructive" />
+              : <PowerIcon active={status === "active"} />
             }
           </button>
         </div>
