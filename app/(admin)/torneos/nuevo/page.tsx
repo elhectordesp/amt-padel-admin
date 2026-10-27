@@ -8,8 +8,15 @@ import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
-import { localDateTimeToIso } from "@/lib/utils/date-keys";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
+import {
+  addDaysToKey,
+  formatDayKey,
+  formatInTimeZone,
+  timeZoneOptions,
+  tournamentTimeZone,
+  zonedDateTimeToIso,
+} from "@/lib/utils/time-zone";
 import type { CategoryLevel, Gender } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +60,8 @@ const configSchema = z.object({
   scoringSystem:       z.string().min(1),
   matchDuration:       z.number().int().min(10).max(180),
   registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
+  // Zona de las horas del torneo; por defecto, la de su club
+  timezone:            z.string().min(1),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
 });
@@ -233,8 +242,18 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, hasShirts: false, useSeeding: false },
+    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, timezone: tournamentTimeZone(null), hasShirts: false, useSeeding: false },
   });
+
+  // La zona del torneo empieza siendo la de su club (la elegida en el paso 1),
+  // mientras no se cambie a mano
+  const selectedClub = isClubUser ? myClub : clubs.find((c) => c.id === infoData?.clubId);
+  const clubTimeZone = tournamentTimeZone(selectedClub);
+  useEffect(() => {
+    if (step === 3 && !configForm.getFieldState("timezone").isDirty) {
+      configForm.setValue("timezone", clubTimeZone);
+    }
+  }, [step, clubTimeZone, configForm]);
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
   const scheduleForm = useForm<ScheduleData>({
@@ -246,19 +265,21 @@ export default function NuevoTorneoPage() {
   // Auto-generate days when reaching step 4
   useEffect(() => {
     if (step === 4 && infoData && (scheduleForm.getValues().days.length === 0)) {
-      const start = new Date(infoData.startDate);
-      const end   = new Date(infoData.endDate);
       const days: ScheduleData["days"] = [];
-      const curr = new Date(start);
-      while (curr <= end) {
+      // Día a día sobre «YYYY-MM-DD», sin hora: con setDate en hora local, el
+      // cambio de hora de marzo repetía una jornada
+      for (
+        let day = infoData.startDate;
+        day <= infoData.endDate && days.length < 366;
+        day = addDaysToKey(day, 1)
+      ) {
         days.push({
-          date:                curr.toISOString().split("T")[0],
+          date:                day,
           type:                "AMBOS" as const,
           isFinal:             false,
           maxUnavailableSlots: 0,
           blocks:              [{ start: "16:00", end: "21:00" }],
         });
-        curr.setDate(curr.getDate() + 1);
       }
       scheduleForm.reset({ days });
     }
@@ -275,9 +296,10 @@ export default function NuevoTorneoPage() {
       format:      configData!.format,
       scoringSystem: configData!.scoringSystem,
       matchDuration: configData!.matchDuration,
-      // Con su zona: sin ella, el back lo leía en la hora del servidor (UTC en
-      // producción) y el cierre quedaba 1-2 h más tarde de lo escrito
-      registrationDeadline: localDateTimeToIso(configData!.registrationDeadline),
+      // Como instante: lo escrito es hora de la zona del torneo (sin zona, un
+      // back anterior lo leía en la hora del servidor, UTC en producción)
+      registrationDeadline: zonedDateTimeToIso(configData!.registrationDeadline, configData!.timezone),
+      timezone:    configData!.timezone,
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
       categories: catData!.categories.map((c) => ({
@@ -324,8 +346,8 @@ export default function NuevoTorneoPage() {
 
   // El cierre: la regla de Editar y del back, y además futuro (el fin es
   // posterior al inicio: no hace falta comprobarlo aparte)
-  const deadlineIssue = (value: string) =>
-    registrationDeadlineIssue(value, infoData?.startDate ?? "", { requireFuture: true });
+  const deadlineIssue = (value: string, timeZone: string) =>
+    registrationDeadlineIssue(value, infoData?.startDate ?? "", { requireFuture: true, timeZone });
 
   /**
    * Crea el torneo. El cierre se comprobó en el paso 3; si se ha quedado en el
@@ -333,7 +355,7 @@ export default function NuevoTorneoPage() {
    * vuelve al paso 3 con el aviso.
    */
   const submitCreate = () => {
-    const issue = deadlineIssue(configData!.registrationDeadline);
+    const issue = deadlineIssue(configData!.registrationDeadline, configData!.timezone);
     if (issue) {
       setStep(3);
       configForm.setError("registrationDeadline", { message: issue });
@@ -358,7 +380,7 @@ export default function NuevoTorneoPage() {
       const ok = await configForm.trigger();
       if (!ok) return;
       const cfg = configForm.getValues();
-      const issue = deadlineIssue(cfg.registrationDeadline);
+      const issue = deadlineIssue(cfg.registrationDeadline, cfg.timezone);
       if (issue) {
         configForm.setError("registrationDeadline", { message: issue });
         return;
@@ -686,11 +708,24 @@ export default function NuevoTorneoPage() {
                       onChange={(v) => configForm.setValue("matchDuration", Number(v), { shouldValidate: true })}
                     />
                   </Field>
+                  <Field label="Zona horaria" error={configForm.formState.errors.timezone?.message}>
+                    <CustomSelect
+                      options={timeZoneOptions(configForm.watch("timezone"))}
+                      value={configForm.watch("timezone")}
+                      onChange={(v) => configForm.setValue("timezone", v, { shouldValidate: true, shouldDirty: true })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      La de su club, salvo que la cambies. Las horas del torneo (jornadas, partidos y cierre) van en esta zona.
+                    </p>
+                  </Field>
                   <Field label="Cierre de inscripciones" error={configForm.formState.errors.registrationDeadline?.message}>
                     <Input
                       {...configForm.register("registrationDeadline")}
                       type="datetime-local"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Hora del torneo ({configForm.watch("timezone")})
+                    </p>
                   </Field>
                 </div>
                 <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
@@ -721,7 +756,7 @@ export default function NuevoTorneoPage() {
                   <div key={day.date} className="p-4 bg-secondary/30 rounded-lg border border-border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-foreground capitalize">
-                        {new Date(day.date).toLocaleDateString("es-ES", { weekday: 'long', day: 'numeric', month: 'long' })}
+                        {formatDayKey(day.date, { weekday: 'long', day: 'numeric', month: 'long' })}
                       </span>
                       <button
                         type="button"
@@ -908,8 +943,13 @@ export default function NuevoTorneoPage() {
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Duración part.", `${configData.matchDuration} mins`],
                     ["Cierre insc.", configData.registrationDeadline
-                      ? new Date(configData.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                      ? formatInTimeZone(
+                          zonedDateTimeToIso(configData.registrationDeadline, configData.timezone),
+                          configData.timezone,
+                          { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" },
+                        )
                       : "—"],
+                    ["Zona horaria", configData.timezone],
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
                   ].map(([k, v]) => (
@@ -926,7 +966,7 @@ export default function NuevoTorneoPage() {
                   {scheduleData?.days.map((d) => (
                     <div key={d.date} className="flex justify-between text-xs">
                       <span className="text-muted-foreground capitalize">
-                        {new Date(d.date).toLocaleDateString("es-ES", { weekday: 'short', day: 'numeric' })}
+                        {formatDayKey(d.date, { weekday: 'short', day: 'numeric' })}
                       </span>
                       <span className="text-foreground">
                         {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}

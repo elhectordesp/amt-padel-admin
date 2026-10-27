@@ -17,12 +17,16 @@ import {
 } from "@dnd-kit/core";
 import { phaseLabel, GENDER_LABEL, CATEGORY_LABEL_SHORT } from "@/lib/constants";
 import { isByeMatch } from "@/lib/utils/match-status";
+import { dateOnlyKey, formatDayKey, tournamentTimeZone, zonedDayKey, zonedMinutes } from "@/lib/utils/time-zone";
 import type { MatchResult, Gender, CategoryLevel } from "@/types";
 
 const ROW_H = 64; // px per 30-min slot
 
 export interface ScheduleTarget {
-  /** "YYYY-MM-DDTHH:MM" (hora local, mismo formato que el editor inline). */
+  /**
+   * "YYYY-MM-DDTHH:MM" en la zona del torneo (no en la del navegador), el
+   * mismo formato que el editor inline.
+   */
   date:  string;
   court: string;
 }
@@ -224,16 +228,19 @@ function DroppableCell({
 export function ScheduleGrid({
   matches, duration, tournament, onMatchClick, onCorrectClick, onMove, onDelete, onCreateAt,
 }: Props) {
+  // Días y horas en la zona del torneo: antes el día era el de UTC y la hora
+  // la del navegador
+  const tz = tournamentTimeZone(tournament);
   const matchesByDate = useMemo(() => {
     const map: Record<string, MatchResult[]> = {};
     for (const m of matches) {
       const raw = (m as any).date;
       if (!raw) continue;
-      const iso = new Date(raw).toISOString().split("T")[0];
-      (map[iso] ??= []).push(m);
+      const day = zonedDayKey(raw, tz);
+      (map[day] ??= []).push(m);
     }
     return map;
-  }, [matches]);
+  }, [matches, tz]);
 
   const dates = useMemo(() => Object.keys(matchesByDate).sort(), [matchesByDate]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -278,7 +285,7 @@ export function ScheduleGrid({
       const matched = days.filter((d) => {
         const dd = d?.date;
         if (!dd) return false;
-        return new Date(dd).toISOString().split("T")[0] === effectiveDate;
+        return dateOnlyKey(dd, tz) === effectiveDate;
       });
       if (matched.length > 0) relevant = matched;
     }
@@ -290,7 +297,7 @@ export function ScheduleGrid({
       }
     }
     return mins;
-  }, [tournament, effectiveDate]);
+  }, [tournament, effectiveDate, tz]);
 
   // Rango por defecto del día: (1) horas configuradas del torneo si existen;
   // (2) si no, deducido de los partidos; (3) si no hay nada, 09:00–23:00.
@@ -303,13 +310,10 @@ export function ScheduleGrid({
       return round(Math.min(...scheduleMinutes), Math.max(...scheduleMinutes) + duration);
     }
     const mt: number[] = [];
-    for (const m of dayMatches) {
-      const d = new Date((m as any).date);
-      mt.push(d.getHours() * 60 + d.getMinutes());
-    }
+    for (const m of dayMatches) mt.push(zonedMinutes((m as any).date, tz));
     if (mt.length > 0) return round(Math.min(...mt), Math.max(...mt) + duration);
     return { from: 9 * 60, to: 23 * 60 };
-  }, [scheduleMinutes, dayMatches, duration]);
+  }, [scheduleMinutes, dayMatches, duration, tz]);
 
   // El usuario puede ajustar el rango visible; se resetea al cambiar de día.
   const [rangeOverride, setRangeOverride] = useState<{ from: number; to: number } | null>(null);
@@ -321,8 +325,7 @@ export function ScheduleGrid({
     // Nunca ocultar partidos: ensancha el rango para incluir cualquiera que
     // caiga fuera del horario visible.
     for (const m of dayMatches) {
-      const d = new Date((m as any).date);
-      const t = d.getHours() * 60 + d.getMinutes();
+      const t = zonedMinutes((m as any).date, tz);
       lo = Math.min(lo, t);
       hi = Math.max(hi, t + duration);
     }
@@ -332,7 +335,7 @@ export function ScheduleGrid({
     const s: number[] = [];
     for (let t = lo; t < hi; t += 30) s.push(t);
     return { minMin: lo, slots: s };
-  }, [range, dayMatches, duration]);
+  }, [range, dayMatches, duration, tz]);
 
   // Un bye no se juega: no está «sin programar» aunque no tenga hora.
   const unscheduled = matches.filter((m) => !m.date && !isByeMatch(m));
@@ -357,14 +360,13 @@ export function ScheduleGrid({
     if (!m || !over || !onMove || isByeMatch(m)) return;
     if (over.court === "Sin pista") return;
     // Construye la fecha destino conservando el día del partido y cambiando
-    // solo la hora — mismo formato "datetime-local" que el editor inline, para
-    // no tener problemas de zona horaria.
-    const base = new Date((m as any).date);
-    const curMin = base.getHours() * 60 + base.getMinutes();
+    // solo la hora, las dos en la zona del torneo — mismo formato
+    // "datetime-local" que el editor inline.
+    const day = zonedDayKey((m as any).date, tz);
+    const curMin = zonedMinutes((m as any).date, tz);
     const sameCourt = ((m as any).court ?? "Sin pista") === over.court;
     if (curMin === over.slotMin && sameCourt) return; // sin cambios
-    base.setHours(Math.floor(over.slotMin / 60), over.slotMin % 60, 0, 0);
-    const date = `${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}T${pad2(base.getHours())}:${pad2(base.getMinutes())}`;
+    const date = `${day}T${pad2(Math.floor(over.slotMin / 60))}:${pad2(over.slotMin % 60)}`;
     onMove(m, { date, court: over.court });
   }
 
@@ -401,7 +403,7 @@ export function ScheduleGrid({
                   : "border-border text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.3)]"
               }`}
             >
-              {new Date(d + "T12:00:00").toLocaleDateString("es-ES", {
+              {formatDayKey(d, {
                 weekday: "short",
                 day: "numeric",
                 month: "short",
@@ -529,8 +531,7 @@ export function ScheduleGrid({
 
               {/* Match cards */}
               {dayMatches.map((m) => {
-                const d        = new Date((m as any).date);
-                const matchMin = d.getHours() * 60 + d.getMinutes();
+                const matchMin = zonedMinutes((m as any).date, tz);
                 const rowStart = (matchMin - minMin) / 30 + 2;
                 const rowSpan  = Math.max(1, Math.ceil(duration / 30));
                 const court    = (m as any).court ?? "Sin pista";

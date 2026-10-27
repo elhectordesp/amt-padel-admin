@@ -10,6 +10,7 @@ import { CourtsManager } from "@/components/admin/courts-manager";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { PROVINCES } from "@/lib/constants/spain";
+import { DEFAULT_TIME_ZONE, timeZoneOptions, tournamentTimeZone } from "@/lib/utils/time-zone";
 import type { Club } from "@/types";
 
 type Form = {
@@ -22,6 +23,7 @@ type Form = {
   instagram: string;
   contactEmail: string;
   logoUrl: string;
+  timezone: string;
 };
 
 const EMPTY: Form = {
@@ -34,6 +36,7 @@ const EMPTY: Form = {
   instagram: "",
   contactEmail: "",
   logoUrl: "",
+  timezone: DEFAULT_TIME_ZONE,
 };
 
 function buildForm(club: Club | undefined): Form {
@@ -48,6 +51,7 @@ function buildForm(club: Club | undefined): Form {
     instagram:    club.instagram ?? "",
     contactEmail: club.contactEmail ?? "",
     logoUrl:      club.logoUrl ?? "",
+    timezone:     tournamentTimeZone(club),
   };
 }
 
@@ -99,6 +103,8 @@ export default function MiClubPage() {
         instagram: form.instagram.trim() || null,
         contactEmail: form.contactEmail.trim() || null,
         logoUrl: form.logoUrl.trim() || null,
+        // La heredan los torneos nuevos del club
+        timezone: form.timezone,
       };
       return adminService.clubs.update(clubId, payload);
     },
@@ -213,6 +219,28 @@ export default function MiClubPage() {
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Zona horaria
+                </span>
+                <select
+                  value={form.timezone}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, timezone: e.target.value }))
+                  }
+                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                >
+                  {timeZoneOptions(form.timezone).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-muted-foreground block">
+                  La de tus torneos nuevos: sus horas se interpretan en esta zona.
+                </span>
               </label>
 
               <label className="space-y-1.5">

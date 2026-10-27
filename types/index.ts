@@ -80,6 +80,8 @@ export interface Club {
   tournamentCount?:     number;
   lat?:                 number | null;
   lng?:                 number | null;
+  // Zona horaria IANA del club: la heredan sus torneos. No viene con un back anterior
+  timezone?:            string;
 }
 
 export interface CourtBlock {
@@ -134,6 +136,9 @@ export interface Tournament {
   format?:     string;
   scoringSystem?: string;
   registrationDeadline?: string;
+  // Zona horaria IANA del torneo: la de sus horas (jornadas, partidos, cierre).
+  // No viene con un back anterior: entonces, Europe/Madrid (tournamentTimeZone)
+  timezone?:   string;
   courts?:     string[];
   matchDuration?: number;
   elimMatchDuration?: number | null;
@@ -497,6 +502,8 @@ export interface CreateTournamentPayload {
   format?:     string;
   scoringSystem?: string;
   registrationDeadline?: string;
+  // Zona IANA del torneo; sin ella, el back pone la de su club
+  timezone?:   string;
   hasShirts?:  boolean;
   useSeeding?: boolean;
   matchDuration?: number;

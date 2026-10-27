@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Trophy, Users, Calendar, MapPin, Clock, ListTree } from "lucide-react";
+import { DEFAULT_TIME_ZONE, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -45,11 +46,15 @@ function scoreOf(m: any): string {
   if (s1?.length) return s1.map((s: number, i: number) => `${s}-${s2[i]}`).join("  ");
   return "";
 }
-const fmtWhen = (d?: string | null) => (d ? new Date(d).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
+// La zona del torneo: las horas van en ella, no en la del navegador ni en la
+// del servidor (el SSR corre en UTC y enseñaba 1-2 h menos)
+const TimeZoneContext = createContext(DEFAULT_TIME_ZONE);
+const fmtWhen = (d: string | null | undefined, tz: string) =>
+  d ? formatInTimeZone(d, tz, { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) || null : null;
 
 // Línea compacta de día·hora · pista (para tarjetas y listas).
 function WhenWhere({ m, className = "", justify = "justify-center" }: { m: any; className?: string; justify?: string }) {
-  const when = fmtWhen(m.date);
+  const when = fmtWhen(m.date, useContext(TimeZoneContext));
   if (!when && !m.court) return null;
   return (
     <span className={`text-[10px] text-zinc-500 flex items-center ${justify} gap-2 flex-wrap ${className}`}>
@@ -223,6 +228,7 @@ export default function TournamentViewer({
   const secShow = (key: string) => (curTab === key ? "" : "hidden") + " sm:block";
 
   return (
+    <TimeZoneContext.Provider value={tournamentTimeZone(tournament)}>
     <div className="min-h-screen bg-[#0C0C0C] text-white">
       {/* Header */}
       <header className="border-b border-zinc-800 px-6 py-4 flex items-center gap-3 sticky top-0 bg-[#0C0C0C]/95 backdrop-blur z-10">
@@ -451,5 +457,6 @@ export default function TournamentViewer({
         </p>
       </main>
     </div>
+    </TimeZoneContext.Provider>
   );
 }

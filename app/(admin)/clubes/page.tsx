@@ -18,6 +18,7 @@ import {
   clubStatus, toggleConfirm, type ClubStatus, type ClubToggle, type ToggleConfirm,
 } from "@/lib/utils/club-status";
 import { PROVINCES, PROVINCE_TO_CCAA } from "@/lib/constants/spain";
+import { DEFAULT_TIME_ZONE, timeZoneOptions, tournamentTimeZone } from "@/lib/utils/time-zone";
 import type { Club } from "@/types";
 
 // ── CourtsPanel (modal wrapper sobre <CourtsManager>) ─────────────────────
@@ -57,7 +58,7 @@ function CourtsPanel({
 const EMPTY_FORM = {
   name: "", city: "", province: "", address: "", phone: "", website: "",
   instagram: "", logoUrl: "", contactEmail: "", isAmtPartner: true,
-  lat: "", lng: "",
+  lat: "", lng: "", timezone: DEFAULT_TIME_ZONE,
 };
 type FormState = typeof EMPTY_FORM & { isAmtPartner: boolean };
 
@@ -85,6 +86,7 @@ function ClubModal({
           isAmtPartner: club.isAmtPartner ?? true,
           lat:          club.lat != null ? String(club.lat) : "",
           lng:          club.lng != null ? String(club.lng) : "",
+          timezone:     tournamentTimeZone(club),
         }
       : { ...EMPTY_FORM }
   );
@@ -154,6 +156,8 @@ function ClubModal({
         isAmtPartner: form.isAmtPartner,
         lat:          latN != null && !isNaN(latN) ? latN : undefined,
         lng:          lngN != null && !isNaN(lngN) ? lngN : undefined,
+        // La heredan los torneos nuevos del club
+        timezone:     form.timezone,
       };
       return isEditing
         ? adminService.clubs.update(club!.id, payload)
@@ -252,6 +256,23 @@ function ClubModal({
               </div>
             </div>
           </div>
+
+          {/* Zona horaria: la heredan sus torneos nuevos */}
+          <label className="space-y-1.5 block">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Zona horaria</span>
+            <select
+              value={form.timezone}
+              onChange={(e) => set("timezone", e.target.value)}
+              className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+            >
+              {timeZoneOptions(form.timezone).map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground block">
+              La de sus torneos nuevos: sus horas se interpretan en esta zona.
+            </span>
+          </label>
 
           {/* Address */}
           <label className="space-y-1.5 block">

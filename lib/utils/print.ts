@@ -3,6 +3,7 @@ import type { Tournament, RegistrationStatus, MatchResult } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
 import { hasDate, isMatchFinished, type DatedMatch } from "@/lib/utils/match-status";
+import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -245,8 +246,9 @@ export function printTournamentReport(
             : "";
           const w1   = m.winner === "team1";
           const w2   = m.winner === "team2";
+          // En la zona del torneo, no en la del navegador
           const time = m.date
-            ? new Date(m.date).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+            ? formatInTimeZone(m.date, tournamentTimeZone(tournament), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
             : "—";
           return `
             <tr class="${i % 2 === 0 ? "row-alt" : ""}">
@@ -427,9 +429,11 @@ export function printSchedule(
 
   if (scheduled.length === 0) return;
 
+  // Días y horas en la zona del torneo, no en la del navegador
+  const tz = tournamentTimeZone(tournament);
   const byDate = new Map<string, DatedMatch[]>();
   for (const m of scheduled) {
-    const key = new Date(m.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    const key = formatInTimeZone(m.date, tz, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     (byDate.get(key) ?? byDate.set(key, []).get(key)!).push(m);
   }
 
@@ -440,7 +444,7 @@ export function printSchedule(
     });
 
     const rows = sorted.map((m, i) => {
-      const time    = new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      const time    = formatInTimeZone(m.date, tz, { hour: "2-digit", minute: "2-digit" });
       const cat     = esc(catMap[m.categoryId ?? ""] ?? "—");
       const phase   = esc(PHASE_LABEL[m.phase] ?? m.phase);
       const t1      = m.team1.map(esc).join(" / ") || "—";
