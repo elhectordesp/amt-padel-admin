@@ -24,6 +24,11 @@ export const TIME_ZONE_OPTIONS: { value: string; label: string }[] = [
   { value: "Europe/Andorra",  label: "Andorra" },
 ];
 
+/** El nombre de la zona en el selector («Canarias»); si no está, la zona tal cual. */
+export function timeZoneLabel(tz: string): string {
+  return TIME_ZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
+}
+
 /** Las opciones del selector, con la zona actual aunque no esté en la lista. */
 export function timeZoneOptions(current?: string | null): { value: string; label: string }[] {
   if (!current || TIME_ZONE_OPTIONS.some((o) => o.value === current)) return TIME_ZONE_OPTIONS;
@@ -155,7 +160,9 @@ function wallToInstant(target: number, tz: string): Date {
   return new Date(matches.length > 0 ? matches[0] : target - before);
 }
 
-const NAIVE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/;
+// Los segundos, si vienen, no cuentan (como NAIVE_DATE_TIME en el back). Sin
+// ellos aquí, un valor con segundos no se leía y el partido se guardaba sin hora
+const NAIVE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?$/;
 
 /** El instante de «YYYY-MM-DD» o «YYYY-MM-DDTHH:mm» (hora de pared de `tz`). */
 export function zonedToDate(value: string, tz: string): Date | null {
@@ -191,16 +198,16 @@ export function zonedDateTimeToIso(value: string | null | undefined, tz: string)
 
 /**
  * El día («YYYY-MM-DD») de una fecha de calendario del back (inicio, fin,
- * jornada). Va a la medianoche UTC y se lee sin zona; cualquier otro valor es
- * un instante y se lee en la zona `tz`. Con la zona del navegador, al oeste
- * de UTC salía el día anterior.
+ * jornada). Va a la medianoche UTC; alguna antigua se guardó como la
+ * medianoche de España («2026-11-19T23:00Z» para el 20). Como el back, se
+ * redondea a la medianoche UTC más cercana, que es su día en cualquier zona
+ * entre UTC-12 y UTC+12. Leída en la zona del torneo, en Canarias salía el
+ * día anterior (y al guardar el formulario, se movía el inicio).
  */
-export function dateOnlyKey(value: string | Date | null | undefined, tz: string = DEFAULT_TIME_ZONE): string {
+export function dateOnlyKey(value: string | Date | null | undefined): string {
   const d = toDate(value);
   if (!d) return "";
-  const t = d.getTime();
-  if (((t % DAY_MS) + DAY_MS) % DAY_MS === 0) return d.toISOString().slice(0, 10);
-  return zonedDayKey(d, tz);
+  return new Date(Math.round(d.getTime() / DAY_MS) * DAY_MS).toISOString().slice(0, 10);
 }
 
 /** Una fecha de calendario («YYYY-MM-DD») para un texto, sin zona. */

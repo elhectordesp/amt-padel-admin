@@ -13,6 +13,7 @@ import {
   addDaysToKey,
   formatDayKey,
   formatInTimeZone,
+  timeZoneLabel,
   timeZoneOptions,
   tournamentTimeZone,
   zonedDateTimeToIso,
@@ -724,7 +725,7 @@ export default function NuevoTorneoPage() {
                       type="datetime-local"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Hora del torneo ({configForm.watch("timezone")})
+                      Hora del torneo ({timeZoneLabel(configForm.watch("timezone"))})
                     </p>
                   </Field>
                 </div>
@@ -949,7 +950,7 @@ export default function NuevoTorneoPage() {
                           { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" },
                         )
                       : "—"],
-                    ["Zona horaria", configData.timezone],
+                    ["Zona horaria", timeZoneLabel(configData.timezone)],
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
                   ].map(([k, v]) => (

@@ -285,7 +285,7 @@ export function ScheduleGrid({
       const matched = days.filter((d) => {
         const dd = d?.date;
         if (!dd) return false;
-        return dateOnlyKey(dd, tz) === effectiveDate;
+        return dateOnlyKey(dd) === effectiveDate;
       });
       if (matched.length > 0) relevant = matched;
     }
@@ -297,7 +297,7 @@ export function ScheduleGrid({
       }
     }
     return mins;
-  }, [tournament, effectiveDate, tz]);
+  }, [tournament, effectiveDate]);
 
   // Rango por defecto del día: (1) horas configuradas del torneo si existen;
   // (2) si no, deducido de los partidos; (3) si no hay nada, 09:00–23:00.

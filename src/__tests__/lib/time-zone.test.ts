@@ -4,6 +4,7 @@ import {
   dateOnlyKey,
   formatDayKey,
   formatInTimeZone,
+  timeZoneLabel,
   timeZoneOptions,
   toZonedDateTimeInput,
   tournamentTimeZone,
@@ -63,6 +64,16 @@ describe("zona del torneo (vitest corre en Europe/Madrid: lo de Canarias no pued
     expect(zonedTime(gap, MADRID)).toBe("03:30");
   });
 
+  it("con segundos (lo que puede dar el campo) también se lee: antes se guardaba sin hora", () => {
+    expect(zonedDateTimeToIso("2026-11-20T10:00:30", CANARY)).toBe("2026-11-20T10:00:00.000Z");
+    expect(zonedDateTimeToIso("2026-11-20T10:00:30.500", MADRID)).toBe("2026-11-20T09:00:00.000Z");
+  });
+
+  it("timeZoneLabel: el nombre del selector, o la zona tal cual si no está", () => {
+    expect(timeZoneLabel(CANARY)).toBe("Canarias");
+    expect(timeZoneLabel("America/Mexico_City")).toBe("America/Mexico_City");
+  });
+
   it("vacío o no válido: campo vacío y nada que mandar", () => {
     expect(toZonedDateTimeInput(null, MADRID)).toBe("");
     expect(toZonedDateTimeInput("no es una fecha", MADRID)).toBe("");
@@ -73,10 +84,16 @@ describe("zona del torneo (vitest corre en Europe/Madrid: lo de Canarias no pued
 });
 
 describe("fechas de calendario", () => {
-  it("dateOnlyKey: la medianoche UTC se lee sin zona; otro valor, como instante", () => {
+  it("dateOnlyKey: la medianoche UTC, tal cual", () => {
     expect(dateOnlyKey("2026-11-20T00:00:00.000Z")).toBe("2026-11-20");
-    expect(dateOnlyKey("2026-11-19T23:00:00.000Z", MADRID)).toBe("2026-11-20");
     expect(dateOnlyKey(null)).toBe("");
+  });
+
+  it("dateOnlyKey: una medianoche de España (cliente antiguo) es su día, también en un torneo de Canarias", () => {
+    // Invierno (+1) y verano (+2): antes se leía en la zona del torneo y en
+    // Canarias salía el día anterior
+    expect(dateOnlyKey("2026-11-19T23:00:00.000Z")).toBe("2026-11-20");
+    expect(dateOnlyKey("2026-07-19T22:00:00.000Z")).toBe("2026-07-20");
   });
 
   it("formatDayKey no depende de la zona del navegador", () => {
