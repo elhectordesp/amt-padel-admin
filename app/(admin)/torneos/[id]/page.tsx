@@ -34,6 +34,10 @@ import { MatchCreateDialog } from "@/components/admin/match-create-dialog";
 import { MatchEditPairsDialog } from "@/components/admin/match-edit-pairs-dialog";
 import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
+import { TournamentPreparationChecklist } from "@/components/admin/tournament-preparation-checklist";
+import { AvailabilityHeatmap } from "@/components/admin/availability-heatmap";
+import { CategoryLevelBands } from "@/components/admin/category-level-bands";
+import { GroupsLockBanner } from "@/components/admin/groups-lock-banner";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
@@ -1424,7 +1428,7 @@ export default function TorneoDetailPage() {
   const qc      = useQueryClient();
 
   const [tab,             setTab]           = useState<Tab>("resumen");
-  const [horariosView,    setHorariosView]  = useState<"lista" | "tablero">("lista");
+  const [horariosView,    setHorariosView]  = useState<"lista" | "tablero" | "disponibilidad">("lista");
   const [masView,         setMasView]       = useState<"estado" | "historial">("estado");
   const [showShare,       setShowShare]     = useState(false);
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
@@ -1471,6 +1475,9 @@ export default function TorneoDetailPage() {
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
   const [groupEditMode,       setGroupEditMode]       = useState(false);
+  // Categoría con los grupos de su cuadro publicado desbloqueados con «Forzar»
+  const [forceLockedCatId,    setForceLockedCatId]    = useState<string | null>(null);
+  const lockOpts = (catId: string) => ({ forceLocked: forceLockedCatId === catId });
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
@@ -1642,7 +1649,7 @@ export default function TorneoDetailPage() {
   });
 
   const regenerateBracket = useMutation({
-    mutationFn: (categoryId: string) => adminService.tournaments.regenerateBracket(id, categoryId),
+    mutationFn: (categoryId: string) => adminService.tournaments.regenerateBracket(id, categoryId, undefined, undefined, lockOpts(categoryId)),
     onSuccess:  () => {
       toast.success("Cuadro regenerado correctamente");
       setRegenCatId(null);
@@ -1786,7 +1793,7 @@ export default function TorneoDetailPage() {
   // Mejora QA #3 — reparto GLOBAL de grupos (modo edición, atómico)
   const saveAllGroups = useMutation({
     mutationFn: ({ catId, groups, force }: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) =>
-      adminService.tournaments.updateAllGroupMembers(id, catId, groups, force),
+      adminService.tournaments.updateAllGroupMembers(id, catId, groups, force, lockOpts(catId)),
     onSuccess: () => {
       toast.success("Reparto de grupos guardado");
       setManualGroupEdits({});
@@ -1832,7 +1839,7 @@ export default function TorneoDetailPage() {
 
   // Mini-Bloque 5: añadir/borrar grupos individuales
   const addEmptyGroupMut = useMutation({
-    mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId),
+    mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId, lockOpts(catId)),
     onSuccess: () => {
       toast.success("Grupo vacío añadido");
       qc.invalidateQueries({ queryKey: ["standings", id] });
@@ -1852,7 +1859,7 @@ export default function TorneoDetailPage() {
 
   const deleteGroupMut = useMutation({
     mutationFn: ({ catId, groupId, force }: { catId: string; groupId: string; force?: boolean }) =>
-      adminService.tournaments.deleteGroup(id, catId, groupId, force),
+      adminService.tournaments.deleteGroup(id, catId, groupId, force, lockOpts(catId)),
     onSuccess: (_data, variables) => {
       toast.success("Grupo borrado");
       qc.invalidateQueries({ queryKey: ["standings", id] });
@@ -1889,6 +1896,7 @@ export default function TorneoDetailPage() {
       adminService.tournaments.restructureGroups(id, catId, {
         numGroups,
         force,
+        ...lockOpts(catId),
       }),
     onSuccess: (data) => {
       // H3 — feedback detallado sobre preservación de horarios
@@ -2257,7 +2265,8 @@ export default function TorneoDetailPage() {
             {([
               { key: "lista", label: "Lista / Calendario" },
               { key: "tablero", label: "Tablero por pista" },
-            ] as { key: "lista" | "tablero"; label: string }[]).map(({ key, label }) => (
+              { key: "disponibilidad", label: "Disponibilidad" },
+            ] as { key: "lista" | "tablero" | "disponibilidad"; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setHorariosView(key)}
@@ -2298,6 +2307,9 @@ export default function TorneoDetailPage() {
         {/* ── RESUMEN TAB ── */}
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="lg:col-span-2 empty:hidden">
+              <TournamentPreparationChecklist tournamentId={id} onNavigate={setTab} />
+            </div>
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">Categorías</h3>
@@ -2507,6 +2519,10 @@ export default function TorneoDetailPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="lg:col-span-2">
+              <CategoryLevelBands tournamentId={id} />
             </div>
 
             {/* ── Premios por categoría ── */}
@@ -3048,6 +3064,20 @@ export default function TorneoDetailPage() {
                 </div>
               );
             })()}
+
+            {bracketCatId && (
+              <GroupsLockBanner
+                tournamentId={id}
+                categoryId={bracketCatId}
+                categoryLabel={catOptions.find((c) => c.value === bracketCatId)?.label ?? "la categoría"}
+                published={
+                  !!tournament.categories.find((c) => c.id === bracketCatId)?.schedulePublishedAt &&
+                  bracketMatches.some((m: any) => m.categoryId === bracketCatId)
+                }
+                forced={forceLockedCatId === bracketCatId}
+                onForcedChange={(f) => setForceLockedCatId(f ? bracketCatId : null)}
+              />
+            )}
 
             {/* ── EDITOR DE GRUPOS (Bloque 3 — siempre visible) ── */}
             <div className="bg-card border border-border rounded-lg p-5">
@@ -3900,6 +3930,10 @@ export default function TorneoDetailPage() {
           <PistasTab tournamentId={id} categories={tournament?.categories ?? []} />
         )}
 
+        {tab === "horarios" && horariosView === "disponibilidad" && (
+          <AvailabilityHeatmap tournamentId={id} categories={tournament.categories} />
+        )}
+
         {/* ── HISTORIAL TAB ── */}
         {tab === "mas" && masView === "historial" && (
           <div className="p-4">
@@ -4015,6 +4049,7 @@ export default function TorneoDetailPage() {
             ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${new Date(tournament.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
             : null
         }
+        lock={lockOpts(bracketCatId)}
         onGenerated={() => invalidateBracket()}
       />
     )}

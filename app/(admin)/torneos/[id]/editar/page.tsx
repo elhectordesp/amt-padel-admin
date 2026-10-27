@@ -60,6 +60,11 @@ export default function EditarTorneoPage() {
   const qc     = useQueryClient();
   const [pendingData, setPendingData] = useState<FormData | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  // «Avanzado» (el estado a mano) abierto si se llega con #avanzado
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  useEffect(() => {
+    if (window.location.hash === "#avanzado") setAdvancedOpen(true);
+  }, []);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
@@ -309,21 +314,6 @@ export default function EditarTorneoPage() {
             </Field>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <Field label="Estado">
-                <CustomSelect
-                  options={[
-                    { value: "DRAFT",     label: "🔵 Borrador" },
-                    { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
-                    { value: "DRAW",      label: "🟣 Sorteo (Generando cuadro)" },
-                    { value: "SCHEDULED", label: "🩵 Programado (Cuadro listo)" },
-                    { value: "ONGOING",   label: "🟡 En curso" },
-                    { value: "FINISHED",  label: "⚫ Finalizado" },
-                    { value: "CANCELLED", label: "🔴 Cancelado" },
-                  ]}
-                  value={watch("status") ?? "OPEN"}
-                  onChange={(v) => setValue("status", v as FormData["status"], { shouldValidate: true, shouldDirty: true })}
-                />
-              </Field>
               <Field label="Formato">
                 <CustomSelect
                   options={[
@@ -442,6 +432,38 @@ export default function EditarTorneoPage() {
               </button>
             </div>
           </div>
+
+          {/* Avanzado: el estado avanza solo con la preparación (ficha → Resumen);
+              aquí queda para corregirlo a mano */}
+          <details
+            id="avanzado"
+            open={advancedOpen}
+            onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+            className="rounded-lg border border-border bg-card/40 p-4"
+          >
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">Avanzado</summary>
+            <p className="text-xs text-muted-foreground mt-2">
+              El estado avanza solo al completar la preparación del torneo (en su ficha, pestaña Resumen):
+              abrir inscripciones, cerrarlas y publicar y avisar. Cámbialo aquí solo para corregirlo a mano.
+            </p>
+            <div className="mt-3 max-w-sm">
+              <Field label="Estado">
+                <CustomSelect
+                  options={[
+                    { value: "DRAFT",     label: "🔵 Borrador" },
+                    { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
+                    { value: "DRAW",      label: "🟣 Sorteo (Generando cuadro)" },
+                    { value: "SCHEDULED", label: "🩵 Programado (Cuadro listo)" },
+                    { value: "ONGOING",   label: "🟡 En curso" },
+                    { value: "FINISHED",  label: "⚫ Finalizado" },
+                    { value: "CANCELLED", label: "🔴 Cancelado" },
+                  ]}
+                  value={watch("status") ?? "OPEN"}
+                  onChange={(v) => setValue("status", v as FormData["status"], { shouldValidate: true, shouldDirty: true })}
+                />
+              </Field>
+            </div>
+          </details>
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">

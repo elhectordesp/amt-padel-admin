@@ -271,6 +271,30 @@ describe("GenerateBracketDialog", () => {
           "cat-1",
           expect.any(Object),
           "solo-eliminatoria",
+          // Sin «Forzar» el bloqueo del cuadro publicado
+          undefined,
+        );
+      });
+    });
+
+    it("con «Forzar» en el bloqueo de grupos, lo manda al regenerar", async () => {
+      wrap(
+        <GenerateBracketDialog
+          {...baseProps({ alreadyHasBracket: true, currentFormat: "eliminatoria" })}
+          lock={{ forceLocked: true }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByText(/ninguno con resultado/)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
+      await waitFor(() => {
+        expect(adminService.tournaments.regenerateBracket).toHaveBeenCalledWith(
+          "tour-1",
+          "cat-1",
+          expect.any(Object),
+          "solo-eliminatoria",
+          { forceLocked: true },
         );
       });
     });
@@ -292,6 +316,7 @@ describe("GenerateBracketDialog", () => {
           "cat-1",
           expect.objectContaining({ topNPerGroup: 2 }),
           "grupos+eliminatoria",
+          undefined,
         );
       });
     });

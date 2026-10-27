@@ -13,6 +13,10 @@ import type {
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
 } from "@/types";
+import type {
+  TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
+  CategoryLevelSummary, GroupsLockOptions,
+} from "@/types/preparation";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
 
@@ -193,6 +197,16 @@ export const adminService = {
     delete:          (id: string, force?: boolean)  => api.delete(`/admin/tournaments/${id}`, force ? { params: { force: true } } : undefined).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
+    /** Pasos de la preparación del torneo, con su % y el detalle por categoría. */
+    preparation:     (id: string) => api.get<TournamentPreparation>(`/admin/tournaments/${id}/preparation`).then((r) => r.data),
+    /** «Publicar y avisar»: publica el cuadro y el horario de las categorías sorteadas y avisa a los inscritos. */
+    publishAndNotify: (id: string, force?: boolean) =>
+      api.post<PublishAndNotifyResult>(`/admin/tournaments/${id}/preparation/publish`, force ? { force: true } : {}).then((r) => r.data),
+    /** Por jornada y franja, cuántas parejas no pueden jugar (del torneo o de una categoría). */
+    availabilityHeatmap: (id: string, categoryId?: string) =>
+      api.get<AvailabilityHeatmap>(`/admin/tournaments/${id}/availability-heatmap`, categoryId ? { params: { categoryId } } : undefined).then((r) => r.data),
+    /** SPA mínimo, máximo y medio de los inscritos de cada categoría y su banda (solo informa). */
+    levelBands:      (id: string) => api.get<CategoryLevelSummary[]>(`/admin/tournaments/${id}/level-bands`).then((r) => r.data ?? []),
     previewBracket: (
       id: string,
       categoryId: string,
@@ -260,11 +274,13 @@ export const adminService = {
       // El formato elegido en el diálogo: sin él, el back rehacía el cuadro
       // con el de antes
       format?: string,
+      lock?: GroupsLockOptions,
     ) =>
       api
         .post(`/admin/tournaments/${id}/bracket/regenerate`, {
           categoryId,
           ...(format !== undefined ? { format } : {}),
+          ...(lock?.forceLocked ? { forceLocked: true } : {}),
           ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
           ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
           ...(options?.extraQualifiers !== undefined ? { extraQualifiers: options.extraQualifiers } : {}),
@@ -291,21 +307,30 @@ export const adminService = {
         .then((r) => r.data),
 
     /** Añade un grupo vacío al cuadro existente (mini-Bloque 5). */
-    addEmptyGroup: (id: string, catId: string) =>
-      api
-        .post<{ id: string; name: string; members: never[] }>(
-          `/admin/tournaments/${id}/categories/${catId}/bracket/groups`,
-        )
-        .then((r) => r.data),
+    addEmptyGroup: (id: string, catId: string, lock?: GroupsLockOptions) =>
+      (lock?.forceLocked
+        ? api.post<{ id: string; name: string; members: never[] }>(
+            `/admin/tournaments/${id}/categories/${catId}/bracket/groups`,
+            { forceLocked: true },
+          )
+        : api.post<{ id: string; name: string; members: never[] }>(
+            `/admin/tournaments/${id}/categories/${catId}/bracket/groups`,
+          )
+      ).then((r) => r.data),
 
     /** Borra un grupo vacío (mini-Bloque 5). */
-    deleteGroup: (id: string, catId: string, groupId: string, force?: boolean) =>
-      api
+    deleteGroup: (id: string, catId: string, groupId: string, force?: boolean, lock?: GroupsLockOptions) => {
+      const params = {
+        ...(force ? { force: true } : {}),
+        ...(lock?.forceLocked ? { forceLocked: true } : {}),
+      };
+      return api
         .delete(
           `/admin/tournaments/${id}/categories/${catId}/bracket/groups/${groupId}`,
-          force ? { params: { force: true } } : undefined,
+          Object.keys(params).length ? { params } : undefined,
         )
-        .then((r) => r.data),
+        .then((r) => r.data);
+    },
 
     /**
      * Reestructura grupos: cambia nº de grupos y redistribuye parejas (Bloque 5).
@@ -320,6 +345,8 @@ export const adminService = {
         numGroups: number;
         assignments?: Record<string, string[]> | null;
         force?: boolean;
+        /** Con el cuadro publicado (GroupsLockOptions). */
+        forceLocked?: boolean;
       },
     ) =>
       api
@@ -344,11 +371,19 @@ export const adminService = {
 
     initBracketManual: (id: string, catId: string, numGroups?: number) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/bracket/init-manual`, numGroups !== undefined ? { numGroups } : {}).then((r) => r.data),
-    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[], force?: boolean) =>
-      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, force ? { members, force } : { members }).then((r) => r.data),
+    updateGroupMembers: (id: string, catId: string, groupId: string, members: { userId: string; partnerId?: string | null }[], force?: boolean, lock?: GroupsLockOptions) =>
+      api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members`, {
+        members,
+        ...(force ? { force } : {}),
+        ...(lock?.forceLocked ? { forceLocked: true } : {}),
+      }).then((r) => r.data),
     /** Reparto global de grupos (modo edición, atómico): reemplaza todos los grupos de una vez. */
-    updateAllGroupMembers: (id: string, catId: string, groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[], force?: boolean) =>
-      api.put(`/admin/tournaments/${id}/categories/${catId}/groups/members`, force ? { groups, force } : { groups }).then((r) => r.data),
+    updateAllGroupMembers: (id: string, catId: string, groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[], force?: boolean, lock?: GroupsLockOptions) =>
+      api.put(`/admin/tournaments/${id}/categories/${catId}/groups/members`, {
+        groups,
+        ...(force ? { force } : {}),
+        ...(lock?.forceLocked ? { forceLocked: true } : {}),
+      }).then((r) => r.data),
     renameGroup: (id: string, catId: string, groupId: string, name: string) =>
       api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/name`, { name }).then((r) => r.data),
     /** Override manual de stats de una pareja en un grupo (sanciones/ajustes). */

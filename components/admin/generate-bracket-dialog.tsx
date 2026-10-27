@@ -26,6 +26,7 @@ import {
   adminService,
   type BracketGenerationOptions,
 } from "@/lib/services/admin";
+import type { GroupsLockOptions } from "@/types/preparation";
 
 type Format = "grupos+eliminatoria" | "solo-eliminatoria";
 type DistMode = "byCount" | "bySize";
@@ -61,6 +62,8 @@ interface Props {
    * deshabilitado con motivo claro.
    */
   registrationsOpenReason?: string | null;
+  /** «Forzar» el bloqueo de los grupos del cuadro publicado al regenerar. */
+  lock?: GroupsLockOptions;
   onGenerated?: () => void;
 }
 
@@ -89,6 +92,7 @@ export function GenerateBracketDialog({
   alreadyHasBracket = false,
   currentFormat = null,
   registrationsOpenReason = null,
+  lock,
   onGenerated,
 }: Props) {
   const [genMode, setGenMode] = useState<GenerationMode>("auto"); // Bloque 3
@@ -179,7 +183,7 @@ export function GenerateBracketDialog({
       // en el backend). Si no, generateBracket normal. Los dos con el formato
       // elegido: al regenerar se perdía y salía el cuadro de antes.
       return alreadyHasBracket
-        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts, format)
+        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts, format, lock)
         : adminService.tournaments.generateBracket(
             tournamentId,
             categoryId,

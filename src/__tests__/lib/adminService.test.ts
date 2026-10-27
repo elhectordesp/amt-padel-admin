@@ -431,4 +431,71 @@ describe('adminService', () => {
       );
     });
   });
+
+  // ── Preparación, mapa de calor, nivel SPA y grupos bloqueados ─────────
+
+  describe('preparación del torneo', () => {
+    it('pasos, «Publicar y avisar» (force solo si se pide), mapa de calor y nivel', async () => {
+      mockGet.mockResolvedValue({ data: {} });
+      mockPost.mockResolvedValue({ data: {} });
+      await adminService.tournaments.preparation('t1');
+      expect(mockGet).toHaveBeenCalledWith('/admin/tournaments/t1/preparation');
+
+      await adminService.tournaments.publishAndNotify('t1');
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/preparation/publish', {});
+      await adminService.tournaments.publishAndNotify('t1', true);
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/preparation/publish', { force: true });
+
+      await adminService.tournaments.availabilityHeatmap('t1');
+      expect(mockGet).toHaveBeenLastCalledWith('/admin/tournaments/t1/availability-heatmap', undefined);
+      await adminService.tournaments.availabilityHeatmap('t1', 'c1');
+      expect(mockGet).toHaveBeenLastCalledWith('/admin/tournaments/t1/availability-heatmap', { params: { categoryId: 'c1' } });
+
+      mockGet.mockResolvedValueOnce({ data: null });
+      await expect(adminService.tournaments.levelBands('t1')).resolves.toEqual([]);
+      expect(mockGet).toHaveBeenLastCalledWith('/admin/tournaments/t1/level-bands');
+    });
+  });
+
+  describe('grupos con el cuadro publicado: forceLocked solo con «Forzar»', () => {
+    const mockPut = api.put as ReturnType<typeof vi.fn>;
+    const members = [{ userId: 'u1', partnerId: 'u2' }];
+    const base = '/admin/tournaments/t1/categories/c1';
+
+    beforeEach(() => {
+      mockPost.mockResolvedValue({ data: {} });
+      mockPut.mockResolvedValue({ data: {} });
+      mockPatch.mockResolvedValue({ data: {} });
+      mockDelete.mockResolvedValue({ data: {} });
+    });
+
+    it('sin forzar, las peticiones de siempre', async () => {
+      await adminService.tournaments.addEmptyGroup('t1', 'c1');
+      expect(mockPost).toHaveBeenLastCalledWith(`${base}/bracket/groups`);
+      await adminService.tournaments.deleteGroup('t1', 'c1', 'g1');
+      expect(mockDelete).toHaveBeenLastCalledWith(`${base}/bracket/groups/g1`, undefined);
+      await adminService.tournaments.deleteGroup('t1', 'c1', 'g1', true);
+      expect(mockDelete).toHaveBeenLastCalledWith(`${base}/bracket/groups/g1`, { params: { force: true } });
+      await adminService.tournaments.updateGroupMembers('t1', 'c1', 'g1', members);
+      expect(mockPatch).toHaveBeenLastCalledWith(`${base}/groups/g1/members`, { members });
+      await adminService.tournaments.updateAllGroupMembers('t1', 'c1', [{ groupId: 'g1', members }], true);
+      expect(mockPut).toHaveBeenLastCalledWith(`${base}/groups/members`, { groups: [{ groupId: 'g1', members }], force: true });
+      await adminService.tournaments.regenerateBracket('t1', 'c1');
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/regenerate', { categoryId: 'c1' });
+    });
+
+    it('forzando, añaden forceLocked', async () => {
+      const lock = { forceLocked: true };
+      await adminService.tournaments.addEmptyGroup('t1', 'c1', lock);
+      expect(mockPost).toHaveBeenLastCalledWith(`${base}/bracket/groups`, { forceLocked: true });
+      await adminService.tournaments.deleteGroup('t1', 'c1', 'g1', false, lock);
+      expect(mockDelete).toHaveBeenLastCalledWith(`${base}/bracket/groups/g1`, { params: { forceLocked: true } });
+      await adminService.tournaments.updateGroupMembers('t1', 'c1', 'g1', members, false, lock);
+      expect(mockPatch).toHaveBeenLastCalledWith(`${base}/groups/g1/members`, { members, forceLocked: true });
+      await adminService.tournaments.updateAllGroupMembers('t1', 'c1', [{ groupId: 'g1', members }], false, lock);
+      expect(mockPut).toHaveBeenLastCalledWith(`${base}/groups/members`, { groups: [{ groupId: 'g1', members }], forceLocked: true });
+      await adminService.tournaments.regenerateBracket('t1', 'c1', undefined, undefined, lock);
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/regenerate', { categoryId: 'c1', forceLocked: true });
+    });
+  });
 });
