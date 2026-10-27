@@ -7,7 +7,7 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   resetPassword: vi.fn(),
 }));
 
-import { resetPassword, RESET_LINK_EXPIRED_MESSAGE } from "@/lib/auth";
+import { ACTIVATE_LINK_EXPIRED_MESSAGE, resetPassword, RESET_LINK_EXPIRED_MESSAGE } from "@/lib/auth";
 
 const mockReset = vi.mocked(resetPassword);
 const DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
@@ -51,11 +51,15 @@ describe("/restablecer (P2-26)", () => {
     await renderAt("#token=tok-123");
     const rules = await screen.findByRole("list", { name: "Requisitos de la contraseña" });
     expect(rules).toHaveTextContent("Mínimo 8 caracteres (pendiente)");
-    expect(rules).toHaveTextContent("Una mayúscula (pendiente)");
+    // (A-Z): como en el back, la Ñ y las letras con tilde no cuentan
+    expect(rules).toHaveTextContent("Una mayúscula (A-Z) (pendiente)");
     expect(rules).toHaveTextContent("Un número (pendiente)");
 
+    await userEvent.type(screen.getByLabelText("Contraseña nueva"), "Ñandú1");
+    expect(rules).toHaveTextContent("Una mayúscula (A-Z) (pendiente)");
+    await userEvent.clear(screen.getByLabelText("Contraseña nueva"));
     await userEvent.type(screen.getByLabelText("Contraseña nueva"), "Clave1");
-    expect(rules).toHaveTextContent("Una mayúscula (cumplido)");
+    expect(rules).toHaveTextContent("Una mayúscula (A-Z) (cumplido)");
     expect(rules).toHaveTextContent("Un número (cumplido)");
     expect(rules).toHaveTextContent("Mínimo 8 caracteres (pendiente)");
   });
@@ -77,7 +81,18 @@ describe("/restablecer (P2-26)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cambiar contraseña" }));
 
     expect(await screen.findByRole("heading", { name: "Contraseña cambiada" })).toBeInTheDocument();
-    expect(mockReset).toHaveBeenCalledWith("tok-123", "ClaveNueva1");
+    expect(mockReset).toHaveBeenCalledWith("tok-123", "ClaveNueva1", { activate: false });
+  });
+
+  it("al activar una cuenta, avisa de que es una invitación (por si caducó)", async () => {
+    mockReset.mockRejectedValueOnce(new Error(ACTIVATE_LINK_EXPIRED_MESSAGE));
+    await renderAt("#token=tok-9&mode=activate");
+    await userEvent.type(await screen.findByLabelText("Contraseña nueva"), "ClaveNueva1");
+    await userEvent.type(screen.getByLabelText("Repite la contraseña"), "ClaveNueva1");
+    await userEvent.click(screen.getByRole("button", { name: "Activar mi cuenta" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("pide a quien te invitó que te reenvíe la invitación");
+    expect(mockReset).toHaveBeenCalledWith("tok-9", "ClaveNueva1", { activate: true });
   });
 
   it("enlace caducado o usado: lo dice y cómo pedir otro", async () => {
@@ -96,9 +111,14 @@ describe("/restablecer (P2-26)", () => {
     await waitFor(() => expect(window.location.search).toBe(""));
   });
 
-  it("sin token: enlace no válido", async () => {
+  it("sin token: enlace no válido, y qué hacer si se ha recargado la página", async () => {
     await renderAt("");
     expect(await screen.findByRole("heading", { name: "Enlace no válido" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Si has recargado la página, vuelve a abrir el enlace del email (sigue valiendo si no lo has usado).",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("en el ordenador no intenta abrir la app", async () => {
@@ -107,10 +127,13 @@ describe("/restablecer (P2-26)", () => {
     expect(screen.queryByRole("link", { name: /abrir en la app/i })).not.toBeInTheDocument();
   });
 
-  it("en el móvil intenta abrir la app con el mismo enlace y deja el formulario por si no se abre", async () => {
+  // No abre la app sola: sin ella instalada, Safari da un error y el
+  // navegador de un correo en Android acaba en ERR_UNKNOWN_URL_SCHEME (y al
+  // volver ya no hay token). Solo el botón, y el formulario
+  it("en el móvil ofrece el botón de la app con el mismo enlace, sin abrirla sola", async () => {
     const realLocation = window.location;
     const opened: string[] = [];
-    // jsdom no navega a amtpadel://: se apunta qué se intenta abrir
+    // jsdom no navega a amtpadel://: se apunta si algo intenta abrirlo
     const stubLocation = () =>
       Object.defineProperty(window, "location", {
         configurable: true,
@@ -132,9 +155,10 @@ describe("/restablecer (P2-26)", () => {
         "href",
         "amtpadel://reset-password?token=tok-123&mode=activate",
       );
-      await waitFor(() => expect(opened).toEqual(["amtpadel://reset-password?token=tok-123&mode=activate"]));
-      // Si la app no se abre, el formulario sigue ahí
       expect(screen.getByLabelText("Contraseña nueva")).toBeInTheDocument();
+      // Tras el efecto que limpia la URL, nada ha navegado a la app
+      await waitFor(() => expect(window.location.hash).toBe(""));
+      expect(opened).toEqual([]);
     } finally {
       Object.defineProperty(window, "location", { configurable: true, value: realLocation });
     }

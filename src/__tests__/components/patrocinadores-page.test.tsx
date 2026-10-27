@@ -6,7 +6,8 @@
  * Mockea useRole, adminService y Header para aislar la lógica condicional.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { IMAGE_URL_MESSAGE, WEB_URL_MESSAGE } from "@/lib/utils/web-url";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const useRoleMock = vi.fn();
@@ -26,10 +27,13 @@ vi.mock("@/components/admin/header", () => ({
   ),
 }));
 
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
     sponsors: {
       list: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
       reorder: vi.fn(),
@@ -120,5 +124,27 @@ describe("PatrocinadoresPage — URL destino", () => {
     expect(good.closest("a")).toHaveAttribute("href", "https://raquetas.example");
     const bad = screen.getByText("javascript:alert(document.cookie)");
     expect(bad.closest("a")).toBeNull();
+  });
+
+  // Lo que el back rechazaría (http(s) y dominio con punto) se dice antes,
+  // también para la imagen
+  it.each([
+    ["https://raquetas.example", "javascript:alert(1)", IMAGE_URL_MESSAGE],
+    ["https://raquetas.example", "https://localhost/banner.png", IMAGE_URL_MESSAGE],
+    ["https://raquetas", "", WEB_URL_MESSAGE],
+  ])("web %s e imagen «%s»: no lo manda y lo dice", async (websiteUrl, imageUrl, message) => {
+    useRoleMock.mockReturnValue({ role: "admin", clubId: null });
+    const { adminService } = await import("@/lib/services/admin");
+    const { toast } = await import("sonner");
+
+    renderWithClient(<PatrocinadoresPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nuevo patrocinador/ }));
+    fireEvent.change(screen.getByPlaceholderText("Raquetas García"), { target: { value: "Raquetas" } });
+    fireEvent.change(screen.getByPlaceholderText("https://raquetasgarcia.com"), { target: { value: websiteUrl } });
+    fireEvent.change(screen.getByPlaceholderText("https://..."), { target: { value: imageUrl } });
+    fireEvent.click(screen.getByRole("button", { name: /Crear patrocinador/ }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    expect(adminService.sponsors.create).not.toHaveBeenCalled();
   });
 });

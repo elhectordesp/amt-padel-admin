@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,9 +52,10 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 /**
  * Página del enlace de los emails de restablecer la contraseña y de activar
- * la cuenta. En el móvil intenta abrir la app con el mismo enlace; si no se
- * abre (no está instalada, o el correo no deja abrirla), la contraseña se
- * cambia aquí con el mismo endpoint que usa la app.
+ * la cuenta: la contraseña se cambia aquí con el mismo endpoint que usa la
+ * app. En el móvil ofrece además un botón para hacerlo en la app; no la abre
+ * sola: sin la app instalada Safari da un error, y el navegador de un correo
+ * en Android acaba en ERR_UNKNOWN_URL_SCHEME y, al volver, ya no hay token.
  */
 export function ResetPasswordForm() {
   // undefined: aún sin leer (en el servidor y al hidratar)
@@ -64,20 +65,12 @@ export function ResetPasswordForm() {
   const [showPass, setShowPass] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const triedApp = useRef(false);
 
   // El token fuera de la barra de direcciones y del historial: así no se
   // comparte al copiar la URL ni acaba en los avisos de errores
   useEffect(() => {
     if (link) window.history.replaceState(null, "", window.location.pathname);
   }, [link]);
-
-  // En el móvil, primero la app (una vez). Si no se abre, sigue la web
-  useEffect(() => {
-    if (!link || !isMobile || triedApp.current) return;
-    triedApp.current = true;
-    window.location.href = appResetUrl(link);
-  }, [link, isMobile]);
 
   const {
     register,
@@ -97,6 +90,9 @@ export function ResetPasswordForm() {
           <p className="text-sm text-muted-foreground">
             Esta página se abre desde el enlace del email. Si no funciona, pide uno nuevo desde la app con
             «¿Olvidaste tu contraseña?».
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Si has recargado la página, vuelve a abrir el enlace del email (sigue valiendo si no lo has usado).
           </p>
         </div>
       </Shell>
@@ -138,7 +134,7 @@ export function ResetPasswordForm() {
   const onSubmit = async (data: FormData) => {
     setApiError(null);
     try {
-      await resetPassword(link.token, data.password);
+      await resetPassword(link.token, data.password, { activate: link.activate });
       setDone(true);
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : "No se pudo cambiar la contraseña. Inténtalo de nuevo.");
@@ -160,14 +156,14 @@ export function ResetPasswordForm() {
 
       {isMobile && (
         <div className="space-y-2 rounded-md border border-border p-3">
-          <p className="text-xs text-muted-foreground">¿Tienes la app en este móvil? Hazlo desde ella:</p>
+          <p className="text-xs text-muted-foreground">¿Tienes la app instalada en este móvil? Puedes hacerlo desde ella:</p>
           <a
             href={appResetUrl(link)}
             className="inline-flex items-center justify-center gap-2 w-full h-9 rounded-md border border-[rgba(212,175,55,0.4)] text-sm text-[#D4AF37] font-semibold"
           >
             <Smartphone size={15} /> Abrir en la app
           </a>
-          <p className="text-xs text-muted-foreground">Si no se abre, cámbiala aquí.</p>
+          <p className="text-xs text-muted-foreground">Si no la tienes, cámbiala aquí abajo.</p>
         </div>
       )}
 

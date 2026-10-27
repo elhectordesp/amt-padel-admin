@@ -25,7 +25,14 @@ vi.mock('../../../lib/api', async (importOriginal) => ({
   getRefreshToken: vi.fn(),
 }));
 
-import { acceptClubInvite, login, logout, resetPassword, RESET_LINK_EXPIRED_MESSAGE } from '../../../lib/auth';
+import {
+  acceptClubInvite,
+  ACTIVATE_LINK_EXPIRED_MESSAGE,
+  login,
+  logout,
+  resetPassword,
+  RESET_LINK_EXPIRED_MESSAGE,
+} from '../../../lib/auth';
 import { api, ApiError, setToken, setRefreshToken, removeTokens, getRefreshToken } from '../../../lib/api';
 
 describe('auth helpers', () => {
@@ -125,6 +132,16 @@ describe('auth helpers', () => {
       (api.post as any).mockRejectedValueOnce(new ApiError('texto del back', 400, code));
 
       await expect(resetPassword('tok', 'Clave123!')).rejects.toThrow(RESET_LINK_EXPIRED_MESSAGE);
+    });
+
+    // Quien activa una cuenta puede no tener la app: también, que se la reenvíen
+    it('al activar una cuenta, el enlace caducado dice además que pida la invitación otra vez', async () => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('texto del back', 400, 'RESET_LINK_INVALID'));
+
+      await expect(resetPassword('tok', 'Clave123!', { activate: true })).rejects.toThrow(
+        ACTIVATE_LINK_EXPIRED_MESSAGE,
+      );
+      expect(ACTIVATE_LINK_EXPIRED_MESSAGE).toContain('pide a quien te invitó que te reenvíe la invitación');
     });
 
     it('otro error (p. ej. el 429): su texto', async () => {

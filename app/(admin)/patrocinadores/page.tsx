@@ -21,7 +21,7 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { AUTONOMOUS_COMMUNITIES } from "@/lib/constants/spain";
-import { isWebUrl, WEB_URL_MESSAGE } from "@/lib/utils/web-url";
+import { IMAGE_URL_MESSAGE, isWebUrl, WEB_URL_MESSAGE } from "@/lib/utils/web-url";
 import type { Sponsor, SponsorScope } from "@/types";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -361,9 +361,12 @@ function SponsorModal({
       if (isClubUser && !form.tournamentId) {
         throw new Error("Selecciona el torneo al que asociar el patrocinador");
       }
-      // El back solo admite http(s); aquí se dice antes y con claridad
+      // El back solo admite http(s) con dominio; aquí se dice antes y con claridad
       if (form.websiteUrl.trim() && !isWebUrl(form.websiteUrl)) {
         throw new Error(WEB_URL_MESSAGE);
+      }
+      if (form.imageUrl.trim() && !isWebUrl(form.imageUrl)) {
+        throw new Error(IMAGE_URL_MESSAGE);
       }
       const payload = {
         name:         form.name.trim(),

@@ -42,11 +42,26 @@ describe("scrubEvent", () => {
 });
 
 describe("isWebUrl", () => {
-  it.each(["https://raquetas.example", "http://raquetas.example/tienda?x=1"])("%s: sí", (url) => {
+  it.each([
+    "https://raquetas.example",
+    "http://raquetas.example/tienda?x=1",
+    "https://res.cloudinary.com/demo/image/upload/s.png",
+    "https://www.raquetas.example:8443/#ofertas",
+  ])("%s: sí", (url) => {
     expect(isWebUrl(url)).toBe(true);
   });
 
-  it.each(["javascript:alert(1)", "JAVASCRIPT:alert(1)", "raquetas.example", "data:text/html,x", "https://"])(
+  // Sin punto en el dominio tampoco: el back (IsUrl) lo rechaza
+  it.each([
+    "javascript:alert(1)",
+    "JAVASCRIPT:alert(1)",
+    "raquetas.example",
+    "data:text/html,x",
+    "https://",
+    "https://localhost",
+    "https://raquetas",
+    "https://raquetas./tienda",
+  ])(
     "%s: no",
     (url) => {
       expect(isWebUrl(url)).toBe(false);

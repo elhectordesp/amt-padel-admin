@@ -7,7 +7,8 @@ export const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 export const PASSWORD_RULES = [
   { id: "length", label: "Mínimo 8 caracteres", test: (p: string) => p.length >= 8 },
-  { id: "upper", label: "Una mayúscula", test: (p: string) => /[A-Z]/.test(p) },
+  // Como el back: [A-Z] no cuenta la Ñ ni las letras con tilde
+  { id: "upper", label: "Una mayúscula (A-Z)", test: (p: string) => /[A-Z]/.test(p) },
   { id: "digit", label: "Un número", test: (p: string) => /\d/.test(p) },
 ] as const;
 

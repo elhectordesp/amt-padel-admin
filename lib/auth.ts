@@ -105,16 +105,28 @@ export const RESET_LINK_EXPIRED_MESSAGE =
   "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app con «¿Olvidaste tu contraseña?».";
 
 /**
- * Pone la contraseña nueva con el token del enlace del email (restablecer o
- * activar la cuenta): el mismo endpoint que usa la app. No inicia sesión.
+ * Lo mismo con el enlace de activar una cuenta creada por un admin o un club:
+ * quien llega aquí puede no tener aún la app.
  */
-export async function resetPassword(token: string, newPassword: string): Promise<void> {
+export const ACTIVATE_LINK_EXPIRED_MESSAGE =
+  "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app con «¿Olvidaste tu contraseña?» o pide a quien te invitó que te reenvíe la invitación.";
+
+/**
+ * Pone la contraseña nueva con el token del enlace del email (restablecer o,
+ * con `activate`, activar la cuenta): el mismo endpoint que usa la app. No
+ * inicia sesión.
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  { activate = false }: { activate?: boolean } = {},
+): Promise<void> {
   try {
     await api.post("/auth/reset-password", { token, newPassword });
   } catch (err: unknown) {
     const code = err instanceof ApiError ? err.code : undefined;
     if (code === "RESET_LINK_INVALID" || code === "RESET_LINK_USED")
-      throw new Error(RESET_LINK_EXPIRED_MESSAGE);
+      throw new Error(activate ? ACTIVATE_LINK_EXPIRED_MESSAGE : RESET_LINK_EXPIRED_MESSAGE);
     throw new Error(
       err instanceof ApiError && err.message
         ? err.message
