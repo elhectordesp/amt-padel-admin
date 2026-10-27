@@ -97,7 +97,7 @@ export default function PrivacidadPage() {
               Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.
             </p>
             <div style={{ fontSize: 12, color: "#666", marginTop: 12 }}>
-              Versión 1.0 · Última actualización: julio 2026 · Ámbito: España (Unión Europea)
+              Versión 1.1 · Última actualización: octubre 2026 · Ámbito: España (Unión Europea)
             </div>
           </div>
 
@@ -388,6 +388,18 @@ export default function PrivacidadPage() {
                     <td style={td}>Cláusulas contractuales estándar (SCC)</td>
                   </tr>
                   <tr>
+                    <td style={tdHead}>Google (Firebase Cloud Messaging)</td>
+                    <td style={td}>Entrega de las notificaciones push en dispositivos Android</td>
+                    <td style={td}>EE.UU.</td>
+                    <td style={td}>Cláusulas contractuales estándar (SCC)</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHead}>Sentry</td>
+                    <td style={td}>Registro de errores técnicos de la app, el panel y el servidor</td>
+                    <td style={td}>UE (Alemania)</td>
+                    <td style={td}>Cláusulas contractuales estándar (SCC)</td>
+                  </tr>
+                  <tr>
                     <td style={tdHead}>Proveedor SMTP</td>
                     <td style={td}>Envío de emails transaccionales</td>
                     <td style={td}>Variable</td>
@@ -450,7 +462,7 @@ export default function PrivacidadPage() {
             <ul style={{ margin: 0, paddingLeft: 20, color: "#ccc", fontSize: 14, lineHeight: 1.9 }}>
               <li><strong style={{ color: "#fff" }}>Qué notificamos:</strong> nuevos partidos programados, publicación de resultados, cambios en el torneo, novedades del circuito.</li>
               <li><strong style={{ color: "#fff" }}>Cómo desactivarlas:</strong> puedes revocar el permiso en cualquier momento desde los ajustes de notificaciones de tu dispositivo o desde la sección de perfil de la aplicación.</li>
-              <li><strong style={{ color: "#fff" }}>Token push:</strong> tu dispositivo genera un token único (Expo Push Token) que utilizamos exclusivamente para enviarte notificaciones. Este token no identifica a la persona y no se comparte con terceros salvo con Expo para la entrega técnica del mensaje.</li>
+              <li><strong style={{ color: "#fff" }}>Token push:</strong> tu dispositivo genera un token único (Expo Push Token) que utilizamos exclusivamente para enviarte notificaciones. Este token no identifica a la persona y no se comparte con terceros salvo con Expo y, en Android, con Google (Firebase Cloud Messaging) para la entrega técnica del mensaje.</li>
             </ul>
           </section>
 
@@ -538,7 +550,7 @@ export default function PrivacidadPage() {
 
           {/* Footer */}
           <div style={{ marginTop: 32, fontSize: 12, color: "#666", borderTop: "1px solid #1a1a1a", paddingTop: 20, lineHeight: 1.7 }}>
-            AMT Padel Circuit · Política de Privacidad v1.0 · Última actualización: julio 2026
+            AMT Padel Circuit · Política de Privacidad v1.1 · Última actualización: octubre 2026
             <br />
             <a href="/eliminar-cuenta" style={{ color: "#D4AF37" }}>
               Eliminar cuenta
