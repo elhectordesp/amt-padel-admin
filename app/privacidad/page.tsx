@@ -340,6 +340,10 @@ export default function PrivacidadPage() {
                     <td style={tdHead}>Mensajes de soporte</td>
                     <td style={td}>2 años desde la resolución</td>
                   </tr>
+                  <tr>
+                    <td style={tdHead}>Mensajes del organizador a los inscritos de un torneo (historial de envíos)</td>
+                    <td style={td}>12 meses desde el envío</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
