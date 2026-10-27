@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubEvent } from './lib/sentry-scrub';
 
 // Next carga este archivo en el navegador antes de que la app sea
 // interactiva (también con Turbopack, que no inyectaba el antiguo
@@ -17,6 +18,10 @@ Sentry.init({
     'No tienes permisos de administrador',
     'Network Error',
   ],
+  // Sin los tokens de los enlaces de los emails (/restablecer, /aceptar-invitacion)
+  beforeSend: (event) => scrubEvent(event),
+  beforeSendTransaction: (event) => scrubEvent(event),
+  beforeBreadcrumb: (breadcrumb) => scrubEvent(breadcrumb),
 });
 
 // Navegaciones del App Router (rendimiento en Sentry).

@@ -1,4 +1,12 @@
-import { api, ApiError, setToken, setRefreshToken, removeTokens, getRefreshToken } from "./api";
+import {
+  api,
+  ApiError,
+  setToken,
+  setRefreshToken,
+  removeTokens,
+  getRefreshToken,
+  TOO_MANY_REQUESTS_MESSAGE,
+} from "./api";
 
 /** El admin de un club que AMT desactivó no entra hasta que AMT lo reactive. */
 export const CLUB_DEACTIVATED_MESSAGE = "Tu club está desactivado. Contacta con AMT para reactivarlo.";
@@ -34,6 +42,7 @@ export async function login(email: string, password: string): Promise<AdminUser>
       throw new Error(CLUB_DEACTIVATED_MESSAGE);
     if (status === 401) throw new Error("Email o contraseña incorrectos.");
     if (status === 403) throw new Error("No tienes permisos para acceder.");
+    if (status === 429) throw new Error(TOO_MANY_REQUESTS_MESSAGE);
     throw new Error(serverMsg ?? "Error al conectar con el servidor. Inténtalo de nuevo.");
   }
   const data = res.data as unknown as { token: string; refreshToken: string; user: AdminUser };
@@ -89,6 +98,29 @@ export async function acceptClubInvite(
   if (data.refreshToken) setRefreshToken(data.refreshToken);
   const payload = decodeJwtPayload(data.token);
   return { ...data.user, role: (payload.role as string) ?? "club" };
+}
+
+/** El enlace ya se usó o caducó: hay que pedir otro. */
+export const RESET_LINK_EXPIRED_MESSAGE =
+  "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app con «¿Olvidaste tu contraseña?».";
+
+/**
+ * Pone la contraseña nueva con el token del enlace del email (restablecer o
+ * activar la cuenta): el mismo endpoint que usa la app. No inicia sesión.
+ */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  try {
+    await api.post("/auth/reset-password", { token, newPassword });
+  } catch (err: unknown) {
+    const code = err instanceof ApiError ? err.code : undefined;
+    if (code === "RESET_LINK_INVALID" || code === "RESET_LINK_USED")
+      throw new Error(RESET_LINK_EXPIRED_MESSAGE);
+    throw new Error(
+      err instanceof ApiError && err.message
+        ? err.message
+        : "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
+    );
+  }
 }
 
 export async function logout(onBeforeRedirect?: () => void) {

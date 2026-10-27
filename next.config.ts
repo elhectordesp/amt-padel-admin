@@ -1,12 +1,22 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
+// Páginas que leen un token del enlace de un email: el navegador no manda su
+// URL (con el token) como Referer a nadie.
+const TOKEN_LINK_PAGES = ["/restablecer", "/aceptar-invitacion"];
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**" },
       { protocol: "http",  hostname: "localhost" },
     ],
+  },
+  headers() {
+    return TOKEN_LINK_PAGES.map((source) => ({
+      source,
+      headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+    }));
   },
 };
 

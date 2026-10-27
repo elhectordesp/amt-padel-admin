@@ -92,3 +92,33 @@ describe("PatrocinadoresPage — role gating", () => {
     ).toBeInTheDocument();
   });
 });
+
+// P2-25: una URL guardada antes con otro esquema no se pinta como enlace
+describe("PatrocinadoresPage — URL destino", () => {
+  const sponsor = (id: string, websiteUrl: string) => ({
+    id,
+    name: `Patrocinador ${id}`,
+    websiteUrl,
+    scope: "CIRCUIT" as const,
+    displayOrder: 0,
+    active: true,
+    clickCount: 0,
+    createdAt: "2026-10-01T00:00:00.000Z",
+  });
+
+  it("solo http(s) es un enlace", async () => {
+    useRoleMock.mockReturnValue({ role: "admin", clubId: null });
+    const { adminService } = await import("@/lib/services/admin");
+    vi.mocked(adminService.sponsors.list).mockResolvedValueOnce([
+      sponsor("bueno", "https://raquetas.example"),
+      sponsor("malo", "javascript:alert(document.cookie)"),
+    ]);
+
+    renderWithClient(<PatrocinadoresPage />);
+
+    const good = await screen.findByText("raquetas.example");
+    expect(good.closest("a")).toHaveAttribute("href", "https://raquetas.example");
+    const bad = screen.getByText("javascript:alert(document.cookie)");
+    expect(bad.closest("a")).toBeNull();
+  });
+});

@@ -21,6 +21,7 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { AUTONOMOUS_COMMUNITIES } from "@/lib/constants/spain";
+import { isWebUrl, WEB_URL_MESSAGE } from "@/lib/utils/web-url";
 import type { Sponsor, SponsorScope } from "@/types";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -360,6 +361,10 @@ function SponsorModal({
       if (isClubUser && !form.tournamentId) {
         throw new Error("Selecciona el torneo al que asociar el patrocinador");
       }
+      // El back solo admite http(s); aquí se dice antes y con claridad
+      if (form.websiteUrl.trim() && !isWebUrl(form.websiteUrl)) {
+        throw new Error(WEB_URL_MESSAGE);
+      }
       const payload = {
         name:         form.name.trim(),
         imageUrl:     form.imageUrl.trim()   || undefined,
@@ -654,7 +659,9 @@ function SortableSponsorRow({
       </td>
       {/* Enlace */}
       <td className="px-4 py-3">
-        {sponsor.websiteUrl ? (
+        {/* Solo http(s) como enlace: una URL guardada antes con otro esquema
+            se enseña como texto, en rojo, para que se corrija */}
+        {sponsor.websiteUrl && isWebUrl(sponsor.websiteUrl) ? (
           <a
             href={sponsor.websiteUrl}
             target="_blank"
@@ -664,6 +671,10 @@ function SortableSponsorRow({
             <ExternalLink size={10} />
             <span className="truncate max-w-[100px]">{sponsor.websiteUrl.replace(/^https?:\/\//, "")}</span>
           </a>
+        ) : sponsor.websiteUrl ? (
+          <span className="block truncate max-w-[100px] text-[11px] text-destructive" title="URL no válida: edítala">
+            {sponsor.websiteUrl}
+          </span>
         ) : (
           <span className="text-[11px] text-muted-foreground/40">—</span>
         )}
