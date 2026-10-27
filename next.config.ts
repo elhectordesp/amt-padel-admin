@@ -11,15 +11,14 @@ const nextConfig: NextConfig = {
 };
 
 export default withSentryConfig(nextConfig, {
-  // URL del proyecto en Sentry (necesaria para source maps en producción)
-  // Sustituir por la URL real del proyecto cuando se cree en https://sentry.io
+  // Source maps: se suben a Sentry al compilar en Vercel Production (donde
+  // están SENTRY_ORG, SENTRY_PROJECT y SENTRY_AUTH_TOKEN) y el SDK los borra
+  // del despliegue. Sin token (previews, CI de GitHub) no se sube nada.
   silent: true,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
-  // Subir source maps solo en CI/CD (SENTRY_AUTH_TOKEN como secret de GitHub)
   authToken: process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
-  sourcemaps: { disable: true },
   // Los eventos del navegador pasan por el propio panel: los bloqueadores de
   // anuncios cortan *.ingest.sentry.io. Excluida del middleware.
   tunnelRoute: "/monitoring",
