@@ -2,9 +2,18 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const TOKEN_KEY = "amt_admin_token";
-// Rutas públicas (sin login): login/gestión de cuenta + visor de torneo (modo
-// espectador y Widget TV), que usan solo endpoints públicos sin datos sensibles.
-const PUBLIC_PATHS = ["/login", "/eliminar-cuenta", "/privacidad", "/ayuda", "/aceptar-invitacion", "/torneo"];
+// Rutas públicas (sin login): login/gestión de cuenta (también /restablecer, la
+// del enlace del email de la contraseña) + visor de torneo (modo espectador y
+// Widget TV), que usan solo endpoints públicos sin datos sensibles.
+const PUBLIC_PATHS = [
+  "/login",
+  "/eliminar-cuenta",
+  "/privacidad",
+  "/ayuda",
+  "/aceptar-invitacion",
+  "/restablecer",
+  "/torneo",
+];
 
 // Páginas del admin a las que un user CLUB NO debe entrar — operaciones
 // globales del circuito (estadísticas globales, finanzas, config, etc).
