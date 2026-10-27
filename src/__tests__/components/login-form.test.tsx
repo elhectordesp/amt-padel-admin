@@ -24,10 +24,17 @@ vi.mock('sonner', () => ({
   toast: { error: vi.fn() },
 }));
 
+vi.mock('@/lib/account', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/account')>()),
+  requestPasswordReset: vi.fn(),
+}));
+
 import { LoginForm }                  from '../../../app/login/login-form';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { login }                      from '@/lib/auth';
 import { toast }                      from 'sonner';
+import { requestPasswordReset }       from '@/lib/account';
+import { ApiError }                   from '@/lib/api';
 
 const mockUseRouter       = vi.mocked(useRouter);
 const mockUseSearchParams = vi.mocked(useSearchParams);
@@ -164,5 +171,54 @@ describe('LoginForm', () => {
       expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     });
     resolve();
+  });
+
+  it('si le echaron por no tener acceso al panel (?motivo=sin-acceso), se lo dice (P2-16)', () => {
+    mockUseSearchParams.mockReturnValue({ get: (k: string) => (k === 'motivo' ? 'sin-acceso' : null) } as any);
+    render(<LoginForm />);
+    expect(screen.getByText(/no tiene acceso al panel/i)).toBeInTheDocument();
+  });
+
+  describe('«¿Olvidaste la contraseña?»', () => {
+    const mockRequest = vi.mocked(requestPasswordReset);
+
+    it('pide el email con el que entra (el que ya había escrito) y manda el enlace', async () => {
+      mockRequest.mockResolvedValueOnce(undefined);
+      render(<LoginForm />);
+      await userEvent.type(screen.getByPlaceholderText('admin@amptournaments.com'), 'ana@club.es');
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+
+      const email = screen.getByLabelText(/email/i);
+      expect(email).toHaveValue('ana@club.es');
+      fireEvent.click(screen.getByRole('button', { name: /enviar enlace/i }));
+
+      await waitFor(() => expect(screen.getByText(/te llegará un email/i)).toBeInTheDocument());
+      expect(mockRequest).toHaveBeenCalledWith('ana@club.es');
+    });
+
+    it('con un email mal escrito no llama al servidor', async () => {
+      render(<LoginForm />);
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      await userEvent.type(screen.getByLabelText(/email/i), 'no-es-un-email');
+      fireEvent.click(screen.getByRole('button', { name: /enviar enlace/i }));
+      expect(await screen.findByText(/escribe un email válido/i)).toBeInTheDocument();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('con demasiados intentos (429) lo dice claro', async () => {
+      mockRequest.mockRejectedValueOnce(new ApiError('ThrottlerException: Too Many Requests', 429));
+      render(<LoginForm />);
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      await userEvent.type(screen.getByLabelText(/email/i), 'ana@club.es');
+      fireEvent.click(screen.getByRole('button', { name: /enviar enlace/i }));
+      expect(await screen.findByText(/demasiados intentos/i)).toBeInTheDocument();
+    });
+
+    it('«Volver a iniciar sesión» vuelve al formulario', () => {
+      render(<LoginForm />);
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      fireEvent.click(screen.getByRole('button', { name: /volver a iniciar sesión/i }));
+      expect(screen.getByPlaceholderText('••••••••••')).toBeInTheDocument();
+    });
   });
 });

@@ -88,6 +88,27 @@ function NumInput({ label, value, onChange, step = 1, min, suffix }: {
   );
 }
 
+/**
+ * Ajustes que se guardaban pero nadie aplicaba (D10, P2-12): se ven, sin
+ * poder tocarlos, con «Próximamente». Cuando el servidor o la app los use,
+ * se saca de aquí.
+ */
+function Soon({ children, note }: { children: React.ReactNode; note?: string }) {
+  return (
+    <div>
+      <p className="flex flex-wrap items-center gap-1.5 mb-2 text-xs text-muted-foreground">
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-secondary border border-border text-foreground">
+          Próximamente
+        </span>
+        {note ?? "Todavía no tiene efecto: cambiarlo no cambia nada en la app ni en el panel."}
+      </p>
+      <fieldset disabled aria-disabled className="opacity-50">
+        {children}
+      </fieldset>
+    </div>
+  );
+}
+
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -224,10 +245,7 @@ function TabGeneral() {
     <div className="space-y-5">
       <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
 
-      <Section title="Identidad del circuito">
-        <FieldRow label="Nombre del circuito">
-          <TextInput value={cfg.circuitName} onChange={(v) => set("circuitName", v)} className="w-72" />
-        </FieldRow>
+      <Section title="Contacto y reglamento" description="Salen en la pantalla de Ayuda de la app">
         <FieldRow label="Email de contacto">
           <TextInput value={cfg.contactEmail} onChange={(v) => set("contactEmail", v)} type="email" className="w-72" />
         </FieldRow>
@@ -237,12 +255,21 @@ function TabGeneral() {
         <FieldRow label="URL Reglamento">
           <TextInput value={cfg.reglamentoUrl} onChange={(v) => set("reglamentoUrl", v)} placeholder="https://…" className="w-72" />
         </FieldRow>
-        <FieldRow label="URL Política de privacidad">
-          <TextInput value={cfg.privacyPolicyUrl} onChange={(v) => set("privacyPolicyUrl", v)} placeholder="https://…" className="w-72" />
-        </FieldRow>
       </Section>
 
-      <Section title="Banner de anuncio" description="Aparece en la parte superior de la app para todos los jugadores">
+      <Section title="Identidad del circuito">
+        <Soon note="La app y el panel aún no usan el nombre ni esta URL (la política de privacidad es la página /privacidad del panel).">
+          <FieldRow label="Nombre del circuito">
+            <TextInput value={cfg.circuitName} onChange={(v) => set("circuitName", v)} className="w-72" />
+          </FieldRow>
+          <FieldRow label="URL Política de privacidad">
+            <TextInput value={cfg.privacyPolicyUrl} onChange={(v) => set("privacyPolicyUrl", v)} placeholder="https://…" className="w-72" />
+          </FieldRow>
+        </Soon>
+      </Section>
+
+      <Section title="Banner de anuncio" description="Aparecerá en la parte superior de la app para todos los jugadores">
+        <Soon note="La app todavía no lo muestra.">
         <FieldRow label="Activado">
           <Toggle
             checked={cfg.announcementBanner.enabled}
@@ -268,9 +295,11 @@ function TabGeneral() {
             className="w-96"
           />
         </FieldRow>
+        </Soon>
       </Section>
 
-      <Section title="Modo mantenimiento" description="Bloquea el acceso a la app y muestra un mensaje personalizado">
+      <Section title="Modo mantenimiento" description="Bloqueará el acceso a la app y mostrará un mensaje personalizado">
+        <Soon note="La app todavía no lo aplica: activarlo no bloquea nada.">
         <FieldRow label="Activado">
           <Toggle
             checked={cfg.maintenanceMode.enabled}
@@ -284,6 +313,7 @@ function TabGeneral() {
             className="w-96"
           />
         </FieldRow>
+        </Soon>
       </Section>
     </div>
   );
@@ -302,6 +332,8 @@ function TabTemporada() {
   useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
   const [showClose,   setShowClose]   = useState(false);
   const [showAdvance, setShowAdvance] = useState(false);
+  // La temporada que de verdad se usa (la del servidor), la misma del dashboard
+  const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: adminService.stats });
 
   const cfg = local ?? data;
   const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
@@ -342,6 +374,16 @@ function TabTemporada() {
     <div className="space-y-5">
       <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
 
+      {stats?.season && (
+        <div className="px-4 py-3 rounded-lg bg-card border border-border text-sm text-foreground">
+          Temporada en uso: <span className="font-semibold text-[#D4AF37]">{stats.season}</span>
+          <span className="block text-xs text-muted-foreground mt-0.5">
+            Es la de los torneos nuevos, el ranking y el dashboard. Hoy la fija el servidor.
+          </span>
+        </div>
+      )}
+
+      <Soon note="Ni estas fechas ni cerrar o avanzar la temporada cambian todavía la temporada en uso.">
       <Section title="Temporada activa">
         <FieldRow label="Año de temporada">
           <input
@@ -391,6 +433,7 @@ function TabTemporada() {
           </button>
         </div>
       </div>
+      </Soon>
 
       <ConfirmModal
         open={showClose}
@@ -445,6 +488,7 @@ function TabCircuito() {
       <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
 
       <Section title="Ranking de circuito">
+        <Soon note="El ranking todavía no usa estos ajustes: cuenta todos los resultados de la temporada.">
         <NumInput
           label="Mejores N resultados (0 = todos)"
           value={cfg.bestNResults}
@@ -476,6 +520,7 @@ function TabCircuito() {
             className="w-40"
           />
         </FieldRow>
+        </Soon>
       </Section>
     </div>
   );
@@ -514,12 +559,13 @@ function TabComunicaciones() {
 
   if (isLoading || !cfg) return <TabSkeleton />;
 
-  const toggles: [keyof AppConfigEmail, string][] = [
+  // Emails que todavía no existen: el interruptor no tendría nada que apagar.
+  // «Restablecimiento de contraseña» no se ofrece: apagarlo dejaría sin forma
+  // de recuperar la cuenta.
+  const soonToggles: [keyof AppConfigEmail, string][] = [
     ["enableRegistrationConfirmation", "Confirmación de inscripción"],
     ["enableResultNotification",       "Notificación de resultado"],
     ["enableCategoryChange",           "Cambio de categoría"],
-    ["enableInviteEmail",              "Email de invitación"],
-    ["enablePasswordReset",            "Restablecimiento de contraseña"],
     ["enableWelcomeEmail",             "Bienvenida al circuito"],
   ];
 
@@ -527,21 +573,35 @@ function TabComunicaciones() {
     <div className="space-y-5">
       <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
 
-      <Section title="Remitente">
-        <FieldRow label="Nombre del remitente">
-          <TextInput value={cfg.fromName} onChange={(v) => set("fromName", v)} className="w-56" />
+      <Section title="Email de invitación">
+        <FieldRow label="Enviar la invitación al dar de alta a un jugador con email">
+          <Toggle checked={cfg.enableInviteEmail} onChange={(v) => set("enableInviteEmail", v)} />
         </FieldRow>
-        <FieldRow label="Responder a">
-          <TextInput value={cfg.replyTo} onChange={(v) => set("replyTo", v)} type="email" className="w-56" />
-        </FieldRow>
+        <p className="pt-2 text-xs text-muted-foreground">
+          También al cambiarle el email antes de que active su cuenta. Apagado, no se le envía nada: puedes enviársela
+          después desde su ficha («Enviar invitación» o «Compartir invitación») o con «Invitar pendientes».
+        </p>
       </Section>
 
-      <Section title="Tipos de email habilitados">
-        {toggles.map(([key, label]) => (
-          <FieldRow key={key} label={label}>
-            <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
+      <Section title="Remitente">
+        <Soon note="Los emails todavía salen con el remitente del servidor.">
+          <FieldRow label="Nombre del remitente">
+            <TextInput value={cfg.fromName} onChange={(v) => set("fromName", v)} className="w-56" />
           </FieldRow>
-        ))}
+          <FieldRow label="Responder a">
+            <TextInput value={cfg.replyTo} onChange={(v) => set("replyTo", v)} type="email" className="w-56" />
+          </FieldRow>
+        </Soon>
+      </Section>
+
+      <Section title="Otros emails">
+        <Soon note="Estos emails todavía no se envían.">
+          {soonToggles.map(([key, label]) => (
+            <FieldRow key={key} label={label}>
+              <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
+            </FieldRow>
+          ))}
+        </Soon>
       </Section>
 
       <Section title="Prueba de envío" description="Verifica que el SMTP funciona antes de mandar comunicaciones reales. Si dejas el destino vacío se envía al email de tu cuenta.">
@@ -613,11 +673,13 @@ function TabNotificaciones() {
       <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
 
       <Section title="Notificaciones push habilitadas" description="Los jugadores pueden desactivar individualmente en su app">
-        {toggles.map(([key, label]) => (
-          <FieldRow key={key} label={label}>
-            <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
-          </FieldRow>
-        ))}
+        <Soon note="Las notificaciones salen igual: apagarlas aquí todavía no las para.">
+          {toggles.map(([key, label]) => (
+            <FieldRow key={key} label={label}>
+              <Toggle checked={cfg[key] as boolean} onChange={(v) => set(key, v as boolean)} />
+            </FieldRow>
+          ))}
+        </Soon>
       </Section>
 
       <Section title="Prueba de envío" description="Lanza una notificación push de prueba a tu dispositivo. Necesitas haber abierto la app móvil con esta cuenta y aceptado notificaciones.">
@@ -663,7 +725,8 @@ function TabTorneos() {
     <div className="space-y-5">
       <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
 
-      <Section title="Valores por defecto para nuevos torneos" description="Estos valores se usan como punto de partida al crear un torneo; se pueden modificar por torneo">
+      <Section title="Valores por defecto para nuevos torneos" description="Serán el punto de partida al crear un torneo; se podrán modificar por torneo">
+        <Soon note="El asistente de «Nuevo torneo» todavía no los usa.">
         <NumInput label="Duración de partido" value={cfg.matchDuration} onChange={(v) => set("matchDuration", v)} min={15} suffix="min" />
         <FieldRow label="Sistema de puntuación">
           <select
@@ -694,6 +757,7 @@ function TabTorneos() {
         <FieldRow label="Cabezas de serie por defecto">
           <Toggle checked={cfg.useSeedingDefault} onChange={(v) => set("useSeedingDefault", v)} />
         </FieldRow>
+        </Soon>
       </Section>
     </div>
   );

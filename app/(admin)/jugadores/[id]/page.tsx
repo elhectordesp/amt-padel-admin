@@ -20,7 +20,12 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
 import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, levelLabel } from "@/lib/constants";
-import { playerUpdatePayload } from "@/lib/player-edit";
+import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
+import { invitationNotice } from "@/lib/player-invite";
+import { ApiError } from "@/lib/api";
+
+/** El back responde 404 a un jugador borrado o inexistente. */
+const isNotFound = (err: unknown) => err instanceof ApiError && err.status === 404;
 import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -58,9 +63,11 @@ export default function JugadorDetailPage() {
   const [qrData,        setQrData]        = useState<{ url: string; name: string } | null>(null);
   const shareRef = useRef<HTMLDivElement>(null);
 
-  const { data: player, isLoading } = useQuery({
+  const { data: player, isLoading, isError, error } = useQuery({
     queryKey: ["player", id],
     queryFn:  () => adminService.players.detail(id),
+    // Un 404 no se reintenta: el jugador no va a aparecer
+    retry: (count, err) => !isNotFound(err) && count < 3,
   });
 
   const { data: catHistory = [] } = useQuery({
@@ -82,10 +89,14 @@ export default function JugadorDetailPage() {
 
   const editMutation = useMutation({
     mutationFn: (data: UpdatePlayerPayload) => adminService.players.update(id, data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["player", id] });
       qc.invalidateQueries({ queryKey: ["admin-players"] });
-      toast.success("Datos del jugador actualizados");
+      // Si se le cambió el email antes de activar la cuenta: qué pasó con la invitación
+      const notice = invitationNotice(res?.invitation);
+      const text = `Datos del jugador actualizados.${notice ? ` ${notice.text}` : ""}`;
+      if (notice?.kind === "warning") toast.warning(text);
+      else toast.success(text);
       setShowEdit(false);
     },
     onError: (err: Error) => toast.error(err.message ?? "Error al actualizar"),
@@ -193,7 +204,41 @@ export default function JugadorDetailPage() {
     );
   }
 
-  if (!player || !player.name) return null;
+  // Borrado o inexistente (p. ej. un enlace antiguo): antes, pantalla en blanco (P3-7)
+  if (!player || !player.name) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <Header title="Jugador" />
+        <div className="p-6">
+          <div className="bg-card border border-border rounded-lg py-12 px-6 flex flex-col items-center gap-3 text-center">
+            <AlertCircle size={24} className="text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
+              {isError && !isNotFound(error) ? "No se pudo cargar el jugador" : "Jugador no encontrado"}
+            </p>
+            <p className="text-xs text-muted-foreground max-w-sm">
+              {isError && !isNotFound(error)
+                ? "Ha fallado la conexión con el servidor. Vuelve a intentarlo en un momento."
+                : "Puede que se haya eliminado su cuenta o que el enlace no sea correcto."}
+            </p>
+            <Link href="/jugadores" className="flex items-center gap-1 text-sm text-[#D4AF37] hover:underline">
+              <ChevronLeft size={14} /> Volver a jugadores
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Lo que tiene ahora, para saber qué se ha vaciado en «Editar datos»
+  const editCurrent = {
+    level:   player.level,
+    email:   player.email,
+    phone:   player.phone,
+    city:    player.city,
+    bio:     player.bio,
+    usesApp: !player.managedByAdmin || player.activationStatus === "active",
+  };
+  const editProblem = showEdit ? playerEditProblem(editForm, editCurrent) : null;
 
   const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
   const initials = player.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -356,6 +401,12 @@ export default function JugadorDetailPage() {
                           >
                             <QrCode size={14} /> Código QR
                           </button>
+                          {/* Solo vale el último enlace (B-M-02): antes se anulaba sin avisar */}
+                          {player.activationStatus === "invited" && (
+                            <p className="mt-1 px-3 pt-1.5 pb-1 border-t border-border text-[10px] leading-snug text-muted-foreground">
+                              Se crea un enlace nuevo: el de la invitación que se le envió por email deja de valer.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -809,9 +860,12 @@ export default function JugadorDetailPage() {
               >
                 Cancelar
               </button>
+              {editProblem && (
+                <p role="alert" className="mr-auto text-[11px] text-destructive">{editProblem}</p>
+              )}
               <button
-                disabled={editMutation.isPending}
-                onClick={() => editMutation.mutate(playerUpdatePayload(editForm, player.level))}
+                disabled={editMutation.isPending || !!editProblem}
+                onClick={() => editMutation.mutate(playerUpdatePayload(editForm, editCurrent))}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-[#D4AF37] text-black hover:bg-[#C9A227] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {editMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Edit2 size={13} />}
@@ -846,7 +900,7 @@ export default function JugadorDetailPage() {
             </div>
             <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
               El jugador escanea este código con la cámara del móvil para activar su cuenta.
-              Válido 7 días.
+              Válido 7 días. Los enlaces anteriores (también el del email) ya no valen.
             </p>
             <button
               onClick={downloadQr}

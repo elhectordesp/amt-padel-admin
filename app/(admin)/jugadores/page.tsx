@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
@@ -10,18 +10,18 @@ import {
 } from "@tanstack/react-table";
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
-  ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Download, Loader2,
+  TrendingUp, TrendingDown, Minus, Download, Loader2,
   UserPlus, X, AlertTriangle, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
+import { Pagination, usePagination } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, levelLabel } from "@/lib/constants";
+import { invitationNotice } from "@/lib/player-invite";
 import type { Player, Gender, CategoryLevel, CreatePlayerPayload } from "@/types";
-
-const PAGE_SIZE = 50;
 
 const LEVEL_COLOR: Record<string, string> = {
   "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
@@ -78,7 +78,7 @@ export default function JugadoresPage() {
   const router  = useRouter();
   const qc      = useQueryClient();
 
-  const [page,         setPage]         = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePagination();
   const [searchInput,  setSearchInput]  = useState("");
   const [search,       setSearch]       = useState("");
   const [genderFilter,     setGenderFilter]     = useState<"all" | Gender>("all");
@@ -100,32 +100,49 @@ export default function JugadoresPage() {
     onError: (err: Error) => toast.error(err.message ?? "Error al enviar invitaciones"),
   });
 
+  // Un doble clic en «Crear jugador» creaba dos: isPending no llega a
+  // desactivar el botón antes del segundo clic. El candado es síncrono.
+  const creatingRef = useRef(false);
   const createMutation = useMutation({
     mutationFn: (data: CreatePlayerPayload) => adminService.players.create(data),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["admin-players"] });
-      toast.success(`Jugador "${res.name}" creado correctamente`);
+      const notice = invitationNotice(res.invitation);
+      const text = `Jugador "${res.name}" creado.${notice ? ` ${notice.text}` : ""}`;
+      if (notice?.kind === "warning") toast.warning(text);
+      else toast.success(text);
       setShowCreate(false);
       setForm(EMPTY_FORM);
       router.push(`/jugadores/${res.id}`);
     },
     onError: (err: Error) => toast.error(err.message ?? "Error al crear jugador"),
+    onSettled: () => { creatingRef.current = false; },
   });
+  const submitCreate = () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    createMutation.mutate({
+      ...form,
+      email:    form.email?.trim()  || undefined,
+      phone:    form.phone?.trim()  || undefined,
+      city:     form.city?.trim()   || undefined,
+    });
+  };
 
   // Debounce text search 300 ms
   useEffect(() => {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, setPage]);
 
   // Reset page when filters or sorting change
-  useEffect(() => { setPage(1); }, [genderFilter, levelFilter, activationFilter, sortBy, sortDir]);
+  useEffect(() => { setPage(1); }, [genderFilter, levelFilter, activationFilter, sortBy, sortDir, setPage]);
 
   const { data: result, isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey:        ["admin-players", page, genderFilter, levelFilter, activationFilter, search, sortBy, sortDir],
+    queryKey:        ["admin-players", page, pageSize, genderFilter, levelFilter, activationFilter, search, sortBy, sortDir],
     queryFn:         () => adminService.players.list({
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       gender:           genderFilter     !== "all" ? genderFilter     : undefined,
       level:            levelFilter      !== "all" ? levelFilter      : undefined,
       activationStatus: activationFilter !== "all" ? activationFilter : undefined,
@@ -145,7 +162,6 @@ export default function JugadoresPage() {
 
   const players    = result?.data     ?? [];
   const total      = result?.total    ?? 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const columns: ColumnDef<Player>[] = useMemo(() => [
     {
@@ -153,7 +169,7 @@ export default function JugadoresPage() {
       header: () => <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">#</span>,
       cell:   ({ row }) => (
         <span className="text-sm text-muted-foreground">
-          {(page - 1) * PAGE_SIZE + row.index + 1}
+          {(page - 1) * pageSize + row.index + 1}
         </span>
       ),
     },
@@ -250,7 +266,7 @@ export default function JugadoresPage() {
         </Link>
       ),
     },
-  ], [page]);
+  ], [page, pageSize]);
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -365,7 +381,7 @@ export default function JugadoresPage() {
               onClick={() => downloadCsv(
                 `jugadores-p${page}`,
                 table.getRowModel().rows.map((row, i) => ({
-                  "#":          (page - 1) * PAGE_SIZE + i + 1,
+                  "#":          (page - 1) * pageSize + i + 1,
                   Jugador:      row.original.name,
                   Compañero:    row.original.partner ?? "",
                   Género:       row.original.gender === "M" ? "Masculino" : "Femenino",
@@ -431,7 +447,7 @@ export default function JugadoresPage() {
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-muted-foreground shrink-0 w-7 text-center">
-                        #{(page - 1) * PAGE_SIZE + idx + 1}
+                        #{(page - 1) * pageSize + idx + 1}
                       </span>
                       <div className="w-9 h-9 rounded-full bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.2)] flex items-center justify-center shrink-0">
                         <span className="text-[11px] font-bold text-[#D4AF37]">
@@ -541,28 +557,16 @@ export default function JugadoresPage() {
         </div>
 
         {/* Shared pagination */}
-        {!isLoading && totalPages > 1 && (
-          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-card border border-border">
-            <span className="text-xs text-muted-foreground">
-              Página {page} de {totalPages} · {total} jugadores
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1 || isFetching}
-                className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages || isFetching}
-                className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
+        {!isLoading && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="jugadores"
+            busy={isFetching}
+          />
         )}
       </div>
 
@@ -651,7 +655,7 @@ export default function JugadoresPage() {
                   type="email"
                   value={form.email ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="jugador@email.com (se le enviará invitación)"
+                  placeholder="jugador@email.com"
                   className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
                 {!form.email?.trim() && form.firstName.trim() ? (
@@ -659,7 +663,7 @@ export default function JugadoresPage() {
                     <span>⚠</span> Sin email este jugador no podrá activar su cuenta en la app
                   </p>
                 ) : (
-                  <p className="text-[10px] text-muted-foreground">Si se indica, recibirá un email para activar su cuenta.</p>
+                  <p className="text-[10px] text-muted-foreground">Si se indica, se le envía la invitación para activar su cuenta (si el email de invitación está activado).</p>
                 )}
               </div>
 
@@ -726,12 +730,7 @@ export default function JugadoresPage() {
               </button>
               <button
                 disabled={!form.firstName.trim() || !form.lastName.trim() || createMutation.isPending}
-                onClick={() => createMutation.mutate({
-                  ...form,
-                  email:    form.email?.trim()  || undefined,
-                  phone:    form.phone?.trim()  || undefined,
-                  city:     form.city?.trim()   || undefined,
-                })}
+                onClick={submitCreate}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-[#D4AF37] text-black hover:bg-[#C9A227] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {createMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}

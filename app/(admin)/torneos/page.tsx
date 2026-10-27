@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
-  getFilteredRowModel, flexRender,
+  getPaginationRowModel, flexRender,
   type ColumnDef, type SortingState,
 } from "@tanstack/react-table";
 import { Plus, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight, Copy } from "lucide-react";
@@ -15,6 +15,9 @@ import { adminService } from "@/lib/services/admin";
 import { TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR, resolveTier } from "@/lib/constants";
 import type { Tournament, TournamentStatus } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import { matchesSearch } from "@/lib/utils/search";
+import { clampPage } from "@/lib/utils/pagination";
+import { Pagination, usePagination } from "@/components/admin/pagination";
 
 type FilterStatus = "all" | TournamentStatus;
 
@@ -129,8 +132,9 @@ function CloneTournamentModal({
 
 export default function TorneosPage() {
   const router = useRouter();
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const { page, setPage, pageSize, setPageSize } = usePagination();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [cloning, setCloning] = useState<Tournament | null>(null);
 
@@ -139,9 +143,14 @@ export default function TorneosPage() {
     queryFn:  adminService.tournaments.list,
   });
 
+  // El buscador mira el nombre, la sede y su ciudad, sin tildes (P3-4, P3-6):
+  // el filtro global de la tabla solo miraba las columnas con accessorKey, y
+  // la sede no lo era
   const data = useMemo(
-    () => statusFilter === "all" ? all : all.filter((t) => t.status === statusFilter),
-    [all, statusFilter],
+    () => all
+      .filter((t) => statusFilter === "all" || t.status === statusFilter)
+      .filter((t) => matchesSearch(search, t.name, t.club?.name, t.club?.city)),
+    [all, statusFilter, search],
   );
 
   const columns: ColumnDef<Tournament>[] = [
@@ -176,12 +185,22 @@ export default function TorneosPage() {
       },
     },
     {
-      accessorKey: "dates",
-      header: () => (
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fechas</span>
+      // Antes `accessorKey: "dates"`, que no existe en los datos: la columna
+      // salía vacía (P3-3). Ordena por la fecha de inicio.
+      id:         "dates",
+      accessorFn: (t) => t.startDate,
+      header: ({ column }) => (
+        <button
+          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Fechas <SortIcon column={column} />
+        </button>
       ),
-      cell: ({ getValue }) => (
-        <span className="text-sm text-muted-foreground">{getValue() as string}</span>
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {formatDateRange(row.original.startDate, row.original.endDate)}
+        </span>
       ),
     },
     {
@@ -259,13 +278,13 @@ export default function TorneosPage() {
   const table = useReactTable({
     data,
     columns,
-    state:              { sorting, globalFilter },
+    state:              { sorting, pagination: { pageIndex: clampPage(page, data.length, pageSize) - 1, pageSize } },
     onSortingChange:    setSorting,
-    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel:    getCoreRowModel(),
     getSortedRowModel:  getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn:     "includesString",
+    getPaginationRowModel: getPaginationRowModel(),
+    // La página la lleva usePagination (vuelve a la 1 al buscar o filtrar)
+    autoResetPageIndex: false,
   });
 
   const FILTERS: { key: FilterStatus; label: string }[] = [
@@ -292,7 +311,7 @@ export default function TorneosPage() {
             <div className="sm:hidden flex-1">
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
+                onChange={(e) => { setStatusFilter(e.target.value as FilterStatus); setPage(1); }}
                 className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground outline-none appearance-none cursor-pointer"
               >
                 {FILTERS.map((f) => (
@@ -306,7 +325,7 @@ export default function TorneosPage() {
               {FILTERS.map((f) => (
                 <button
                   key={f.key}
-                  onClick={() => setStatusFilter(f.key)}
+                  onClick={() => { setStatusFilter(f.key); setPage(1); }}
                   className={`whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     statusFilter === f.key
                       ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
@@ -333,8 +352,8 @@ export default function TorneosPage() {
           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border">
             <Search size={14} className="text-muted-foreground shrink-0" />
             <input
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Buscar torneo o sede..."
               className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
             />
@@ -459,6 +478,15 @@ export default function TorneosPage() {
                 </table>
               </div>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={data.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="torneos"
+            />
           </>
         )}
       </div>

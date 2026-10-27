@@ -10,7 +10,9 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { CLUB_DEACTIVATED_MESSAGE, login } from "@/lib/auth";
 import { LOGIN_REASON_CLUB_DEACTIVATED } from "@/lib/api";
+import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE } from "@/lib/session";
 import { safeRedirectPath } from "@/lib/utils/safe-redirect";
+import { ForgotPasswordForm } from "./forgot-password-form";
 
 const schema = z.object({
   email:    z.string().email("Email inválido"),
@@ -25,14 +27,20 @@ export function LoginForm() {
   const queryClient  = useQueryClient();
 
   const [showPass, setShowPass] = useState(false);
-  // Si le echaron a mitad de sesión porque AMT desactivó su club, se lo dice
-  const [apiError, setApiError] = useState<string | null>(() =>
-    searchParams.get("motivo") === LOGIN_REASON_CLUB_DEACTIVATED ? CLUB_DEACTIVATED_MESSAGE : null,
-  );
+  const [forgot,   setForgot]   = useState(false);
+  // Si le echaron a mitad de sesión (AMT desactivó su club, o la cuenta ya
+  // no tiene acceso al panel), se lo dice
+  const [apiError, setApiError] = useState<string | null>(() => {
+    const motivo = searchParams.get("motivo");
+    if (motivo === LOGIN_REASON_CLUB_DEACTIVATED) return CLUB_DEACTIVATED_MESSAGE;
+    if (motivo === LOGIN_REASON_NO_ACCESS) return NO_ACCESS_MESSAGE;
+    return null;
+  });
 
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -91,6 +99,10 @@ export function LoginForm() {
             <span className="font-heading text-3xl text-[#D4AF37] tracking-[6px]">AMT</span>
           </div>
 
+          {forgot ? (
+            <ForgotPasswordForm initialEmail={getValues("email") ?? ""} onBack={() => setForgot(false)} />
+          ) : (
+          <>
           <div>
             <h1 className="font-heading text-2xl text-foreground">Bienvenido de vuelta</h1>
             <p className="mt-1 text-sm text-muted-foreground">Inicia sesión para continuar</p>
@@ -154,7 +166,17 @@ export function LoginForm() {
               {isSubmitting && <Loader2 size={15} className="animate-spin" />}
               {isSubmitting ? "Iniciando sesión..." : "Iniciar sesión"}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setForgot(true)}
+              className="w-full text-center text-xs text-muted-foreground hover:text-[#D4AF37] transition-colors"
+            >
+              ¿Olvidaste la contraseña?
+            </button>
           </form>
+          </>
+          )}
         </div>
       </div>
     </div>

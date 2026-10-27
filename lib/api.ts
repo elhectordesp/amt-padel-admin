@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
+import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE, isPanelRole, tokenRole } from "./session";
 
 const TOKEN_KEY         = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
@@ -132,6 +133,14 @@ api.interceptors.response.use(
         );
         // La respuesta está envuelta en { success, data: { token, refreshToken } }
         const tokens = data?.data ?? data;
+        // Un admin al que le quitaron el rol renueva como jugador: se quedaba
+        // dentro con todo a 0 y cada llamada en 403 (P2-16). Fuera.
+        if (!isPanelRole(tokenRole(tokens.token))) {
+          const noAccess = new ApiError(NO_ACCESS_MESSAGE, 403);
+          processQueue(noAccess, null);
+          forceLogout(LOGIN_REASON_NO_ACCESS);
+          return Promise.reject(noAccess);
+        }
         setToken(tokens.token);
         setRefreshToken(tokens.refreshToken);
 

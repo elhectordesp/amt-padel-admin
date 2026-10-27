@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Calendar, Search, LogOut, ChevronDown } from "lucide-react";
+import { Bell, Calendar, Search, LogOut, ChevronDown, UserRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { adminService } from "@/lib/services/admin";
 import { useSearch } from "@/components/admin/search-context";
@@ -177,6 +177,15 @@ export function Header({ title }: HeaderProps) {
                   {/* El rol real (el token dice «admin» tanto a Admin como a Super Admin) */}
                   {me?.role && <p className="text-[10px] font-semibold text-[#D4AF37] mt-0.5">{roleLabel(me.role)}</p>}
                 </div>
+                <Link
+                  href="/perfil"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                >
+                  <UserRound size={13} />
+                  <span>Mi perfil y contraseña</span>
+                </Link>
                 <button
                   type="button"
                   role="menuitem"
