@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Search, X, Loader2, ExternalLink, ChevronDown,
 } from "lucide-react";
 import { Header } from "@/components/admin/header";
-import { Pagination } from "@/components/admin/pagination";
+import { Pagination, useKeepPageInRange } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
 import { DEFAULT_PAGE_SIZE, type PageSize } from "@/lib/utils/pagination";
 
@@ -83,11 +83,15 @@ export default function HistorialPage() {
     [filters],
   );
 
-  const { data, isLoading, isError, isFetching } = useQuery({
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useQuery({
     queryKey: ["audit-logs", queryArgs],
     queryFn: () => adminService.auditLogs(queryArgs),
     placeholderData: (prev) => prev,
   });
+
+  const setPage = useCallback((page: number) => setFilters((f) => ({ ...f, page })), []);
+  // Si baja el total y la página ya no existe, a la última que haya
+  useKeepPageInRange(filters.page, setPage, filters.pageSize, isPlaceholderData ? undefined : data?.total);
 
   const hasActiveFilters =
     !!filters.search || !!filters.action || !!filters.tournamentId || !!filters.from || !!filters.to;
@@ -262,7 +266,7 @@ export default function HistorialPage() {
             page={filters.page}
             pageSize={filters.pageSize}
             total={data.total}
-            onPageChange={(page) => setFilters((f) => ({ ...f, page }))}
+            onPageChange={setPage}
             onPageSizeChange={(pageSize) => setFilters((f) => ({ ...f, pageSize, page: 1 }))}
             itemLabel="registros"
             busy={isFetching}

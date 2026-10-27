@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { ME_QUERY_KEY, roleLabel, useMe } from "@/lib/use-me";
 import {
   MY_PROFILE_QUERY_KEY, PASSWORD_RULES,
-  accountErrorMessage, changePassword, passwordProblem,
+  accountErrorMessage, changePassword, initialProfileForm, passwordProblem,
   profileProblems, updateMyProfile,
   type MyProfile, type ProfileField,
 } from "@/lib/account";
@@ -25,11 +25,7 @@ function FieldError({ text }: { text?: string | null }) {
 export function ProfileForm({ profile }: { profile: MyProfile }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
-  const initial = {
-    firstName: profile.firstName ?? "",
-    lastName:  profile.lastName ?? "",
-    phone:     profile.phone ?? "",
-  };
+  const initial = initialProfileForm(profile);
   const [form, setForm] = useState(initial);
   const [touched, setTouched] = useState(false);
   const problems = profileProblems(form);
@@ -73,7 +69,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
         </div>
         <div className="space-y-1">
           <label htmlFor="perfil-apellidos" className="text-xs font-medium text-muted-foreground">Apellidos</label>
-          <input id="perfil-apellidos" value={form.lastName} onChange={(e) => set("lastName", e.target.value)} className={inputCls} autoComplete="family-name" />
+          <input id="perfil-apellidos" value={form.lastName} onChange={(e) => set("lastName", e.target.value)} placeholder="Opcional" className={inputCls} autoComplete="family-name" />
           <FieldError text={touched ? problems.lastName : null} />
         </div>
         <div className="space-y-1">

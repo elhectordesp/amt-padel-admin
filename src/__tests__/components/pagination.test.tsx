@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { Pagination } from "../../../components/admin/pagination";
+import { render, renderHook, screen, fireEvent } from "@testing-library/react";
+import { Pagination, useKeepPageInRange } from "../../../components/admin/pagination";
 
 function setup(props: Partial<React.ComponentProps<typeof Pagination>> = {}) {
   const onPageChange = vi.fn();
@@ -70,5 +70,40 @@ describe("Pagination", () => {
       <Pagination page={1} pageSize={50} total={0} onPageChange={vi.fn()} onPageSizeChange={vi.fn()} itemLabel="x" />,
     );
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("useKeepPageInRange (paginación en el servidor)", () => {
+  type Props = { page: number; total: number | undefined };
+
+  it("si baja el total y la página ya no existe, pasa a la última que haya", () => {
+    const setPage = vi.fn();
+    const { rerender } = renderHook(
+      ({ page, total }: Props) => useKeepPageInRange(page, setPage, 25, total),
+      { initialProps: { page: 2, total: 40 } },
+    );
+    expect(setPage).not.toHaveBeenCalled();
+
+    // «Invitar pendientes» con «Sin activar»: quedan 10, cabe en una página
+    rerender({ page: 2, total: 10 });
+    expect(setPage).toHaveBeenCalledWith(1);
+  });
+
+  it("sin filas vuelve a la primera", () => {
+    const setPage = vi.fn();
+    renderHook(() => useKeepPageInRange(3, setPage, 50, 0));
+    expect(setPage).toHaveBeenCalledWith(1);
+  });
+
+  it("de 230 a 120 con 50 por página: de la 5 a la 3", () => {
+    const setPage = vi.fn();
+    renderHook(() => useKeepPageInRange(5, setPage, 50, 120));
+    expect(setPage).toHaveBeenCalledWith(3);
+  });
+
+  it("sin total de verdad todavía (cargando o datos de la consulta anterior), no toca nada", () => {
+    const setPage = vi.fn();
+    renderHook(() => useKeepPageInRange(4, setPage, 25, undefined));
+    expect(setPage).not.toHaveBeenCalled();
   });
 });

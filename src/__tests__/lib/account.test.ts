@@ -9,7 +9,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { api, ApiError, setToken, setRefreshToken } from "@/lib/api";
 import {
-  accountErrorMessage, changePassword, passwordProblem, profileProblems,
+  accountErrorMessage, changePassword, initialProfileForm, passwordProblem, profileProblems,
   requestPasswordReset, updateMyProfile,
 } from "../../../lib/account";
 
@@ -60,12 +60,29 @@ describe("passwordProblem (las reglas del back)", () => {
   });
 });
 
+describe("initialProfileForm", () => {
+  const base = { id: "u1", email: "club@x.es", phone: null };
+
+  it("con nombre y apellidos guardados, los usa", () => {
+    expect(initialProfileForm({ ...base, name: "Ana López", firstName: "Ana", lastName: "López", phone: "600111222" }))
+      .toEqual({ firstName: "Ana", lastName: "López", phone: "600111222" });
+  });
+
+  it("un admin de club (solo `name`, sin nombre ni apellidos) parte el nombre", () => {
+    expect(initialProfileForm({ ...base, name: "Club Pádel  Indoor", firstName: null, lastName: null }))
+      .toEqual({ firstName: "Club", lastName: "Pádel Indoor", phone: "" });
+    expect(initialProfileForm({ ...base, name: "Indoor", firstName: null, lastName: null }))
+      .toEqual({ firstName: "Indoor", lastName: "", phone: "" });
+  });
+});
+
 describe("profileProblems", () => {
-  it("nombre y apellidos obligatorios; teléfono opcional pero con forma de teléfono", () => {
+  it("nombre obligatorio; apellidos opcionales; teléfono opcional pero con forma de teléfono", () => {
     expect(profileProblems({ firstName: " ", lastName: "", phone: "" })).toEqual({
       firstName: expect.any(String),
-      lastName: expect.any(String),
     });
+    expect(profileProblems({ firstName: "Indoor", lastName: "", phone: "600111222" })).toEqual({});
+    expect(profileProblems({ firstName: "Ana", lastName: "x".repeat(101), phone: "" })).toHaveProperty("lastName");
     expect(profileProblems({ firstName: "Ana", lastName: "López", phone: "abc-no-es-un-telefono" })).toHaveProperty("phone");
     expect(profileProblems({ firstName: "Ana", lastName: "López", phone: "+34 600 00 00 00" })).toEqual({});
     expect(profileProblems({ firstName: "Ana", lastName: "López", phone: "" })).toEqual({});

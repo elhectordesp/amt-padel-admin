@@ -23,10 +23,10 @@ import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, levelLabel } from "
 import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
+import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 /** El back responde 404 a un jugador borrado o inexistente. */
 const isNotFound = (err: unknown) => err instanceof ApiError && err.status === 404;
-import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 const LEVEL_COLOR: Record<string, string> = {
   "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
@@ -66,8 +66,9 @@ export default function JugadorDetailPage() {
   const { data: player, isLoading, isError, error } = useQuery({
     queryKey: ["player", id],
     queryFn:  () => adminService.players.detail(id),
-    // Un 404 no se reintenta: el jugador no va a aparecer
-    retry: (count, err) => !isNotFound(err) && count < 3,
+    // Un 404 no se reintenta: el jugador no va a aparecer. Lo demás, una vez,
+    // como el resto del panel (retry: 1 en components/providers.tsx)
+    retry: (count, err) => !isNotFound(err) && count < 1,
   });
 
   const { data: catHistory = [] } = useQuery({

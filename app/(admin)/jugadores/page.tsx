@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
-import { Pagination, usePagination } from "@/components/admin/pagination";
+import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, levelLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
@@ -138,7 +138,7 @@ export default function JugadoresPage() {
   // Reset page when filters or sorting change
   useEffect(() => { setPage(1); }, [genderFilter, levelFilter, activationFilter, sortBy, sortDir, setPage]);
 
-  const { data: result, isLoading, isFetching, isError, refetch } = useQuery({
+  const { data: result, isLoading, isFetching, isError, isPlaceholderData, refetch } = useQuery({
     queryKey:        ["admin-players", page, pageSize, genderFilter, levelFilter, activationFilter, search, sortBy, sortDir],
     queryFn:         () => adminService.players.list({
       page,
@@ -162,6 +162,8 @@ export default function JugadoresPage() {
 
   const players    = result?.data     ?? [];
   const total      = result?.total    ?? 0;
+  // Si baja el total y la página ya no existe, a la última que haya
+  useKeepPageInRange(page, setPage, pageSize, isPlaceholderData ? undefined : result?.total);
 
   const columns: ColumnDef<Player>[] = useMemo(() => [
     {

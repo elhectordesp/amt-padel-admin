@@ -86,6 +86,20 @@ describe("ProfileForm (hueco #5)", () => {
     }));
   });
 
+  it("un admin de club sin nombre ni apellidos (solo `name`) ve el nombre partido y guarda el teléfono sin apellidos", async () => {
+    vi.mocked(updateMyProfile).mockResolvedValueOnce(undefined);
+    renderWithQuery(<ProfileForm profile={{ id: "u1", name: "Indoor", firstName: null, lastName: null, email: "club@x.es", phone: null }} />);
+    expect(screen.getByLabelText("Nombre")).toHaveValue("Indoor");
+    expect(screen.getByLabelText("Apellidos")).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText("Teléfono"), { target: { value: "600111222" } });
+    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
+
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalledWith({
+      firstName: "Indoor", lastName: "", phone: "600111222",
+    }));
+  });
+
   it("sin cambios no deja guardar; con el nombre vacío no llama al servidor", () => {
     renderWithQuery(<ProfileForm profile={profile} />);
     expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, type PageSize,
@@ -19,6 +19,27 @@ export function usePagination(initialSize: PageSize = DEFAULT_PAGE_SIZE) {
     setPage(1);
   };
   return { page, setPage, pageSize, setPageSize };
+}
+
+/**
+ * Para los listados que pagina el servidor: si baja el total (p. ej. «Invitar
+ * pendientes» con el filtro «Sin activar» en la página 2), la página pedida
+ * deja de existir, el servidor la devuelve vacía y no quedaban botones para
+ * salir. Cuando llega el total, se pasa a la última página que haya.
+ * `total`: el de la respuesta del servidor, undefined mientras no hay una de
+ * verdad (cargando o con los datos de la consulta anterior).
+ */
+export function useKeepPageInRange(
+  page: number,
+  setPage: (page: number) => void,
+  pageSize: number,
+  total: number | undefined,
+) {
+  useEffect(() => {
+    if (total === undefined) return;
+    const last = pageCount(total, pageSize);
+    if (page > last) setPage(last);
+  }, [page, setPage, pageSize, total]);
 }
 
 interface PaginationProps {

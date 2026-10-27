@@ -58,13 +58,31 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export type ProfileField = "firstName" | "lastName" | "phone";
 
-/** Lo que está mal en el formulario del perfil, por campo (vacío si nada). */
+/**
+ * El formulario del perfil al abrirlo. Los admins de club se crean solo con
+ * `name` (al aceptar la invitación del club), sin nombre ni apellidos: se
+ * parte `name` como en «Editar datos» de la ficha del jugador, para que no
+ * vean el formulario vacío.
+ */
+export function initialProfileForm(profile: MyProfile): Record<ProfileField, string> {
+  const phone = profile.phone ?? "";
+  if (profile.firstName === null && profile.lastName === null) {
+    const [firstName = "", ...rest] = profile.name.trim().split(/\s+/);
+    return { firstName, lastName: rest.join(" "), phone };
+  }
+  return { firstName: profile.firstName ?? "", lastName: profile.lastName ?? "", phone };
+}
+
+/**
+ * Lo que está mal en el formulario del perfil, por campo (vacío si nada). Los
+ * apellidos son opcionales: quien solo tiene un nombre (p. ej. el de su club)
+ * tiene que poder guardar su teléfono.
+ */
 export function profileProblems(form: Record<ProfileField, string>): Partial<Record<ProfileField, string>> {
   const problems: Partial<Record<ProfileField, string>> = {};
   if (!form.firstName.trim()) problems.firstName = "Escribe tu nombre.";
   else if (form.firstName.trim().length > 100) problems.firstName = "Como mucho 100 caracteres.";
-  if (!form.lastName.trim()) problems.lastName = "Escribe tus apellidos.";
-  else if (form.lastName.trim().length > 100) problems.lastName = "Como mucho 100 caracteres.";
+  if (form.lastName.trim().length > 100) problems.lastName = "Como mucho 100 caracteres.";
   const phone = form.phone.trim();
   // Opcional; si se pone, un teléfono: dígitos, espacios, guiones, paréntesis y un + inicial
   if (phone && (!/^\+?[\d\s().-]{6,20}$/.test(phone) || (phone.match(/\d/g) ?? []).length < 6))
