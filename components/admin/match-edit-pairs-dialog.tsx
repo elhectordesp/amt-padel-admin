@@ -14,6 +14,8 @@ import { Loader2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
+import { isGroupsLocked } from "@/lib/utils/groups-lock";
+import type { GroupsLockOptions } from "@/types/preparation";
 
 export interface EditPairsPair {
   userId: string;
@@ -30,6 +32,10 @@ interface Props {
   /** userIds de los jugadores actuales de cada equipo (para pre-seleccionar). */
   team1UserIds: string[];
   team2UserIds: string[];
+  /** «Forzar» el bloqueo del cuadro publicado (partidos de grupos). */
+  lock?: GroupsLockOptions;
+  /** El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED). */
+  onGroupsLocked?: () => void;
   onSaved?: () => void;
 }
 
@@ -41,6 +47,8 @@ export function MatchEditPairsDialog({
   pairs,
   team1UserIds,
   team2UserIds,
+  lock,
+  onGroupsLocked,
   onSaved,
 }: Props) {
   const findPair = (ids: string[]) =>
@@ -67,6 +75,7 @@ export function MatchEditPairsDialog({
       { userId: t1.userId, partnerId: t1.partnerId },
       { userId: t2.userId, partnerId: t2.partnerId },
       force,
+      lock,
     );
   };
 
@@ -79,6 +88,11 @@ export function MatchEditPairsDialog({
       onSaved?.();
       onClose();
     } catch (e: any) {
+      // Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo)
+      if (isGroupsLocked(e) && onGroupsLocked) {
+        onGroupsLocked();
+        return;
+      }
       const msg: string =
         e?.response?.data?.message ?? e?.message ?? "No se pudieron cambiar las parejas";
       if (/Confirma para/i.test(msg) && typeof window !== "undefined" && window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
@@ -88,7 +102,8 @@ export function MatchEditPairsDialog({
           onSaved?.();
           onClose();
         } catch (e2: any) {
-          toast.error(e2?.response?.data?.message ?? e2?.message ?? "Error");
+          if (isGroupsLocked(e2) && onGroupsLocked) onGroupsLocked();
+          else toast.error(e2?.response?.data?.message ?? e2?.message ?? "Error");
         }
       } else {
         toast.error(msg);

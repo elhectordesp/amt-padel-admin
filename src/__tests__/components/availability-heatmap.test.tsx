@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AvailabilityHeatmap as Heatmap } from "@/types/preparation";
 
@@ -58,16 +58,23 @@ describe("slotColumns", () => {
 describe("AvailabilityHeatmap", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("pinta cada franja con las parejas que no pueden, su semáforo en texto y el aviso de las críticas", async () => {
+  it("pinta cada franja con las parejas que no pueden y su semáforo en texto visible, y avisa de las críticas", async () => {
     heatmapMock.mockResolvedValue(heatmap);
     renderMap();
 
-    const critical = await screen.findByLabelText(/^Viernes 18:00: 4 de 6 parejas no pueden \(33 % puede\) · Muy justa$/);
-    expect(critical).toHaveTextContent("4");
+    // Para el lector de pantalla, la descripción entera
+    const critical = (
+      await screen.findByText(/^Viernes 18:00: 4 de 6 parejas no pueden \(33 % puede\) · Muy justa$/)
+    ).closest("td")!;
     expect(critical.className).toContain("bg-red-400");
-    expect(screen.getByLabelText(/^Sábado 19:00: 2 de 6 .* · Justa$/)).toHaveTextContent("2");
+    // A la vista, el número y la etiqueta corta: el color nunca va solo
+    expect(within(critical).getByText("4")).toBeVisible();
+    expect(within(critical).getByText("M. justa")).toBeVisible();
+    const low = screen.getByText(/^Sábado 19:00: 2 de 6 .* · Justa$/).closest("td")!;
+    expect(within(low).getByText("2")).toBeInTheDocument();
+    expect(within(low).getByText("Justa")).toBeInTheDocument();
     // El sábado no tiene las 18:00: hueco, no un 0
-    expect(screen.getAllByLabelText("Sin franja")).toHaveLength(2);
+    expect(screen.getAllByText("Sin franja")).toHaveLength(2);
     expect(screen.getByRole("status")).toHaveTextContent("En 1 franja puede jugar menos de la mitad");
     expect(screen.getByText(/parejas inscritas ·/).textContent).toMatch(/^6 parejas inscritas · 3 con alguna franja/);
     // Leyenda con las etiquetas, no solo colores
@@ -78,7 +85,7 @@ describe("AvailabilityHeatmap", () => {
   it("se filtra por categoría", async () => {
     heatmapMock.mockResolvedValue(heatmap);
     renderMap();
-    await screen.findByLabelText(/Viernes 18:00/);
+    await screen.findByText(/^Viernes 18:00/);
     fireEvent.change(screen.getByLabelText("Categoría"), { target: { value: "c2" } });
     await waitFor(() => expect(heatmapMock).toHaveBeenLastCalledWith("t1", "c2"));
     expect(screen.getByRole("option", { name: "Fem. 3ª" })).toBeInTheDocument();

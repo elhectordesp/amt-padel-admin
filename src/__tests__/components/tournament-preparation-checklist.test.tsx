@@ -90,15 +90,22 @@ describe("TournamentPreparationChecklist", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
   });
 
-  it("abierto: «Cerrar inscripciones» pasa el torneo a Sorteo", async () => {
+  it("abierto: «Cerrar inscripciones» pasa el torneo a Sorteo y refresca también la edición y el listado", async () => {
     preparationMock.mockResolvedValue(prep("OPEN", 2));
     updateMock.mockResolvedValue({});
-    renderChecklist();
+    const { qc } = renderChecklist();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
     // El botón del paso y el de confirmar se llaman igual
     fireEvent.click(await screen.findByRole("button", { name: "Cerrar inscripciones" }));
     const buttons = screen.getAllByRole("button", { name: "Cerrar inscripciones" });
     fireEvent.click(buttons[buttons.length - 1]);
     await waitFor(() => expect(updateMock).toHaveBeenCalledWith("t1", { status: "DRAW" }));
+    // Con el torneo de antes en caché, guardar la edición reabriría las inscripciones
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin-tournament", "t1"] }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tournaments"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tournament", "t1"] });
   });
 
   it("cuadro y horarios llevan a su pestaña", async () => {
@@ -148,6 +155,34 @@ describe("TournamentPreparationChecklist", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publicar igualmente" }));
     await waitFor(() => expect(publishAndNotifyMock).toHaveBeenLastCalledWith("t1", true));
     await waitFor(() => expect(toastSuccess).toHaveBeenLastCalledWith(expect.stringContaining("Programado")));
+  });
+
+  it("«Publicar igualmente» no sale si alguna tiene partidos sin hora (el back no la publicaría)", async () => {
+    preparationMock.mockResolvedValue(prep("DRAW", 5));
+    publishAndNotifyMock.mockResolvedValue({
+      results: [
+        {
+          categoryId: "c2", gender: "F", level: "3a", alreadyPublished: false, published: false,
+          conflicts: [{ type: "MISSING_ASSIGNMENT", matchId: "m1", description: "" }],
+        },
+        {
+          categoryId: "c3", gender: "M", level: "2a", alreadyPublished: false, published: false,
+          conflicts: [
+            { type: "MISSING_ASSIGNMENT", matchId: "m2", description: "" },
+            { type: "COURT_OVERLAP", matchId: "m3", description: "" },
+          ],
+        },
+      ],
+      publishedCount: 0,
+      total: 2,
+      status: "DRAW",
+    });
+    renderChecklist();
+    fireEvent.click(await screen.findByRole("button", { name: "Publicar y avisar" }));
+    const confirm = screen.getAllByRole("button", { name: "Publicar y avisar" });
+    fireEvent.click(confirm[confirm.length - 1]);
+    expect(await screen.findByText("Sin publicar")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Publicar igualmente/ })).toBeNull();
   });
 
   it("un error del back se enseña", async () => {

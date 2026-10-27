@@ -22,6 +22,7 @@ vi.mock("@/lib/services/admin", () => ({
   },
 }));
 import { adminService } from "@/lib/services/admin";
+import { ApiError } from "@/lib/api";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -133,8 +134,22 @@ describe("GenerateBracketDialog", () => {
         undefined,
         "grupos+eliminatoria",
         expect.objectContaining({ topNPerGroup: 2 }),
+        // Sin «Forzar» el bloqueo del cuadro publicado
+        undefined,
       );
     });
+  });
+
+  it("con el cuadro publicado (409 GROUPS_LOCKED) se cierra y ofrece ocultarlo o forzar", async () => {
+    (adminService.tournaments.generateBracket as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ApiError("El cuadro de esta categoría está publicado", 409, "GROUPS_LOCKED"),
+    );
+    const onClose = vi.fn();
+    const onGroupsLocked = vi.fn();
+    wrap(<GenerateBracketDialog {...baseProps({ onClose })} onGroupsLocked={onGroupsLocked} />);
+    fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
+    await waitFor(() => expect(onGroupsLocked).toHaveBeenCalled());
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("muestra error inline cuando generateBracket falla y NO cierra el modal", async () => {

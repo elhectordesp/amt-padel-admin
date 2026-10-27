@@ -76,6 +76,10 @@ export function CategoryLevelBands({ tournamentId }: { tournamentId: string }) {
           No se pudo cargar el nivel de las categorías.{" "}
           <button onClick={() => refetch()} className="underline">Reintentar</button>
         </div>
+      ) : data.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-muted-foreground">
+          El torneo aún no tiene categorías: añádelas para ver su nivel.
+        </p>
       ) : (
         <ul className="divide-y divide-border">
           {data.map((s) => {

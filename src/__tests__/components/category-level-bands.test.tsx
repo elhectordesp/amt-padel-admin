@@ -61,4 +61,10 @@ describe("CategoryLevelBands", () => {
     expect(screen.getByText(/no limita las inscripciones/)).toBeInTheDocument();
     expect(levelBandsMock).toHaveBeenCalledWith("t1");
   });
+
+  it("sin categorías lo dice en vez de quedarse en blanco", async () => {
+    levelBandsMock.mockResolvedValue([]);
+    renderBands();
+    expect(await screen.findByText(/aún no tiene categorías/)).toBeInTheDocument();
+  });
 });

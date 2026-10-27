@@ -484,6 +484,34 @@ describe('adminService', () => {
       expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/regenerate', { categoryId: 'c1' });
     });
 
+    it('partidos de grupos y generar: sin forzar, las peticiones de siempre; forzando, con forceLocked', async () => {
+      const team = { userId: 'a', partnerId: 'b' };
+      await adminService.tournaments.editMatchPlayers('m1', team, team);
+      expect(mockPatch).toHaveBeenLastCalledWith('/admin/matches/m1/players', { team1: team, team2: team });
+      await adminService.tournaments.editMatchPlayers('m1', team, team, false, { forceLocked: true });
+      expect(mockPatch).toHaveBeenLastCalledWith('/admin/matches/m1/players', { team1: team, team2: team, forceLocked: true });
+
+      const dto = { categoryId: 'c1', groupId: 'g1' };
+      await adminService.tournaments.createManualMatch('t1', dto);
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/matches', dto);
+      await adminService.tournaments.createManualMatch('t1', dto, { forceLocked: true });
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/matches', { ...dto, forceLocked: true });
+
+      await adminService.tournaments.deleteMatch('m1', true);
+      expect(mockDelete).toHaveBeenLastCalledWith('/admin/matches/m1', { params: { force: true } });
+      await adminService.tournaments.deleteMatch('m1', false, { forceLocked: true });
+      expect(mockDelete).toHaveBeenLastCalledWith('/admin/matches/m1', { params: { forceLocked: true } });
+
+      await adminService.tournaments.generateBracket('t1', 'c1');
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/generate', { categoryId: 'c1', customGroups: undefined });
+      await adminService.tournaments.generateBracket('t1', 'c1', undefined, undefined, undefined, { forceLocked: true });
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/generate', {
+        categoryId: 'c1',
+        customGroups: undefined,
+        forceLocked: true,
+      });
+    });
+
     it('forzando, añaden forceLocked', async () => {
       const lock = { forceLocked: true };
       await adminService.tournaments.addEmptyGroup('t1', 'c1', lock);

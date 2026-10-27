@@ -27,6 +27,7 @@ import {
   type BracketGenerationOptions,
 } from "@/lib/services/admin";
 import type { GroupsLockOptions } from "@/types/preparation";
+import { isGroupsLocked } from "@/lib/utils/groups-lock";
 
 type Format = "grupos+eliminatoria" | "solo-eliminatoria";
 type DistMode = "byCount" | "bySize";
@@ -64,6 +65,8 @@ interface Props {
   registrationsOpenReason?: string | null;
   /** «Forzar» el bloqueo de los grupos del cuadro publicado al regenerar. */
   lock?: GroupsLockOptions;
+  /** El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED). */
+  onGroupsLocked?: () => void;
   onGenerated?: () => void;
 }
 
@@ -93,6 +96,7 @@ export function GenerateBracketDialog({
   currentFormat = null,
   registrationsOpenReason = null,
   lock,
+  onGroupsLocked,
   onGenerated,
 }: Props) {
   const [genMode, setGenMode] = useState<GenerationMode>("auto"); // Bloque 3
@@ -190,6 +194,7 @@ export function GenerateBracketDialog({
             undefined,
             format,
             opts,
+            lock,
           );
     },
     onSuccess: () => {
@@ -203,6 +208,12 @@ export function GenerateBracketDialog({
       onGenerated?.();
     },
     onError: (err: unknown) => {
+      // Cuadro publicado: se ofrece ocultarlo o forzar
+      if (isGroupsLocked(err) && onGroupsLocked) {
+        onClose();
+        onGroupsLocked();
+        return;
+      }
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ??

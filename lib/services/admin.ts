@@ -233,11 +233,13 @@ export const adminService = {
       customGroups?: string[][],
       format?: string,
       options?: BracketGenerationOptions,
+      lock?: GroupsLockOptions,
     ) =>
       api
         .post(`/admin/tournaments/${id}/bracket/generate`, {
           categoryId,
           customGroups,
+          ...(lock?.forceLocked ? { forceLocked: true } : {}),
           ...(format !== undefined ? { format } : {}),
           ...(options?.numGroups !== undefined ? { numGroups: options.numGroups } : {}),
           ...(options?.topNPerGroup !== undefined ? { topNPerGroup: options.topNPerGroup } : {}),
@@ -390,14 +392,26 @@ export const adminService = {
     overrideGroupMemberStats: (id: string, catId: string, groupId: string, userId: string, stats: { played?: number; wins?: number; points?: number; setsWon?: number; setsLost?: number; gamesWon?: number; gamesLost?: number }) =>
       api.patch(`/admin/tournaments/${id}/categories/${catId}/groups/${groupId}/members/${userId}/stats`, stats).then((r) => r.data),
     /** Edición manual de partidos (Frente 2). */
-    editMatchPlayers: (matchId: string, team1: { userId: string; partnerId?: string | null }, team2: { userId: string; partnerId?: string | null }, force?: boolean) =>
-      api.patch(`/admin/matches/${matchId}/players`, { team1, team2, ...(force ? { force: true } : {}) }).then((r) => r.data),
+    /** Un partido de grupos con el cuadro publicado solo con `lock.forceLocked` (GroupsLockOptions). */
+    editMatchPlayers: (matchId: string, team1: { userId: string; partnerId?: string | null }, team2: { userId: string; partnerId?: string | null }, force?: boolean, lock?: GroupsLockOptions) =>
+      api.patch(`/admin/matches/${matchId}/players`, {
+        team1,
+        team2,
+        ...(force ? { force: true } : {}),
+        ...(lock?.forceLocked ? { forceLocked: true } : {}),
+      }).then((r) => r.data),
     createManualMatch: (
       tournamentId: string,
       payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string },
-    ) => api.post(`/admin/tournaments/${tournamentId}/matches`, payload).then((r) => r.data),
-    deleteMatch: (matchId: string, force?: boolean) =>
-      api.delete(`/admin/matches/${matchId}`, { params: force ? { force: true } : {} }).then((r) => r.data),
+      lock?: GroupsLockOptions,
+    ) => api.post(`/admin/tournaments/${tournamentId}/matches`, lock?.forceLocked ? { ...payload, forceLocked: true } : payload).then((r) => r.data),
+    deleteMatch: (matchId: string, force?: boolean, lock?: GroupsLockOptions) =>
+      api.delete(`/admin/matches/${matchId}`, {
+        params: {
+          ...(force ? { force: true } : {}),
+          ...(lock?.forceLocked ? { forceLocked: true } : {}),
+        },
+      }).then((r) => r.data),
     /** Des-finalizar un partido: revierte su resultado y lo deja pendiente. */
     unfinishMatch: (matchId: string, force?: boolean) =>
       api.post(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),

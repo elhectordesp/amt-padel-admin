@@ -8,12 +8,15 @@ import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
 import type { CategoryLevel, Gender } from "@/types";
 import type { AvailabilityHeatmap as Heatmap, HeatLevel } from "@/types/preparation";
 
-/** Semáforo: etiqueta, umbral y colores (el número de la celda va siempre en texto). */
-export const HEAT_LEVEL: Record<HeatLevel, { label: string; range: string; cell: string; dot: string }> = {
-  HIGH:     { label: "Buena",     range: "el 90 % o más",    cell: "bg-green-400/15 border-green-400/30",   dot: "bg-green-400"  },
-  MEDIUM:   { label: "Aceptable", range: "del 75 al 89 %",   cell: "bg-yellow-400/15 border-yellow-400/30", dot: "bg-yellow-400" },
-  LOW:      { label: "Justa",     range: "del 50 al 74 %",   cell: "bg-orange-400/20 border-orange-400/40", dot: "bg-orange-400" },
-  CRITICAL: { label: "Muy justa", range: "menos del 50 %",   cell: "bg-red-400/25 border-red-400/50",       dot: "bg-red-400"    },
+/**
+ * Semáforo: etiqueta (y su forma corta, la que se ve en la celda junto al
+ * número: el color nunca va solo), umbral y colores.
+ */
+export const HEAT_LEVEL: Record<HeatLevel, { label: string; short: string; range: string; cell: string; dot: string }> = {
+  HIGH:     { label: "Buena",     short: "Buena",    range: "el 90 % o más",  cell: "bg-green-400/15 border-green-400/30",   dot: "bg-green-400"  },
+  MEDIUM:   { label: "Aceptable", short: "Acept.",   range: "del 75 al 89 %", cell: "bg-yellow-400/15 border-yellow-400/30", dot: "bg-yellow-400" },
+  LOW:      { label: "Justa",     short: "Justa",    range: "del 50 al 74 %", cell: "bg-orange-400/20 border-orange-400/40", dot: "bg-orange-400" },
+  CRITICAL: { label: "Muy justa", short: "M. justa", range: "menos del 50 %", cell: "bg-red-400/25 border-red-400/50",       dot: "bg-red-400"    },
 };
 
 const LEVELS: HeatLevel[] = ["HIGH", "MEDIUM", "LOW", "CRITICAL"];
@@ -123,17 +126,23 @@ export function AvailabilityHeatmap({
                       </th>
                       {columns.map((slot) => {
                         const cell = bySlot.get(slot);
-                        if (!cell) return <td key={slot} aria-label="Sin franja" />;
+                        if (!cell)
+                          return (
+                            <td key={slot}>
+                              <span className="sr-only">Sin franja</span>
+                            </td>
+                          );
                         const level = HEAT_LEVEL[cell.level];
                         const help = `${day.label} ${slot}: ${cell.unavailablePairs} de ${data.totalPairs} parejas no pueden (${cell.availablePct} % puede) · ${level.label}`;
                         return (
                           <td
                             key={slot}
                             title={help}
-                            aria-label={help}
-                            className={`w-9 min-w-9 h-8 text-center border rounded tabular-nums text-foreground ${level.cell}`}
+                            className={`w-12 min-w-12 py-1 text-center border rounded tabular-nums text-foreground ${level.cell}`}
                           >
-                            {cell.unavailablePairs}
+                            <span aria-hidden className="block text-xs font-semibold leading-tight">{cell.unavailablePairs}</span>
+                            <span aria-hidden className="block text-[9px] leading-tight text-muted-foreground">{level.short}</span>
+                            <span className="sr-only">{help}</span>
                           </td>
                         );
                       })}

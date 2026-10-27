@@ -62,7 +62,8 @@ function stepDetail(key: PreparationStepKey, done: boolean, p: TournamentPrepara
       return `${drawable.filter((c) => c.hasDraw).length} de ${drawable.length} categorías con cuadro.`;
     case "SCHEDULE": {
       const unscheduled = drawn.reduce((s, c) => s + c.unscheduled, 0);
-      const conflicts = drawn.reduce((s, c) => s + c.conflicts, 0);
+      // Publicada forzando, sus conflictos ya están aceptados
+      const conflicts = drawn.filter((c) => !c.published).reduce((s, c) => s + c.conflicts, 0);
       if (done) return "Todos los partidos con hora y pista, sin conflictos.";
       if (!drawn.length) return "Primero genera el cuadro.";
       return `${unscheduled} ${unscheduled === 1 ? "partido" : "partidos"} sin hora o pista · ${conflicts} ${conflicts === 1 ? "conflicto" : "conflictos"}.`;
@@ -117,11 +118,17 @@ export function TournamentPreparationChecklist({
   const { data: prep, isLoading, isError, refetch } = useQuery({
     queryKey: preparationQK(tournamentId),
     queryFn: () => adminService.tournaments.preparation(tournamentId),
+    // Al volver a Resumen tras programar o sortear, con los recuentos de ahora
+    refetchOnMount: "always",
   });
 
-  // Todo lo del torneo (incluida esta lista) y lo que cambia al publicar
+  // Todo lo del torneo (incluida esta lista), lo que cambia al publicar y el
+  // torneo de la edición y del listado: con el de antes en caché, guardar la
+  // edición devolvería el estado atrás
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+    qc.invalidateQueries({ queryKey: ["admin-tournament", tournamentId] });
+    qc.invalidateQueries({ queryKey: ["tournaments"] });
     qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
     qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
   };
@@ -181,13 +188,16 @@ export function TournamentPreparationChecklist({
   }
   if (!PREPARING.includes(prep.status)) return null;
 
-  const blockedWithConflicts = blocked.filter((b) => b.conflicts.some((c) => c.type !== "MISSING_ASSIGNMENT"));
+  // «Publicar igualmente» solo publica las que tienen conflictos que se pueden
+  // aceptar: con un partido sin hora o pista el back no la publica nunca
+  const blockedWithConflicts = blocked.filter(
+    (b) => b.conflicts.length > 0 && b.conflicts.every((c) => c.type !== "MISSING_ASSIGNMENT"),
+  );
   const { status, categories } = prep;
   const hasCategories = prep.steps.find((s) => s.key === "CATEGORIES")?.done ?? false;
-  // Lo mismo que exige el back para publicar: inscripciones cerradas y algún cuadro
-  const registrationsClosed =
-    status === "DRAW" || status === "SCHEDULED" ||
-    (status === "OPEN" && !!prep.registrationDeadline && new Date(prep.registrationDeadline) <= new Date());
+  // Lo mismo que exige el back para publicar: inscripciones cerradas (el paso,
+  // con su criterio) y algún cuadro
+  const registrationsClosed = prep.steps.find((s) => s.key === "REGISTRATION_CLOSED")?.done ?? false;
   const canPublish = registrationsClosed && categories.some((c) => c.hasDraw);
   const pendingCats = (pred: (c: PreparationCategory) => boolean) =>
     categories.filter(pred).map(catName).join(", ");
@@ -248,7 +258,7 @@ export function TournamentPreparationChecklist({
         {prep.steps.map((s, i) => {
           const isNext = s.key === prep.nextStep;
           return (
-            <li key={s.key} className={`flex items-start gap-3 px-5 py-3 ${isNext ? "bg-[rgba(212,175,55,0.04)]" : ""}`}>
+            <li key={s.key} className={`flex flex-wrap items-start gap-3 px-5 py-3 ${isNext ? "bg-[rgba(212,175,55,0.04)]" : ""}`}>
               <span
                 className={`mt-0.5 flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shrink-0 ${
                   s.done
@@ -261,7 +271,7 @@ export function TournamentPreparationChecklist({
               >
                 {s.done ? <Check size={11} /> : i + 1}
               </span>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-[12rem]">
                 <p className={`text-sm ${s.done ? "text-muted-foreground" : "text-foreground font-medium"}`}>
                   {STEP_LABEL[s.key]}
                   <span className="sr-only">{s.done ? " (hecho)" : " (pendiente)"}</span>
@@ -276,7 +286,7 @@ export function TournamentPreparationChecklist({
                   </p>
                 )}
               </div>
-              {!s.done && <div className="shrink-0">{action(s.key)}</div>}
+              {!s.done && <div className="shrink-0 ml-8 sm:ml-0">{action(s.key)}</div>}
             </li>
           );
         })}

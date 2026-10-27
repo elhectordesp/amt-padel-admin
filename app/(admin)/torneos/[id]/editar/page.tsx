@@ -7,14 +7,15 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
-import { localDateTimeToIso, localDayKey, toLocalDateTimeInput } from "@/lib/utils/date-keys";
+import { localDayKey, toLocalDateTimeInput } from "@/lib/utils/date-keys";
+import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -60,16 +61,22 @@ export default function EditarTorneoPage() {
   const qc     = useQueryClient();
   const [pendingData, setPendingData] = useState<FormData | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
-  // «Avanzado» (el estado a mano) abierto si se llega con #avanzado
+  // «Avanzado» (el estado a mano) abierto y a la vista si se llega con
+  // #avanzado (desde la preparación), una vez pintado el formulario
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  useEffect(() => {
-    if (window.location.hash === "#avanzado") setAdvancedOpen(true);
-  }, []);
+  const jumpedToAdvanced = useRef(false);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
+
+  useEffect(() => {
+    if (!tournament || jumpedToAdvanced.current || window.location.hash !== "#avanzado") return;
+    jumpedToAdvanced.current = true;
+    setAdvancedOpen(true);
+    document.getElementById("avanzado")?.scrollIntoView({ block: "start" });
+  }, [tournament]);
 
   // ADMIN ve el listado completo; CLUB solo carga su propio club (el listado
   // 403earía igualmente). El campo Club es read-only para CLUB.
@@ -134,16 +141,9 @@ export default function EditarTorneoPage() {
   }, [tournament, reset]);
 
   const save = useMutation({
+    // El estado y el cierre de inscripciones, solo si se han tocado
     mutationFn: (data: FormData & { force?: boolean }) =>
-      adminService.tournaments.update(id, {
-        ...data,
-        // Solo si se ha tocado (al mostrarlo se pierden los segundos y, en la
-        // hora repetida del cambio de otoño, cuál de las dos era), y con su
-        // zona: sin ella, el back lo leía en la hora del servidor
-        registrationDeadline: dirtyFields.registrationDeadline
-          ? localDateTimeToIso(data.registrationDeadline)
-          : undefined,
-      }),
+      adminService.tournaments.update(id, tournamentUpdatePayload(data, dirtyFields)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -236,7 +236,8 @@ export default function EditarTorneoPage() {
               imageUrl: data.imageUrl?.trim() ? data.imageUrl : null,
             };
             const DESTRUCTIVE = ["DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"];
-            const statusChanged = tournament && sanitized.status !== tournament.status?.toUpperCase();
+            const statusChanged =
+              tournament && dirtyFields.status && sanitized.status !== tournament.status?.toUpperCase();
             if (statusChanged && DESTRUCTIVE.includes(sanitized.status)) {
               setPendingData(sanitized);
             } else {
