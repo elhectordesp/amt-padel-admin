@@ -39,7 +39,7 @@ import { AvailabilityHeatmap } from "@/components/admin/availability-heatmap";
 import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
-import { isGroupsLocked } from "@/lib/utils/groups-lock";
+import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
@@ -342,7 +342,7 @@ function CalendarTab({
   // Frente 2 — borrar partido a mano. Uno de grupos con el cuadro publicado
   // da 409 GROUPS_LOCKED: se ofrece ocultar el cuadro o borrarlo forzando
   type DeleteMatchVars = { matchId: string; force?: boolean; categoryId?: string; forceLocked?: boolean };
-  const [lockedDelete, setLockedDelete] = useState<DeleteMatchVars | null>(null);
+  const lockedPrompt = useGroupsLockedPrompt();
   const deleteMatchMut = useMutation({
     mutationFn: ({ matchId, force, forceLocked }: DeleteMatchVars) =>
       adminService.tournaments.deleteMatch(matchId, force, { forceLocked }),
@@ -353,10 +353,11 @@ function CalendarTab({
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
     },
     onError: (e: unknown, vars) => {
-      if (isGroupsLocked(e) && vars.categoryId && !vars.forceLocked) {
-        setLockedDelete(vars);
+      if (
+        vars.categoryId && !vars.forceLocked &&
+        lockedPrompt.onError(e, vars.categoryId, () => deleteMatchMut.mutate({ ...vars, forceLocked: true }))
+      )
         return;
-      }
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         (e as Error)?.message ?? "No se pudo borrar el partido";
@@ -891,16 +892,13 @@ function CalendarTab({
 
       <GroupsLockedPrompt
         tournamentId={tournamentId}
-        categoryId={lockedDelete?.categoryId ?? null}
+        categoryId={lockedPrompt.categoryId}
         categoryLabel={(() => {
-          const c = tournament?.categories.find((x) => x.id === lockedDelete?.categoryId);
+          const c = tournament?.categories.find((x) => x.id === lockedPrompt.categoryId);
           return c ? `${GENDER_LABEL[c.gender].short} ${CATEGORY_LABEL_SHORT[c.level]}` : "la categoría";
         })()}
-        onClose={() => setLockedDelete(null)}
-        onForce={() => {
-          if (lockedDelete) deleteMatchMut.mutate({ ...lockedDelete, forceLocked: true });
-          setLockedDelete(null);
-        }}
+        onClose={lockedPrompt.close}
+        onForce={lockedPrompt.force}
       />
 
       <ConfirmModal
@@ -1498,9 +1496,11 @@ export default function TorneoDetailPage() {
   const [manualNumGroups,     setManualNumGroups]      = useState(4);
   const [manualGroupEdits,    setManualGroupEdits]     = useState<Record<string, { userId: string; partnerId: string | null }[]>>({});
   const [groupEditMode,       setGroupEditMode]       = useState(false);
-  // Categoría del 409 GROUPS_LOCKED (o del «Regenerar todo» bloqueado): se
-  // ofrece ocultar el cuadro o forzar
-  const [lockPromptCatId,     setLockPromptCatId]     = useState<string | null>(null);
+  // 409 GROUPS_LOCKED (o «Regenerar todo» con el cuadro publicado): se
+  // ofrece ocultar el cuadro o forzar ESA petición una vez
+  const lockedPrompt = useGroupsLockedPrompt();
+  // «Regenerar todo» forzado desde ese diálogo (solo esa vez)
+  const [regenForceLocked,    setRegenForceLocked]    = useState(false);
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
@@ -1567,12 +1567,9 @@ export default function TorneoDetailPage() {
     !!publishedAtOf(catId) && bracketMatches.some((m: any) => m.categoryId === catId);
   /** Bloqueada y sin forzar: los cambios de grupos se deshabilitan. */
   const groupsLocked = (catId: string) => isPublishedDraw(catId) && !forcedLock.isForced(catId);
-  /** 409 GROUPS_LOCKED: en vez de un error más, se ofrece ocultar el cuadro o forzar. */
-  const onGroupsLocked = (err: unknown, catId: string) => {
-    if (!isGroupsLocked(err)) return false;
-    setLockPromptCatId(catId);
-    return true;
-  };
+  /** Lo que mandan las peticiones de grupos: forzado solo esa vez, o el del aviso. */
+  const lockFor = (catId: string, forceLocked?: boolean) =>
+    forceLocked ? { forceLocked: true } : lockOpts(catId);
 
   const {
     data: tournamentStatus, isLoading: loadingStatus, refetch: refetchStatus,
@@ -1690,15 +1687,23 @@ export default function TorneoDetailPage() {
   });
 
   const regenerateBracket = useMutation({
-    mutationFn: (categoryId: string) => adminService.tournaments.regenerateBracket(id, categoryId, undefined, undefined, lockOpts(categoryId)),
+    mutationFn: ({ categoryId, forceLocked }: { categoryId: string; forceLocked?: boolean }) =>
+      adminService.tournaments.regenerateBracket(id, categoryId, undefined, undefined, lockFor(categoryId, forceLocked)),
     onSuccess:  () => {
       toast.success("Cuadro regenerado correctamente");
       setRegenCatId(null);
+      setRegenForceLocked(false);
       invalidateBracket();
     },
-    onError: (err: Error, categoryId) => {
+    onError: (err: Error, vars) => {
       setRegenCatId(null);
-      if (!onGroupsLocked(err, categoryId)) toast.error(err.message);
+      setRegenForceLocked(false);
+      if (
+        !vars.forceLocked &&
+        lockedPrompt.onError(err, vars.categoryId, () => regenerateBracket.mutate({ ...vars, forceLocked: true }))
+      )
+        return;
+      toast.error(err.message);
     },
   });
 
@@ -1836,8 +1841,8 @@ export default function TorneoDetailPage() {
 
   // Mejora QA #3 — reparto GLOBAL de grupos (modo edición, atómico)
   const saveAllGroups = useMutation({
-    mutationFn: ({ catId, groups, force }: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) =>
-      adminService.tournaments.updateAllGroupMembers(id, catId, groups, force, lockOpts(catId)),
+    mutationFn: ({ catId, groups, force, forceLocked }: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean; forceLocked?: boolean }) =>
+      adminService.tournaments.updateAllGroupMembers(id, catId, groups, force, lockFor(catId, forceLocked)),
     onSuccess: () => {
       toast.success("Reparto de grupos guardado");
       setManualGroupEdits({});
@@ -1845,8 +1850,12 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["standings", id] });
       qc.invalidateQueries({ queryKey: ["bracket", id] });
     },
-    onError: (err: unknown, variables: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean }) => {
-      if (onGroupsLocked(err, variables.catId)) return;
+    onError: (err: unknown, variables: { catId: string; groups: { groupId: string; members: { userId: string; partnerId?: string | null }[] }[]; force?: boolean; forceLocked?: boolean }) => {
+      if (
+        !variables.forceLocked &&
+        lockedPrompt.onError(err, variables.catId, () => saveAllGroups.mutate({ ...variables, forceLocked: true }))
+      )
+        return;
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? (err as Error)?.message ?? "No se pudo guardar el reparto";
       if (!variables.force && /jugad|resultad/i.test(msg)) {
         if (window.confirm(`${msg}\n\n¿Continuar y regenerar los partidos afectados?`)) {
@@ -1884,13 +1893,19 @@ export default function TorneoDetailPage() {
 
   // Mini-Bloque 5: añadir/borrar grupos individuales
   const addEmptyGroupMut = useMutation({
-    mutationFn: (catId: string) => adminService.tournaments.addEmptyGroup(id, catId, lockOpts(catId)),
+    mutationFn: ({ catId, forceLocked }: { catId: string; forceLocked?: boolean }) =>
+      adminService.tournaments.addEmptyGroup(id, catId, lockFor(catId, forceLocked)),
     onSuccess: () => {
       toast.success("Grupo vacío añadido");
       qc.invalidateQueries({ queryKey: ["standings", id] });
     },
-    onError: (err: Error, catId) => {
-      if (!onGroupsLocked(err, catId)) toast.error(err.message);
+    onError: (err: Error, vars) => {
+      if (
+        !vars.forceLocked &&
+        lockedPrompt.onError(err, vars.catId, () => addEmptyGroupMut.mutate({ ...vars, forceLocked: true }))
+      )
+        return;
+      toast.error(err.message);
     },
   });
 
@@ -1905,8 +1920,8 @@ export default function TorneoDetailPage() {
   });
 
   const deleteGroupMut = useMutation({
-    mutationFn: ({ catId, groupId, force }: { catId: string; groupId: string; force?: boolean }) =>
-      adminService.tournaments.deleteGroup(id, catId, groupId, force, lockOpts(catId)),
+    mutationFn: ({ catId, groupId, force, forceLocked }: { catId: string; groupId: string; force?: boolean; forceLocked?: boolean }) =>
+      adminService.tournaments.deleteGroup(id, catId, groupId, force, lockFor(catId, forceLocked)),
     onSuccess: (_data, variables) => {
       toast.success("Grupo borrado");
       qc.invalidateQueries({ queryKey: ["standings", id] });
@@ -1918,7 +1933,11 @@ export default function TorneoDetailPage() {
       });
     },
     onError: (err: Error, variables) => {
-      if (onGroupsLocked(err, variables.catId)) return;
+      if (
+        !variables.forceLocked &&
+        lockedPrompt.onError(err, variables.catId, () => deleteGroupMut.mutate({ ...variables, forceLocked: true }))
+      )
+        return;
       const msg: string = err?.message ?? "";
       if (!variables.force && /Confirma para/i.test(msg) &&
           typeof window !== "undefined" &&
@@ -1936,15 +1955,17 @@ export default function TorneoDetailPage() {
       catId,
       numGroups,
       force,
+      forceLocked,
     }: {
       catId: string;
       numGroups: number;
       force: boolean;
+      forceLocked?: boolean;
     }) =>
       adminService.tournaments.restructureGroups(id, catId, {
         numGroups,
         force,
-        ...lockOpts(catId),
+        ...lockFor(catId, forceLocked),
       }),
     onSuccess: (data) => {
       // H3 — feedback detallado sobre preservación de horarios
@@ -1968,7 +1989,13 @@ export default function TorneoDetailPage() {
       setManualGroupEdits({});
     },
     onError: (err: Error, variables) => {
-      if (onGroupsLocked(err, variables.catId)) return;
+      if (
+        !variables.forceLocked &&
+        lockedPrompt.onError(err, variables.catId, () =>
+          restructureGroupsMut.mutate({ ...variables, forceLocked: true }, { onSuccess: () => setRestructureOpen(false) }),
+        )
+      )
+        return;
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         err?.message ?? "Error al reestructurar grupos";
@@ -3393,7 +3420,7 @@ export default function TorneoDetailPage() {
 
                           {/* Botón "+ Nuevo grupo" — mini-Bloque 5 */}
                           <button
-                            onClick={() => addEmptyGroupMut.mutate(bracketCatId)}
+                            onClick={() => addEmptyGroupMut.mutate({ catId: bracketCatId })}
                             disabled={addEmptyGroupMut.isPending || catGroups.length >= 16 || groupsLocked(bracketCatId)}
                             className="flex flex-col items-center justify-center gap-2 min-h-[120px] rounded-md border-2 border-dashed border-border bg-background/30 text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             title={groupsLocked(bracketCatId) ? "Cuadro publicado: ocúltalo o fuerza la edición (aviso de arriba)" : catGroups.length >= 16 ? "Máximo 16 grupos" : "Añadir un grupo vacío"}
@@ -3586,19 +3613,25 @@ export default function TorneoDetailPage() {
                               <span className="hidden sm:inline">Crear partido</span>
                             </button>
                             {groupsLocked(cat.id) && (
-                              <button
-                                onClick={() => setLockPromptCatId(cat.id)}
-                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-amber-400/40 bg-amber-400/5 text-xs text-amber-400 hover:bg-amber-400/10 transition-colors"
+                              <span
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-amber-400/40 bg-amber-400/5 text-xs text-amber-400"
                                 title="Cuadro publicado: sus grupos están bloqueados. Ocúltalo o fuerza la edición para cambiarlo"
-                                aria-label="Cuadro publicado: grupos bloqueados"
                               >
-                                <Lock size={13} />
-                                <span className="hidden sm:inline">Publicado · bloqueado</span>
-                              </button>
+                                <Lock size={13} aria-hidden />
+                                <span className="sr-only sm:not-sr-only">Publicado · bloqueado</span>
+                              </span>
                             )}
                             <button
-                              // Con el cuadro publicado, primero se explica cómo desbloquearlo
-                              onClick={() => (groupsLocked(cat.id) ? setLockPromptCatId(cat.id) : setRegenCatId(cat.id))}
+                              // Con el cuadro publicado, primero se explica cómo desbloquearlo;
+                              // «Forzar» lleva a la confirmación, forzado solo esa vez
+                              onClick={() =>
+                                groupsLocked(cat.id)
+                                  ? lockedPrompt.open(cat.id, () => {
+                                      setRegenForceLocked(true);
+                                      setRegenCatId(cat.id);
+                                    })
+                                  : setRegenCatId(cat.id)
+                              }
                               className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-yellow-400/50 transition-colors"
                               title={groupsLocked(cat.id) ? "Cuadro publicado: ocúltalo o fuerza la edición para regenerarlo" : "Regenerar cuadro completo"}
                               aria-label="Regenerar todo"
@@ -4110,7 +4143,7 @@ export default function TorneoDetailPage() {
             : null
         }
         lock={lockOpts(bracketCatId)}
-        onGroupsLocked={() => setLockPromptCatId(bracketCatId)}
+        onGroupsLocked={(retry) => lockedPrompt.open(bracketCatId, retry)}
         onGenerated={() => invalidateBracket()}
       />
     )}
@@ -4182,7 +4215,7 @@ export default function TorneoDetailPage() {
             : p.primary.user.name,
         }))}
         lock={lockOpts(createMatchCatId)}
-        onGroupsLocked={() => setLockPromptCatId(createMatchCatId)}
+        onGroupsLocked={(retry) => lockedPrompt.open(createMatchCatId, retry)}
         onCreated={() => invalidateBracket()}
       />
     )}
@@ -4210,7 +4243,7 @@ export default function TorneoDetailPage() {
         team1UserIds={(editPairsMatch.players ?? []).filter((p: any) => p.team === 1).map((p: any) => p.userId)}
         team2UserIds={(editPairsMatch.players ?? []).filter((p: any) => p.team === 2).map((p: any) => p.userId)}
         lock={editPairsMatch.categoryId ? lockOpts(editPairsMatch.categoryId) : undefined}
-        onGroupsLocked={editPairsMatch.categoryId ? () => setLockPromptCatId(editPairsMatch.categoryId) : undefined}
+        onGroupsLocked={editPairsMatch.categoryId ? (retry) => lockedPrompt.open(editPairsMatch.categoryId, retry) : undefined}
         onSaved={() => {
           qc.invalidateQueries({ queryKey: ["matches", id] });
           qc.invalidateQueries({ queryKey: ["bracket", id] });
@@ -4221,15 +4254,10 @@ export default function TorneoDetailPage() {
 
     <GroupsLockedPrompt
       tournamentId={id}
-      categoryId={lockPromptCatId}
-      categoryLabel={catOptions.find((c) => c.value === lockPromptCatId)?.label ?? "la categoría"}
-      onClose={() => setLockPromptCatId(null)}
-      onForce={() => {
-        if (!lockPromptCatId) return;
-        forcedLock.force(lockPromptCatId);
-        setLockPromptCatId(null);
-        toast.warning("Edición forzada: repite el cambio. No se avisa a los inscritos.");
-      }}
+      categoryId={lockedPrompt.categoryId}
+      categoryLabel={catOptions.find((c) => c.value === lockedPrompt.categoryId)?.label ?? "la categoría"}
+      onClose={lockedPrompt.close}
+      onForce={lockedPrompt.force}
     />
 
     {editStatsTarget && (
@@ -4428,11 +4456,16 @@ export default function TorneoDetailPage() {
     <ConfirmModal
       open={!!regenCatId}
       title="Regenerar cuadro completo"
-      description="Esto borrará todos los partidos no jugados de esta categoría y regenerará los grupos desde cero. Si hay partidos jugados se mostrará un error."
+      description={
+        "Esto borrará todos los partidos no jugados de esta categoría y regenerará los grupos desde cero. Si hay partidos jugados se mostrará un error." +
+        (regenCatId && isPublishedDraw(regenCatId)
+          ? " El cuadro está publicado: al regenerarlo queda sin publicar, y hay que volver a publicarlo (en Horarios o en la preparación) para avisar a los inscritos de sus partidos."
+          : "")
+      }
       confirmLabel="Regenerar cuadro"
       loading={regenerateBracket.isPending}
-      onClose={() => setRegenCatId(null)}
-      onConfirm={() => regenCatId && regenerateBracket.mutate(regenCatId)}
+      onClose={() => { setRegenCatId(null); setRegenForceLocked(false); }}
+      onConfirm={() => regenCatId && regenerateBracket.mutate({ categoryId: regenCatId, forceLocked: regenForceLocked })}
     />
 
     <ConfirmModal

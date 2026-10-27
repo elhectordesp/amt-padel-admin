@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GenerateBracketDialog } from "../../../components/admin/generate-bracket-dialog";
 
@@ -140,16 +140,24 @@ describe("GenerateBracketDialog", () => {
     });
   });
 
-  it("con el cuadro publicado (409 GROUPS_LOCKED) se cierra y ofrece ocultarlo o forzar", async () => {
-    (adminService.tournaments.generateBracket as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new ApiError("El cuadro de esta categoría está publicado", 409, "GROUPS_LOCKED"),
-    );
+  it("con el cuadro publicado (409 GROUPS_LOCKED) ofrece ocultarlo o forzar; «Forzar» lo repite forzado una vez", async () => {
+    const generate = adminService.tournaments.generateBracket as ReturnType<typeof vi.fn>;
+    generate
+      .mockRejectedValueOnce(new ApiError("El cuadro de esta categoría está publicado", 409, "GROUPS_LOCKED"))
+      .mockResolvedValueOnce({ success: true });
     const onClose = vi.fn();
     const onGroupsLocked = vi.fn();
     wrap(<GenerateBracketDialog {...baseProps({ onClose })} onGroupsLocked={onGroupsLocked} />);
     fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
     await waitFor(() => expect(onGroupsLocked).toHaveBeenCalled());
-    expect(onClose).toHaveBeenCalled();
+    // Sigue abierto, por si se oculta el cuadro y se vuelve a pedir
+    expect(onClose).not.toHaveBeenCalled();
+    expect(generate.mock.calls[0][5]).toBeUndefined();
+
+    await act(async () => onGroupsLocked.mock.calls[0][0]());
+    await waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+    expect(generate.mock.calls[1][5]).toEqual({ forceLocked: true });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it("muestra error inline cuando generateBracket falla y NO cierra el modal", async () => {

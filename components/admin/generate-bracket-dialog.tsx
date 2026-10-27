@@ -65,8 +65,12 @@ interface Props {
   registrationsOpenReason?: string | null;
   /** «Forzar» el bloqueo de los grupos del cuadro publicado al regenerar. */
   lock?: GroupsLockOptions;
-  /** El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED). */
-  onGroupsLocked?: () => void;
+  /**
+   * El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED): la
+   * ficha ofrece ocultarlo o forzar, y su «Forzar» llama a `retryForced`, que
+   * repite esta petición una vez con forceLocked.
+   */
+  onGroupsLocked?: (retryForced: () => void) => void;
   onGenerated?: () => void;
 }
 
@@ -167,7 +171,9 @@ export function GenerateBracketDialog({
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => {
+    // forceLocked: solo esta vez, desde el «Forzar» del diálogo de la ficha
+    mutationFn: (forceLocked?: boolean) => {
+      const lockNow = forceLocked ? { forceLocked: true } : lock;
       // Bloque 3: modo manual → crea grupos vacíos y deja al admin asignar
       if (genMode === "manual") {
         return adminService.tournaments.initBracketManual(
@@ -187,14 +193,14 @@ export function GenerateBracketDialog({
       // en el backend). Si no, generateBracket normal. Los dos con el formato
       // elegido: al regenerar se perdía y salía el cuadro de antes.
       return alreadyHasBracket
-        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts, format, lock)
+        ? adminService.tournaments.regenerateBracket(tournamentId, categoryId, opts, format, lockNow)
         : adminService.tournaments.generateBracket(
             tournamentId,
             categoryId,
             undefined,
             format,
             opts,
-            lock,
+            lockNow,
           );
     },
     onSuccess: () => {
@@ -207,11 +213,10 @@ export function GenerateBracketDialog({
       onClose();
       onGenerated?.();
     },
-    onError: (err: unknown) => {
-      // Cuadro publicado: se ofrece ocultarlo o forzar
-      if (isGroupsLocked(err) && onGroupsLocked) {
-        onClose();
-        onGroupsLocked();
+    onError: (err: unknown, forceLocked) => {
+      // Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo)
+      if (isGroupsLocked(err) && onGroupsLocked && !forceLocked) {
+        onGroupsLocked(() => generateMutation.mutate(true));
         return;
       }
       const msg =
@@ -593,7 +598,7 @@ export function GenerateBracketDialog({
               size="sm"
               onClick={() => {
                 setSubmitError(null);
-                generateMutation.mutate();
+                generateMutation.mutate(false);
               }}
               disabled={
                 generateMutation.isPending ||

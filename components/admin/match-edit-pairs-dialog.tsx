@@ -34,8 +34,12 @@ interface Props {
   team2UserIds: string[];
   /** «Forzar» el bloqueo del cuadro publicado (partidos de grupos). */
   lock?: GroupsLockOptions;
-  /** El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED). */
-  onGroupsLocked?: () => void;
+  /**
+   * El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED): la
+   * ficha ofrece ocultarlo o forzar, y su «Forzar» llama a `retryForced`, que
+   * repite esta petición una vez con forceLocked.
+   */
+  onGroupsLocked?: (retryForced: () => void) => void;
   onSaved?: () => void;
 }
 
@@ -66,7 +70,8 @@ export function MatchEditPairsDialog({
   const sameTeam = team1 && team2 && team1 === team2;
   const bothSet = !!team1 && !!team2;
 
-  const doSave = async (force: boolean) => {
+  // forceLocked: solo esta vez, desde el «Forzar» del diálogo de la ficha
+  const doSave = async (force: boolean, forceLocked: boolean) => {
     const t1 = pairBy(team1);
     const t2 = pairBy(team2);
     if (!t1 || !t2) return;
@@ -75,35 +80,38 @@ export function MatchEditPairsDialog({
       { userId: t1.userId, partnerId: t1.partnerId },
       { userId: t2.userId, partnerId: t2.partnerId },
       force,
-      lock,
+      forceLocked ? { forceLocked: true } : lock,
     );
   };
 
-  const submit = async () => {
+  /** Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo). */
+  const lockedRetry = (e: unknown, forceLocked: boolean) => {
+    if (!isGroupsLocked(e) || !onGroupsLocked || forceLocked) return false;
+    onGroupsLocked(() => void save(true));
+    return true;
+  };
+
+  const save = async (forceLocked: boolean) => {
     if (sameTeam || !bothSet) return;
     setSaving(true);
     try {
-      await doSave(false);
+      await doSave(false, forceLocked);
       toast.success("Parejas actualizadas");
       onSaved?.();
       onClose();
     } catch (e: any) {
-      // Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo)
-      if (isGroupsLocked(e) && onGroupsLocked) {
-        onGroupsLocked();
-        return;
-      }
+      if (lockedRetry(e, forceLocked)) return;
       const msg: string =
         e?.response?.data?.message ?? e?.message ?? "No se pudieron cambiar las parejas";
       if (/Confirma para/i.test(msg) && typeof window !== "undefined" && window.confirm(`${msg}\n\n¿Continuar de todas formas?`)) {
         try {
-          await doSave(true);
+          await doSave(true, forceLocked);
           toast.success("Parejas actualizadas");
           onSaved?.();
           onClose();
         } catch (e2: any) {
-          if (isGroupsLocked(e2) && onGroupsLocked) onGroupsLocked();
-          else toast.error(e2?.response?.data?.message ?? e2?.message ?? "Error");
+          if (!lockedRetry(e2, forceLocked))
+            toast.error(e2?.response?.data?.message ?? e2?.message ?? "Error");
         }
       } else {
         toast.error(msg);
@@ -112,6 +120,7 @@ export function MatchEditPairsDialog({
       setSaving(false);
     }
   };
+  const submit = () => save(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

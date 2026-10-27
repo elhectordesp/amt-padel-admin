@@ -1,10 +1,11 @@
 /**
  * Crear un partido y cambiar sus parejas con el cuadro publicado: mandan el
- * «Forzar» (forceLocked) y, si el back lo rechaza (409 GROUPS_LOCKED), no lo
- * enseñan como un error más: avisan a la ficha, que ofrece ocultar o forzar.
+ * «Forzar» del aviso (forceLocked) y, si el back lo rechaza (409
+ * GROUPS_LOCKED), no lo enseñan como un error más: avisan a la ficha, que
+ * ofrece ocultar o forzar. Ese «Forzar» repite la petición UNA vez.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ApiError } from "@/lib/api";
 
 const createManualMatch = vi.fn();
@@ -64,14 +65,22 @@ describe("MatchCreateDialog con el cuadro publicado", () => {
     );
   });
 
-  it("el 409 GROUPS_LOCKED avisa a la ficha, sin error genérico ni cerrar", async () => {
-    createManualMatch.mockRejectedValue(locked);
+  it("el 409 GROUPS_LOCKED avisa a la ficha, sin error genérico ni cerrar; su «Forzar» lo repite forzado una vez", async () => {
+    createManualMatch.mockRejectedValueOnce(locked).mockResolvedValueOnce({ success: true });
     const onGroupsLocked = vi.fn();
     const { onClose } = renderCreate({ onGroupsLocked });
     fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
     await waitFor(() => expect(onGroupsLocked).toHaveBeenCalled());
     expect(toastError).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+    // Sin forzar la primera vez
+    expect(createManualMatch.mock.calls[0][2]).toBeUndefined();
+
+    // «Forzar» en el diálogo de la ficha
+    await act(async () => onGroupsLocked.mock.calls[0][0]());
+    expect(createManualMatch).toHaveBeenCalledTimes(2);
+    expect(createManualMatch.mock.calls[1][2]).toEqual({ forceLocked: true });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });
 
@@ -92,13 +101,16 @@ describe("MatchEditPairsDialog con el cuadro publicado", () => {
       />,
     );
 
-  it("manda el «Forzar» y el 409 avisa a la ficha", async () => {
-    editMatchPlayers.mockRejectedValueOnce(locked).mockResolvedValueOnce({ success: true });
+  it("manda el «Forzar» del aviso; el 409 avisa a la ficha y su «Forzar» vale para esa petición", async () => {
+    editMatchPlayers
+      .mockRejectedValueOnce(locked)
+      .mockResolvedValueOnce({ success: true })
+      .mockRejectedValueOnce(locked);
     const onGroupsLocked = vi.fn();
     renderEdit({ lock: { forceLocked: false }, onGroupsLocked });
     fireEvent.click(screen.getByRole("button", { name: /Guardar/ }));
-    await waitFor(() => expect(onGroupsLocked).toHaveBeenCalled());
-    expect(editMatchPlayers).toHaveBeenCalledWith(
+    await waitFor(() => expect(onGroupsLocked).toHaveBeenCalledTimes(1));
+    expect(editMatchPlayers).toHaveBeenLastCalledWith(
       "m1",
       { userId: "a", partnerId: "b" },
       { userId: "c", partnerId: "d" },
@@ -106,5 +118,20 @@ describe("MatchEditPairsDialog con el cuadro publicado", () => {
       { forceLocked: false },
     );
     expect(toastError).not.toHaveBeenCalled();
+
+    // «Forzar»: esa petición, otra vez, forzada
+    await act(async () => onGroupsLocked.mock.calls[0][0]());
+    expect(editMatchPlayers).toHaveBeenLastCalledWith(
+      "m1",
+      { userId: "a", partnerId: "b" },
+      { userId: "c", partnerId: "d" },
+      false,
+      { forceLocked: true },
+    );
+
+    // La siguiente ya no va forzada: vuelve a pedir confirmación
+    fireEvent.click(screen.getByRole("button", { name: /Guardar/ }));
+    await waitFor(() => expect(onGroupsLocked).toHaveBeenCalledTimes(2));
+    expect(editMatchPlayers.mock.calls[2][4]).toEqual({ forceLocked: false });
   });
 });
