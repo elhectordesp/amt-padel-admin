@@ -34,6 +34,7 @@ import { MatchCreateDialog } from "@/components/admin/match-create-dialog";
 import { MatchEditPairsDialog } from "@/components/admin/match-edit-pairs-dialog";
 import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-dialog";
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
+import { TournamentPushPanel } from "@/components/admin/tournament-push-panel";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
@@ -1425,7 +1426,7 @@ export default function TorneoDetailPage() {
 
   const [tab,             setTab]           = useState<Tab>("resumen");
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero">("lista");
-  const [masView,         setMasView]       = useState<"estado" | "historial">("estado");
+  const [masView,         setMasView]       = useState<"estado" | "mensajes" | "historial">("estado");
   const [showShare,       setShowShare]     = useState(false);
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
   const [regCatFilter,    setRegCatFilter]  = useState<string>("all");
@@ -2278,8 +2279,9 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-2 py-3">
             {([
               { key: "estado", label: "Estado del torneo" },
+              { key: "mensajes", label: "Mensajes a inscritos" },
               { key: "historial", label: "Historial" },
-            ] as { key: "estado" | "historial"; label: string }[]).map(({ key, label }) => (
+            ] as { key: "estado" | "mensajes" | "historial"; label: string }[]).map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setMasView(key)}
@@ -3893,6 +3895,10 @@ export default function TorneoDetailPage() {
         {/* ── ESTADO TAB ── */}
         {tab === "mas" && masView === "estado" && (
           <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
+        )}
+
+        {tab === "mas" && masView === "mensajes" && (
+          <TournamentPushPanel tournamentId={id} categories={tournament?.categories ?? []} />
         )}
 
         {/* ── PISTAS TAB ── */}

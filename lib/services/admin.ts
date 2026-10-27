@@ -657,7 +657,8 @@ export const adminService = {
     closeSeason:      ()                                                  => api.post<{ previousSeason: number; newSeason: number }>("/admin/config/season/close").then((r) => r.data),
     advanceSeason:    ()                                                  => api.post<{ newSeason: number }>("/admin/config/season/advance").then((r) => r.data),
     testEmail:        (to?: string)                                       => api.post<{ sent: boolean; to: string }>("/admin/config/test-email", { to }).then((r) => r.data),
-    testPush:         ()                                                  => api.post<{ sent: boolean }>("/admin/config/test-push").then((r) => r.data),
+    // delivery: 'confirmed' si Apple/Google ya lo recibieron; 'pending' si aún no hay recibo
+    testPush:         ()                                                  => api.post<{ sent: boolean; delivery?: "confirmed" | "pending" }>("/admin/config/test-push").then((r) => r.data),
   },
 
   admins: {
