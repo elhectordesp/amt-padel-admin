@@ -36,7 +36,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import { TournamentPushPanel } from "../../../components/admin/tournament-push-panel";
+import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "../../../components/admin/tournament-push-panel";
 
 const CATEGORIES = [
   { id: "cat-1", gender: "M", level: "3a" },
@@ -64,13 +64,13 @@ function history(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderPanel() {
+function renderPanel({ isDraft = false } = {}) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={qc}>
-      <TournamentPushPanel tournamentId="t1" categories={CATEGORIES} />
+      <TournamentPushPanel tournamentId="t1" categories={CATEGORIES} isDraft={isDraft} />
     </QueryClientProvider>,
   );
 }
@@ -116,6 +116,25 @@ describe("TournamentPushPanel", () => {
     fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Ok" } });
     fireEvent.change(screen.getByLabelText("Texto"), { target: { value: "y".repeat(146) } });
     expect(sendButton()).toBeDisabled();
+  });
+
+  it("los espacios de los extremos no cuentan (el back los quita): 30 caracteres con espacios alrededor se pueden enviar", async () => {
+    renderPanel();
+    await screen.findByText("Lluvia");
+    fireEvent.click(screen.getByLabelText("Masc. 3ª"));
+    fillForm(`  ${"x".repeat(30)}  `, ` ${"y".repeat(145)} `);
+    expect(screen.getByText("30/30")).not.toHaveClass("text-destructive");
+    expect(screen.getByText("145/145")).not.toHaveClass("text-destructive");
+    await waitFor(() => expect(sendButton()).toBeEnabled());
+  });
+
+  it("en un borrador explica por qué no se puede mandar y no consulta nada al back", () => {
+    renderPanel({ isDraft: true });
+    expect(screen.getByText(DRAFT_MESSAGES_HINT)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Título")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Enviar$/ })).toBeNull();
+    expect(listMock).not.toHaveBeenCalled();
+    expect(recipientsMock).not.toHaveBeenCalled();
   });
 
   it("sin categorías marcadas no cuenta ni deja enviar; al marcar, dice a cuántos llegará", async () => {

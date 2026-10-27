@@ -330,7 +330,7 @@ export default function PrivacidadPage() {
                   </tr>
                   <tr>
                     <td style={tdHead}>Tokens push (Expo)</td>
-                    <td style={td}>Mientras las notificaciones estén activadas y la sesión siga abierta en ese dispositivo</td>
+                    <td style={td}>Mientras la cuenta esté activa; se desvincula al cerrar sesión o al entrar otra cuenta en ese dispositivo, y se borra con la cuenta</td>
                   </tr>
                   <tr>
                     <td style={tdHead}>Logs de servidor / IPs</td>
@@ -456,7 +456,7 @@ export default function PrivacidadPage() {
             <ul style={{ margin: 0, paddingLeft: 20, color: "#ccc", fontSize: 14, lineHeight: 1.9 }}>
               <li><strong style={{ color: "#fff" }}>Qué notificamos:</strong> nuevos partidos programados, publicación de resultados, cambios en el torneo, novedades del circuito.</li>
               <li><strong style={{ color: "#fff" }}>Cómo desactivarlas:</strong> puedes revocar el permiso en cualquier momento desde los ajustes de notificaciones de tu dispositivo o desde la sección de perfil de la aplicación.</li>
-              <li><strong style={{ color: "#fff" }}>Token push:</strong> tu dispositivo genera un token único (Expo Push Token) que utilizamos exclusivamente para enviarte notificaciones. Este token no identifica a la persona y no se comparte con terceros salvo con Expo y, en Android, con Google para la entrega técnica del mensaje. Lo desvinculamos de tu cuenta cuando cierras sesión en ese dispositivo.</li>
+              <li><strong style={{ color: "#fff" }}>Token push:</strong> tu dispositivo genera un token único (Expo Push Token) que utilizamos exclusivamente para enviarte notificaciones. Este token no identifica a la persona y no se comparte con terceros salvo con Expo y, en Android, con Google para la entrega técnica del mensaje. Lo desvinculamos de tu cuenta cuando cierras sesión o entra otra cuenta en ese dispositivo.</li>
               <li><strong style={{ color: "#fff" }}>Android:</strong> en los dispositivos Android, las notificaciones se entregan a través de Firebase Cloud Messaging (Google). Para recibirlas, Firebase asigna a la aplicación instalada un identificador de instalación (Firebase Installations). Google trata estos datos como encargado del tratamiento, solo para entregar las notificaciones.</li>
             </ul>
           </section>

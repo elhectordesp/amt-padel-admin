@@ -25,7 +25,13 @@ interface Category {
 interface Props {
   tournamentId: string;
   categories:   Category[];
+  /** En borrador no se puede mandar (el back lo rechaza): solo se explica. */
+  isDraft?:     boolean;
 }
+
+/** Por qué no se puede mandar en un borrador (también en la pestaña desactivada). */
+export const DRAFT_MESSAGES_HINT =
+  "El torneo está en borrador y los jugadores aún no lo ven. Publícalo para poder mandarles mensajes.";
 
 /** "Masc. 3ª" (o el valor tal cual si es uno que el panel aún no conoce). */
 function categoryLabel(c: { gender: string; level: string }): string {
@@ -42,8 +48,11 @@ function sentAt(iso: string): string {
   }).format(new Date(iso));
 }
 
+/** Lo que cuenta el back: sin los espacios de los extremos, que se quitan al enviar. */
+const sentLength = (value: string) => charCount(value.trim());
+
 function Counter({ value, max }: { value: string; max: number }) {
-  const n = charCount(value);
+  const n = sentLength(value);
   return (
     <span className={`text-[11px] tabular-nums ${n > max ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
       {n}/{max}
@@ -58,7 +67,7 @@ function Counter({ value, max }: { value: string; max: number }) {
  * lista de espera), cada uno una vez. Con límite de envíos al día y el
  * historial de lo enviado.
  */
-export function TournamentPushPanel({ tournamentId, categories }: Props) {
+export function TournamentPushPanel({ tournamentId, categories, isDraft = false }: Props) {
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -69,12 +78,13 @@ export function TournamentPushPanel({ tournamentId, categories }: Props) {
   const history = useQuery({
     queryKey: tournamentMessagesQK.list(tournamentId),
     queryFn:  () => tournamentMessagesService.list(tournamentId),
+    enabled:  !isDraft,
   });
 
   const recipients = useQuery({
     queryKey: tournamentMessagesQK.recipients(tournamentId, selected, includeWaitlist),
     queryFn:  () => tournamentMessagesService.recipients(tournamentId, selected, includeWaitlist),
-    enabled:  selected.length > 0,
+    enabled:  !isDraft && selected.length > 0,
   });
 
   const send = useMutation({
@@ -102,8 +112,8 @@ export function TournamentPushPanel({ tournamentId, categories }: Props) {
 
   const remaining = history.data?.remainingToday;
   const dailyLimit = history.data?.dailyLimit;
-  const titleOk = title.trim() !== "" && charCount(title) <= MESSAGE_TITLE_MAX;
-  const bodyOk = body.trim() !== "" && charCount(body) <= MESSAGE_BODY_MAX;
+  const titleOk = title.trim() !== "" && sentLength(title) <= MESSAGE_TITLE_MAX;
+  const bodyOk = body.trim() !== "" && sentLength(body) <= MESSAGE_BODY_MAX;
   const recipientCount = recipients.data?.recipients;
   const canSend =
     titleOk && bodyOk && selected.length > 0 && remaining !== undefined && remaining > 0 &&
@@ -112,6 +122,17 @@ export function TournamentPushPanel({ tournamentId, categories }: Props) {
   const allSelected = categories.length > 0 && selected.length === categories.length;
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  if (isDraft)
+    return (
+      <section className="bg-card border border-border rounded-xl p-5 my-2 flex items-start gap-3">
+        <Bell size={16} className="text-muted-foreground mt-0.5 shrink-0" />
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Mensajes a los inscritos</h3>
+          <p className="text-xs text-muted-foreground mt-1">{DRAFT_MESSAGES_HINT}</p>
+        </div>
+      </section>
+    );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 py-2">
