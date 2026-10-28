@@ -55,6 +55,59 @@ export const REGISTRATION_STATUS_CONFIG: Record<RegistrationStatus, { label: str
   CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30"          },
 };
 
+/** El estado de una inscripción para un texto («En espera», no «WAITLIST»). */
+export function registrationStatusLabel(status: string): string {
+  return REGISTRATION_STATUS_CONFIG[status as RegistrationStatus]?.label ?? status;
+}
+
+/** La fase en la que está una categoría (`TournamentCategory.currentPhase`). */
+const CATEGORY_PHASE_LABEL: Record<string, string> = {
+  REGISTRATION: "Inscripciones",
+  GROUPS:       "Fase de grupos",
+  R32:          "Dieciseisavos",
+  R16:          "Octavos",
+  QF:           "Cuartos",
+  SF:           "Semifinales",
+  FINAL:        "Final",
+  CONSOLATION:  "Consolación",
+  FINISHED:     "Finalizada",
+};
+
+/** La fase de una categoría para un texto («Inscripciones», no «REGISTRATION»). */
+export function categoryPhaseLabel(phase: string | null | undefined): string {
+  return phase ? (CATEGORY_PHASE_LABEL[phase] ?? phase) : "—";
+}
+
+/** De qué es una entrada del historial (`AdminLog.resource`). */
+const AUDIT_RESOURCE_LABEL: Record<string, string> = {
+  tournament:   "Torneo",
+  match:        "Partido",
+  registration: "Inscripción",
+  player:       "Jugador",
+  user:         "Administrador",
+  club:         "Club",
+  sponsor:      "Patrocinador",
+  config:       "Configuración",
+  spa:          "Ranking SPA",
+  support:      "Soporte",
+};
+
+/** El recurso de una entrada del historial para un texto («Patrocinador», no «sponsor»). */
+export function auditResourceLabel(resource: string): string {
+  return AUDIT_RESOURCE_LABEL[resource] ?? resource;
+}
+
+/**
+ * Una acción del historial sobre `subject` como frase: «Reenvió la invitación
+ * a Ana López» (la etiqueta del back es la del historial, «reenvió la
+ * invitación a»). Sin etiqueta (un back anterior), el código legible.
+ */
+export function auditActionText(entry: { action: string; actionLabel?: string }, subject: string): string {
+  if (!entry.actionLabel || entry.actionLabel === entry.action) return entry.action.replace(/_/g, " ");
+  const text = `${entry.actionLabel} ${subject}`.trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 // Tournament status — keys match TournamentStatus (uppercase, from DB)
 export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   DRAFT:     "Borrador",

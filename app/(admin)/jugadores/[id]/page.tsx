@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, levelLabel } from "@/lib/constants";
+import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel } from "@/lib/constants";
 import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
@@ -331,7 +331,8 @@ export default function JugadorDetailPage() {
                   })()}
                   <div className={`flex items-center gap-1 ${trendColor}`}>
                     <TrendIcon size={14} />
-                    <span className="text-xs font-medium capitalize">{player.trend}</span>
+                    {/* En español, como en el perfil público (salía «Stable») */}
+                    <span className="text-xs font-medium">{player.trend === "up" ? "Subiendo" : player.trend === "down" ? "Bajando" : "Estable"}</span>
                   </div>
                 </div>
 
@@ -667,10 +668,10 @@ export default function JugadorDetailPage() {
                   <li key={entry.id} className="flex gap-3 px-5 py-3">
                     <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shrink-0 mt-1.5" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground">{entry.action.replace(/_/g, " ")}</p>
+                      <p className="text-xs font-medium text-foreground">{auditActionText(entry, player.name)}</p>
                       <p className="text-[10px] text-muted-foreground">{entry.adminName} · {new Date(entry.createdAt).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
                     </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{entry.resource}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{auditResourceLabel(entry.resource)}</span>
                   </li>
                 ))}
               </ul>

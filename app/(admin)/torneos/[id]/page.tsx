@@ -53,7 +53,7 @@ import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
   REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
-  resolveTier, phaseLabel,
+  resolveTier, phaseLabel, categoryPhaseLabel, registrationStatusLabel,
 } from "@/lib/constants";
 import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, Gender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
@@ -2613,7 +2613,7 @@ export default function TorneoDetailPage() {
                       {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
                     </span>
                     <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[rgba(212,175,55,0.3)] bg-[rgba(212,175,55,0.08)] text-[#D4AF37]">
-                      {cat.currentPhaseLabel ?? cat.currentPhase}
+                      {cat.currentPhaseLabel ?? categoryPhaseLabel(cat.currentPhase)}
                     </span>
                   </div>
                 ))}
@@ -4529,7 +4529,7 @@ export default function TorneoDetailPage() {
     <ConfirmModal
       open={!!confirmBulk}
       title={`Cambiar estado en bloque (${confirmBulk?.count ?? 0} parejas)`}
-      description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a "${confirmBulk?.status ?? ""}"? Esta acción no se puede deshacer.`}
+      description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a «${registrationStatusLabel(confirmBulk?.status ?? "")}»? Esta acción no se puede deshacer.`}
       confirmLabel="Sí, confirmar"
       danger={confirmBulk?.status === "CANCELLED" || confirmBulk?.status === "REJECTED"}
       onConfirm={() => {

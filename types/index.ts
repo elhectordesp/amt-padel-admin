@@ -626,6 +626,8 @@ export interface AuditLogEntry {
   id:          string;
   adminName:   string;
   action:      string;
+  // La acción en español («reenvió la invitación a»); no viene con un back anterior
+  actionLabel?: string;
   resource:    string;
   resourceId?: string | null;
   details?:    Record<string, unknown> | null;
@@ -657,9 +659,12 @@ export interface SupportMessage {
   status:    SupportStatus;
   createdAt: string;
   user: {
-    id:        string;
-    firstName: string;
-    lastName:  string;
-    email:     string;
+    id:         string;
+    // Nombre y apellidos: un back anterior solo mandaba `name`
+    firstName?: string | null;
+    lastName?:  string | null;
+    name?:      string | null;
+    // Puede no tener email (cuenta creada por el admin)
+    email:      string | null;
   };
 }
