@@ -40,6 +40,7 @@ import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
 import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
+import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "@/components/admin/tournament-push-panel";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { adminService, invalidateRegistrations, registrationsQK, type ScheduleConflict, type ConflictType } from "@/lib/services/admin";
@@ -97,6 +98,7 @@ const AUDIT_ACTION_LABELS: Record<string, { label: string; color: string }> = {
   BRACKET_MANUAL_INIT:            { label: "Grupos manuales creados", color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
   GROUP_MEMBERS_UPDATED:          { label: "Grupo actualizado",       color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
   PREMIOS_CATEGORIA_ACTUALIZADOS: { label: "Premios actualizados",    color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  MENSAJE_INSCRITOS_ENVIADO:      { label: "Mensaje a inscritos",     color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
 };
 
 function AuditActionBadge({ action, resource }: { action: string; resource: string }) {
@@ -1450,7 +1452,7 @@ export default function TorneoDetailPage() {
 
   const [tab,             setTab]           = useState<Tab>("resumen");
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero" | "disponibilidad">("lista");
-  const [masView,         setMasView]       = useState<"estado" | "historial">("estado");
+  const [masView,         setMasView]       = useState<"estado" | "mensajes" | "historial">("estado");
   const [showShare,       setShowShare]     = useState(false);
   const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
   const [regCatFilter,    setRegCatFilter]  = useState<string>("all");
@@ -2358,25 +2360,35 @@ export default function TorneoDetailPage() {
           </div>
         )}
 
-        {/* Sub-navegación de Más (Estado / Historial) */}
+        {/* Sub-navegación de Más (Estado / Mensajes / Historial) */}
         {tab === "mas" && (
-          <div className="flex items-center gap-2 py-3">
+          <div className="flex flex-wrap items-center gap-2 py-3">
             {([
               { key: "estado", label: "Estado del torneo" },
+              { key: "mensajes", label: "Mensajes a inscritos" },
               { key: "historial", label: "Historial" },
-            ] as { key: "estado" | "historial"; label: string }[]).map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setMasView(key)}
-                className={`text-xs font-medium rounded-md px-3 py-1.5 border transition-colors ${
-                  masView === key
-                    ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            ] as { key: "estado" | "mensajes" | "historial"; label: string }[]).map(({ key, label }) => {
+              // En borrador no se puede mandar: los jugadores aún no ven el torneo
+              const off = key === "mensajes" && tournament?.status === "DRAFT";
+              return (
+                <button
+                  key={key}
+                  onClick={() => setMasView(key)}
+                  disabled={off}
+                  title={off ? DRAFT_MESSAGES_HINT : undefined}
+                  className={`text-xs font-medium rounded-md px-3 py-1.5 border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    masView === key
+                      ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {tournament?.status === "DRAFT" && (
+              <p className="text-[11px] text-muted-foreground">{DRAFT_MESSAGES_HINT}</p>
+            )}
           </div>
         )}
 
@@ -4016,6 +4028,14 @@ export default function TorneoDetailPage() {
         {/* ── ESTADO TAB ── */}
         {tab === "mas" && masView === "estado" && (
           <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
+        )}
+
+        {tab === "mas" && masView === "mensajes" && (
+          <TournamentPushPanel
+            tournamentId={id}
+            categories={tournament?.categories ?? []}
+            isDraft={tournament?.status === "DRAFT"}
+          />
         )}
 
         {/* ── PISTAS TAB ── */}
