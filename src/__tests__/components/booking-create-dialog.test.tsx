@@ -2,18 +2,17 @@
  * Alta de reservas desde el panel:
  * - el LSPA de un partido abierto es un entero de 40 o más, como pide el back
  *   (antes admitía decimales y el back lo rechazaba) (R3-5);
- * - la hora que llega del calendario solo vale si es un hueco libre.
+ * - la hora que llega del calendario solo vale si es un hueco libre;
+ * - el club reserva para otros sin ocupar plaza (D14): 4 en dobles, 2 en individual.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+const courtsList = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/admin", () => ({
-  adminService: {
-    courts: { list: vi.fn().mockResolvedValue([{ id: "p1", name: "Pista 1", active: true }]) },
-    players: { search: vi.fn() },
-  },
+  adminService: { courts: { list: courtsList }, players: { search: vi.fn() } },
 }));
 
 const svc = vi.hoisted(() => ({
@@ -53,6 +52,7 @@ describe("lspaRangeError", () => {
 describe("BookingCreateDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    courtsList.mockResolvedValue([{ id: "p1", name: "Pista 1", active: true, type: "DOUBLES" }]);
     svc.courtDurations.list.mockResolvedValue([{ id: "d", courtId: "p1", minutes: 90, isDefault: true }]);
     svc.availability.mockResolvedValue([
       {
@@ -83,6 +83,45 @@ describe("BookingCreateDialog", () => {
         expect.objectContaining({ matchMode: "OPEN", startsAt: SLOT, openMatchMinLspa: 45 }),
       ),
     );
+  });
+
+  async function addGuests(names: string[]) {
+    const input = screen.getByPlaceholderText("Invitado por nombre…");
+    for (const name of names) {
+      fireEvent.change(input, { target: { value: name } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    }
+  }
+
+  it("el club no ocupa plaza (D14): en dobles caben 4 jugadores", async () => {
+    renderDialog();
+    await screen.findByDisplayValue("18:00");
+    await addGuests(["Ana", "Bea", "Carla", "Dani"]);
+
+    expect(screen.getByText("Jugadores: 4/4")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Invitado por nombre…")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
+
+    await waitFor(() =>
+      expect(svc.bookings.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matchMode: "PRIVATE_WITH_GUESTS",
+          participants: ["Ana", "Bea", "Carla", "Dani"].map((guestName) => ({ guestName })),
+        }),
+      ),
+    );
+    // Ni normas ni nada del club como jugador
+    expect(svc.bookings.create.mock.calls[0][0]).not.toHaveProperty("rulesVersion");
+  });
+
+  it("en una pista individual caben 2", async () => {
+    courtsList.mockResolvedValue([{ id: "p1", name: "Pista 1", active: true, type: "SINGLES" }]);
+    renderDialog();
+    await screen.findByDisplayValue("18:00");
+    await addGuests(["Ana", "Bea"]);
+
+    expect(screen.getByText("Jugadores: 2/2")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Invitado por nombre…")).not.toBeInTheDocument();
   });
 
   it("una hora que no es un hueco libre no se puede reservar", async () => {

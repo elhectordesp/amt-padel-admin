@@ -15,6 +15,7 @@ import type {
   BookingExtra,
   BookingFiltersQuery,
   BookingPaymentMethod,
+  BookingResult,
   ClubBookingConfig,
   ClubOperatingHours,
   ClubRulesResponse,
@@ -32,6 +33,7 @@ import type {
   ReplaceCourtDurationsPayload,
   ReplaceCourtPricingPayload,
   ReplaceOperatingHoursPayload,
+  ResultEntryPayload,
   UpdateBookingConfigPayload,
   UpdateBookingExtraPayload,
   UpdateClubRulesPayload,
@@ -270,6 +272,15 @@ export const bookingsService = {
     cancel: (id: string, reason?: string) =>
       api
         .delete<Booking>(`/bookings/${id}`, { data: { reason } })
+        .then((r) => r.data),
+
+    /**
+     * El club pone o corrige el resultado (hasta 30 días después del partido).
+     * Queda firme: los jugadores ya no lo cambian.
+     */
+    setResult: (id: string, payload: ResultEntryPayload) =>
+      api
+        .put<BookingResult>(`/bookings/${id}/result`, payload)
         .then((r) => r.data),
 
     /** Registrar/marcar pago offline (efectivo/manual). method=PENDING revierte. */

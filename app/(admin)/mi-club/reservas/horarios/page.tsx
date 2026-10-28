@@ -30,6 +30,9 @@ import type {
 } from "@/types/bookings";
 
 const DAY_NAMES = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+// Cierre a medianoche: el back lo guarda como «24:00» (solo vale de cierre)
+const MIDNIGHT = "24:00";
+const DEFAULT_CLOSE = "23:00";
 
 type DayRow = {
   dayOfWeek: number;
@@ -206,7 +209,7 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-border">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -240,12 +243,11 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <input
-                    type="time"
-                    className="rounded border border-border bg-background px-2 py-1 text-sm disabled:opacity-40"
+                  <CloseTimeInput
                     value={r.closeTime}
-                    onChange={(e) => updateRow(i, { closeTime: e.target.value })}
+                    onChange={(closeTime) => updateRow(i, { closeTime })}
                     disabled={!r.active}
+                    label={DAY_NAMES[r.dayOfWeek]}
                   />
                 </td>
               </tr>
@@ -368,14 +370,14 @@ function ExceptionsSection({ clubId }: { clubId: string }) {
                   className="rounded border border-border bg-background px-2 py-1 text-sm"
                 />
               </Field>
-              <Field label="Cierre">
-                <input
-                  type="time"
+              <div>
+                <span className="mb-1 block text-xs text-muted-foreground">Cierre</span>
+                <CloseTimeInput
                   value={form.customClose}
-                  onChange={(e) => setForm({ ...form, customClose: e.target.value })}
-                  className="rounded border border-border bg-background px-2 py-1 text-sm"
+                  onChange={(customClose) => setForm({ ...form, customClose })}
+                  label="la excepción"
                 />
-              </Field>
+              </div>
             </div>
           )}
           <div className="flex justify-end gap-2 pt-2">
@@ -484,6 +486,50 @@ function ExceptionRow({
 }
 
 // ── Helpers UI ──────────────────────────────────────────────────────────────
+
+/**
+ * Hora de cierre, con «Medianoche» para el club que cierra a las 24:00: un
+ * campo de hora no puede escribir «24:00» y con 23:59 la última franja
+ * (p. ej. 22:30-24:00) no se ofrecía. El back lo admite solo como cierre.
+ */
+function CloseTimeInput({
+  value,
+  onChange,
+  disabled,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  const midnight = value === MIDNIGHT;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {!midnight && (
+        <input
+          type="time"
+          className="rounded border border-border bg-background px-2 py-1 text-sm disabled:opacity-40"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          aria-label={`Cierre de ${label}`}
+        />
+      )}
+      <label className={`inline-flex items-center gap-1.5 text-xs ${disabled ? "opacity-40" : ""}`}>
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 accent-primary"
+          checked={midnight}
+          onChange={(e) => onChange(e.target.checked ? MIDNIGHT : DEFAULT_CLOSE)}
+          disabled={disabled}
+          aria-label={`Cierra a medianoche (${label})`}
+        />
+        Medianoche
+      </label>
+    </div>
+  );
+}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="text-base font-medium">{children}</h2>;

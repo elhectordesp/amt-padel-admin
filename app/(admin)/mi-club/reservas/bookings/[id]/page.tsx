@@ -16,12 +16,13 @@ import {
   Loader2, MapPin, Trophy, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
-import { cancellationNoticeCount } from "@/lib/utils/booking-participants";
+import { bookingCapacity, cancellationNoticeCount } from "@/lib/utils/booking-participants";
 import type {
   BookingMatchMode, BookingParticipant, BookingParticipantStatus,
   BookingPaymentMethod, BookingStatus,
@@ -193,7 +194,7 @@ export default function BookingDetailPage({
             )}
             {isOpen && b.openMatchSlotsRemaining !== null && (
               <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-500">
-                <Flame className="h-3 w-3" /> {b.openMatchSlotsRemaining}/4 libres
+                <Flame className="h-3 w-3" /> {b.openMatchSlotsRemaining}/{bookingCapacity(b)} libres
               </span>
             )}
           </div>
@@ -271,6 +272,13 @@ export default function BookingDetailPage({
           </ul>
         )}
       </Section>
+
+      {/* Resultado: desde que empieza el partido */}
+      {(b.result || ["IN_PROGRESS", "COMPLETED", "WITHOUT_RESULT"].includes(b.status)) && (
+        <Section title="Resultado">
+          <BookingResultPanel booking={b} />
+        </Section>
+      )}
 
       {/* Notas */}
       {b.notes && (

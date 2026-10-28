@@ -70,11 +70,12 @@ export default function BookingsListPage() {
         ...base,
         fromDate: start.toISOString(),
         toDate: end.toISOString(),
+        order: "asc",
       };
     }
     if (tab === "upcoming") {
-      // Las que siguen en pie: sin las canceladas
-      return { ...base, fromDate: end.toISOString(), statuses: UPCOMING_STATUSES };
+      // Las que siguen en pie, de la más cercana a la más lejana
+      return { ...base, fromDate: end.toISOString(), statuses: UPCOMING_STATUSES, order: "asc" };
     }
     if (tab === "history") {
       return { ...base, toDate: start.toISOString() };

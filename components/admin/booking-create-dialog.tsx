@@ -6,7 +6,8 @@
  * (GET /availability) y escoge una hora de inicio, luego el modo:
  *  - Abierta (OPEN) + min/max LSPA opcional
  *  - Con jugadores (PRIVATE_AMT / PRIVATE_WITH_GUESTS) — busca jugadores AMT
- *    y/o añade invitados por nombre (máx. 3 acompañantes)
+ *    y/o añade invitados por nombre (hasta 4 en dobles y 2 en individual: el
+ *    club reserva para ellos y no figura como jugador)
  *  - Por teléfono / sin gente (ADMIN_MANUAL) — un contacto libre opcional
  *
  * Submit → bookingsService.bookings.create. Al éxito cierra + refresca la lista.
@@ -46,7 +47,6 @@ interface Props {
   initial?: BookingCreateInitial;
 }
 
-const MAX_COMPANIONS = 3;
 // Lo que pide el back para el rango de un partido abierto (enteros, mín. 40)
 const MIN_LSPA = 40;
 
@@ -182,6 +182,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   if (!open) return null;
 
   const companionCount = players.length + guests.length;
+  // El club no ocupa plaza (D14): caben todos los de la pista
+  const maxPlayers = courts.find((c) => c.id === courtId)?.type === "SINGLES" ? 2 : 4;
 
   function resetAndClose() {
     setStartsAt("");
@@ -198,8 +200,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   }
 
   function addPlayer(p: Player) {
-    if (companionCount >= MAX_COMPANIONS) {
-      toast.info(`Máximo ${MAX_COMPANIONS} acompañantes`);
+    if (companionCount >= maxPlayers) {
+      toast.info(`Máximo ${maxPlayers} jugadores en esta pista`);
       return;
     }
     if (players.some((x) => x.id === p.id)) return;
@@ -209,8 +211,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   function addGuest() {
     const name = guestDraft.trim();
     if (!name) return;
-    if (companionCount >= MAX_COMPANIONS) {
-      toast.info(`Máximo ${MAX_COMPANIONS} acompañantes`);
+    if (companionCount >= maxPlayers) {
+      toast.info(`Máximo ${maxPlayers} jugadores en esta pista`);
       return;
     }
     setGuests((prev) => [...prev, { guestName: name }]);
@@ -259,12 +261,15 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   }
 
   const lspaError = mode === "OPEN" ? lspaRangeError(minLspa, maxLspa) : null;
+  // Pasa a una pista individual con más jugadores de los que caben
+  const tooManyPlayers = mode === "PLAYERS" && companionCount > maxPlayers;
   // La hora tiene que ser uno de los huecos libres de ahora (no basta con la
   // que vino del calendario si aún se están buscando o ya no está libre)
   const canSubmit =
     !!courtId &&
     slots.some((s) => s.startsAt === startsAt) &&
     !lspaError &&
+    !tooManyPlayers &&
     !create.isPending;
 
   return (
@@ -446,8 +451,9 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
           {/* Modo PLAYERS */}
           {mode === "PLAYERS" && (
             <div className="space-y-2 rounded-md border border-border bg-background p-3">
-              <p className="text-xs text-muted-foreground">
-                Acompañantes: {companionCount}/{MAX_COMPANIONS}
+              <p className={`text-xs ${tooManyPlayers ? "text-destructive" : "text-muted-foreground"}`}>
+                Jugadores: {companionCount}/{maxPlayers}
+                {tooManyPlayers && " — quita alguno: en esta pista no caben tantos"}
               </p>
 
               {(players.length > 0 || guests.length > 0) && (
@@ -498,7 +504,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
                 </ul>
               )}
 
-              {companionCount < MAX_COMPANIONS && (
+              {companionCount < maxPlayers && (
                 <>
                   <PlayerSearch onPick={addPlayer} />
                   <div className="flex items-center gap-2">
