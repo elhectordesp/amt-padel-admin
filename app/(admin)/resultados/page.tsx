@@ -2,10 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trophy, Search, CheckCircle, Clock, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Trophy, Search, CheckCircle, Clock, Download } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { Pagination, usePagination } from "@/components/admin/pagination";
+import { paginate } from "@/lib/utils/pagination";
+import { matchesSearch } from "@/lib/utils/search";
 import { ErrorState } from "@/components/admin/error-state";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ResultModal } from "@/components/admin/result-modal";
@@ -14,8 +17,6 @@ import { phaseLabel } from "@/lib/constants";
 import { hasBothPairs } from "@/lib/utils/match-status";
 import { isActiveTournamentStatus } from "@/lib/utils/dashboard-tournaments";
 import type { MatchResult, Tournament } from "@/types";
-
-const PAGE_SIZE = 30;
 
 /** El marcador para la lista y el CSV, con la marca W.O. si fue walkover. */
 const scoreText = (m: MatchResult) => {
@@ -27,7 +28,7 @@ const scoreText = (m: MatchResult) => {
 export default function ResultadosPage() {
   const qc = useQueryClient();
   const [search,        setSearch]        = useState("");
-  const [page,          setPage]          = useState(0);
+  const { page, setPage, pageSize, setPageSize } = usePagination();
   const [tournamentId,  setTournamentId]  = useState<string>("");
   const [selectedMatch,  setSelectedMatch]  = useState<MatchResult | null>(null);
   const [savingId,       setSavingId]       = useState<string | null>(null);
@@ -86,21 +87,17 @@ export default function ResultadosPage() {
   const finishedMatches = useMemo(() => matches.filter((m: MatchResult) =>  m.isResult), [matches]);
 
   const filtered = useMemo(() =>
-    [...pendingMatches, ...finishedMatches].filter((m: MatchResult) => {
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      // Los partidos sin pista asignada llegan con court null (rompía la página)
-      return m.team1.some((p) => p.toLowerCase().includes(q)) ||
-             m.team2.some((p) => p.toLowerCase().includes(q)) ||
-             (m.court ?? "").toLowerCase().includes(q);
-    }),
+    [...pendingMatches, ...finishedMatches].filter((m: MatchResult) =>
+      // Sin mirar tildes. Los partidos sin pista asignada llegan con court
+      // null (rompía la página)
+      matchesSearch(search, ...m.team1, ...m.team2, m.court),
+    ),
   [pendingMatches, finishedMatches, search]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged      = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const paged = paginate(filtered, page, pageSize);
 
-  const handleTournamentChange = (id: string) => { setTournamentId(id); setPage(0); setSearch(""); };
-  const handleSearchChange     = (v: string)  => { setSearch(v);        setPage(0); };
+  const handleTournamentChange = (id: string) => { setTournamentId(id); setPage(1); setSearch(""); };
+  const handleSearchChange     = (v: string)  => { setSearch(v);        setPage(1); };
 
   return (
     <>
@@ -324,27 +321,15 @@ export default function ResultadosPage() {
                 </>
               )}
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{filtered.length} partidos · página {page + 1} de {totalPages}</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPage((p) => p - 1)}
-                      disabled={page === 0}
-                      className="p-1.5 rounded-md border border-border hover:bg-secondary disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronLeft size={13} />
-                    </button>
-                    <button
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={page >= totalPages - 1}
-                      className="p-1.5 rounded-md border border-border hover:bg-secondary disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronRight size={13} />
-                    </button>
-                  </div>
-                </div>
+              {!isLoading && !isError && (
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={filtered.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="partidos"
+                />
               )}
             </div>
           )}

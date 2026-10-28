@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Clock, X, Download, ChevronRight, ChevronLeft, Users, CalendarDays, ArrowLeftRight, UserPlus } from "lucide-react";
+import { Search, Check, Clock, X, Download, ChevronRight, Users, CalendarDays, ArrowLeftRight, UserPlus } from "lucide-react";
 import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -19,6 +19,9 @@ import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/se
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG } from "@/lib/constants";
 import { compareWaitlist, groupByPair, paymentCsvColumns, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
+import { matchesSearch } from "@/lib/utils/search";
+import { paginate } from "@/lib/utils/pagination";
+import { Pagination, usePagination } from "@/components/admin/pagination";
 import type { AdminRegistration, CategoryLevel, RegistrationStatus, Tournament } from "@/types";
 
 // Tooltip del botón confirmar según el estado actual de la inscripción
@@ -30,8 +33,6 @@ function confirmTitle(status: RegistrationStatus): string {
 }
 
 type StatusFilter = "all" | RegistrationStatus;
-
-const PAGE_SIZE = 20;
 
 /** La URL de Inscripciones con el torneo elegido (el dashboard enlaza así). */
 function inscripcionesHref(tournamentId: string): string {
@@ -90,7 +91,8 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
   const [search,       setSearch]       = useState("");
   const [updatingIds,   setUpdatingIds]  = useState<Set<string>>(new Set());
   const [selected,      setSelected]    = useState<Set<string>>(new Set());
-  const [page,          setPage]        = useState(0);
+  // Filas con muchos botones: 25 por página de entrada
+  const { page, setPage, pageSize, setPageSize } = usePagination(25);
   const [confirmCancel,    setConfirmCancel]    = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,      setConfirmBulk]      = useState<{ ids: string[]; status: string; count: number } | null>(null);
   // Categoría llena o con cola: el aviso del back y el cambio a repetir con force
@@ -204,14 +206,13 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
     const list = pairs
       .filter((p) => statusFilter === "all" || p.status === statusFilter)
       .filter((p) => catFilter === "all" || p.primary.categoryId === catFilter)
-      .filter((p) => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        const reg = p.primary;
-        return reg.user.name.toLowerCase().includes(q) ||
-               (reg.partner?.name ?? "").toLowerCase().includes(q) ||
-               `${reg.category.gender} ${reg.category.level}`.toLowerCase().includes(q);
-      });
+      // Sin mirar tildes: «inigo» encuentra a «Íñigo» (P3-6)
+      .filter((p) => matchesSearch(
+        search,
+        p.primary.user.name,
+        p.primary.partner?.name,
+        `${p.primary.category.gender} ${p.primary.category.level}`,
+      ));
     // «En espera»: en el orden de la cola de cada categoría (el de subir)
     return statusFilter === "WAITLIST"
       ? [...list].sort((a, b) =>
@@ -386,7 +387,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
               ] as { key: StatusFilter; label: string; value: number; cls: string }[]).map((s) => (
                 <button
                   key={s.key}
-                  onClick={() => setStatusFilter(s.key)}
+                  onClick={() => { setStatusFilter(s.key); setPage(1); }}
                   className={`bg-card border rounded-lg p-4 text-left transition-all hover:border-[rgba(212,175,55,0.3)] ${
                     statusFilter === s.key ? "border-[rgba(212,175,55,0.4)] bg-[rgba(212,175,55,0.05)]" : "border-border"
                   }`}
@@ -402,7 +403,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
               {availableCategories.length > 1 && (
                 <select
                   value={catFilter}
-                  onChange={(e) => { setCatFilter(e.target.value); setPage(0); }}
+                  onChange={(e) => { setCatFilter(e.target.value); setPage(1); }}
                   className="h-9 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 >
                   <option value="all">Todas las categorías</option>
@@ -417,7 +418,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                 <Search size={14} className="text-muted-foreground shrink-0" />
                 <input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                   placeholder="Buscar jugador o pareja..."
                   className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
                 />
@@ -485,7 +486,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
 
             {/* Table / Cards */}
             {(() => {
-              const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+              const pageItems = paginate(filtered, page, pageSize);
               const pageKeys  = pageItems.map((p) => p.pairKey);
               const allPageSelected = pageKeys.length > 0 && pageKeys.every((k) => selected.has(k));
 
@@ -831,29 +832,14 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                   </div>
 
                   {/* Shared pagination */}
-                  {filtered.length > PAGE_SIZE && (
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-card border border-border">
-                      <span className="text-xs text-muted-foreground">
-                        Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setPage((p) => p - 1)}
-                          disabled={page === 0}
-                          className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                        >
-                          <ChevronLeft size={15} />
-                        </button>
-                        <button
-                          onClick={() => setPage((p) => p + 1)}
-                          disabled={(page + 1) * PAGE_SIZE >= filtered.length}
-                          className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                        >
-                          <ChevronRight size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <Pagination
+                    page={page}
+                    pageSize={pageSize}
+                    total={filtered.length}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                    itemLabel="parejas"
+                  />
                 </>
               );
             })()}

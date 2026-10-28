@@ -9,7 +9,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const redirectMock = vi.fn((url: URL) => ({ type: "redirect", url }));
+const deleteCookieMock = vi.fn();
+const redirectMock = vi.fn((url: URL) => ({ type: "redirect", url, cookies: { delete: deleteCookieMock } }));
 const nextMock = vi.fn(() => ({ type: "next" }));
 
 vi.mock("next/server", () => ({
@@ -197,5 +198,42 @@ describe("middleware — ADMIN passthrough (no role gating)", () => {
   it("ADMIN en /finanzas → pasa", () => {
     middleware(makeRequest("/finanzas", adminToken));
     expect(nextMock).toHaveBeenCalled();
+  });
+});
+
+describe("middleware — solo entran admin y club (P2-16)", () => {
+  beforeEach(() => {
+    redirectMock.mockClear();
+    nextMock.mockClear();
+    deleteCookieMock.mockClear();
+  });
+
+  it("token vigente de un jugador → /login?motivo=sin-acceso y fuera sus cookies", () => {
+    const playerToken = makeToken({ exp: futureExp, role: "user" });
+    middleware(makeRequest("/finanzas", playerToken));
+    expect(nextMock).not.toHaveBeenCalled();
+    const url = redirectMock.mock.calls[0][0];
+    expect(url.pathname).toBe("/login");
+    expect(url.searchParams.get("motivo")).toBe("sin-acceso");
+    expect(url.searchParams.get("from")).toBeNull();
+    expect(deleteCookieMock).toHaveBeenCalledWith("amt_admin_token");
+    expect(deleteCookieMock).toHaveBeenCalledWith("amt_admin_refresh");
+  });
+
+  it("token sin rol → tampoco entra", () => {
+    middleware(makeRequest("/dashboard", makeToken({ exp: futureExp })));
+    expect(redirectMock.mock.calls[0][0].searchParams.get("motivo")).toBe("sin-acceso");
+  });
+
+  it("las páginas públicas siguen abiertas con la cookie de un jugador (también la de restablecer y la de aceptar la invitación)", () => {
+    const playerToken = makeToken({ exp: futureExp, role: "user" });
+    for (const path of ["/torneo/x", "/restablecer", "/aceptar-invitacion"]) {
+      nextMock.mockClear();
+      redirectMock.mockClear();
+      middleware(makeRequest(path, playerToken));
+      expect(nextMock).toHaveBeenCalled();
+      expect(redirectMock).not.toHaveBeenCalled();
+      expect(deleteCookieMock).not.toHaveBeenCalled();
+    }
   });
 });

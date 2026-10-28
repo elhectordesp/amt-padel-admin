@@ -88,8 +88,8 @@ export function ResetPasswordForm() {
         <div className="text-center space-y-4">
           <h1 className="font-heading text-2xl text-foreground">Enlace no válido</h1>
           <p className="text-sm text-muted-foreground">
-            Esta página se abre desde el enlace del email. Si no funciona, pide uno nuevo desde la app con
-            «¿Olvidaste tu contraseña?».
+            Esta página se abre desde el enlace del email. Si no funciona, pide uno nuevo desde la app o desde el
+            acceso al panel con «¿Olvidaste tu contraseña?».
           </p>
           <p className="text-sm text-muted-foreground">
             Si has recargado la página, vuelve a abrir el enlace del email (sigue valiendo si no lo has usado).

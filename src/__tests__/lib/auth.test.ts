@@ -134,6 +134,12 @@ describe('auth helpers', () => {
       await expect(resetPassword('tok', 'Clave123!')).rejects.toThrow(RESET_LINK_EXPIRED_MESSAGE);
     });
 
+    // Un admin o un club también lo pide, desde el acceso al panel
+    it('dice que se pide otro desde la app o desde el acceso al panel', () => {
+      for (const message of [RESET_LINK_EXPIRED_MESSAGE, ACTIVATE_LINK_EXPIRED_MESSAGE])
+        expect(message).toContain('Pide uno nuevo desde la app o desde el acceso al panel con «¿Olvidaste tu contraseña?»');
+    });
+
     // Quien activa una cuenta puede no tener la app: también, que se la reenvíen
     it('al activar una cuenta, el enlace caducado dice además que pida la invitación otra vez', async () => {
       (api.post as any).mockRejectedValueOnce(new ApiError('texto del back', 400, 'RESET_LINK_INVALID'));

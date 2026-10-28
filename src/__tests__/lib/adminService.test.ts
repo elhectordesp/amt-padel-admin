@@ -358,7 +358,20 @@ describe('adminService', () => {
       mockGet.mockResolvedValueOnce({ data: [] });
       await adminService.rankings.list('F', 'circuit', 2025, '1a');
       expect(mockGet).toHaveBeenCalledWith('/ranking', {
-        params: { gender: 'F', type: 'circuit', limit: 500, season: 2025, level: '1a' },
+        params: { gender: 'F', type: 'circuit', season: 2025, level: '1a', page: 1, limit: 500 },
+      });
+    });
+
+    it('pide páginas hasta tener el ranking entero: con más de 500 no se corta', async () => {
+      const row = (i: number) => ({ id: `p${i}`, name: `J${i}`, gender: 'M' });
+      mockGet
+        .mockResolvedValueOnce({ data: Array.from({ length: 500 }, (_, i) => row(i)) })
+        .mockResolvedValueOnce({ data: [row(500), row(501)] });
+      const result = await adminService.rankings.list('M');
+      expect(result).toHaveLength(502);
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(mockGet).toHaveBeenLastCalledWith('/ranking', {
+        params: { gender: 'M', type: 'circuit', page: 2, limit: 500 },
       });
     });
   });

@@ -9,6 +9,8 @@ import { CATEGORY_LABEL_SHORT, GENDER_LABEL, levelLabel } from "@/lib/constants"
 import { useSearch } from "@/components/admin/search-context";
 import type { Tournament, Player } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import { matchesSearch } from "@/lib/utils/search";
+import { isClub, useRole } from "@/lib/use-role";
 import { useState } from "react";
 
 interface SearchResult {
@@ -34,31 +36,39 @@ export function SearchModal() {
     return () => window.removeEventListener("keydown", handler);
   }, [toggle, close]);
 
+  // Lo escrito, tras 300 ms sin teclear: es lo que se pregunta al servidor
+  const [playerQuery, setPlayerQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setPlayerQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Un club no abre fichas de jugador (/jugadores es solo de AMT)
+  const { role } = useRole();
+  const searchPlayers = !isClub(role);
+
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
     queryFn:  adminService.tournaments.list,
     enabled:  open,
   });
 
-  const { data: mPlayers } = useQuery({
-    queryKey: ["players", "M"],
-    queryFn:  () => adminService.players.list({ gender: "M" }),
-    enabled:  open && query.length >= 2,
-  });
-
-  const { data: fPlayers } = useQuery({
-    queryKey: ["players", "F"],
-    queryFn:  () => adminService.players.list({ gender: "F" }),
-    enabled:  open && query.length >= 2,
+  // Los jugadores los busca el servidor, en todos y sin mirar tildes (el
+  // mismo criterio que el listado de Jugadores). Antes se filtraban aquí los
+  // 50 con más puntos de cada género, y «nunez» no encontraba a «Núñez»
+  const { data: players } = useQuery({
+    queryKey: ["search-players", playerQuery],
+    queryFn:  () => adminService.players.list({ q: playerQuery, pageSize: 4 }),
+    enabled:  open && searchPlayers && playerQuery.length >= 2,
   });
 
   // Fixed: useMemo instead of useCallback()()
   const results: SearchResult[] = useMemo(() => {
     if (!query.trim()) return [];
-    const q = query.toLowerCase();
 
+    // Nombre, sede y ciudad, sin tildes («malaga» encuentra «Málaga»)
     const tResults: SearchResult[] = (tournaments as Tournament[])
-      .filter((t) => t.name.toLowerCase().includes(q) || (t.club?.name ?? "").toLowerCase().includes(q))
+      .filter((t) => matchesSearch(query, t.name, t.club?.name, t.club?.city))
       .slice(0, 4)
       .map((t) => ({
         type: "tournament", id: t.id,
@@ -67,8 +77,8 @@ export function SearchModal() {
         href:  `/torneos/${t.id}`,
       }));
 
-    const pResults: SearchResult[] = [...(mPlayers?.data ?? []), ...(fPlayers?.data ?? [])]
-      .filter((p: Player) => p.name.toLowerCase().includes(q))
+    // Solo si responden a lo que hay escrito ahora (no a una búsqueda anterior)
+    const pResults: SearchResult[] = (playerQuery === query.trim() ? players?.data ?? [] : [])
       .slice(0, 4)
       .map((p: Player) => ({
         type: "player", id: p.id,
@@ -78,7 +88,7 @@ export function SearchModal() {
       }));
 
     return [...tResults, ...pResults];
-  }, [query, tournaments, mPlayers, fPlayers]);
+  }, [query, tournaments, players, playerQuery]);
 
   const navigate = (href: string) => { router.push(href); close(); setQuery(""); };
 

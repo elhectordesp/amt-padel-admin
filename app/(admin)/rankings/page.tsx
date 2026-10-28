@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, Minus, RefreshCw, Loader2,
-  Download, ChevronLeft, ChevronRight, BarChart2, Trophy,
+  Download, BarChart2, Trophy,
 } from "lucide-react";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { Pagination, usePagination } from "@/components/admin/pagination";
+import { clampPage, paginate } from "@/lib/utils/pagination";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT, levelLabel } from "@/lib/constants";
 import { downloadCsv } from "@/lib/utils/csv";
@@ -23,7 +25,6 @@ const LEVEL_COLOR: Record<string, string> = {
   "4a": "#34D399", "5a": "#A78BFA", "6a": "#FB923C", "iniciacion": "#94A3B8",
 };
 
-const PAGE_SIZE    = 20;
 const CURRENT_YEAR = new Date().getFullYear();
 
 type CatFilter = "global" | CategoryLevel;
@@ -33,7 +34,7 @@ export default function RankingsPage() {
   const [gender,            setGender]            = useState<Gender>("M");
   const [rankType,          setRankType]          = useState<RankingType>("circuit");
   const [catFilter,         setCatFilter]         = useState<CatFilter>("global");
-  const [page,              setPage]              = useState(0);
+  const { page, setPage, pageSize, setPageSize } = usePagination();
   const [showRecalcConfirm, setShowRecalcConfirm] = useState(false);
 
   // Siempre pedimos todo el ranking global (sin filtro de level) para tener los ranks correctos
@@ -56,11 +57,12 @@ export default function RankingsPage() {
     ? allPlayers
     : allPlayers.filter((p: Player) => p.level === catFilter);
 
-  const pagedPlayers = displayPlayers.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const current      = clampPage(page, displayPlayers.length, pageSize);
+  const pagedPlayers = paginate(displayPlayers, current, pageSize);
 
-  const handleCatChange = (cat: CatFilter) => { setCatFilter(cat); setPage(0); };
-  const handleTypeChange = (t: RankingType) => { setRankType(t); setCatFilter("global"); setPage(0); };
-  const handleGenderChange = (g: Gender) => { setGender(g); setCatFilter("global"); setPage(0); };
+  const handleCatChange = (cat: CatFilter) => { setCatFilter(cat); setPage(1); };
+  const handleTypeChange = (t: RankingType) => { setRankType(t); setCatFilter("global"); setPage(1); };
+  const handleGenderChange = (g: Gender) => { setGender(g); setCatFilter("global"); setPage(1); };
 
   const recalculate = useMutation({
     mutationFn: adminService.rankings.recalculate,
@@ -246,7 +248,7 @@ export default function RankingsPage() {
               </div>
             ) : (
               pagedPlayers.map((player: Player, idx: number) => {
-                const absIdx     = page * PAGE_SIZE + idx;
+                const absIdx     = (current - 1) * pageSize + idx;
                 const primRank   = catFilter !== "global" ? (player.categoryRank ?? absIdx + 1) : (player.globalRank ?? absIdx + 1);
                 const secRank    = catFilter !== "global" ? (player.globalRank ?? "—") : (player.categoryRank ?? "—");
                 const trend      = TREND[player.trend as keyof typeof TREND] ?? TREND.stable;
@@ -363,7 +365,7 @@ export default function RankingsPage() {
                   </thead>
                   <tbody>
                     {pagedPlayers.map((player: Player, idx: number) => {
-                      const absIdx     = page * PAGE_SIZE + idx;
+                      const absIdx     = (current - 1) * pageSize + idx;
                       const primRank   = catFilter !== "global" ? (player.categoryRank ?? absIdx + 1) : (player.globalRank ?? absIdx + 1);
                       const secRank    = catFilter !== "global" ? (player.globalRank ?? "—") : (player.categoryRank ?? "—");
                       const trend      = TREND[player.trend as keyof typeof TREND] ?? TREND.stable;
@@ -483,32 +485,21 @@ export default function RankingsPage() {
                 </table>
               </div>
 
-              {displayPlayers.length > PAGE_SIZE && (
-                <div className="flex items-center justify-between px-5 py-3 border-t border-border">
-                  <span className="text-xs text-muted-foreground">
-                    Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, displayPlayers.length)} de {displayPlayers.length}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPage((p) => p - 1)}
-                      disabled={page === 0}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronLeft size={15} />
-                    </button>
-                    <button
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={(page + 1) * PAGE_SIZE >= displayPlayers.length}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
+
+        {/* Para móvil y escritorio (en móvil no había forma de pasar de página) */}
+        {!isLoading && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={displayPlayers.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="jugadores"
+          />
+        )}
       </div>
 
       <ConfirmModal

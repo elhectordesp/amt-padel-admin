@@ -15,6 +15,7 @@ import type {
 } from "@/types";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
+import type { AutomaticInvite } from "@/lib/player-invite";
 
 /**
  * Claves de caché de las inscripciones de un torneo, en un solo sitio: tres
@@ -113,6 +114,27 @@ export async function fetchAllPages<T>(
     if (batch.length === 0 || items.length >= total) break;
   }
   return items;
+}
+
+/** Máximo por página de /ranking. */
+const RANKING_PAGE_SIZE = 500;
+
+/**
+ * Todo el ranking: /ranking devuelve una página (una lista, sin total) de
+ * hasta 500 jugadores, y con una sola petición el resto no salía. Se piden
+ * páginas hasta que una viene incompleta.
+ */
+async function fetchAllRankingPages(params: Record<string, string | number>): Promise<any[]> {
+  const rows: any[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const { data } = await api.get<any[]>("/ranking", {
+      params: { ...params, page, limit: RANKING_PAGE_SIZE },
+    });
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < RANKING_PAGE_SIZE) break;
+  }
+  return rows;
 }
 
 export const adminService = {
@@ -509,8 +531,9 @@ export const adminService = {
     categoryHistory:   (id: string) => api.get<CategoryChange[]>(`/admin/players/${id}/category-history`).then((r) => r.data ?? []).catch((e) => { console.error("[admin] categoryHistory:", e); return [] as CategoryChange[]; }),
     registrations:     (id: string) => api.get<PlayerRegistrationEntry[]>(`/admin/players/${id}/registrations`).then((r) => r.data ?? []).catch(() => [] as PlayerRegistrationEntry[]),
     auditLog:          (id: string) => api.get<AuditLogEntry[]>(`/admin/players/${id}/audit`).then((r) => r.data ?? []).catch(() => [] as AuditLogEntry[]),
-    create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null }>("/admin/players", data).then((r) => r.data),
-    update:       (id: string, data: UpdatePlayerPayload) => api.patch(`/admin/players/${id}/profile`, data).then((r) => r.data),
+    // invitation: qué pasó con la invitación que sale sola (sin ella, no tocaba)
+    create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null; invitation?: AutomaticInvite }>("/admin/players", data).then((r) => r.data),
+    update:       (id: string, data: UpdatePlayerPayload) => api.patch<{ invitation?: AutomaticInvite }>(`/admin/players/${id}/profile`, data).then((r) => r.data),
     // erasure: la baja la pide el propio jugador (supresión completa)
     delete:       (id: string, { erasure = false }: { erasure?: boolean } = {}) =>
       api.delete(`/admin/players/${id}`, { params: erasure ? { erasure: true } : undefined }).then((r) => r.data),
@@ -615,14 +638,12 @@ export const adminService = {
 
   rankings: {
     list: (gender: string, type: RankingType = "circuit", season?: number, level?: string) =>
-      api.get<any[]>("/ranking", {
-        params: {
-          gender, type, limit: 500,
-          ...(season ? { season } : {}),
-          ...(level  ? { level  } : {}),
-        },
-      }).then((r) =>
-        (r.data ?? []).map((u: any): Player => ({
+      fetchAllRankingPages({
+        gender, type,
+        ...(season ? { season } : {}),
+        ...(level  ? { level  } : {}),
+      }).then((rows) =>
+        rows.map((u: any): Player => ({
           ...u,
           level:        u.level ?? u.categoryLevel ?? null,
           points:       u.points ?? u.circuitPoints ?? u.spaPoints ?? 0,

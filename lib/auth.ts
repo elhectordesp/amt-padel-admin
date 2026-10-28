@@ -100,16 +100,20 @@ export async function acceptClubInvite(
   return { ...data.user, role: (payload.role as string) ?? "club" };
 }
 
-/** El enlace ya se usó o caducó: hay que pedir otro. */
+/**
+ * El enlace ya se usó o caducó: hay que pedir otro. Lo mismo vale para un
+ * jugador (la app) que para un admin o un club (el acceso al panel): los dos
+ * tienen «¿Olvidaste tu contraseña?».
+ */
 export const RESET_LINK_EXPIRED_MESSAGE =
-  "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app con «¿Olvidaste tu contraseña?».";
+  "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app o desde el acceso al panel con «¿Olvidaste tu contraseña?».";
 
 /**
  * Lo mismo con el enlace de activar una cuenta creada por un admin o un club:
  * quien llega aquí puede no tener aún la app.
  */
 export const ACTIVATE_LINK_EXPIRED_MESSAGE =
-  "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app con «¿Olvidaste tu contraseña?» o pide a quien te invitó que te reenvíe la invitación.";
+  "El enlace ha caducado o ya se ha usado. Pide uno nuevo desde la app o desde el acceso al panel con «¿Olvidaste tu contraseña?» o pide a quien te invitó que te reenvíe la invitación.";
 
 /**
  * Pone la contraseña nueva con el token del enlace del email (restablecer o,

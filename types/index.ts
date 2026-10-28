@@ -298,16 +298,17 @@ export interface UpdatePlayerPayload {
   firstName?:    string;
   lastName?:     string;
   gender?:       Gender;
-  email?:        string;
-  phone?:        string;
-  city?:         string;
+  // null: lo borra
+  email?:        string | null;
+  phone?:        string | null;
+  city?:         string | null;
   // null: le quita la categoría («Sin asignar»)
   categoryLevel?: CategoryLevel | null;
   position?:     "reves" | "drive" | "indiferente";
   hand?:         "diestro" | "zurdo" | "ambidiestro";
   playsMasc?:    boolean;
   playsFem?:     boolean;
-  bio?:          string;
+  bio?:          string | null;
 }
 
 export interface PlayerMatch {
