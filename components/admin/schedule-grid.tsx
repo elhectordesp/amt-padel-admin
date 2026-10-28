@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, RotateCcw, X, Plus } from "lucide-react";
 import {
   DndContext,
@@ -241,8 +241,11 @@ export function ScheduleGrid({
   const tz = tournamentTimeZone(tournament);
   // Lo que dura cada partido en la rejilla: los de eliminatoria pueden durar
   // más (elimMatchDuration), como cuenta el back al buscar choques
-  const matchMinutes = (m: MatchResult) =>
-    phaseDuration({ matchDuration: duration, elimMatchDuration: tournament?.elimMatchDuration }, m.phase);
+  const elimMatchDuration = tournament?.elimMatchDuration;
+  const matchMinutes = useCallback(
+    (m: MatchResult) => phaseDuration({ matchDuration: duration, elimMatchDuration }, m.phase),
+    [duration, elimMatchDuration],
+  );
   const matchesByDate = useMemo(() => {
     const map: Record<string, MatchResult[]> = {};
     for (const m of matches) {
@@ -336,11 +339,10 @@ export function ScheduleGrid({
     let lo = range.from, hi = range.to;
     // Nunca ocultar partidos: ensancha el rango para incluir cualquiera que
     // caiga fuera del horario visible.
-    const elimDuration = tournament?.elimMatchDuration;
     for (const m of dayMatches) {
       const t = zonedMinutes((m as any).date, tz);
       lo = Math.min(lo, t);
-      hi = Math.max(hi, t + phaseDuration({ matchDuration: duration, elimMatchDuration: elimDuration }, m.phase));
+      hi = Math.max(hi, t + matchMinutes(m));
     }
     lo = Math.floor(lo / 30) * 30;
     hi = Math.ceil(hi / 30) * 30;
@@ -348,7 +350,7 @@ export function ScheduleGrid({
     const s: number[] = [];
     for (let t = lo; t < hi; t += 30) s.push(t);
     return { minMin: lo, slots: s };
-  }, [range, dayMatches, duration, tz, tournament]);
+  }, [range, dayMatches, tz, matchMinutes]);
 
   // Los tramos de las jornadas de ese día (null: el torneo no tiene jornadas
   // con fecha y no hay con qué comparar). Las celdas fuera se ven rayadas:

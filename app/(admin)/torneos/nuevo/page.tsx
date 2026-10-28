@@ -9,7 +9,7 @@ import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
-import { nextFreeBlock } from "@/lib/utils/schedule-windows";
+import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
 import {
   addDaysToKey,
   formatDayKey,
@@ -101,19 +101,15 @@ const scheduleSchema = z.object({
             });
           }
         });
-        // 2) no overlap between blocks of the same day
-        const ordered = blocks
-          .map((b, i) => ({ ...b, i }))
-          .filter((b) => b.start && b.end && b.start < b.end)
-          .sort((a, b) => a.start.localeCompare(b.start));
-        for (let i = 1; i < ordered.length; i++) {
-          if (ordered[i].start < ordered[i - 1].end) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: [ordered[i].i, "start"],
-              message: "Este bloque se solapa con otro de la misma jornada",
-            });
-          }
+        // 2) no overlap between blocks of the same day: la misma regla que
+        // «Editar jornadas». Comparar cada tramo solo con el anterior dejaba
+        // pasar 09-14, 10-11 y 12-13 (el de 12-13 pisa el de 09-14)
+        for (const i of overlappingBlocks(blocks)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [i, "start"],
+            message: "Este bloque se solapa con otro de la misma jornada",
+          });
         }
       }),
   })).min(1, "Añade al menos una jornada"),

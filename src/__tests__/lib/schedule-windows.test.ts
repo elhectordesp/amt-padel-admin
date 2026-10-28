@@ -92,6 +92,16 @@ describe("overlappingBlocks", () => {
     expect(overlappingBlocks([{ start: "16:00", end: "21:00" }, { start: "09:00", end: "16:00" }])).toEqual([]);
     expect(overlappingBlocks([{ start: "10:00", end: "14:00" }, { start: "09:00", end: "11:00" }])).toEqual([0]);
   });
+
+  it("compara con todos los anteriores, no solo con el de justo antes: 09-14 pisa a 10-11 y a 12-13", () => {
+    expect(
+      overlappingBlocks([
+        { start: "09:00", end: "14:00" },
+        { start: "10:00", end: "11:00" },
+        { start: "12:00", end: "13:00" },
+      ]),
+    ).toEqual([1, 2]);
+  });
 });
 
 describe("nextFreeBlock", () => {

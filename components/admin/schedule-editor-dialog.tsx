@@ -99,11 +99,8 @@ export function scheduleDaysIssue(
       ? `La jornada del ${formatDay(outOfRange.date)} cae fuera del torneo (del ${formatDay(startDate)} al ${formatDay(endDate)}).`
       : `La jornada del ${formatDay(outOfRange.date)} cae fuera de las fechas del torneo.`;
   }
-  const seen = new Set<string>();
-  for (const d of days) {
-    if (seen.has(d.date)) return `Hay dos jornadas el ${formatDay(d.date)}: junta sus tramos en una.`;
-    seen.add(d.date);
-  }
+  // Dos jornadas el mismo día valen: el back las separa por tipo (p. ej. los
+  // grupos por la mañana y la eliminatoria por la tarde)
   for (const d of days) {
     if (d.blocks.length === 0) return "Cada jornada necesita al menos un tramo horario.";
     if (d.blocks.some((b) => hhmmToMinutes(b.start) == null || hhmmToMinutes(b.end) == null)) return "Cada tramo necesita su hora de inicio y de fin.";

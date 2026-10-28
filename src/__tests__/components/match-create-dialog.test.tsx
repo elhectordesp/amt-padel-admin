@@ -9,14 +9,9 @@ import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 
 const createManualMatch = vi.fn().mockResolvedValue({ matchId: "m-1" });
-// El rechazo del back, sin pasar por vi.fn: con mockRejectedValue vitest daba
-// el test por fallido con el propio error, aunque el diálogo lo recoge
-let rejectWith: Error | null = null;
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
-    tournaments: {
-      createManualMatch: (...args: unknown[]) => (rejectWith ? Promise.reject(rejectWith) : createManualMatch(...args)),
-    },
+    tournaments: { createManualMatch: (...args: unknown[]) => createManualMatch(...args) },
   },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -40,7 +35,12 @@ function renderDialog(timeZone: string, initialDate?: string) {
 }
 
 describe("MatchCreateDialog — hora en la zona del torneo", () => {
-  beforeEach(() => createManualMatch.mockClear());
+  // Con cuerpo: mockClear() devuelve el mock, y lo que devuelve un beforeEach
+  // vitest lo ejecuta al acabar el test como limpieza (una llamada de más a
+  // createManualMatch, que con un rechazo hacía fallar el test)
+  beforeEach(() => {
+    createManualMatch.mockClear();
+  });
 
   it("torneo de Canarias: las 10:00 escritas en noviembre son las 10:00 UTC", async () => {
     renderDialog("Atlantic/Canary");
@@ -70,7 +70,6 @@ describe("MatchCreateDialog — hora en la zona del torneo", () => {
 describe("MatchCreateDialog — fuera de los tramos y mensajes del back", () => {
   beforeEach(() => {
     createManualMatch.mockClear();
-    rejectWith = null;
   });
 
   // Jornada del 20-nov de 16:00 a 21:00; los grupos duran 60 min y la eliminatoria 90
@@ -110,9 +109,10 @@ describe("MatchCreateDialog — fuera de los tramos y mensajes del back", () => 
   });
 
   it("si el back lo rechaza, se ve su mensaje y no un genérico", async () => {
-    rejectWith = new ApiError("Las dos parejas tienen que ser de esta categoría.", 400);
+    createManualMatch.mockRejectedValueOnce(new ApiError("Las dos parejas tienen que ser de esta categoría.", 400));
     renderWithSchedule("2026-11-20T17:00");
     fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Las dos parejas tienen que ser de esta categoría."));
+    expect(createManualMatch).toHaveBeenCalledTimes(1);
   });
 });
