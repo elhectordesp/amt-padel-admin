@@ -49,6 +49,7 @@ import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/
 import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
 import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
+import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
   REGISTRATION_STATUS_CONFIG,
@@ -1550,7 +1551,9 @@ export default function TorneoDetailPage() {
   } = useQuery({
     queryKey:  registrationsQK.list(id),
     queryFn:   () => adminService.registrations.list(id),
-    enabled:   tab === "inscripciones" || (tab === "cuadro" && manualMode),
+    // También con «Crear partido» abierto: desde un hueco de Horarios no
+    // había parejas que elegir si no se había pasado antes por Inscripciones
+    enabled:   tab === "inscripciones" || (tab === "cuadro" && manualMode) || !!createMatchCatId,
     staleTime: 60_000,
   });
 
@@ -1670,12 +1673,17 @@ export default function TorneoDetailPage() {
     },
   });
 
-  const invalidateBracket = () => {
+  /** Vuelve a cargar el torneo y sus partidos, sin cambiar de pestaña. */
+  const refreshBracket = () => {
     qc.invalidateQueries({ queryKey: ["tournament", id] });
     qc.invalidateQueries({ queryKey: ["matches", id] });
     qc.invalidateQueries({ queryKey: ["bracket", id] });
     qc.invalidateQueries({ queryKey: ["standings", id] });
     refetchTournament();
+  };
+
+  const invalidateBracket = () => {
+    refreshBracket();
     setTab("cuadro");
   };
 
@@ -2451,13 +2459,13 @@ export default function TorneoDetailPage() {
                       <option value="BEST_OF_2_SUPERTB">2 sets + super-TB</option>
                     </select>
                     <input
-                      type="number" min={1} placeholder="Plazas"
+                      type="number" min={1} step={1} placeholder="Plazas"
                       value={addCatForm.totalSpots}
                       onChange={(e) => setAddCatForm((f) => ({ ...f, totalSpots: Number(e.target.value) }))}
                       className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                     />
                     <input
-                      type="number" min={0} placeholder="Precio €"
+                      type="number" min={0} step={1} placeholder="Precio €"
                       value={addCatForm.price}
                       onChange={(e) => setAddCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
                       className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -2471,7 +2479,11 @@ export default function TorneoDetailPage() {
                       Cancelar
                     </button>
                     <button
-                      onClick={() => addCatMut.mutate(addCatForm)}
+                      onClick={() => {
+                        const issue = categoryNumbersIssue(addCatForm);
+                        if (issue) { toast.error(issue); return; }
+                        addCatMut.mutate(addCatForm);
+                      }}
                       disabled={addCatMut.isPending || addCatForm.totalSpots < 1}
                       className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
                     >
@@ -2505,7 +2517,7 @@ export default function TorneoDetailPage() {
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
                             <input
-                              type="number" min={pairCount}
+                              type="number" min={pairCount} step={1}
                               value={editCatForm.totalSpots}
                               onChange={(e) => setEditCatForm((f) => ({ ...f, totalSpots: Number(e.target.value) }))}
                               className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -2516,7 +2528,7 @@ export default function TorneoDetailPage() {
                           {isEditing ? (
                             <div className="flex flex-col gap-1">
                               <input
-                                type="number" min={0}
+                                type="number" min={0} step={1}
                                 value={editCatForm.price}
                                 onChange={(e) => setEditCatForm((f) => ({ ...f, price: Number(e.target.value) }))}
                                 className="w-16 h-7 px-2 rounded bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -2555,7 +2567,11 @@ export default function TorneoDetailPage() {
                             {isEditing ? (
                               <>
                                 <button
-                                  onClick={() => updateCatMut.mutate({ catId: cat.id, data: editCatForm })}
+                                  onClick={() => {
+                                    const issue = categoryNumbersIssue(editCatForm);
+                                    if (issue) { toast.error(issue); return; }
+                                    updateCatMut.mutate({ catId: cat.id, data: editCatForm });
+                                  }}
                                   disabled={updateCatMut.isPending}
                                   className="p-1.5 rounded hover:bg-[rgba(212,175,55,0.15)] text-[#D4AF37] disabled:opacity-50"
                                   title="Guardar"
@@ -4246,9 +4262,12 @@ export default function TorneoDetailPage() {
             ? `${p.primary.user.name} / ${p.primary.partner.name}`
             : p.primary.user.name,
         }))}
+        schedule={tournament.schedule}
+        durations={tournament}
         lock={lockOpts(createMatchCatId)}
         onGroupsLocked={(retry) => lockedPrompt.open(createMatchCatId, retry)}
-        onCreated={() => invalidateBracket()}
+        // Sin cambiar de pestaña: desde Horarios saltaba al Cuadro
+        onCreated={() => refreshBracket()}
       />
     )}
 

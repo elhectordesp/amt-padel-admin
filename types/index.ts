@@ -47,6 +47,8 @@ export interface TournamentCategory {
 export interface TournamentScheduleDay {
   id:                      string;
   label:                   string;
+  // Medianoche UTC del día (dateOnlyKey); null en jornadas antiguas sin fecha
+  date?:                   string | null;
   slots:                   string[];
   maxUnavailableHours:     number;
   isFinal?:                boolean;

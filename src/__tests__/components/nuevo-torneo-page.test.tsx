@@ -79,3 +79,47 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
     });
   }, 30_000);
 });
+
+describe("Crear torneo — tramos del paso 4 (P2-10)", () => {
+  it("«Añadir tramo» no repite el de por defecto, y un solape se dice en el tramo", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    fireEvent.change(input("name"), { target: { value: "Open de un día" } });
+    fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
+    fireEvent.change(input("endDate"), { target: { value: "2099-11-20" } });
+    next();
+    await screen.findByLabelText("Plazas", {}, WAIT);
+    next();
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+
+    // Antes añadía otro 16:00-21:00 y «Siguiente» no hacía nada sin decir por qué
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir tramo/ }, WAIT));
+    const starts = () => screen.getAllByLabelText("Inicio del tramo") as HTMLInputElement[];
+    const ends = () => screen.getAllByLabelText("Fin del tramo") as HTMLInputElement[];
+    expect(starts().map((i) => i.value)).toEqual(["16:00", "09:00"]);
+    expect(ends().map((i) => i.value)).toEqual(["21:00", "14:00"]);
+
+    // Lo movemos encima del de la tarde: el error sale en ese tramo
+    fireEvent.change(starts()[1], { target: { value: "17:00" } });
+    fireEvent.change(ends()[1], { target: { value: "19:00" } });
+    next();
+    expect(await screen.findByText("Este bloque se solapa con otro de la misma jornada", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("Hay tramos que corregir: revisa los marcados en rojo.")).toBeInTheDocument();
+
+    // Al corregirlo, el error se va y se avanza
+    fireEvent.change(starts()[1], { target: { value: "10:00" } });
+    fireEvent.change(ends()[1], { target: { value: "13:00" } });
+    await waitFor(() => expect(screen.queryByText("Este bloque se solapa con otro de la misma jornada")).not.toBeInTheDocument(), WAIT);
+    next();
+    expect(await screen.findByRole("button", { name: /Crear torneo/ }, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("16:00-21:00, 10:00-13:00")).toBeInTheDocument();
+  }, 30_000);
+});

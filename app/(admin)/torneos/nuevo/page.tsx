@@ -9,6 +9,7 @@ import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
+import { nextFreeBlock } from "@/lib/utils/schedule-windows";
 import {
   addDaysToKey,
   formatDayKey,
@@ -31,7 +32,9 @@ import { z } from "zod";
 // ── Schemas ──────────────────────────────────────────────────────────────
 const infoSchema = z.object({
   name:      z.string().min(3, "Nombre requerido"),
-  clubId:    z.string().min(1, "Club requerido"),
+  // El club se elige en un desplegable que empieza sin valor: sin el mensaje
+  // propio, zod daba el suyo en inglés («Invalid input: expected string…»)
+  clubId:    z.string({ error: "Club requerido" }).min(1, "Club requerido"),
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:       z.string().optional(),
@@ -262,6 +265,13 @@ export default function NuevoTorneoPage() {
     resolver:      zodResolver(scheduleSchema) as any,
     defaultValues: scheduleData ?? { days: [] },
   });
+
+  /** Cambia los tramos de una jornada; tras un «Siguiente» con errores, revalida para que se vayan al corregirlos. */
+  const setDayBlocks = (dIdx: number, blocks: ScheduleData["days"][number]["blocks"]) =>
+    scheduleForm.setValue(`days.${dIdx}.blocks`, blocks, {
+      shouldDirty:    true,
+      shouldValidate: !!scheduleForm.formState.errors.days,
+    });
 
   // Auto-generate days when reaching step 4
   useEffect(() => {
@@ -753,7 +763,13 @@ export default function NuevoTorneoPage() {
               </div>
               
               <div className="space-y-4">
-                {scheduleForm.watch("days").map((day, dIdx) => (
+                {scheduleForm.watch("days").map((day, dIdx) => {
+                  // El tramo nuevo no pisa los que ya hay: antes era siempre
+                  // 16:00-21:00, igual que el de por defecto, y «Siguiente» no
+                  // avanzaba sin decir por qué
+                  const newBlock  = nextFreeBlock(day.blocks);
+                  const dayErrors = scheduleForm.formState.errors.days?.[dIdx]?.blocks;
+                  return (
                   <div key={day.date} className="p-4 bg-secondary/30 rounded-lg border border-border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-foreground capitalize">
@@ -761,11 +777,12 @@ export default function NuevoTorneoPage() {
                       </span>
                       <button
                         type="button"
+                        disabled={!newBlock}
+                        title={newBlock ? undefined : "No queda hueco libre en el día"}
                         onClick={() => {
-                          const blocks = [...scheduleForm.getValues().days[dIdx].blocks, { start: "16:00", end: "21:00" }];
-                          scheduleForm.setValue(`days.${dIdx}.blocks`, blocks);
+                          if (newBlock) setDayBlocks(dIdx, [...scheduleForm.getValues().days[dIdx].blocks, newBlock]);
                         }}
-                        className="text-[10px] font-bold text-[#D4AF37] uppercase hover:underline"
+                        className="text-[10px] font-bold text-[#D4AF37] uppercase hover:underline disabled:opacity-40 disabled:no-underline"
                       >
                         + Añadir tramo
                       </button>
@@ -822,49 +839,57 @@ export default function NuevoTorneoPage() {
                     </div>
 
                     <div className="space-y-2">
-                      {day.blocks.map((block, bIdx) => (
-                        <div key={bIdx} className="flex items-center gap-3">
-                          <div className="flex-1 flex items-center gap-2">
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Inicio</span>
-                            <input
-                              type="time"
-                              defaultValue={block.start}
-                              onBlur={(e) => {
-                                const b = [...scheduleForm.getValues().days[dIdx].blocks];
-                                b[bIdx] = { ...b[bIdx], start: e.target.value };
-                                scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
-                              }}
-                              className="flex-1 h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
-                            />
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Fin</span>
-                            <input
-                              type="time"
-                              defaultValue={block.end}
-                              onBlur={(e) => {
-                                const b = [...scheduleForm.getValues().days[dIdx].blocks];
-                                b[bIdx] = { ...b[bIdx], end: e.target.value };
-                                scheduleForm.setValue(`days.${dIdx}.blocks`, b, { shouldDirty: true });
-                              }}
-                              className="flex-1 h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors"
-                            />
+                      {day.blocks.map((block, bIdx) => {
+                        const blockError = dayErrors?.[bIdx]?.start?.message ?? dayErrors?.[bIdx]?.end?.message;
+                        // Controlados: con defaultValue, al quitar un tramo el
+                        // de debajo seguía enseñando las horas del quitado
+                        const setTime = (field: "start" | "end", value: string) => {
+                          const b = [...scheduleForm.getValues().days[dIdx].blocks];
+                          b[bIdx] = { ...b[bIdx], [field]: value };
+                          setDayBlocks(dIdx, b);
+                        };
+                        return (
+                        <div key={bIdx} className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 flex items-center gap-2">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Inicio</span>
+                              <input
+                                type="time"
+                                aria-label="Inicio del tramo"
+                                aria-invalid={!!blockError}
+                                value={block.start}
+                                onChange={(e) => setTime("start", e.target.value)}
+                                className={`flex-1 h-8 px-2 rounded-md bg-input border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors ${blockError ? "border-destructive" : "border-border"}`}
+                              />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Fin</span>
+                              <input
+                                type="time"
+                                aria-label="Fin del tramo"
+                                aria-invalid={!!blockError}
+                                value={block.end}
+                                onChange={(e) => setTime("end", e.target.value)}
+                                className={`flex-1 h-8 px-2 rounded-md bg-input border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-colors ${blockError ? "border-destructive" : "border-border"}`}
+                              />
+                            </div>
+                            {day.blocks.length > 1 && (
+                              <button
+                                type="button"
+                                aria-label="Quitar tramo"
+                                onClick={() => setDayBlocks(dIdx, scheduleForm.getValues().days[dIdx].blocks.filter((_, i) => i !== bIdx))}
+                                className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
-                          {day.blocks.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const b = scheduleForm.getValues().days[dIdx].blocks.filter((_, i) => i !== bIdx);
-                                scheduleForm.setValue(`days.${dIdx}.blocks`, b);
-                              }}
-                              className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                          {blockError && <p className="text-xs text-destructive">{blockError}</p>}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Límite total de disponibilidad */}
@@ -881,6 +906,13 @@ export default function NuevoTorneoPage() {
                 />
                 <span className="text-[10px] text-muted-foreground">(0 = sin límite · suma de todas las jornadas)</span>
               </div>
+
+              {/* Junto a «Siguiente»: el tramo con el error puede quedar lejos en la lista */}
+              {scheduleForm.formState.errors.days && (
+                <p role="alert" className="text-xs text-destructive">
+                  Hay tramos que corregir: revisa los marcados en rojo.
+                </p>
+              )}
             </div>
           )}
 

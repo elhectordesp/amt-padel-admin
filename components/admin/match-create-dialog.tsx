@@ -14,6 +14,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { zonedDateTimeToIso } from "@/lib/utils/time-zone";
+import {
+  hhmmToMinutes,
+  outsideScheduleIssue,
+  phaseDuration,
+  type MatchDurations,
+  type ScheduleDayLike,
+} from "@/lib/utils/schedule-windows";
 import { isGroupsLocked } from "@/lib/utils/groups-lock";
 import type { GroupsLockOptions } from "@/types/preparation";
 
@@ -41,6 +48,9 @@ interface Props {
   initialCourt?: string;
   /** Zona del torneo: la hora escrita es de esa zona. */
   timeZone: string;
+  /** Jornadas del torneo y duración de sus partidos: para avisar si la hora cae fuera de los tramos. */
+  schedule?: ScheduleDayLike[] | null;
+  durations?: MatchDurations | null;
   /** «Forzar» el bloqueo del cuadro publicado (un partido de grupos). */
   lock?: GroupsLockOptions;
   /**
@@ -72,6 +82,8 @@ export function MatchCreateDialog({
   initialDate,
   initialCourt,
   timeZone,
+  schedule,
+  durations,
   lock,
   onGroupsLocked,
 }: Props) {
@@ -87,6 +99,13 @@ export function MatchCreateDialog({
 
   const pairBy = (uid: string) => pairs.find((p) => p.userId === uid) ?? null;
   const sameTeam = team1 && team2 && team1 === team2;
+  // Fuera de los tramos de la jornada se puede crear (el admin manda), pero
+  // avisando: antes se creaba sin decir nada (p. ej. en el hueco de las 22:00)
+  const when = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/.exec(date);
+  const startMin = when ? hhmmToMinutes(when[2]) : null;
+  const scheduleIssue = when && startMin != null
+    ? outsideScheduleIssue(schedule, when[1], startMin, phaseDuration(durations, target === "free" ? phase : "GROUPS"))
+    : null;
 
   // forceLocked: solo esta vez, desde el «Forzar» del diálogo de la ficha
   const save = async (forceLocked: boolean) => {
@@ -108,9 +127,11 @@ export function MatchCreateDialog({
       onCreated?.();
       onClose();
     } catch (e: any) {
-      // Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo)
+      // Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo).
+      // El mensaje del back viene en el ApiError (con e.response.data.message
+      // salía siempre el genérico)
       if (isGroupsLocked(e) && onGroupsLocked && !forceLocked) onGroupsLocked(() => void save(true));
-      else toast.error(e?.response?.data?.message ?? "No se pudo crear el partido");
+      else toast.error(e instanceof Error && e.message ? e.message : "No se pudo crear el partido");
     } finally {
       setSaving(false);
     }
@@ -195,6 +216,12 @@ export function MatchCreateDialog({
               <input type="text" value={court} onChange={(e) => setCourt(e.target.value)} placeholder="Pista 1" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
             </label>
           </div>
+
+          {scheduleIssue && (
+            <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-amber-400">
+              Fuera del horario del torneo: {scheduleIssue} Puedes crearlo igualmente.
+            </div>
+          )}
 
           {sameTeam && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">

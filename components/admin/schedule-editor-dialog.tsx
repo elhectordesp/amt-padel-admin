@@ -13,6 +13,8 @@ import { CalendarDays, Loader2, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
+import { hhmmToMinutes, nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
+import { dateOnlyKey, formatDayKey } from "@/lib/utils/time-zone";
 
 export interface ScheduleEditorDay {
   date: string; // ISO o YYYY-MM-DD
@@ -39,6 +41,9 @@ interface Props {
   onClose: () => void;
   tournamentId: string;
   initialDays: ScheduleEditorDay[];
+  /** Inicio y fin del torneo («YYYY-MM-DD»): las jornadas tienen que caer entre los dos. */
+  startDate?: string;
+  endDate?: string;
   onSaved?: () => void;
 }
 
@@ -76,9 +81,39 @@ function slotsToBlocks(slots?: string[]): Block[] {
   return blocks;
 }
 
-const isoToDate = (iso: string) => (iso ? iso.split("T")[0] : "");
+/** El día de una jornada guardada; con split("T"), una antigua guardada a la medianoche de España salía el día anterior. */
+const isoToDate = (iso: string) => dateOnlyKey(iso);
 
-export function ScheduleEditorDialog({ open, onClose, tournamentId, initialDays, onSaved }: Props) {
+const formatDay = (dayKey: string) => formatDayKey(dayKey, { day: "numeric", month: "short" });
+
+/** Lo primero que impide guardar las jornadas, o null. */
+export function scheduleDaysIssue(
+  days: readonly Pick<DayForm, "date" | "blocks">[],
+  range: { startDate?: string; endDate?: string },
+): string | null {
+  if (days.some((d) => !d.date)) return "Todas las jornadas necesitan fecha.";
+  const { startDate, endDate } = range;
+  const outOfRange = days.find((d) => (startDate && d.date < startDate) || (endDate && d.date > endDate));
+  if (outOfRange) {
+    return startDate && endDate
+      ? `La jornada del ${formatDay(outOfRange.date)} cae fuera del torneo (del ${formatDay(startDate)} al ${formatDay(endDate)}).`
+      : `La jornada del ${formatDay(outOfRange.date)} cae fuera de las fechas del torneo.`;
+  }
+  const seen = new Set<string>();
+  for (const d of days) {
+    if (seen.has(d.date)) return `Hay dos jornadas el ${formatDay(d.date)}: junta sus tramos en una.`;
+    seen.add(d.date);
+  }
+  for (const d of days) {
+    if (d.blocks.length === 0) return "Cada jornada necesita al menos un tramo horario.";
+    if (d.blocks.some((b) => hhmmToMinutes(b.start) == null || hhmmToMinutes(b.end) == null)) return "Cada tramo necesita su hora de inicio y de fin.";
+    if (d.blocks.some((b) => toMin(b.start) >= toMin(b.end))) return "En cada tramo, la hora de inicio debe ser anterior a la de fin.";
+    if (overlappingBlocks(d.blocks).length > 0) return `En la jornada del ${formatDay(d.date)} hay tramos que se solapan.`;
+  }
+  return null;
+}
+
+export function ScheduleEditorDialog({ open, onClose, tournamentId, initialDays, startDate, endDate, onSaved }: Props) {
   const [days, setDays] = useState<DayForm[]>(() =>
     (initialDays.length
       ? initialDays
@@ -100,21 +135,18 @@ export function ScheduleEditorDialog({ open, onClose, tournamentId, initialDays,
   const addDay = () =>
     setDays((p) => [...p, { date: "", type: "AMBOS", isFinal: false, maxUnavailableSlots: 0, blocks: [{ start: "09:00", end: "11:00" }] }]);
   const removeDay = (i: number) => setDays((p) => (p.length > 1 ? p.filter((_, idx) => idx !== i) : p));
-  const addBlock = (i: number) => update(i, { blocks: [...days[i].blocks, { start: "16:00", end: "21:00" }] });
+  // Un tramo que no pise los que ya tiene la jornada (antes, siempre 16:00-21:00)
+  const addBlock = (i: number) => {
+    const block = nextFreeBlock(days[i].blocks);
+    if (block) update(i, { blocks: [...days[i].blocks, block] });
+  };
   const setBlock = (i: number, bi: number, patch: Partial<Block>) =>
     update(i, { blocks: days[i].blocks.map((b, idx) => (idx === bi ? { ...b, ...patch } : b)) });
   const removeBlock = (i: number, bi: number) =>
     update(i, { blocks: days[i].blocks.length > 1 ? days[i].blocks.filter((_, idx) => idx !== bi) : days[i].blocks });
 
-  // ── Validación ──
-  const error = (() => {
-    if (days.some((d) => !d.date)) return "Todas las jornadas necesitan fecha.";
-    for (const d of days) {
-      if (d.blocks.length === 0) return "Cada jornada necesita al menos un tramo horario.";
-      if (d.blocks.some((b) => toMin(b.start) >= toMin(b.end))) return "En cada tramo, la hora de inicio debe ser anterior a la de fin.";
-    }
-    return null;
-  })();
+  // ── Validación ── (antes guardaba tramos solapados y jornadas fuera del torneo)
+  const error = scheduleDaysIssue(days, { startDate, endDate });
 
   const submit = async () => {
     if (error) return;
@@ -133,8 +165,10 @@ export function ScheduleEditorDialog({ open, onClose, tournamentId, initialDays,
       toast.success("Jornadas y horarios actualizados");
       onSaved?.();
       onClose();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? "No se pudieron actualizar las jornadas");
+    } catch (e) {
+      // El mensaje del back viene en el ApiError (con e.response.data.message
+      // salía siempre el genérico)
+      toast.error(e instanceof Error && e.message ? e.message : "No se pudieron actualizar las jornadas");
     } finally {
       setSaving(false);
     }
@@ -198,7 +232,12 @@ export function ScheduleEditorDialog({ open, onClose, tournamentId, initialDays,
                     </button>
                   </div>
                 ))}
-                <button onClick={() => addBlock(i)} className="flex items-center gap-1 text-xs text-[#D4AF37] hover:underline">
+                <button
+                  onClick={() => addBlock(i)}
+                  disabled={!nextFreeBlock(d.blocks)}
+                  title={nextFreeBlock(d.blocks) ? undefined : "No queda hueco libre en el día"}
+                  className="flex items-center gap-1 text-xs text-[#D4AF37] hover:underline disabled:opacity-40 disabled:no-underline"
+                >
                   <Plus className="h-3 w-3" /> Añadir tramo
                 </button>
               </div>
