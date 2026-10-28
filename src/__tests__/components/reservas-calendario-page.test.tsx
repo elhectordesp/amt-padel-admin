@@ -152,6 +152,30 @@ describe("Calendario de reservas — vista Día", () => {
     expect(screen.getByRole("button", { name: "Crear reserva en Pista 2 a las 18:30" })).toBeInTheDocument();
   });
 
+  it("el bloque se estira a todas sus franjas (con h-full medían igual 60 y 90 min)", async () => {
+    svc.bookings.listAll.mockResolvedValue([booking({})]);
+    renderPage();
+
+    const block = await screen.findByRole("link", { name: /18:00–19:30/ });
+    const cell = block.closest("td")!;
+    expect(cell).toHaveAttribute("rowspan", "3");
+    // jsdom no calcula alturas: se comprueba la maqueta que las da (medida en Chromium)
+    expect(cell).toHaveClass("relative");
+    expect(block).toHaveClass("absolute", "inset-0.5");
+    expect(block).not.toHaveClass("h-full");
+  });
+
+  it("el «+» de los huecos libres se ve siempre, no solo con el ratón encima", async () => {
+    renderPage();
+    const slot = await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 09:00" });
+    expect(within(slot).getByText("+")).not.toHaveClass("opacity-0");
+  });
+
+  it("el día va con solo la primera letra en mayúscula", async () => {
+    renderPage();
+    expect(await screen.findByText("Domingo, 25 oct")).toBeInTheDocument();
+  });
+
   it("el contacto solo es la etiqueta en una reserva por teléfono; si no, un invitado es un jugador más", async () => {
     const guests = [
       { id: "x1", userId: "u1", status: "ACCEPTED" },
@@ -191,9 +215,10 @@ describe("Calendario de reservas — vista Día", () => {
 
 describe("Calendario de reservas — vista Semana", () => {
   it("pide de lunes a domingo del club y pone cada reserva en su día de Madrid", async () => {
-    // Domingo a las 23:30 de Madrid
+    // Domingo a las 23:30 de Madrid, y una cancelada que se ve pero no cuenta
     svc.bookings.listAll.mockResolvedValue([
       booking({ id: "tarde", startsAt: "2026-10-25T22:30:00.000Z", endsAt: "2026-10-25T23:30:00.000Z", durationMinutes: 60 }),
+      booking({ id: "anulada", status: "CANCELLED", startsAt: "2026-10-21T17:00:00.000Z", endsAt: "2026-10-21T18:30:00.000Z" }),
     ]);
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
@@ -205,7 +230,7 @@ describe("Calendario de reservas — vista Semana", () => {
       fromDate: "2026-10-18T22:00:00.000Z",
       toDate: "2026-10-25T22:59:59.999Z",
     });
-    expect(screen.getByText("1 reservas esta semana")).toBeInTheDocument();
+    expect(screen.getByText("1 reserva esta semana")).toBeInTheDocument();
     const sunday = within(screen.getByRole("row", { name: /^Pista 1/ })).getAllByRole("cell")[7];
     expect(within(sunday).getByText("23:30")).toBeInTheDocument();
   });

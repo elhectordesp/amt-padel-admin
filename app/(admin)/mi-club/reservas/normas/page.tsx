@@ -10,10 +10,9 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { ArrowLeft, Eye, Loader2, Pencil, Save } from "lucide-react";
+import { Eye, Loader2, Pencil, Save } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
@@ -75,20 +74,16 @@ export default function NormasPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Normas" />
+      <ReservasPage title="Normas">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <Header title="Normas del club" />
+    <ReservasPage title="Normas del club">
 
       <div className="mt-4 flex items-center justify-end gap-2">
         <div className="flex rounded-md border border-border p-0.5">
@@ -165,7 +160,7 @@ export default function NormasPage() {
           </div>
         )}
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -221,15 +216,4 @@ function renderInline(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>");
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
-  );
 }

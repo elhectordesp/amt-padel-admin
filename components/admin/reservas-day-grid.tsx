@@ -79,8 +79,10 @@ export function ReservasDayGrid({
             const isHour = t % 60 === 0;
             return (
               <tr key={t}>
+                {/* h-7: todas las franjas miden lo mismo, también las que solo
+                    tienen reservas (que no empujan la altura de la fila) */}
                 <td
-                  className={`sticky left-0 z-10 border-t border-border bg-background py-0 px-2 align-top tabular-nums ${
+                  className={`sticky left-0 z-10 h-7 border-t border-border bg-background py-0 px-2 align-top tabular-nums ${
                     isHour ? "font-medium text-foreground" : "text-muted-foreground/60"
                   }`}
                 >
@@ -91,10 +93,12 @@ export function ReservasDayGrid({
                   if (cell.kind === "covered") return null; // la tapa el rowSpan de arriba
                   if (cell.kind === "booking") {
                     return (
+                      // relative: el bloque se estira a toda la celda (h-full dentro
+                      // de un td con rowSpan no se resuelve y medían todos lo mismo)
                       <td
                         key={c.id}
                         rowSpan={cell.span}
-                        className="border-t border-l border-border p-1 align-top"
+                        className="relative border-t border-l border-border p-0 align-top"
                       >
                         <BookingBlock booking={cell.booking} timeZone={timeZone} />
                       </td>
@@ -131,7 +135,9 @@ export function ReservasDayGrid({
                         className="group flex h-7 w-full items-center justify-center rounded-sm transition-colors hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary focus:outline-none"
                         aria-label={`Crear reserva en ${c.name} a las ${time}`}
                       >
-                        <span className="text-sm opacity-0 group-hover:opacity-100 group-focus:opacity-100">
+                        {/* Siempre a la vista, discreto: en táctil no hay hover
+                            y el hueco parecía una celda vacía */}
+                        <span className="text-sm text-muted-foreground/40 transition-colors group-hover:text-primary group-focus:text-primary">
                           +
                         </span>
                       </button>
@@ -166,7 +172,7 @@ function BookingBlock({ booking: b, timeZone }: { booking: Booking; timeZone: st
   return (
     <Link
       href={`/mi-club/reservas/bookings/${b.id}`}
-      className={`flex h-full min-h-[1.75rem] flex-col justify-start gap-0.5 rounded px-2 py-1 transition-colors ${bg}`}
+      className={`absolute inset-0.5 flex flex-col justify-start gap-0.5 overflow-hidden rounded px-2 py-1 transition-colors ${bg}`}
       title={`${b.shortCode} · ${b.durationMinutes} min`}
     >
       <span className="font-medium tabular-nums">

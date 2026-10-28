@@ -13,6 +13,11 @@ export function activeParticipants(b: Pick<Booking, "participants">): BookingPar
   );
 }
 
+/** «1 jugador», «3 jugadores» (antes «1 jugadores»). */
+export function playersLabel(n: number): string {
+  return n === 1 ? "1 jugador" : `${n} jugadores`;
+}
+
 /** Cuántos juegan en la pista: 2 en una individual, 4 en una de dobles. */
 export function bookingCapacity(b: Pick<Booking, "court">): number {
   return b.court?.type === "SINGLES" ? 2 : 4;

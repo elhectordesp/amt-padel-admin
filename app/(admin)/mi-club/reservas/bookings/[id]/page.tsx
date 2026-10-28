@@ -10,19 +10,24 @@
 
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import {
-  ArrowLeft, Calendar, Clock, CreditCard, Crown, FileText, Flame,
+  Calendar, Clock, CreditCard, Crown, FileText, Flame,
   Loader2, MapPin, Trophy, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
 import { cancellationNoticeCount } from "@/lib/utils/booking-participants";
-import { DEFAULT_TIME_ZONE, formatInTimeZone, zonedTime } from "@/lib/utils/time-zone";
+import { formatCents } from "@/lib/utils/booking-price";
+import {
+  DEFAULT_TIME_ZONE,
+  capitalizeFirst,
+  formatInTimeZone,
+  zonedTime,
+} from "@/lib/utils/time-zone";
 import type {
   BookingMatchMode, BookingParticipant, BookingParticipantStatus,
   BookingPaymentMethod, BookingStatus,
@@ -53,6 +58,8 @@ const MODE_LABELS: Record<BookingMatchMode, string> = {
   OPEN: "Abierto",
   ADMIN_MANUAL: "Manual (admin)",
 };
+
+const BACK_TO_LIST = { href: "/mi-club/reservas/bookings", label: "Volver al listado" };
 
 const PAYMENT_LABELS: Record<BookingPaymentMethod, string> = {
   PENDING: "Pendiente",
@@ -139,32 +146,28 @@ export default function BookingDetailPage({
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Reserva" />
+      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
   if (query.isError || !query.data) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Reserva" />
+      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
         <p className="mt-6 text-sm text-muted-foreground">
           Reserva no encontrada o sin permisos.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   const b = query.data;
   // En hora del club (Madrid, como el back y el calendario), no del navegador
-  const dateStr = formatInTimeZone(b.startsAt, DEFAULT_TIME_ZONE, {
+  const dateStr = capitalizeFirst(formatInTimeZone(b.startsAt, DEFAULT_TIME_ZONE, {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  }));
   const timeStr = `${zonedTime(b.startsAt, DEFAULT_TIME_ZONE)} – ${zonedTime(b.endsAt, DEFAULT_TIME_ZONE)}`;
   const isOpen = b.matchMode === "OPEN";
   const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
@@ -173,9 +176,8 @@ export default function BookingDetailPage({
   const noticeCount = me ? cancellationNoticeCount(b, me.id) : null;
 
   return (
-    <div className="p-6 max-w-4xl">
-      <BackLink />
-      <div className="mt-2 flex items-start justify-between gap-4">
+    <ReservasPage title="Reserva" back={BACK_TO_LIST} className="max-w-4xl">
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Reserva <span className="font-mono text-primary">{b.shortCode}</span>
@@ -214,13 +216,13 @@ export default function BookingDetailPage({
           {b.court?.type && <span className="ml-1 text-xs text-muted-foreground">· {b.court.type}</span>}
         </Row>
         <Row icon={Calendar} label="Fecha">
-          <span className="capitalize">{dateStr}</span>
+          {dateStr}
         </Row>
         <Row icon={Clock} label="Horario">
           {timeStr} · {b.durationMinutes} min
         </Row>
         <Row icon={CreditCard} label="Precio">
-          {(b.priceCents / 100).toFixed(2)} €
+          {formatCents(b.priceCents)}
           <span className="ml-2 text-xs text-muted-foreground">
             ({PAYMENT_LABELS[b.paymentMethod]})
           </span>
@@ -250,7 +252,7 @@ export default function BookingDetailPage({
         )}
         {b.priceBreakdown.extras.length > 0 && (
           <div className="ml-7 text-xs text-muted-foreground">
-            Incluye: {b.priceBreakdown.extras.map((e) => `${e.name} (${(e.cents / 100).toFixed(2)}€)`).join(", ")}
+            Incluye: {b.priceBreakdown.extras.map((e) => `${e.name} (${formatCents(e.cents)})`).join(", ")}
           </div>
         )}
         {isOpen && (b.openMatchMinLspa !== null || b.openMatchMaxLspa !== null) && (
@@ -352,7 +354,7 @@ export default function BookingDetailPage({
           </div>
         </div>
       )}
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -402,16 +404,5 @@ function ParticipantItem({ p }: { p: BookingParticipant }) {
         {PARTICIPANT_STATUS_LABELS[p.status]}
       </span>
     </li>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas/bookings"
-      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver al listado
-    </Link>
   );
 }
