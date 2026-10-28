@@ -56,11 +56,11 @@ function prep(status: TournamentPreparation["status"], doneCount: number, o: Par
   };
 }
 
-function renderChecklist(onNavigate = vi.fn()) {
+function renderChecklist(onNavigate = vi.fn(), timeZone = "Europe/Madrid") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <TournamentPreparationChecklist tournamentId="t1" onNavigate={onNavigate} />
+      <TournamentPreparationChecklist tournamentId="t1" onNavigate={onNavigate} timeZone={timeZone} />
     </QueryClientProvider>,
   );
   return { onNavigate, qc };
@@ -117,6 +117,13 @@ describe("TournamentPreparationChecklist", () => {
     expect(onNavigate).toHaveBeenCalledWith("horarios");
     // Qué categorías faltan por sortear
     expect(screen.getByText(/Sin cuadro: Masc\. 4ª/)).toBeInTheDocument();
+  });
+
+  it("el cierre se enseña en la hora del torneo, no en la del navegador (Canarias)", async () => {
+    // 20:00 UTC del 15-nov-2099: 20:00 en Canarias, 21:00 en Madrid
+    preparationMock.mockResolvedValue(prep("OPEN", 2, { registrationDeadline: "2099-11-15T20:00:00.000Z" }));
+    renderChecklist(vi.fn(), "Atlantic/Canary");
+    expect(await screen.findByText(/Abiertas hasta el 15 nov,? 20:00/)).toBeInTheDocument();
   });
 
   it("«Publicar y avisar» no se puede con las inscripciones abiertas", async () => {

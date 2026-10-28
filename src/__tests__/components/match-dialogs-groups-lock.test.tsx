@@ -46,6 +46,7 @@ describe("MatchCreateDialog con el cuadro publicado", () => {
         categoryLabel="Masc. 4ª"
         groups={[{ id: "g1", label: "Grupo A" }]}
         pairs={pairs}
+        timeZone="Europe/Madrid"
         {...props}
       />,
     );

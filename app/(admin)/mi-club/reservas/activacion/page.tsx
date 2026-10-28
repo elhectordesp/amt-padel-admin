@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { DEFAULT_TIME_ZONE, formatInTimeZone, zonedDateTimeToIso } from "@/lib/utils/time-zone";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
@@ -192,7 +193,9 @@ function TestersSection({ clubId }: { clubId: string }) {
     mutationFn: () =>
       bookingsService.testers.add(clubId, {
         userId: selected!.id,
-        validUntil: validUntil || undefined,
+        // Hora del club (las reservas van en hora de España): sin zona, el
+        // back la leía en la del servidor (UTC) y el tester duraba 1-2 h más
+        validUntil: zonedDateTimeToIso(validUntil, DEFAULT_TIME_ZONE),
       }),
     onSuccess: () => {
       toast.success("Tester añadido");
@@ -296,7 +299,7 @@ function TestersSection({ clubId }: { clubId: string }) {
                 <p className="text-sm font-medium">{t.user?.name ?? "—"}</p>
                 <p className="text-xs text-muted-foreground">
                   {t.user?.email ? `${t.user.email} · ` : ""}Hasta{" "}
-                  {new Date(t.validUntil).toLocaleString("es-ES", {
+                  {formatInTimeZone(t.validUntil, DEFAULT_TIME_ZONE, {
                     dateStyle: "short",
                     timeStyle: "short",
                   })}

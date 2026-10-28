@@ -7,21 +7,35 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
-import { localDayKey, toLocalDateTimeInput } from "@/lib/utils/date-keys";
+import { hasDate } from "@/lib/utils/match-status";
 import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
+import {
+  dateOnlyKey,
+  timeZoneLabel,
+  timeZoneOptions,
+  toZonedDateTimeInput,
+  tournamentTimeZone,
+} from "@/lib/utils/time-zone";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+/** Lo que tenía el torneo al abrir el formulario (para saber qué se ha tocado). */
+interface Original {
+  registrationDeadline: string;
+  startDate:            string;
+  timezone:             string;
+}
+
 // ── Schema ───────────────────────────────────────────────────────────────
-const schema = z.object({
+const makeSchema = (original: { current: Original | null }) => z.object({
   name:                 z.string().min(3, "Nombre requerido"),
   clubId:               z.string().min(1, "Club requerido"),
   imageUrl:             z.string().nullable().optional(),
@@ -38,21 +52,29 @@ const schema = z.object({
   hasShirts:                 z.boolean().optional(),
   useSeeding:                z.boolean().optional(),
   registrationDeadline:      z.string().optional(),
+  timezone:                  z.string().min(1),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
   }
-  // La regla del asistente y del back, sin exigir que sea futuro (un torneo
-  // pasado se tiene que poder guardar). Comparando solo el día se dejaba
-  // pasar un cierre a cualquier hora del día de inicio, y el back lo rechazaba
-  const issue = data.registrationDeadline
-    ? registrationDeadlineIssue(data.registrationDeadline, data.startDate)
+  // La regla del asistente y del back, en la zona del torneo y sin exigir que
+  // sea futuro (un torneo pasado se tiene que poder guardar). Solo si cambia
+  // el cierre o el inicio, como el back: un cierre guardado con la regla de
+  // antes (que dejaba las 00:00-02:00 del día de inicio) no impide guardar lo
+  // demás. Cambiar la zona no cuenta: el cierre conserva su hora del reloj
+  const o = original.current;
+  const touched =
+    !o ||
+    data.registrationDeadline !== o.registrationDeadline ||
+    data.startDate !== o.startDate;
+  const issue = data.registrationDeadline && touched
+    ? registrationDeadlineIssue(data.registrationDeadline, data.startDate, { timeZone: data.timezone })
     : null;
   if (issue) ctx.addIssue({ code: "custom", path: ["registrationDeadline"], message: issue });
 });
 
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<ReturnType<typeof makeSchema>>;
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 export default function EditarTorneoPage() {
@@ -60,6 +82,8 @@ export default function EditarTorneoPage() {
   const router = useRouter();
   const qc     = useQueryClient();
   const [pendingData, setPendingData] = useState<FormData | null>(null);
+  // Cambio de zona con partidos con hora, a la espera de confirmar
+  const [pendingZone, setPendingZone] = useState<FormData | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
   // «Avanzado» (el estado a mano) abierto y a la vista si se llega con
   // #avanzado (desde la preparación), una vez pintado el formulario
@@ -70,6 +94,13 @@ export default function EditarTorneoPage() {
     queryKey: ["admin-tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
+
+  // Para pedir confirmación al cambiar la zona si ya hay partidos con hora
+  const { data: matches = [] } = useQuery({
+    queryKey: ["matches", id],
+    queryFn:  () => adminService.matches.list(id),
+  });
+  const scheduledMatches = matches.filter(hasDate).length;
 
   useEffect(() => {
     if (!tournament || jumpedToAdvanced.current || window.location.hash !== "#avanzado") return;
@@ -102,6 +133,8 @@ export default function EditarTorneoPage() {
     0,
   );
 
+  const original = useRef<Original | null>(null);
+  const schema = useMemo(() => makeSchema(original), []);
   const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isDirty, dirtyFields } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
@@ -109,15 +142,14 @@ export default function EditarTorneoPage() {
   useEffect(() => {
     if (!tournament) return;
 
-    // YYYY-MM-DD en hora local (no UTC)
-    const toDateInput = (val: string | null | undefined): string =>
-      val ? localDayKey(new Date(val)) : "";
-
-    const startStr   = toDateInput(tournament.startDate);
-    const endStr     = toDateInput(tournament.endDate);
-    // En hora local, y al guardar se manda con su zona (localDateTimeToIso):
-    // en UTC, cada guardado lo movía 1-2 h según la hora del servidor
-    const regDeadline = toLocalDateTimeInput(tournament.registrationDeadline);
+    const tz = tournamentTimeZone(tournament);
+    // Fechas de calendario: el día guardado, no el del navegador
+    const startStr   = dateOnlyKey(tournament.startDate);
+    const endStr     = dateOnlyKey(tournament.endDate);
+    // En la hora del torneo, y al guardar se manda con su zona
+    // (zonedDateTimeToIso): sin zona, cada guardado lo movía 1-2 h
+    const regDeadline = toZonedDateTimeInput(tournament.registrationDeadline, tz);
+    original.current = { registrationDeadline: regDeadline, startDate: startStr, timezone: tz };
 
     reset({
       name:                 tournament.name,
@@ -135,6 +167,7 @@ export default function EditarTorneoPage() {
       hasShirts:                 tournament.hasShirts ?? false,
       useSeeding:                tournament.useSeeding ?? false,
       registrationDeadline:      regDeadline,
+      timezone:                  tz,
       status:               tournament.status as FormData["status"],
       tier:                 tournament.tier ?? "BRONZE",
     });
@@ -148,6 +181,8 @@ export default function EditarTorneoPage() {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournaments"] });
+      // Con otra zona, los partidos con hora cambian de instante
+      qc.invalidateQueries({ queryKey: ["matches", id] });
       toast.success("Torneo actualizado correctamente");
       router.push(`/torneos/${id}`);
     },
@@ -182,6 +217,18 @@ export default function EditarTorneoPage() {
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const imageUrlValue = watch("imageUrl") ?? "";
+
+  /** Guarda, pidiendo antes confirmación si cambia a un estado delicado. */
+  const saveOrConfirmStatus = (data: FormData) => {
+    const DESTRUCTIVE = ["DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"];
+    const statusChanged =
+      tournament && dirtyFields.status && data.status !== tournament.status?.toUpperCase();
+    if (statusChanged && DESTRUCTIVE.includes(data.status)) {
+      setPendingData(data);
+    } else {
+      save.mutate(data);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -220,6 +267,15 @@ export default function EditarTorneoPage() {
           onClose={() => setPendingData(null)}
         />
 
+        <ConfirmModal
+          open={!!pendingZone}
+          title="Cambio de zona horaria"
+          description={`El torneo tiene ${scheduledMatches} ${scheduledMatches === 1 ? "partido" : "partidos"} con hora. Al pasar a ${timeZoneLabel(pendingZone?.timezone ?? "")}, los partidos y el cierre de inscripciones mantienen su hora del reloj (las 10:00 seguirán siendo las 10:00, ahora en la zona nueva). ¿Cambiar la zona?`}
+          confirmLabel="Sí, cambiar la zona"
+          onConfirm={() => { const data = pendingZone; setPendingZone(null); if (data) saveOrConfirmStatus(data); }}
+          onClose={() => setPendingZone(null)}
+        />
+
         <form
           onSubmit={handleSubmit((data) => {
             // Un cierre que había no se puede quitar desde aquí (vacío no se
@@ -235,14 +291,13 @@ export default function EditarTorneoPage() {
               ...data,
               imageUrl: data.imageUrl?.trim() ? data.imageUrl : null,
             };
-            const DESTRUCTIVE = ["DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"];
-            const statusChanged =
-              tournament && dirtyFields.status && sanitized.status !== tournament.status?.toUpperCase();
-            if (statusChanged && DESTRUCTIVE.includes(sanitized.status)) {
-              setPendingData(sanitized);
-            } else {
-              save.mutate(sanitized);
+            // Otra zona con partidos con hora: cambian de instante, así que se confirma
+            const zoneChanged = sanitized.timezone !== tournamentTimeZone(tournament);
+            if (zoneChanged && scheduledMatches > 0) {
+              setPendingZone(sanitized);
+              return;
             }
+            saveOrConfirmStatus(sanitized);
           })}
           className="space-y-6"
         >
@@ -377,8 +432,22 @@ export default function EditarTorneoPage() {
                   onChange={(v) => setValue("maxMatchesPerPlayerPerDay", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
+              <Field label="Zona horaria" error={errors.timezone?.message}>
+                <CustomSelect
+                  options={timeZoneOptions(tournament.timezone)}
+                  value={watch("timezone") ?? tournamentTimeZone(tournament)}
+                  // El cierre se queda como está: conserva su hora del reloj en la zona nueva
+                  onChange={(v) => setValue("timezone", v, { shouldValidate: true, shouldDirty: true })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Las horas del torneo (jornadas, partidos y cierre) van en esta zona. Si la cambias, los partidos y el cierre mantienen su hora del reloj en la zona nueva.
+                </p>
+              </Field>
               <Field label="Cierre de inscripciones" error={errors.registrationDeadline?.message}>
                 <Input {...register("registrationDeadline")} type="datetime-local" />
+                <p className="text-xs text-muted-foreground">
+                  Hora del torneo ({timeZoneLabel(watch("timezone") ?? tournamentTimeZone(tournament))})
+                </p>
               </Field>
               <Field label="Máx. horas no disponibles (total)">
                 <Input

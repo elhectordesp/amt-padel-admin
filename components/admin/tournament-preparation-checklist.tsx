@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { adminService } from "@/lib/services/admin";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import { formatInTimeZone } from "@/lib/utils/time-zone";
 import type { CategoryLevel, Gender } from "@/types";
 import type {
   PreparationCategory,
@@ -37,11 +38,12 @@ type Confirm = "open" | "close" | "publish" | "publish-force" | null;
 const catName = (c: { gender: string; level: string }) =>
   `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`;
 
-const fmtDeadline = (iso: string) =>
-  new Date(iso).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+// En la zona del torneo, no en la del navegador
+const fmtDeadline = (iso: string, timeZone: string) =>
+  formatInTimeZone(iso, timeZone, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /** El detalle de cada paso, en una línea. */
-function stepDetail(key: PreparationStepKey, done: boolean, p: TournamentPreparation): string {
+function stepDetail(key: PreparationStepKey, done: boolean, p: TournamentPreparation, timeZone: string): string {
   const drawable = p.categories.filter((c) => c.hasDraw || c.canDraw);
   const drawn = p.categories.filter((c) => c.hasDraw);
   switch (key) {
@@ -55,8 +57,8 @@ function stepDetail(key: PreparationStepKey, done: boolean, p: TournamentPrepara
       if (done) return "Ya no se admiten inscripciones desde la app.";
       if (!p.registrationDeadline) return "Sin fecha de cierre: ciérralas cuando quieras sortear.";
       return new Date(p.registrationDeadline) <= new Date()
-        ? `El plazo terminó el ${fmtDeadline(p.registrationDeadline)}: ciérralas para sortear.`
-        : `Abiertas hasta el ${fmtDeadline(p.registrationDeadline)}.`;
+        ? `El plazo terminó el ${fmtDeadline(p.registrationDeadline, timeZone)}: ciérralas para sortear.`
+        : `Abiertas hasta el ${fmtDeadline(p.registrationDeadline, timeZone)}.`;
     }
     case "DRAW":
       return `${drawable.filter((c) => c.hasDraw).length} de ${drawable.length} categorías con cuadro.`;
@@ -106,8 +108,11 @@ function ProgressRing({ percent }: { percent: number }) {
 export function TournamentPreparationChecklist({
   tournamentId,
   onNavigate,
+  timeZone,
 }: {
   tournamentId: string;
+  /** Zona del torneo: la del cierre de inscripciones. */
+  timeZone: string;
   /** Ir a la pestaña donde se hace el paso. */
   onNavigate: (tab: "cuadro" | "horarios") => void;
 }) {
@@ -276,7 +281,7 @@ export function TournamentPreparationChecklist({
                   {STEP_LABEL[s.key]}
                   <span className="sr-only">{s.done ? " (hecho)" : " (pendiente)"}</span>
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">{stepDetail(s.key, s.done, prep)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{stepDetail(s.key, s.done, prep, timeZone)}</p>
                 {s.key === "DRAW" && !s.done && pendingCats((c) => c.canDraw && !c.hasDraw) && (
                   <p className="text-[11px] text-amber-400 mt-0.5">Sin cuadro: {pendingCats((c) => c.canDraw && !c.hasDraw)}</p>
                 )}

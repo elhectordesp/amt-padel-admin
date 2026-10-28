@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
+import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -46,6 +47,8 @@ interface LiveData {
     status: string;
     club:   { name: string };
     tier:   string;
+    // Zona del torneo (no viene con un back anterior: Madrid)
+    timezone?: string;
   };
   matches: LiveMatch[];
 }
@@ -197,15 +200,16 @@ function SectionBlock({
 
 // ── Clock ─────────────────────────────────────────────────────────────────
 
-function LiveClock() {
+/** La hora de ahora en la zona del torneo (la de la pantalla puede ser otra). */
+function LiveClock({ timeZone }: { timeZone: string }) {
   const [time, setTime] = useState<string>("");
   useEffect(() => {
     const update = () =>
-      setTime(new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setTime(formatInTimeZone(new Date(), timeZone, { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [timeZone]);
   return <span className="font-mono text-3xl font-bold text-zinc-200 tabular-nums">{time}</span>;
 }
 
@@ -324,7 +328,7 @@ export default function LiveWidgetPage() {
 
         {/* Right: clock */}
         <div className="text-right">
-          <LiveClock />
+          <LiveClock timeZone={tournamentTimeZone(tournament)} />
           <p className="text-[10px] text-zinc-700 mt-1 tabular-nums">
             {lastUpdated
               ? secsAgo < 5 ? "Actualizado ahora" : `Hace ${secsAgo}s`
@@ -363,7 +367,7 @@ export default function LiveWidgetPage() {
           Actualización automática cada 10 segundos
         </p>
         <p className="text-zinc-700 text-xs">
-          {new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
+          {formatInTimeZone(new Date(), tournamentTimeZone(tournament), { weekday: "long", day: "numeric", month: "long" })}
         </p>
       </footer>
     </div>

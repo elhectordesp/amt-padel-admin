@@ -13,6 +13,7 @@ import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
+import { zonedDateTimeToIso } from "@/lib/utils/time-zone";
 import { isGroupsLocked } from "@/lib/utils/groups-lock";
 import type { GroupsLockOptions } from "@/types/preparation";
 
@@ -35,9 +36,11 @@ interface Props {
   groups: MatchCreateGroup[];
   pairs: MatchCreatePair[];
   onCreated?: () => void;
-  /** Prefill al crear desde un hueco de la rejilla ("YYYY-MM-DDTHH:MM" y nombre de pista). */
+  /** Prefill al crear desde un hueco de la rejilla ("YYYY-MM-DDTHH:MM" en la zona del torneo y nombre de pista). */
   initialDate?: string;
   initialCourt?: string;
+  /** Zona del torneo: la hora escrita es de esa zona. */
+  timeZone: string;
   /** «Forzar» el bloqueo del cuadro publicado (un partido de grupos). */
   lock?: GroupsLockOptions;
   /**
@@ -68,6 +71,7 @@ export function MatchCreateDialog({
   onCreated,
   initialDate,
   initialCourt,
+  timeZone,
   lock,
   onGroupsLocked,
 }: Props) {
@@ -96,7 +100,8 @@ export function MatchCreateDialog({
         ...(target === "free" ? { phase } : { groupId: target }),
         ...(t1 ? { team1: { userId: t1.userId, partnerId: t1.partnerId } } : {}),
         ...(t2 ? { team2: { userId: t2.userId, partnerId: t2.partnerId } } : {}),
-        ...(date ? { date: new Date(date).toISOString() } : {}),
+        // Lo escrito es hora del torneo (con new Date() era la del navegador)
+        ...(date ? { date: zonedDateTimeToIso(date, timeZone) } : {}),
         ...(court.trim() ? { court: court.trim() } : {}),
       }, forceLocked ? { forceLocked: true } : lock);
       toast.success("Partido creado");

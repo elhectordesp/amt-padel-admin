@@ -57,6 +57,15 @@ import {
 } from "@/lib/constants";
 import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, Gender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
+import {
+  formatDayKey,
+  formatInTimeZone,
+  toZonedDateTimeInput,
+  tournamentTimeZone,
+  zonedDateTimeToIso,
+  zonedDayKey,
+  zonedTime,
+} from "@/lib/utils/time-zone";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;
@@ -218,6 +227,8 @@ function CalendarTab({
   onCreateAt?:      (target: { date: string; court: string }) => void;
 }) {
   const qc = useQueryClient();
+  // Las horas se enseñan y se mandan en la zona del torneo, no en la del navegador
+  const tz = tournamentTimeZone(tournament);
 
   // View mode
   const [viewMode, setViewMode] = useState<"lista" | "grid">("lista");
@@ -396,11 +407,7 @@ function CalendarTab({
 
   const startEdit = (m: MatchResult) => {
     setEditMatchId(m.id);
-    const d = m.date ? new Date(m.date) : null;
-    const pad = (n: number) => String(n).padStart(2, "0");
-    setEditDate(d
-      ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-      : "");
+    setEditDate(toZonedDateTimeInput(m.date, tz));
     setEditCourt(m.court ?? "");
     setEditReferee((m as { referee?: string | null }).referee ?? "");
     setEditConflicts([]);
@@ -409,7 +416,7 @@ function CalendarTab({
   const cancelEdit = () => { setEditMatchId(null); setEditDate(""); setEditCourt(""); setEditReferee(""); setEditConflicts([]); };
 
   const saveEdit = (matchId: string, force = false) => {
-    patchMut.mutate({ matchId, data: { date: editDate || undefined, court: editCourt.trim() || undefined, referee: editReferee, force } });
+    patchMut.mutate({ matchId, data: { date: zonedDateTimeToIso(editDate, tz), court: editCourt.trim() || undefined, referee: editReferee, force } });
   };
 
   const catMap = Object.fromEntries(
@@ -424,10 +431,9 @@ function CalendarTab({
       .filter(hasDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((m) => {
-        const d = new Date(m.date);
         return {
-          Fecha:      d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }),
-          Hora:       d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+          Fecha:      formatInTimeZone(m.date, tz, { day: "2-digit", month: "2-digit", year: "numeric" }),
+          Hora:       formatInTimeZone(m.date, tz, { hour: "2-digit", minute: "2-digit" }),
           Pista:      m.court ?? "—",
           Categoría:  catMap[m.categoryId ?? ""] ?? "—",
           Fase:       phaseLabel(m.phase),
@@ -599,7 +605,7 @@ function CalendarTab({
           tournament={tournament}
           onMatchClick={onMatchClick}
           onCorrectClick={onCorrectClick}
-          onMove={(m, target) => moveMut.mutate({ matchId: m.id, data: { date: target.date, court: target.court } })}
+          onMove={(m, target) => moveMut.mutate({ matchId: m.id, data: { date: zonedDateTimeToIso(target.date, tz), court: target.court } })}
           onDelete={(m) => {
             const finished = !!(m as { isResult?: boolean }).isResult;
             if (typeof window !== "undefined" &&
@@ -619,14 +625,14 @@ function CalendarTab({
 
           const isPublished   = !!cat.schedulePublishedAt;
           const publishedDate = cat.schedulePublishedAt
-            ? new Date(cat.schedulePublishedAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+            ? formatInTimeZone(cat.schedulePublishedAt, tz, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
             : null;
           const isPublishing  = publishMut.isPending && publishCatId === cat.id;
 
+          // El día del partido en la zona del torneo (con el día UTC, uno de las
+          // 00:00-02:00 salía en el día anterior)
           const byDate = catMatches.reduce<Record<string, MatchResult[]>>((acc, m) => {
-            const raw  = m.date;
-            const str  = raw ? (typeof raw === "string" ? raw : String(raw)) : null;
-            const date = str ? (str.includes("T") ? str.split("T")[0] : str) : "sin-fecha";
+            const date = m.date ? zonedDayKey(m.date, tz) : "sin-fecha";
             (acc[date] ??= []).push(m);
             return acc;
           }, {});
@@ -677,7 +683,7 @@ function CalendarTab({
               {Object.entries(byDate).map(([date, dayMatches]) => {
                 const label    = date === "sin-fecha"
                   ? "Sin fecha asignada"
-                  : new Date(date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+                  : formatDayKey(date, { weekday: "long", day: "numeric", month: "long" });
                 const pending  = dayMatches.filter((m) => !m.isResult).length;
                 const finished = dayMatches.filter((m) =>  m.isResult).length;
 
@@ -701,7 +707,7 @@ function CalendarTab({
                         )
                         .map((m) => {
                         const time      = m.date
-                          ? new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+                          ? formatInTimeZone(m.date, tz, { hour: "2-digit", minute: "2-digit" })
                           : "—";
                         const isEditing = editMatchId === m.id;
 
@@ -929,7 +935,7 @@ function CalendarTab({
 }
 
 // ── StatusTab ─────────────────────────────────────────────────────────────
-function StatusTab({ status, loading, onRefresh }: { status: any; loading: boolean; onRefresh: () => void }) {
+function StatusTab({ status, loading, onRefresh, timeZone }: { status: any; loading: boolean; onRefresh: () => void; timeZone: string }) {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
 
   if (loading) {
@@ -1071,8 +1077,8 @@ function StatusTab({ status, loading, onRefresh }: { status: any; loading: boole
                   {cat.conflicts.map((c: any, idx: number) => (
                     <div key={idx} className="text-[10px] text-muted-foreground space-y-0.5">
                       <p className="text-xs font-medium text-red-300">{c.playerName}</p>
-                      <p>{phaseLabel(c.phase1)} · {new Date(c.time1).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court1}</p>
-                      <p>{phaseLabel(c.phase2)} · {new Date(c.time2).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court2}</p>
+                      <p>{phaseLabel(c.phase1)} · {formatInTimeZone(c.time1, timeZone, { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court1}</p>
+                      <p>{phaseLabel(c.phase2)} · {formatInTimeZone(c.time2, timeZone, { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {c.court2}</p>
                     </div>
                   ))}
                 </div>
@@ -1097,9 +1103,12 @@ const BOARD_STATUS: Record<string, string> = {
 function CourtBoard({
   tournamentId,
   categories,
+  timeZone,
 }: {
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
+  /** Zona del torneo: la de los días y horas del tablero. */
+  timeZone:     string;
 }) {
   const qc = useQueryClient();
   const [selectedDay,  setSelectedDay]  = useState("");
@@ -1133,13 +1142,14 @@ function CourtBoard({
   const days = useMemo(() => {
     const map = new Map<string, string>();
     for (const m of scheduled) {
-      const d = new Date(m.date);
-      const key = d.toISOString().slice(0, 10);
+      // El día en la zona del torneo (con el de UTC, los de las 00:00-02:00
+      // caían en el anterior)
+      const key = zonedDayKey(m.date, timeZone);
       if (!map.has(key))
-        map.set(key, d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }));
+        map.set(key, formatDayKey(key, { weekday: "short", day: "numeric", month: "short" }));
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [scheduled]);
+  }, [scheduled, timeZone]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1147,27 +1157,26 @@ function CourtBoard({
   }, [days, selectedDay]);
 
   const dayMatches = useMemo(
-    () => scheduled.filter((m) => new Date(m.date).toISOString().slice(0, 10) === selectedDay),
-    [scheduled, selectedDay],
+    () => scheduled.filter((m) => zonedDayKey(m.date, timeZone) === selectedDay),
+    [scheduled, selectedDay, timeZone],
   );
 
   const timeSlots = useMemo(() => {
     const set = new Set<string>();
-    for (const m of dayMatches)
-      set.add(new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }));
+    for (const m of dayMatches) set.add(zonedTime(m.date, timeZone));
     return [...set].sort();
-  }, [dayMatches]);
+  }, [dayMatches, timeZone]);
 
   const courtNames = useMemo(() => courts.map((c) => c.court.name), [courts]);
 
   const grid = useMemo(() => {
     const g: Record<string, Record<string, MatchResult>> = {};
     for (const m of dayMatches) {
-      const t = new Date(m.date).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      const t = zonedTime(m.date, timeZone);
       (g[t] ??= {})[(m.court as string) || ""] = m;
     }
     return g;
-  }, [dayMatches]);
+  }, [dayMatches, timeZone]);
 
   const unassigned = useMemo(() => dayMatches.filter((m) => !m.court), [dayMatches]);
 
@@ -1363,9 +1372,11 @@ function TournamentCourtCard({ tc }: { tc: TournamentCourt }) {
 function PistasTab({
   tournamentId,
   categories,
+  timeZone,
 }: {
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
+  timeZone:     string;
 }) {
   const qc = useQueryClient();
 
@@ -1413,7 +1424,7 @@ function PistasTab({
       {/* Board */}
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">Tablero del día</h3>
-        <CourtBoard tournamentId={tournamentId} categories={categories} />
+        <CourtBoard tournamentId={tournamentId} categories={categories} timeZone={timeZone} />
       </div>
 
       {/* Court list */}
@@ -2217,7 +2228,7 @@ export default function TorneoDetailPage() {
                 )}
                 {tournament.registrationDeadline && (() => {
                   const closed = new Date() > new Date(tournament.registrationDeadline);
-                  const label  = new Date(tournament.registrationDeadline).toLocaleString("es-ES", {
+                  const label  = formatInTimeZone(tournament.registrationDeadline, tournamentTimeZone(tournament), {
                     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
                   });
                   return (
@@ -2396,7 +2407,7 @@ export default function TorneoDetailPage() {
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="lg:col-span-2 empty:hidden">
-              <TournamentPreparationChecklist tournamentId={id} onNavigate={setTab} />
+              <TournamentPreparationChecklist tournamentId={id} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} />
             </div>
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -3085,7 +3096,7 @@ export default function TorneoDetailPage() {
                   ? new Date() > new Date(tournament.registrationDeadline)
                   : false;
               const deadlineLabel = tournament.registrationDeadline
-                ? new Date(tournament.registrationDeadline).toLocaleString("es-ES", {
+                ? formatInTimeZone(tournament.registrationDeadline, tournamentTimeZone(tournament), {
                     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
                   })
                 : null;
@@ -3836,7 +3847,7 @@ export default function TorneoDetailPage() {
                               </p>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {phaseMatches.map((m: any) => {
-                                  const matchTime = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+                                  const matchTime = m.date ? formatInTimeZone(m.date, tournamentTimeZone(tournament), { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
                                   // Bloque 4 — swap states
                                   const isSwapSource = swapSourceMatchId === m.id;
                                   const canBeSwapTarget =
@@ -3965,7 +3976,7 @@ export default function TorneoDetailPage() {
                             <div key={grp} className="bg-secondary/40 border border-border rounded-md p-3 space-y-2">
                               <p className="text-xs font-semibold text-[#D4AF37]">{grp}</p>
                               {grpMatches.map((m: any) => {
-                                const matchTime = m.date ? new Date(m.date).toLocaleString("es-ES", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+                                const matchTime = m.date ? formatInTimeZone(m.date, tournamentTimeZone(tournament), { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
                                 return (
                                   <div key={m.id} className="space-y-0.5">
                                     <div className="flex flex-col sm:grid text-xs text-muted-foreground sm:items-center gap-0.5 sm:gap-1" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
@@ -4027,7 +4038,7 @@ export default function TorneoDetailPage() {
 
         {/* ── ESTADO TAB ── */}
         {tab === "mas" && masView === "estado" && (
-          <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} />
+          <StatusTab status={tournamentStatus} loading={loadingStatus} onRefresh={refetchStatus} timeZone={tournamentTimeZone(tournament)} />
         )}
 
         {tab === "mas" && masView === "mensajes" && (
@@ -4040,7 +4051,7 @@ export default function TorneoDetailPage() {
 
         {/* ── PISTAS TAB ── */}
         {tab === "horarios" && horariosView === "tablero" && (
-          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} />
+          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} timeZone={tournamentTimeZone(tournament)} />
         )}
 
         {tab === "horarios" && horariosView === "disponibilidad" && (
@@ -4075,7 +4086,7 @@ export default function TorneoDetailPage() {
                     {auditLog.map((entry: AuditLogEntry, i: number) => (
                       <tr key={entry.id} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                          {new Date(entry.createdAt).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          {formatInTimeZone(entry.createdAt, tournamentTimeZone(tournament), { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </td>
                         <td className="px-3 py-2 font-medium truncate max-w-[7rem]">{entry.adminName}</td>
                         <td className="px-3 py-2">
@@ -4159,7 +4170,7 @@ export default function TorneoDetailPage() {
           tournament.status === "OPEN" &&
           (!tournament.registrationDeadline ||
             new Date() <= new Date(tournament.registrationDeadline))
-            ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${new Date(tournament.registrationDeadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
+            ? `Las inscripciones siguen abiertas${tournament.registrationDeadline ? ` hasta ${formatInTimeZone(tournament.registrationDeadline, tournamentTimeZone(tournament), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.`
             : null
         }
         lock={lockOpts(bracketCatId)}
@@ -4216,6 +4227,7 @@ export default function TorneoDetailPage() {
         categoryId={createMatchCatId}
         initialDate={createAt?.date}
         initialCourt={createAt?.court}
+        timeZone={tournamentTimeZone(tournament)}
         categoryLabel={
           (catOptions.find((c) => c.value === createMatchCatId)?.label) ?? "Categoría"
         }
