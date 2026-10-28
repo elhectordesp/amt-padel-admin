@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GenerateBracketDialog } from "../../../components/admin/generate-bracket-dialog";
 
@@ -22,6 +22,7 @@ vi.mock("@/lib/services/admin", () => ({
   },
 }));
 import { adminService } from "@/lib/services/admin";
+import { ApiError } from "@/lib/api";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -133,8 +134,30 @@ describe("GenerateBracketDialog", () => {
         undefined,
         "grupos+eliminatoria",
         expect.objectContaining({ topNPerGroup: 2 }),
+        // Sin «Forzar» el bloqueo del cuadro publicado
+        undefined,
       );
     });
+  });
+
+  it("con el cuadro publicado (409 GROUPS_LOCKED) ofrece ocultarlo o forzar; «Forzar» lo repite forzado una vez", async () => {
+    const generate = adminService.tournaments.generateBracket as ReturnType<typeof vi.fn>;
+    generate
+      .mockRejectedValueOnce(new ApiError("El cuadro de esta categoría está publicado", 409, "GROUPS_LOCKED"))
+      .mockResolvedValueOnce({ success: true });
+    const onClose = vi.fn();
+    const onGroupsLocked = vi.fn();
+    wrap(<GenerateBracketDialog {...baseProps({ onClose })} onGroupsLocked={onGroupsLocked} />);
+    fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
+    await waitFor(() => expect(onGroupsLocked).toHaveBeenCalled());
+    // Sigue abierto, por si se oculta el cuadro y se vuelve a pedir
+    expect(onClose).not.toHaveBeenCalled();
+    expect(generate.mock.calls[0][5]).toBeUndefined();
+
+    await act(async () => onGroupsLocked.mock.calls[0][0]());
+    await waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+    expect(generate.mock.calls[1][5]).toEqual({ forceLocked: true });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it("muestra error inline cuando generateBracket falla y NO cierra el modal", async () => {
@@ -271,6 +294,30 @@ describe("GenerateBracketDialog", () => {
           "cat-1",
           expect.any(Object),
           "solo-eliminatoria",
+          // Sin «Forzar» el bloqueo del cuadro publicado
+          undefined,
+        );
+      });
+    });
+
+    it("con «Forzar» en el bloqueo de grupos, lo manda al regenerar", async () => {
+      wrap(
+        <GenerateBracketDialog
+          {...baseProps({ alreadyHasBracket: true, currentFormat: "eliminatoria" })}
+          lock={{ forceLocked: true }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByText(/ninguno con resultado/)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Generar cuadro$/ }));
+      await waitFor(() => {
+        expect(adminService.tournaments.regenerateBracket).toHaveBeenCalledWith(
+          "tour-1",
+          "cat-1",
+          expect.any(Object),
+          "solo-eliminatoria",
+          { forceLocked: true },
         );
       });
     });
@@ -292,6 +339,7 @@ describe("GenerateBracketDialog", () => {
           "cat-1",
           expect.objectContaining({ topNPerGroup: 2 }),
           "grupos+eliminatoria",
+          undefined,
         );
       });
     });

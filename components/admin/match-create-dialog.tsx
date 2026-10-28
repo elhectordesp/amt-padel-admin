@@ -13,6 +13,8 @@ import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
+import { isGroupsLocked } from "@/lib/utils/groups-lock";
+import type { GroupsLockOptions } from "@/types/preparation";
 
 export interface MatchCreateGroup {
   id: string;
@@ -36,6 +38,14 @@ interface Props {
   /** Prefill al crear desde un hueco de la rejilla ("YYYY-MM-DDTHH:MM" y nombre de pista). */
   initialDate?: string;
   initialCourt?: string;
+  /** «Forzar» el bloqueo del cuadro publicado (un partido de grupos). */
+  lock?: GroupsLockOptions;
+  /**
+   * El back lo ha rechazado por el cuadro publicado (409 GROUPS_LOCKED): la
+   * ficha ofrece ocultarlo o forzar, y su «Forzar» llama a `retryForced`, que
+   * repite esta petición una vez con forceLocked.
+   */
+  onGroupsLocked?: (retryForced: () => void) => void;
 }
 
 const PHASES = [
@@ -58,6 +68,8 @@ export function MatchCreateDialog({
   onCreated,
   initialDate,
   initialCourt,
+  lock,
+  onGroupsLocked,
 }: Props) {
   const [target, setTarget] = useState<string>(groups[0]?.id ?? "free"); // groupId | "free"
   const [phase, setPhase] = useState("QF");
@@ -72,7 +84,8 @@ export function MatchCreateDialog({
   const pairBy = (uid: string) => pairs.find((p) => p.userId === uid) ?? null;
   const sameTeam = team1 && team2 && team1 === team2;
 
-  const submit = async () => {
+  // forceLocked: solo esta vez, desde el «Forzar» del diálogo de la ficha
+  const save = async (forceLocked: boolean) => {
     if (sameTeam) return;
     setSaving(true);
     try {
@@ -85,16 +98,19 @@ export function MatchCreateDialog({
         ...(t2 ? { team2: { userId: t2.userId, partnerId: t2.partnerId } } : {}),
         ...(date ? { date: new Date(date).toISOString() } : {}),
         ...(court.trim() ? { court: court.trim() } : {}),
-      });
+      }, forceLocked ? { forceLocked: true } : lock);
       toast.success("Partido creado");
       onCreated?.();
       onClose();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? "No se pudo crear el partido");
+      // Cuadro publicado: se ofrece ocultarlo o forzar (sin cerrar el diálogo)
+      if (isGroupsLocked(e) && onGroupsLocked && !forceLocked) onGroupsLocked(() => void save(true));
+      else toast.error(e?.response?.data?.message ?? "No se pudo crear el partido");
     } finally {
       setSaving(false);
     }
   };
+  const submit = () => save(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
