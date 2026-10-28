@@ -7,6 +7,7 @@ import {
   activeParticipants,
   bookingCapacity,
   cancellationNoticeCount,
+  playersLabel,
 } from "@/lib/utils/booking-participants";
 import type { BookingParticipant, BookingParticipantStatus } from "@/types/bookings";
 
@@ -44,5 +45,13 @@ describe("bookingCapacity", () => {
     expect(bookingCapacity({ court: { id: "c", name: "P", type: "SINGLES", isIndoor: false } })).toBe(2);
     expect(bookingCapacity({ court: { id: "c", name: "P", type: "DOUBLES", isIndoor: false } })).toBe(4);
     expect(bookingCapacity({})).toBe(4);
+  });
+});
+
+describe("playersLabel", () => {
+  it("singular y plural («1 jugadores» → «1 jugador»)", () => {
+    expect(playersLabel(1)).toBe("1 jugador");
+    expect(playersLabel(0)).toBe("0 jugadores");
+    expect(playersLabel(4)).toBe("4 jugadores");
   });
 });

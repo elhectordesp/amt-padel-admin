@@ -152,9 +152,18 @@ describe("Listado de reservas", () => {
     );
   });
 
-  it("quien rechazó no cuenta como jugador", async () => {
+  it("quien rechazó no cuenta como jugador; el precio, con coma", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText(/^4 jugadores/)).toBeInTheDocument();
+    expect(await screen.findByText("4 jugadores · 20,00 €")).toBeInTheDocument();
+  });
+
+  it("con uno solo, «1 jugador» (antes «1 jugadores»)", async () => {
+    svc.bookings.list.mockResolvedValue({
+      items: [{ ...BOOKING, participants: [BOOKING.participants[1]] }],
+      total: 1,
+    });
+    wrap(<BookingsListPage />);
+    expect(await screen.findByText("1 jugador · 20,00 €")).toBeInTheDocument();
   });
 });
 
@@ -165,10 +174,22 @@ describe("Detalle de reserva", () => {
     svc.bookings.detail.mockResolvedValue(BOOKING);
   });
 
-  it("el día y las horas son los de Madrid", async () => {
+  it("el día y las horas son los de Madrid; solo la primera letra en mayúscula", async () => {
     await renderDetail();
-    expect(await screen.findByText("lunes, 2 de noviembre de 2026")).toBeInTheDocument();
+    // Antes, con capitalize: «Lunes, 2 De Noviembre De 2026»
+    expect(await screen.findByText("Lunes, 2 de noviembre de 2026")).toBeInTheDocument();
     expect(screen.getByText(/18:00 – 19:30 · 90 min/)).toBeInTheDocument();
+  });
+
+  it("el precio con coma, como el resto del panel", async () => {
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING,
+      priceCents: 3000,
+      priceBreakdown: { slot: 2600, extras: [{ id: "luz", name: "Luz", cents: 400 }] },
+    });
+    await renderDetail();
+    expect(await screen.findByText(/^30,00 €/)).toBeInTheDocument();
+    expect(screen.getByText("Incluye: Luz (4,00 €)")).toBeInTheDocument();
   });
 
   it("al cancelar dice a cuántos jugadores avisa: los que siguen con cuenta, sin el club", async () => {

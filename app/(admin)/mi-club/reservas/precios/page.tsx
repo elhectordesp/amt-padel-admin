@@ -15,7 +15,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  ArrowLeft,
   CopyPlus,
   Loader2,
   Plus,
@@ -23,7 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
@@ -78,22 +77,18 @@ export default function PreciosPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Precios" />
+      <ReservasPage title="Precios">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   const courts = courtsQuery.data ?? [];
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <Header title="Precios" />
+    <ReservasPage title="Precios">
       <p className="mt-2 text-sm text-muted-foreground">
         Matriz de precios por (día × franja horaria × duración) para cada pista.
         Sin un precio definido, ese slot NO se ofrecerá al jugador.
@@ -113,7 +108,7 @@ export default function PreciosPage() {
           <PricingTable clubId={clubId} courtId={selectedCourtId} />
         </div>
       )}
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -386,16 +381,5 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
         </div>
       )}
     </div>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

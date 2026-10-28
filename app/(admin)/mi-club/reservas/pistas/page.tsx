@@ -14,7 +14,6 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -24,7 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
@@ -52,20 +51,16 @@ export default function PistasPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Pistas + Duraciones" />
+      <ReservasPage title="Pistas + Duraciones">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <Header title="Pistas + Duraciones" />
+    <ReservasPage title="Pistas + Duraciones">
       <p className="mt-2 text-sm text-muted-foreground">
         Configura los atributos específicos de cada pista para reservas
         (tipo, tipo de pared, partidos abiertos) y las duraciones permitidas.
@@ -93,7 +88,7 @@ export default function PistasPage() {
           ))
         )}
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -424,16 +419,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       {children}
     </label>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

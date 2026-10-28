@@ -16,7 +16,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  ArrowLeft,
   CalendarDays,
   CalendarRange,
   ChevronLeft,
@@ -24,7 +23,7 @@ import {
   Loader2,
   Plus,
 } from "lucide-react";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog, type BookingCreateInitial } from "@/components/admin/booking-create-dialog";
 import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
@@ -41,6 +40,7 @@ import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-partici
 import {
   DEFAULT_TIME_ZONE,
   addDaysToKey,
+  capitalizeFirst,
   formatDayKey,
   zonedDayKey,
   zonedTime,
@@ -77,29 +77,24 @@ export default function CalendarioPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Calendario" />
+      <ReservasPage title="Calendario">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Header title="Calendario de reservas" />
-        <div className="inline-flex rounded-lg border border-border p-0.5">
-          <ViewTab active={view === "day"} onClick={() => setView("day")} icon={<CalendarDays className="h-3.5 w-3.5" />}>
-            Día
-          </ViewTab>
-          <ViewTab active={view === "week"} onClick={() => setView("week")} icon={<CalendarRange className="h-3.5 w-3.5" />}>
-            Semana
-          </ViewTab>
-        </div>
+    <ReservasPage title="Calendario de reservas">
+      {/* Día / Semana, en el contenido: la cabecera del panel va sola y a todo el ancho */}
+      <div className="mt-2 inline-flex rounded-lg border border-border p-0.5">
+        <ViewTab active={view === "day"} onClick={() => setView("day")} icon={<CalendarDays className="h-3.5 w-3.5" />}>
+          Día
+        </ViewTab>
+        <ViewTab active={view === "week"} onClick={() => setView("week")} icon={<CalendarRange className="h-3.5 w-3.5" />}>
+          Semana
+        </ViewTab>
       </div>
 
       {/* Si fallan las pistas es un fallo de carga, no un club «sin pistas» */}
@@ -118,7 +113,7 @@ export default function CalendarioPage() {
           courtsError={courtsQuery.isError}
         />
       )}
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -182,8 +177,8 @@ function DayView({
           <Button variant="outline" size="icon-sm" onClick={() => setDayOffset((o) => o - 1)} aria-label="Día anterior">
             <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
-          <span className="min-w-[11rem] text-center text-sm font-medium capitalize">
-            {formatDayKey(dateStr, { weekday: "long", day: "numeric", month: "short" })}
+          <span className="min-w-[11rem] text-center text-sm font-medium">
+            {capitalizeFirst(formatDayKey(dateStr, { weekday: "long", day: "numeric", month: "short" }))}
           </span>
           <Button variant="outline" size="icon-sm" onClick={() => setDayOffset((o) => o + 1)} aria-label="Día siguiente">
             <ChevronRight className="h-3.5 w-3.5" />
@@ -264,13 +259,15 @@ function WeekView({
   });
 
   const bookings = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
+  // Las canceladas se ven tachadas, pero no cuentan como reservas de la semana
+  const liveCount = bookings.filter((b) => b.status !== "CANCELLED").length;
 
   // Pista → día → reservas, por hora de inicio
   const grid = useMemo(() => bookingsByCourtAndDay(bookings, TZ), [bookings]);
 
   return (
     <>
-      <div className="mt-4 flex items-center justify-between gap-4">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon-sm" onClick={() => setWeekOffset((o) => o - 1)} aria-label="Semana anterior">
             <ChevronLeft className="h-3.5 w-3.5" />
@@ -290,7 +287,7 @@ function WeekView({
           )}
         </div>
         <div className="text-sm text-muted-foreground">
-          {bookings.length} reservas esta semana
+          {liveCount === 1 ? "1 reserva" : `${liveCount} reservas`} esta semana
         </div>
       </div>
 
@@ -413,17 +410,6 @@ function WeekBookingBlock({ booking: b }: { booking: Booking }) {
         {isOpen ? `${players}/${bookingCapacity(b)}` : `${players} jug.`}{" "}
         · {b.shortCode}
       </div>
-    </Link>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
     </Link>
   );
 }

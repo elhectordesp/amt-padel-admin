@@ -11,20 +11,20 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Calendar,
   Loader2,
   Plus,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
-import { activeParticipants } from "@/lib/utils/booking-participants";
+import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
+import { formatCents } from "@/lib/utils/booking-price";
 import {
   DEFAULT_TIME_ZONE,
   formatInTimeZone,
@@ -102,13 +102,11 @@ export default function BookingsListPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Reservas" />
+      <ReservasPage title="Reservas">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
@@ -116,18 +114,17 @@ export default function BookingsListPage() {
   const total = query.data?.total ?? 0;
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <div className="flex items-start justify-between gap-3">
-        <Header title="Reservas" />
+    <ReservasPage title="Reservas">
+      {/* El botón va con el texto, no junto a la cabecera: en el móvil se cortaba */}
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">
+          Listado de reservas de tu club. Cancelar aquí notifica automáticamente
+          a los jugadores con el motivo opcional.
+        </p>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="h-3.5 w-3.5" /> Crear reserva
         </Button>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Listado de reservas de tu club. Cancelar aquí notifica automáticamente
-        a los jugadores con el motivo opcional.
-      </p>
 
       <BookingCreateDialog
         open={showCreate}
@@ -174,7 +171,7 @@ export default function BookingsListPage() {
           )}
         </div>
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -227,7 +224,7 @@ function BookingRow({ booking: b }: { booking: Booking }) {
             {b.court?.name ?? "Pista?"} · {dateStr} · {timeStr}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            {activeParticipants(b).length} jugadores · {(b.priceCents / 100).toFixed(2)} €
+            {playersLabel(activeParticipants(b).length)} · {formatCents(b.priceCents)}
             {b.paidAt && <span> · pagada</span>}
           </div>
         </Link>
@@ -295,16 +292,5 @@ function TabButton({
     >
       {children}
     </button>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

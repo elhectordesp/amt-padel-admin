@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   addDaysToKey,
+  capitalizeFirst,
   dateOnlyKey,
   formatDayKey,
   formatInTimeZone,
@@ -108,5 +109,15 @@ describe("fechas de calendario", () => {
     expect(addDaysToKey("2026-10-24", 1)).toBe("2026-10-25");
     expect(addDaysToKey("2026-10-25", 1)).toBe("2026-10-26");
     expect(addDaysToKey("2026-12-31", 1)).toBe("2027-01-01");
+  });
+});
+
+describe("capitalizeFirst", () => {
+  it("solo la primera letra en mayúscula: el mes se queda como viene", () => {
+    expect(capitalizeFirst("jueves, 29 de octubre de 2026")).toBe("Jueves, 29 de octubre de 2026");
+    expect(
+      capitalizeFirst(formatDayKey("2026-10-29", { weekday: "long", day: "numeric", month: "short" })),
+    ).toBe("Jueves, 29 oct");
+    expect(capitalizeFirst("")).toBe("");
   });
 });
