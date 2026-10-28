@@ -12,6 +12,7 @@ import type {
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
+  DeletedTournament,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
@@ -217,6 +218,10 @@ export const adminService = {
     updateSchedule:  (id: string, schedule: { date: string; type?: string; isFinal?: boolean; maxUnavailableSlots?: number; blocks: { start: string; end: string }[] }[]) =>
       api.put(`/admin/tournaments/${id}/schedule`, { schedule }).then((r) => r.data),
     delete:          (id: string, force?: boolean)  => api.delete(`/admin/tournaments/${id}`, force ? { params: { force: true } } : undefined).then((r) => r.data),
+    /** Los torneos borrados, los más recientes primero (solo AMT). */
+    deleted:         () => api.get<DeletedTournament[]>("/admin/deleted-tournaments").then((r) => r.data ?? []),
+    /** Deshace el borrado (solo AMT). */
+    restore:         (id: string) => api.post(`/admin/tournaments/${id}/restore`).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
     /** Pasos de la preparación del torneo, con su % y el detalle por categoría. */

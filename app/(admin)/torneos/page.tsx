@@ -18,6 +18,8 @@ import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { matchesSearch } from "@/lib/utils/search";
 import { clampPage } from "@/lib/utils/pagination";
 import { Pagination, usePagination } from "@/components/admin/pagination";
+import { DeletedTournaments } from "@/components/admin/deleted-tournaments";
+import { useRole } from "@/lib/use-role";
 
 type FilterStatus = "all" | TournamentStatus;
 
@@ -137,6 +139,7 @@ export default function TorneosPage() {
   const { page, setPage, pageSize, setPageSize } = usePagination();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [cloning, setCloning] = useState<Tournament | null>(null);
+  const { role } = useRole();
 
   const { data: all = [], isLoading } = useQuery({
     queryKey: ["tournaments"],
@@ -489,6 +492,9 @@ export default function TorneosPage() {
             />
           </>
         )}
+
+        {/* Restaurar lo borrado: solo AMT puede (D12) */}
+        {role === "admin" && <DeletedTournaments />}
       </div>
 
       {cloning && (

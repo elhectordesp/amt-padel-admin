@@ -4,6 +4,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Trophy, Users, Calendar, MapPin, Clock, ListTree } from "lucide-react";
 import { DEFAULT_TIME_ZONE, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
+import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
+import type { TournamentStatus } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -153,6 +155,10 @@ export default function TournamentViewer({
 
   const categories = useMemo(() => initialCats.map((c) => c.cat), [initialCats]);
   const tierColor = TIER_COLOR[tournament.tier] ?? "#D4AF37";
+  // El estado por su nombre (salía «FINISHED»); el visor público lo manda en minúsculas
+  const status = String(tournament.status ?? "").toUpperCase() as TournamentStatus;
+  const statusLabel = TOURNAMENT_STATUS_LABEL[status] ?? status;
+  const isLive = status === "ONGOING";
 
   const refresh = useCallback(async () => {
     const [ms, ...perCat] = await Promise.all([
@@ -236,8 +242,15 @@ export default function TournamentViewer({
         <div className="w-px h-5 bg-zinc-700" />
         <span className="text-xs text-zinc-500 uppercase tracking-widest hidden sm:inline">Modo Espectador</span>
         <div className="ml-auto flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-xs text-green-400">En directo</span>
+          {/* «En directo» solo con el torneo en curso: salía también finalizado */}
+          {isLive ? (
+            <>
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-xs text-green-400">En directo</span>
+            </>
+          ) : (
+            <span className="text-xs text-zinc-400">{statusLabel}</span>
+          )}
           <span className="text-[10px] text-zinc-600 hidden sm:inline">· actualizado hace {secs}s</span>
         </div>
       </header>
@@ -247,7 +260,7 @@ export default function TournamentViewer({
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-xs font-bold px-2 py-0.5 rounded border" style={{ color: tierColor, borderColor: tierColor + "66", backgroundColor: tierColor + "11" }}>{tournament.tier}</span>
-            <span className="text-xs text-zinc-500 uppercase tracking-widest">{tournament.status}</span>
+            <span className="text-xs text-zinc-500 uppercase tracking-widest">{statusLabel}</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-serif font-bold">{tournament.name}</h1>
           <div className="flex items-center gap-5 text-sm text-zinc-400 flex-wrap">
@@ -367,6 +380,13 @@ export default function TournamentViewer({
             )}
 
             {/* ── ELIMINATORIA ── */}
+            {/* Sin grupos, cuadro ni partidos, la categoría salía en blanco */}
+            {!hasGroups && !hasBracket && !hasMatchesSection && (
+              <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-8 text-center text-sm text-zinc-500">
+                Esta categoría aún no tiene cuadro ni partidos publicados.
+              </p>
+            )}
+
             {hasBracket && (
               <section className={`space-y-4 ${secShow("cuadro")}`}>
                 <div className="flex items-center gap-3 flex-wrap">

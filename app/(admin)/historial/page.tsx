@@ -192,7 +192,9 @@ export default function HistorialPage() {
           )}
           {data && data.items.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              {/* En el móvil, ancho mínimo y celdas en una línea: se desliza a los
+                  lados en vez de partir cada fila en muchas líneas muy altas */}
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-secondary/40 text-[10px] uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Fecha</th>
@@ -213,9 +215,9 @@ export default function HistorialPage() {
                           <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                             {fmtDateTime(it.createdAt)}
                           </td>
-                          <td className="px-3 py-2 text-xs text-foreground font-medium">{it.adminName}</td>
-                          <td className="px-3 py-2 text-xs text-[#D4AF37]">{it.actionLabel}</td>
-                          <td className="px-3 py-2 text-xs">
+                          <td className="px-3 py-2 text-xs text-foreground font-medium whitespace-nowrap">{it.adminName}</td>
+                          <td className="px-3 py-2 text-xs text-[#D4AF37] whitespace-nowrap">{it.actionLabel}</td>
+                          <td className="px-3 py-2 text-xs max-w-[220px] truncate">
                             {it.href ? (
                               <Link href={it.href} className="inline-flex items-center gap-1 text-foreground hover:text-[#D4AF37] transition-colors">
                                 {it.entityName ?? it.resourceId} <ExternalLink size={9} />

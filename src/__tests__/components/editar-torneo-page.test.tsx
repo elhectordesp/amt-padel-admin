@@ -125,3 +125,17 @@ describe("Editar torneo — zona del torneo", { timeout: 30_000 }, () => {
     expect(update.mock.calls[0][1]).toMatchObject({ timezone: "Europe/Madrid" });
   });
 });
+
+describe("Editar torneo — Avanzado: el estado", { timeout: 30_000 }, () => {
+  it("dice qué cambios son los habituales desde el estado guardado y marca los que piden forzar", async () => {
+    renderPage();
+    // Abierto: lo habitual es Sorteo o Cancelado
+    expect(
+      await screen.findByText("Desde «Abierto», lo habitual es pasar a «Sorteo», «Cancelado». Los demás cambios piden confirmar al guardar.", {}, WAIT),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Abierto \(Inscripciones\)/ }));
+    expect(screen.getByRole("button", { name: /Sorteo \(Generando cuadro\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /En curso · pide forzar/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Borrador · pide forzar/ })).toBeInTheDocument();
+  });
+});

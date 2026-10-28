@@ -146,6 +146,17 @@ export interface Tournament {
   season?:     number;
 }
 
+/** Un torneo borrado (borrado lógico), para restaurarlo (`GET /admin/deleted-tournaments`). */
+export interface DeletedTournament {
+  id:        string;
+  name:      string;
+  status:    TournamentStatus;
+  startDate: string;
+  endDate:   string;
+  deletedAt: string;
+  club:      { id: string; name: string };
+}
+
 export interface SpaProfile {
   spaPoints:      number;
   spaLevel:       CategoryLevel;
@@ -319,6 +330,9 @@ export interface UpdatePlayerPayload {
 export interface PlayerMatch {
   id:         string;
   date:       string | null;
+  // Zona del torneo del partido: su fecha se enseña en ella. No viene con
+  // un back anterior (entonces, Madrid)
+  timezone?:  string | null;
   tournament: string;
   category:   string;
   isWinner:   boolean;

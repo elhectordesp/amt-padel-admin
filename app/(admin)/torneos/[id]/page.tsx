@@ -39,6 +39,7 @@ import { AvailabilityHeatmap } from "@/components/admin/availability-heatmap";
 import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
+import { useRole } from "@/lib/use-role";
 import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
 import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "@/components/admin/tournament-push-panel";
 import { ErrorState } from "@/components/admin/error-state";
@@ -47,7 +48,7 @@ import { adminService, invalidateRegistrations, registrationsQK, type ScheduleCo
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
-import { groupByPair, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { groupByPair, pairsSummary, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import {
   CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
@@ -1460,6 +1461,7 @@ export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const qc      = useQueryClient();
+  const { role } = useRole();
 
   const [tab,             setTab]           = useState<Tab>("resumen");
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero" | "disponibilidad">("lista");
@@ -1521,6 +1523,8 @@ export default function TorneoDetailPage() {
   const [addCatOpen,          setAddCatOpen]           = useState(false);
   const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
   const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
+  // Borrar una categoría con inscripciones o partidos: lo que dice el back que se borra con ella
+  const [cascadeCat,          setCascadeCat]           = useState<{ catId: string; message: string } | null>(null);
   const [validatingCatId,    setValidatingCatId]    = useState<string | null>(null);
   const [conflictsByCat,     setConflictsByCat]     = useState<Record<string, ScheduleConflict[]>>({});
   const [showConflictsCatId, setShowConflictsCatId] = useState<string | null>(null);
@@ -1650,11 +1654,25 @@ export default function TorneoDetailPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Borrar es lógico: AMT lo puede deshacer (aquí mismo o desde Torneos →
+  // Eliminados); un club no, se lo pide a AMT (D12)
+  const canRestore = role === "admin";
+  const restoreTournament = () =>
+    adminService.tournaments.restore(id).then(
+      () => {
+        qc.invalidateQueries({ queryKey: ["tournaments"] });
+        toast.success("Torneo restaurado");
+      },
+      (err: Error) => toast.error(err.message || "No se pudo restaurar el torneo"),
+    );
+
   const deleteTournament = useMutation({
     mutationFn: (force?: boolean) => adminService.tournaments.delete(id, force),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo eliminado");
+      toast.success("Torneo eliminado", canRestore
+        ? { action: { label: "Deshacer", onClick: () => void restoreTournament() }, duration: 10_000 }
+        : undefined);
       router.push("/torneos");
     },
     onError: (err: Error, force) => {
@@ -1662,7 +1680,7 @@ export default function TorneoDetailPage() {
       // "Confirma para…" → torneo en curso/finalizado o con inscripciones (soft-delete, recuperable).
       if (!force && /Confirma para/i.test(msg) &&
           typeof window !== "undefined" &&
-          window.confirm(`${msg}\n\n¿Eliminarlo de todas formas? (se puede restaurar)`)) {
+          window.confirm(`${msg}\n\n¿Eliminarlo de todas formas?`)) {
         deleteTournament.mutate(true);
         return;
       }
@@ -2072,11 +2090,12 @@ export default function TorneoDetailPage() {
     },
     onError: (err: Error, variables) => {
       const msg: string = err?.message ?? "";
-      // "Confirma para…" → la categoría tiene inscripciones/partidos: borrar en cascada.
-      if (!variables.force && /Confirma para/i.test(msg) &&
-          typeof window !== "undefined" &&
-          window.confirm(`${msg}\n\n¿Borrar en cascada de todas formas?`)) {
-        deleteCatMut.mutate({ ...variables, force: true });
+      // "Confirma para…" → la categoría tiene inscripciones/partidos: se
+      // pregunta en el panel qué se borra con ella (antes, un confirm del
+      // navegador detrás de un modal que decía que no se podía)
+      if (!variables.force && /Confirma para/i.test(msg)) {
+        setDeleteCatId(null);
+        setCascadeCat({ catId: variables.catId, message: msg });
         return;
       }
       toast.error(msg || "No se pudo eliminar la categoría");
@@ -2740,7 +2759,10 @@ export default function TorneoDetailPage() {
             {/* Section header */}
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                {pairs.length} pareja{pairs.length !== 1 ? "s" : ""} inscrita{pairs.length !== 1 ? "s" : ""}
+                {/* Como el resumen de arriba: las que ocupan plaza, y aparte
+                    las que esperan (contaba todas juntas y salían 18 frente
+                    a «17 (+1 en espera)») y las canceladas */}
+                {pairsSummary(pairs)}
               </p>
               {(tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
                 <button
@@ -2811,8 +2833,9 @@ export default function TorneoDetailPage() {
                       "Email J2": p.primary.partner?.email ?? "",
                       "Nivel J2": p.primary.partner?.categoryLevel ?? "",
                       "SPA J2":   p.primary.partner?.spaPoints ?? "",
-                      Categoría:  `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
-                      Estado:     p.status,
+                      Categoría:  `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${CATEGORY_LABEL_SHORT[p.primary.category.level as CategoryLevel] ?? p.primary.category.level}`,
+                      // Por su nombre: salía el código («WAITLIST»)
+                      Estado:     REGISTRATION_STATUS_CONFIG[p.status]?.label ?? p.status,
                       ...paymentCsvColumns(p.primary),
                       Fecha:      p.primary.createdAt,
                     }));
@@ -4419,7 +4442,10 @@ export default function TorneoDetailPage() {
     <ConfirmModal
       open={showDeleteModal}
       title="Eliminar torneo"
-      description={`¿Seguro que quieres eliminar "${tournament?.name}"? Esta acción no se puede deshacer.`}
+      // Decía «no se puede deshacer» y luego «se puede restaurar» (D12)
+      description={canRestore
+        ? `¿Eliminar «${tournament?.name}»? Dejará de verse en el panel y en la app. Podrás restaurarlo desde Torneos → Eliminados.`
+        : `¿Eliminar «${tournament?.name}»? Dejará de verse en el panel y en la app. Solo AMT puede restaurarlo: pídeselo si lo necesitas.`}
       confirmLabel="Eliminar"
       danger
       loading={deleteTournament.isPending}
@@ -4559,12 +4585,26 @@ export default function TorneoDetailPage() {
     <ConfirmModal
       open={!!deleteCatId}
       title="Eliminar categoría"
-      description="Esta acción no se puede deshacer. Solo es posible si la categoría no tiene inscripciones ni partidos generados."
+      description="No se puede deshacer. Si la categoría ya tiene inscripciones o partidos, antes de borrar nada te diremos qué se elimina con ella."
       confirmLabel="Sí, eliminar"
       danger
       loading={deleteCatMut.isPending}
       onClose={() => setDeleteCatId(null)}
       onConfirm={() => { if (deleteCatId) deleteCatMut.mutate({ catId: deleteCatId }); }}
+    />
+
+    <ConfirmModal
+      open={!!cascadeCat}
+      title="La categoría tiene datos"
+      description={cascadeCat?.message ?? ""}
+      confirmLabel="Borrar todo"
+      danger
+      loading={deleteCatMut.isPending}
+      onClose={() => setCascadeCat(null)}
+      onConfirm={() => {
+        if (cascadeCat) deleteCatMut.mutate({ catId: cascadeCat.catId, force: true });
+        setCascadeCat(null);
+      }}
     />
 
 

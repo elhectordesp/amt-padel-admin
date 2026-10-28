@@ -70,6 +70,27 @@ describe("middleware — auth gate", () => {
     }
   });
 
+  it("el ranking y el perfil públicos (con su imagen para compartir) pasan sin token", () => {
+    for (const path of ["/ranking", "/ranking/opengraph-image", "/player/p-1", "/player/p-1/opengraph-image"]) {
+      nextMock.mockClear();
+      redirectMock.mockClear();
+      middleware(makeRequest(path));
+      expect(nextMock).toHaveBeenCalled();
+      expect(redirectMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("el ranking del admin (/rankings) y lo que empieza igual siguen pidiendo sesión", () => {
+    for (const path of ["/rankings", "/rankings/x", "/players", "/playerx"]) {
+      redirectMock.mockClear();
+      nextMock.mockClear();
+      middleware(makeRequest(path));
+      expect(redirectMock).toHaveBeenCalled();
+      expect(redirectMock.mock.calls[0][0].pathname).toBe("/login");
+      expect(nextMock).not.toHaveBeenCalled();
+    }
+  });
+
   it("la página del enlace del email de la contraseña (/restablecer) pasa sin token", () => {
     middleware(makeRequest("/restablecer"));
     expect(nextMock).toHaveBeenCalled();

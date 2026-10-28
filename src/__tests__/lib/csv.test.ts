@@ -17,7 +17,7 @@ beforeEach(() => {
   } as any);
 });
 
-import { downloadCsv } from '../../../lib/utils/csv';
+import { downloadCsv, toCsv } from '../../../lib/utils/csv';
 
 describe('downloadCsv', () => {
   it('no hace nada si rows está vacío', () => {
@@ -62,5 +62,23 @@ describe('downloadCsv', () => {
     vi.spyOn(document, 'createElement').mockReturnValue(anchor as any);
     downloadCsv('mi-reporte', [{ x: 1 }]);
     expect(anchor.download).toBe('mi-reporte.csv');
+  });
+});
+
+describe('toCsv — para el Excel en español (D09)', () => {
+  it('separa con «;» y pone los decimales con coma', () => {
+    expect(toCsv([{ Concepto: 'Inscripciones', Importe: 442.98, Parejas: 12 }])).toBe(
+      ['Concepto;Importe;Parejas', 'Inscripciones;442,98;12'].join('\n'),
+    );
+  });
+
+  it('entrecomilla lo que lleva «;», comillas o saltos de línea; un importe con coma va tal cual', () => {
+    expect(toCsv([{ a: 'uno; dos', b: '1.234,56', c: 'di "hola"' }])).toBe(
+      ['a;b;c', '"uno; dos";1.234,56;"di ""hola"""'].join('\n'),
+    );
+  });
+
+  it('neutraliza las fórmulas (inyección CSV)', () => {
+    expect(toCsv([{ a: '=SUMA(1)' }]).split('\n')[1]).toBe('\t=SUMA(1)');
   });
 });
