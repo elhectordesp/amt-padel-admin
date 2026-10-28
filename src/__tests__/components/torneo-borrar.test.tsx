@@ -42,24 +42,14 @@ const TOURNAMENT = {
 };
 const remove = vi.fn();
 const restore = vi.fn().mockResolvedValue({ success: true });
-// Los rechazos, sin pasar por vi.fn: con mockRejectedValue vitest daba el
-// test por fallido con el propio error, aunque la ficha lo recoge
-const removeCategoryCalls: unknown[][] = [];
-let removeCategoryError: Error | null = null;
+const removeCategory = vi.fn().mockResolvedValue({ success: true });
 const handlers: Record<string, Record<string, (...args: unknown[]) => unknown>> = {
   tournaments: {
     adminDetail: async () => TOURNAMENT,
     delete: (...args: unknown[]) => remove(...args),
     restore: (...args: unknown[]) => restore(...args),
   },
-  categories: {
-    remove: (...args: unknown[]) => {
-      removeCategoryCalls.push(args);
-      const err = removeCategoryError;
-      removeCategoryError = null;
-      return err ? Promise.reject(err) : Promise.resolve({ success: true });
-    },
-  },
+  categories: { remove: (...args: unknown[]) => removeCategory(...args) },
 };
 vi.mock("@/lib/services/admin", () => ({
   adminService: new Proxy({}, {
@@ -85,7 +75,6 @@ describe("Ficha del torneo — borrar y restaurar", { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks();
     roleMock.role = "admin";
-    removeCategoryCalls.length = 0;
   });
 
   it("AMT: el aviso dice dónde restaurarlo y, tras borrar, «Deshacer» lo restaura", async () => {
@@ -116,7 +105,7 @@ describe("Ficha del torneo — borrar y restaurar", { timeout: 30_000 }, () => {
 
   it("una categoría con partidos: lo que se borra con ella se confirma en el panel", async () => {
     const message = "La categoría tiene partidos generados. Confirma para borrarla igualmente (se eliminan grupos y partidos con sus resultados).";
-    removeCategoryError = new ApiError(message, 400);
+    removeCategory.mockRejectedValueOnce(new ApiError(message, 400));
     const confirmSpy = vi.spyOn(window, "confirm");
     renderPage();
 
@@ -127,7 +116,10 @@ describe("Ficha del torneo — borrar y restaurar", { timeout: 30_000 }, () => {
     expect(screen.getByText(message)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Borrar todo" }));
 
-    await waitFor(() => expect(removeCategoryCalls.at(-1)).toEqual(["t-1", "c-1", true]), WAIT);
+    await waitFor(() => expect(removeCategory).toHaveBeenLastCalledWith("t-1", "c-1", true), WAIT);
+    // Se cierra cuando el borrado termina (mientras, enseña la carga)
+    await waitFor(() => expect(screen.queryByText("La categoría tiene datos")).not.toBeInTheDocument(), WAIT);
+    expect(toastMock.success).toHaveBeenCalledWith("Categoría eliminada");
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });

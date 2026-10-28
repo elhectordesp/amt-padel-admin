@@ -6,11 +6,7 @@ const TOKEN_KEY = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
 // Rutas públicas (sin login): login/gestión de cuenta (también /restablecer, la
 // del enlace del email de la contraseña) + visor de torneo (modo espectador y
-// Widget TV), que usan solo endpoints públicos sin datos sensibles. También el
-// ranking público y el perfil público de un jugador: se hicieron para
-// compartirse fuera del panel (tienen su imagen OG) y solo leen endpoints
-// públicos, pero sin sesión mandaban al login. «/ranking» no abre «/rankings»
-// (la página del admin): ver isUnder.
+// Widget TV), que usan solo endpoints públicos sin datos sensibles.
 const PUBLIC_PATHS = [
   "/login",
   "/eliminar-cuenta",
@@ -19,8 +15,6 @@ const PUBLIC_PATHS = [
   "/aceptar-invitacion",
   "/restablecer",
   "/torneo",
-  "/ranking",
-  "/player",
 ];
 
 // Páginas del admin a las que un user CLUB NO debe entrar — operaciones

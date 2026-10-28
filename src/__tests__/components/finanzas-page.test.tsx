@@ -144,14 +144,16 @@ describe("FinanzasPage", () => {
 
     fireEvent.click(screen.getByText("Exportar P&L"));
 
-    const [, rows] = downloadCsvMock.mock.calls[0] as [string, Record<string, string>[]];
+    // Números a céntimos (el CSV pone la coma decimal): un negativo en texto
+    // salía neutralizado y Excel no lo sumaba
+    const [, rows] = downloadCsvMock.mock.calls[0] as [string, Record<string, number | string>[]];
     const byConcept = Object.fromEntries(rows.map((r) => [r.Concepto, r]));
-    expect(byConcept["Inscripciones (devengado)"]).toMatchObject({ "Sin IVA (€)": "442,98", "IVA (€)": "93,02" });
-    expect(byConcept["TOTAL INGRESOS"]).toMatchObject({ "Sin IVA (€)": "442,98", "IVA (€)": "93,02" });
-    expect(byConcept["Gastos operativos"]).toMatchObject({ "Sin IVA (€)": "-110,74", "IVA (€)": "-23,26" });
-    expect(byConcept["BENEFICIO NETO"]).toMatchObject({ "Sin IVA (€)": "332,24", "IVA (€)": "69,76" });
-    expect(byConcept["Cobrado (inscripciones del periodo)"]).toMatchObject({ "Con IVA (€)": "441,00" });
-    expect(byConcept["Pendiente de cobro (inscripciones del periodo)"]).toMatchObject({ "Con IVA (€)": "95,00" });
+    expect(byConcept["Inscripciones (devengado)"]).toMatchObject({ "Sin IVA (€)": 442.98, "IVA (€)": 93.02 });
+    expect(byConcept["TOTAL INGRESOS"]).toMatchObject({ "Sin IVA (€)": 442.98, "IVA (€)": 93.02 });
+    expect(byConcept["Gastos operativos"]).toMatchObject({ "Sin IVA (€)": -110.74, "IVA (€)": -23.26 });
+    expect(byConcept["BENEFICIO NETO"]).toMatchObject({ "Sin IVA (€)": 332.24, "IVA (€)": 69.76 });
+    expect(byConcept["Cobrado (inscripciones del periodo)"]).toMatchObject({ "Con IVA (€)": 441 });
+    expect(byConcept["Pendiente de cobro (inscripciones del periodo)"]).toMatchObject({ "Con IVA (€)": 95 });
   });
 
   it("con un back que aún no manda lo cobrado, «—» en vez de un número falso", async () => {

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import { ErrorState } from "@/components/admin/error-state";
 import { adminService } from "@/lib/services/admin";
+import { useRestoreTournament } from "@/lib/use-restore-tournament";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { formatInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/utils/time-zone";
@@ -18,7 +18,6 @@ export const DELETED_TOURNAMENTS_QK = ["tournaments", "deleted"] as const;
  * Solo AMT (el back solo deja restaurar a AMT). Se cargan al abrir la sección.
  */
 export function DeletedTournaments() {
-  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
   const { data = [], isLoading, isError, refetch } = useQuery({
@@ -27,15 +26,7 @@ export function DeletedTournaments() {
     enabled:  open,
   });
 
-  const restore = useMutation({
-    mutationFn: (id: string) => adminService.tournaments.restore(id),
-    onSuccess: () => {
-      // Vuelve al listado de torneos y sale de este
-      qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo restaurado");
-    },
-    onError: (err: Error) => toast.error(err.message || "No se pudo restaurar el torneo"),
-  });
+  const restore = useRestoreTournament();
 
   return (
     <details

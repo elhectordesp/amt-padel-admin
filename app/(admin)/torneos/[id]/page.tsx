@@ -40,6 +40,7 @@ import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
 import { useRole } from "@/lib/use-role";
+import { useRestoreTournament } from "@/lib/use-restore-tournament";
 import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
 import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "@/components/admin/tournament-push-panel";
 import { ErrorState } from "@/components/admin/error-state";
@@ -1657,21 +1658,14 @@ export default function TorneoDetailPage() {
   // Borrar es lógico: AMT lo puede deshacer (aquí mismo o desde Torneos →
   // Eliminados); un club no, se lo pide a AMT (D12)
   const canRestore = role === "admin";
-  const restoreTournament = () =>
-    adminService.tournaments.restore(id).then(
-      () => {
-        qc.invalidateQueries({ queryKey: ["tournaments"] });
-        toast.success("Torneo restaurado");
-      },
-      (err: Error) => toast.error(err.message || "No se pudo restaurar el torneo"),
-    );
+  const restoreTournament = useRestoreTournament();
 
   const deleteTournament = useMutation({
     mutationFn: (force?: boolean) => adminService.tournaments.delete(id, force),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       toast.success("Torneo eliminado", canRestore
-        ? { action: { label: "Deshacer", onClick: () => void restoreTournament() }, duration: 10_000 }
+        ? { action: { label: "Deshacer", onClick: () => restoreTournament.mutate(id) }, duration: 10_000 }
         : undefined);
       router.push("/torneos");
     },
@@ -2087,6 +2081,7 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["standings", id] });
       toast.success("Categoría eliminada");
       setDeleteCatId(null);
+      setCascadeCat(null);
     },
     onError: (err: Error, variables) => {
       const msg: string = err?.message ?? "";
@@ -4601,10 +4596,8 @@ export default function TorneoDetailPage() {
       danger
       loading={deleteCatMut.isPending}
       onClose={() => setCascadeCat(null)}
-      onConfirm={() => {
-        if (cascadeCat) deleteCatMut.mutate({ catId: cascadeCat.catId, force: true });
-        setCascadeCat(null);
-      }}
+      // Se cierra al borrar (onSuccess): mientras, enseña la carga
+      onConfirm={() => { if (cascadeCat) deleteCatMut.mutate({ catId: cascadeCat.catId, force: true }); }}
     />
 
 
