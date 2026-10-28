@@ -23,7 +23,14 @@ import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { dayRangeIso } from "@/lib/utils/booking-day-grid";
 import { activeParticipants } from "@/lib/utils/booking-participants";
+import {
+  DEFAULT_TIME_ZONE,
+  formatInTimeZone,
+  zonedDayKey,
+  zonedTime,
+} from "@/lib/utils/time-zone";
 import type {
   Booking,
   BookingFiltersQuery,
@@ -31,6 +38,9 @@ import type {
 } from "@/types/bookings";
 
 type Tab = "today" | "upcoming" | "history" | "all";
+
+// Las reservas van en hora de España: el back las calcula en Europe/Madrid
+const TZ = DEFAULT_TIME_ZONE;
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   PENDING_INVITES: "Esperando invitaciones",
@@ -59,26 +69,20 @@ export default function BookingsListPage() {
 
   const filters = useMemo<BookingFiltersQuery>(() => {
     if (!clubId) return {};
-    const today = new Date();
-    const start = new Date(today);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(today);
-    end.setHours(23, 59, 59, 999);
+    // «Hoy» es el día del club (Madrid, como el back y el calendario), no el
+    // del navegador
+    const todayKey = zonedDayKey(new Date(), TZ);
+    const today = dayRangeIso(todayKey, todayKey, TZ);
     const base: BookingFiltersQuery = { clubId, limit: 50 };
     if (tab === "today") {
-      return {
-        ...base,
-        fromDate: start.toISOString(),
-        toDate: end.toISOString(),
-        order: "asc",
-      };
+      return { ...base, ...today, order: "asc" };
     }
     if (tab === "upcoming") {
       // Las que siguen en pie, de la más cercana a la más lejana
-      return { ...base, fromDate: end.toISOString(), statuses: UPCOMING_STATUSES, order: "asc" };
+      return { ...base, fromDate: today.toDate, statuses: UPCOMING_STATUSES, order: "asc" };
     }
     if (tab === "history") {
-      return { ...base, toDate: start.toISOString() };
+      return { ...base, toDate: today.fromDate };
     }
     return base;
   }, [clubId, tab]);
@@ -195,16 +199,9 @@ function BookingRow({ booking: b }: { booking: Booking }) {
     },
   });
 
-  const start = new Date(b.startsAt);
-  const end = new Date(b.endsAt);
-  const timeStr = `${start.toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })} - ${end.toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
-  const dateStr = start.toLocaleDateString("es-ES", {
+  // En hora del club, como el detalle y el calendario
+  const timeStr = `${zonedTime(b.startsAt, TZ)} - ${zonedTime(b.endsAt, TZ)}`;
+  const dateStr = formatInTimeZone(b.startsAt, TZ, {
     weekday: "short",
     day: "numeric",
     month: "short",

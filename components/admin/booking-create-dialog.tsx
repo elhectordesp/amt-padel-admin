@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
-import { DEFAULT_TIME_ZONE, zonedDayKey } from "@/lib/utils/time-zone";
+import { DEFAULT_TIME_ZONE, zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
 import type { CreateBookingPayload } from "@/types/bookings";
 
@@ -77,7 +77,9 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   const [courtId, setCourtId] = useState(initial?.courtId ?? "");
   const [date, setDate] = useState(initial?.date ?? todayISODate());
   const [duration, setDuration] = useState(90);
-  const [startsAt, setStartsAt] = useState(initial?.startsAt ?? ""); // ISO UTC del slot elegido
+  // La hora pedida (ISO UTC): la del hueco del calendario o la elegida aquí.
+  // Se conserva al cambiar de pista o de duración; vale si es un hueco libre
+  const [wantedStartsAt, setWantedStartsAt] = useState(initial?.startsAt ?? "");
   const [mode, setMode] = useState<Mode>("PLAYERS");
   const [isCompetitive, setIsCompetitive] = useState(false);
   const [notes, setNotes] = useState("");
@@ -146,21 +148,18 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
     [availabilityQuery.data, courtId],
   );
 
-  // Resetea la hora elegida si desaparece de los huecos disponibles.
-  // Solo cuando la búsqueda de huecos ha terminado (si no, borraría un prefill
-  // válido mientras aún está cargando).
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (
-      startsAt &&
-      availabilityQuery.isSuccess &&
-      !availabilityQuery.isFetching &&
-      !slots.some((s) => s.startsAt === startsAt)
-    ) {
-      setStartsAt("");
-    }
-  }, [slots, startsAt, availabilityQuery.isSuccess, availabilityQuery.isFetching]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  // La hora con la que se crea: la pedida, si es uno de los huecos libres
+  const startsAt = slots.some((s) => s.startsAt === wantedStartsAt) ? wantedStartsAt : "";
+  // Si ya se sabe que no cabe (huecos cargados para una duración que admite
+  // la pista), se dice por qué en vez de dejar la hora en blanco sin más
+  const slotsSettled =
+    availabilityQuery.isSuccess && !availabilityQuery.isFetching && durations.includes(duration);
+  const unavailableNotice =
+    wantedStartsAt && !startsAt && slotsSettled
+      ? `A las ${zonedTime(wantedStartsAt, DEFAULT_TIME_ZONE)} no hay hueco de ${duration} min en ${
+          courts.find((c) => c.id === courtId)?.name ?? "esta pista"
+        }.`
+      : null;
 
   const create = useMutation({
     mutationFn: () => bookingsService.bookings.create(buildPayload()),
@@ -186,7 +185,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   const maxPlayers = courts.find((c) => c.id === courtId)?.type === "SINGLES" ? 2 : 4;
 
   function resetAndClose() {
-    setStartsAt("");
+    setWantedStartsAt("");
     setMode("PLAYERS");
     setIsCompetitive(false);
     setNotes("");
@@ -306,8 +305,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
             <span className="text-xs text-muted-foreground">Pista</span>
             <select
               value={courtId}
-              // La hora se queda si en esta pista también está libre (la
-              // quita el efecto de arriba si no)
+              // La hora pedida se queda: vale si en esta pista también está
+              // libre, y si no, se dice
               onChange={(e) => setCourtId(e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
             >
@@ -331,7 +330,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
                 value={date}
                 onChange={(e) => {
                   setDate(e.target.value);
-                  setStartsAt("");
+                  setWantedStartsAt("");
                 }}
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
               />
@@ -340,8 +339,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
               <span className="text-xs text-muted-foreground">Duración</span>
               <select
                 value={duration}
-                // Igual que la pista: la hora elegida en el calendario se
-                // conserva si con esta duración sigue libre
+                // Igual que la pista: la hora pedida vale si con esta
+                // duración sigue libre
                 onChange={(e) => setDuration(Number(e.target.value))}
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
               >
@@ -369,7 +368,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
             ) : (
               <select
                 value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
+                onChange={(e) => setWantedStartsAt(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
               >
                 <option value="">— elige una hora —</option>
@@ -379,6 +378,11 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
                   </option>
                 ))}
               </select>
+            )}
+            {unavailableNotice && (
+              <p role="status" className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {unavailableNotice}
+              </p>
             )}
           </label>
 

@@ -5,9 +5,12 @@
  */
 import { describe, it, expect } from "vitest";
 import {
+  bookingsByCourtAndDay,
   buildDayGrid,
+  dayRangeIso,
   isoDayOfWeek,
   resolveDayWindow,
+  weekDayKeys,
   type DayGridCell,
 } from "@/lib/utils/booking-day-grid";
 import type { Court } from "@/types";
@@ -43,6 +46,77 @@ describe("isoDayOfWeek", () => {
     expect(isoDayOfWeek("2026-10-26")).toBe(1);
     expect(isoDayOfWeek(DAY)).toBe(3);
     expect(isoDayOfWeek("2026-11-01")).toBe(7);
+  });
+});
+
+describe("dayRangeIso", () => {
+  it("un día cualquiera: de las 00:00 al último milisegundo en Madrid", () => {
+    expect(dayRangeIso("2026-10-28", "2026-10-28", MADRID)).toEqual({
+      fromDate: "2026-10-27T23:00:00.000Z",
+      toDate: "2026-10-28T22:59:59.999Z",
+    });
+  });
+
+  it("el día del cambio de hora (25/10/2026) dura 25 horas", () => {
+    expect(dayRangeIso("2026-10-25", "2026-10-25", MADRID)).toEqual({
+      fromDate: "2026-10-24T22:00:00.000Z",
+      toDate: "2026-10-25T22:59:59.999Z",
+    });
+  });
+
+  it("en otra zona, otro rango (no depende de la del navegador)", () => {
+    expect(dayRangeIso("2026-10-25", "2026-10-25", "Atlantic/Canary")).toEqual({
+      fromDate: "2026-10-24T23:00:00.000Z",
+      toDate: "2026-10-25T23:59:59.999Z",
+    });
+  });
+
+  it("una semana: del lunes a las 00:00 al final del domingo", () => {
+    expect(dayRangeIso("2026-10-19", "2026-10-25", MADRID)).toEqual({
+      fromDate: "2026-10-18T22:00:00.000Z",
+      toDate: "2026-10-25T22:59:59.999Z",
+    });
+  });
+});
+
+describe("weekDayKeys", () => {
+  const WEEK = ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"];
+
+  it("de lunes a domingo, sea cual sea el día de partida", () => {
+    expect(weekDayKeys("2026-10-25")).toEqual(WEEK);
+    expect(weekDayKeys("2026-10-19")).toEqual(WEEK);
+    expect(weekDayKeys("2026-10-22")).toEqual(WEEK);
+  });
+
+  it("semanas antes y después, cruzando de mes", () => {
+    expect(weekDayKeys("2026-10-25", 1)).toEqual([
+      "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01",
+    ]);
+    expect(weekDayKeys("2026-10-25", -1)[0]).toBe("2026-10-12");
+  });
+});
+
+describe("bookingsByCourtAndDay", () => {
+  it("una reserva del domingo a las 23:30 de Madrid (22:30Z) cae en el domingo de esa semana", () => {
+    const late = booking({ id: "tarde", startsAt: "2026-10-25T22:30:00.000Z", endsAt: "2026-10-25T23:30:00.000Z" });
+    const range = dayRangeIso("2026-10-19", "2026-10-25", MADRID);
+    expect(late.startsAt >= range.fromDate && late.startsAt <= range.toDate).toBe(true);
+    expect(bookingsByCourtAndDay([late], MADRID).p1["2026-10-25"]).toEqual([late]);
+  });
+
+  it("el día es el del club: lo que en Canarias es domingo, en Madrid ya es lunes", () => {
+    const b = booking({ id: "noche", startsAt: "2026-10-25T23:30:00.000Z" });
+    expect(Object.keys(bookingsByCourtAndDay([b], MADRID).p1)).toEqual(["2026-10-26"]);
+    expect(Object.keys(bookingsByCourtAndDay([b], "Atlantic/Canary").p1)).toEqual(["2026-10-25"]);
+  });
+
+  it("por pista y, cada día, por hora de inicio", () => {
+    const b2 = booking({ id: "b2", startsAt: "2026-10-28T19:00:00.000Z" });
+    const b1 = booking({ id: "b1", startsAt: "2026-10-28T09:00:00.000Z" });
+    const other = booking({ id: "b3", courtId: "p2", startsAt: "2026-10-28T10:00:00.000Z" });
+    const grid = bookingsByCourtAndDay([b2, other, b1], MADRID);
+    expect(grid.p1["2026-10-28"].map((b) => b.id)).toEqual(["b1", "b2"]);
+    expect(grid.p2["2026-10-28"].map((b) => b.id)).toEqual(["b3"]);
   });
 });
 

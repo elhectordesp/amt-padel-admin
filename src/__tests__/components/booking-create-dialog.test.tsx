@@ -2,7 +2,8 @@
  * Alta de reservas desde el panel:
  * - el LSPA de un partido abierto es un entero de 40 o más, como pide el back
  *   (antes admitía decimales y el back lo rechazaba) (R3-5);
- * - la hora que llega del calendario solo vale si es un hueco libre;
+ * - la hora que llega del calendario solo vale si es un hueco libre; si no
+ *   cabe, se dice por qué, y vuelve si con otra duración cabe;
  * - el club reserva para otros sin ocupar plaza (D14): 4 en dobles, 2 en individual.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -128,5 +129,33 @@ describe("BookingCreateDialog", () => {
     renderDialog({ courtId: "p1", date: "2026-11-02", startsAt: "2026-11-02T08:00:00.000Z" });
     await screen.findByDisplayValue("— elige una hora —");
     expect(screen.getByRole("button", { name: "Crear reserva" })).toBeDisabled();
+  });
+
+  it("si la hora del calendario no cabe con esa duración, lo dice; con una en que cabe, vuelve", async () => {
+    svc.courtDurations.list.mockResolvedValue([
+      { id: "d60", courtId: "p1", minutes: 60, isDefault: false },
+      { id: "d90", courtId: "p1", minutes: 90, isDefault: true },
+    ]);
+    // A las 18:00 solo cabe un partido de 60 min
+    svc.availability.mockImplementation(({ duration }: { duration: number }) =>
+      Promise.resolve(
+        duration === 60
+          ? [{
+              courtId: "p1", courtName: "Pista 1", courtType: "DOUBLES", isIndoor: false, startsAt: SLOT,
+              endsAt: SLOT, startsAtLocal: "18:00", durationMinutes: 60, priceCents: 1500,
+              priceBreakdown: { slot: 1500, extras: [] },
+            }]
+          : [],
+      ),
+    );
+    renderDialog();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("A las 18:00 no hay hueco de 90 min en Pista 1.");
+    expect(screen.getByRole("button", { name: "Crear reserva" })).toBeDisabled();
+
+    fireEvent.change(screen.getByDisplayValue("90 min"), { target: { value: "60" } });
+    expect(await screen.findByDisplayValue("18:00")).toHaveValue(SLOT);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Crear reserva" })).toBeEnabled());
   });
 });

@@ -23,6 +23,7 @@ import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
 import { bookingCapacity, cancellationNoticeCount } from "@/lib/utils/booking-participants";
+import { DEFAULT_TIME_ZONE, formatInTimeZone, zonedTime } from "@/lib/utils/time-zone";
 import type {
   BookingMatchMode, BookingParticipant, BookingParticipantStatus,
   BookingPaymentMethod, BookingStatus,
@@ -161,16 +162,16 @@ export default function BookingDetailPage({
   }
 
   const b = query.data;
-  const start = new Date(b.startsAt);
-  const end = new Date(b.endsAt);
-  const dateStr = start.toLocaleDateString("es-ES", {
+  // En hora del club (Madrid, como el back y el calendario), no del navegador
+  const dateStr = formatInTimeZone(b.startsAt, DEFAULT_TIME_ZONE, {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
-  const timeStr = `${start.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} – ${end.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
+  const timeStr = `${zonedTime(b.startsAt, DEFAULT_TIME_ZONE)} – ${zonedTime(b.endsAt, DEFAULT_TIME_ZONE)}`;
   const isOpen = b.matchMode === "OPEN";
   const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
-  // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien cancela
-  const noticeCount = cancellationNoticeCount(b, me?.id);
+  // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien
+  // cancela. Sin saber aún quién es, no hay número (contaría al propio club)
+  const noticeCount = me ? cancellationNoticeCount(b, me.id) : null;
 
   return (
     <div className="p-6 max-w-4xl">
@@ -336,9 +337,11 @@ export default function BookingDetailPage({
         <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
           <p className="text-sm font-medium text-destructive">¿Cancelar esta reserva?</p>
           <p className="text-xs text-muted-foreground">
-            {noticeCount === 0
-              ? "No hay jugadores con cuenta a los que avisar."
-              : `Se avisará por push y email a ${noticeCount === 1 ? "1 jugador" : `${noticeCount} jugadores`}.`}
+            {noticeCount === null
+              ? "Se avisará por push y email a los jugadores con cuenta."
+              : noticeCount === 0
+                ? "No hay jugadores con cuenta a los que avisar."
+                : `Se avisará por push y email a ${noticeCount === 1 ? "1 jugador" : `${noticeCount} jugadores`}.`}
           </p>
           <input
             type="text"

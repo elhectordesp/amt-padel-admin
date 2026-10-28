@@ -31,13 +31,17 @@ import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
-import { isoDayOfWeek, resolveDayWindow } from "@/lib/utils/booking-day-grid";
+import {
+  bookingsByCourtAndDay,
+  dayRangeIso,
+  resolveDayWindow,
+  weekDayKeys,
+} from "@/lib/utils/booking-day-grid";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import {
   DEFAULT_TIME_ZONE,
   addDaysToKey,
   formatDayKey,
-  startOfZonedDay,
   zonedDayKey,
   zonedTime,
 } from "@/lib/utils/time-zone";
@@ -48,16 +52,6 @@ const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 // Las reservas van en hora de España: el back las calcula en Europe/Madrid
 const TZ = DEFAULT_TIME_ZONE;
 type View = "day" | "week";
-
-/** Desde las 00:00 del primer día hasta el final del último, en la zona del club. */
-function dayRange(fromKey: string, toKey: string) {
-  const start = startOfZonedDay(fromKey, TZ)!;
-  const nextStart = startOfZonedDay(addDaysToKey(toKey, 1), TZ)!;
-  return {
-    fromDate: start.toISOString(),
-    toDate: new Date(nextStart.getTime() - 1).toISOString(),
-  };
-}
 
 export default function CalendarioPage() {
   const { role, clubId } = useRole();
@@ -108,10 +102,21 @@ export default function CalendarioPage() {
         </div>
       </div>
 
+      {/* Si fallan las pistas es un fallo de carga, no un club «sin pistas» */}
       {view === "day" ? (
-        <DayView clubId={clubId} courts={courts} courtsLoading={courtsQuery.isLoading} />
+        <DayView
+          clubId={clubId}
+          courts={courts}
+          courtsLoading={courtsQuery.isLoading}
+          courtsError={courtsQuery.isError}
+        />
       ) : (
-        <WeekView clubId={clubId} courts={courts} courtsLoading={courtsQuery.isLoading} />
+        <WeekView
+          clubId={clubId}
+          courts={courts}
+          courtsLoading={courtsQuery.isLoading}
+          courtsError={courtsQuery.isError}
+        />
       )}
     </div>
   );
@@ -123,10 +128,12 @@ function DayView({
   clubId,
   courts,
   courtsLoading,
+  courtsError,
 }: {
   clubId: string;
   courts: Court[];
   courtsLoading: boolean;
+  courtsError: boolean;
 }) {
   const [dayOffset, setDayOffset] = useState(0);
   // Abierto: con qué se abre el alta (null: cerrado)
@@ -136,7 +143,7 @@ function DayView({
     () => addDaysToKey(zonedDayKey(new Date(), TZ), dayOffset),
     [dayOffset],
   );
-  const range = useMemo(() => dayRange(dateStr, dateStr), [dateStr]);
+  const range = useMemo(() => dayRangeIso(dateStr, dateStr, TZ), [dateStr]);
 
   const hoursQuery = useQuery({
     queryKey: bookingsQK.operatingHours(clubId),
@@ -165,7 +172,8 @@ function DayView({
     hoursQuery.isLoading ||
     exceptionsQuery.isLoading ||
     bookingsQuery.isLoading;
-  const failed = hoursQuery.isError || exceptionsQuery.isError || bookingsQuery.isError;
+  const failed =
+    courtsError || hoursQuery.isError || exceptionsQuery.isError || bookingsQuery.isError;
 
   return (
     <>
@@ -233,20 +241,21 @@ function WeekView({
   clubId,
   courts,
   courtsLoading,
+  courtsError,
 }: {
   clubId: string;
   courts: Court[];
   courtsLoading: boolean;
+  courtsError: boolean;
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
 
   // Lunes a domingo de la semana, en días del club
-  const weekKeys = useMemo(() => {
-    const today = zonedDayKey(new Date(), TZ);
-    const monday = addDaysToKey(today, 1 - isoDayOfWeek(today) + weekOffset * 7);
-    return Array.from({ length: 7 }, (_, i) => addDaysToKey(monday, i));
-  }, [weekOffset]);
-  const range = useMemo(() => dayRange(weekKeys[0], weekKeys[6]), [weekKeys]);
+  const weekKeys = useMemo(
+    () => weekDayKeys(zonedDayKey(new Date(), TZ), weekOffset),
+    [weekOffset],
+  );
+  const range = useMemo(() => dayRangeIso(weekKeys[0], weekKeys[6], TZ), [weekKeys]);
 
   const bookingsFilters = { clubId, ...range };
   const bookingsQuery = useQuery({
@@ -257,17 +266,7 @@ function WeekView({
   const bookings = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
 
   // Pista → día → reservas, por hora de inicio
-  const grid = useMemo(() => {
-    const map: Record<string, Record<string, Booking[]>> = {};
-    for (const c of courts) map[c.id] = {};
-    for (const b of [...bookings].sort((x, y) => x.startsAt.localeCompare(y.startsAt))) {
-      const dayKey = zonedDayKey(b.startsAt, TZ);
-      if (!map[b.courtId]) map[b.courtId] = {};
-      if (!map[b.courtId][dayKey]) map[b.courtId][dayKey] = [];
-      map[b.courtId][dayKey].push(b);
-    }
-    return map;
-  }, [courts, bookings]);
+  const grid = useMemo(() => bookingsByCourtAndDay(bookings, TZ), [bookings]);
 
   return (
     <>
@@ -298,7 +297,7 @@ function WeekView({
       <div className="mt-6 overflow-x-auto">
         {courtsLoading || bookingsQuery.isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : bookingsQuery.isError ? (
+        ) : courtsError || bookingsQuery.isError ? (
           <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
             No se pudo cargar la semana. Vuelve a intentarlo.
           </p>
