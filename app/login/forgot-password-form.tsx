@@ -7,8 +7,8 @@ import { accountErrorMessage, requestPasswordReset } from "@/lib/account";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * «¿Olvidaste la contraseña?»: pide el email con el enlace para elegir una
- * nueva. Dice lo mismo exista o no la cuenta, como el back.
+ * «¿Olvidaste tu contraseña?» (como en la app): pide el email con el enlace
+ * para elegir una nueva. Dice lo mismo exista o no la cuenta, como el back.
  */
 export function ForgotPasswordForm({
   initialEmail = "",
@@ -69,7 +69,7 @@ export function ForgotPasswordForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
       <div>
-        <h1 className="font-heading text-2xl text-foreground">¿Olvidaste la contraseña?</h1>
+        <h1 className="font-heading text-2xl text-foreground">¿Olvidaste tu contraseña?</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Escribe el email con el que entras y te enviamos un enlace para elegir otra.
         </p>

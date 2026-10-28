@@ -31,7 +31,7 @@ vi.mock('@/lib/account', async (importOriginal) => ({
 
 import { LoginForm }                  from '../../../app/login/login-form';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { login }                      from '@/lib/auth';
+import { login, ACTIVATE_LINK_EXPIRED_MESSAGE, RESET_LINK_EXPIRED_MESSAGE } from '@/lib/auth';
 import { toast }                      from 'sonner';
 import { requestPasswordReset }       from '@/lib/account';
 import { ApiError }                   from '@/lib/api';
@@ -179,14 +179,21 @@ describe('LoginForm', () => {
     expect(screen.getByText(/no tiene acceso al panel/i)).toBeInTheDocument();
   });
 
-  describe('«¿Olvidaste la contraseña?»', () => {
+  describe('«¿Olvidaste tu contraseña?»', () => {
     const mockRequest = vi.mocked(requestPasswordReset);
+
+    it('se llama igual que en la app: es el botón que nombra el aviso de enlace caducado de /restablecer', () => {
+      render(<LoginForm />);
+      const name = screen.getByRole('button', { name: /olvidaste tu contraseña/i }).textContent!.trim();
+      expect(RESET_LINK_EXPIRED_MESSAGE).toContain(`desde el acceso al panel con «${name}»`);
+      expect(ACTIVATE_LINK_EXPIRED_MESSAGE).toContain(`desde el acceso al panel con «${name}»`);
+    });
 
     it('pide el email con el que entra (el que ya había escrito) y manda el enlace', async () => {
       mockRequest.mockResolvedValueOnce(undefined);
       render(<LoginForm />);
       await userEvent.type(screen.getByPlaceholderText('admin@amptournaments.com'), 'ana@club.es');
-      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste tu contraseña/i }));
 
       const email = screen.getByLabelText(/email/i);
       expect(email).toHaveValue('ana@club.es');
@@ -198,7 +205,7 @@ describe('LoginForm', () => {
 
     it('con un email mal escrito no llama al servidor', async () => {
       render(<LoginForm />);
-      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste tu contraseña/i }));
       await userEvent.type(screen.getByLabelText(/email/i), 'no-es-un-email');
       fireEvent.click(screen.getByRole('button', { name: /enviar enlace/i }));
       expect(await screen.findByText(/escribe un email válido/i)).toBeInTheDocument();
@@ -208,7 +215,7 @@ describe('LoginForm', () => {
     it('con demasiados intentos (429) lo dice claro', async () => {
       mockRequest.mockRejectedValueOnce(new ApiError('ThrottlerException: Too Many Requests', 429));
       render(<LoginForm />);
-      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste tu contraseña/i }));
       await userEvent.type(screen.getByLabelText(/email/i), 'ana@club.es');
       fireEvent.click(screen.getByRole('button', { name: /enviar enlace/i }));
       expect(await screen.findByText(/demasiados intentos/i)).toBeInTheDocument();
@@ -216,7 +223,7 @@ describe('LoginForm', () => {
 
     it('«Volver a iniciar sesión» vuelve al formulario', () => {
       render(<LoginForm />);
-      fireEvent.click(screen.getByRole('button', { name: /olvidaste la contraseña/i }));
+      fireEvent.click(screen.getByRole('button', { name: /olvidaste tu contraseña/i }));
       fireEvent.click(screen.getByRole('button', { name: /volver a iniciar sesión/i }));
       expect(screen.getByPlaceholderText('••••••••••')).toBeInTheDocument();
     });

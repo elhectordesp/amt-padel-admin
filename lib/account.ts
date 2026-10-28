@@ -109,7 +109,7 @@ export function accountErrorMessage(err: unknown, fallback: string): string {
     if (err.status === 429) return TOO_MANY_REQUESTS_MESSAGE;
     if (err.code === "CURRENT_PASSWORD_WRONG") return "La contraseña actual no es correcta.";
     if (err.code === "NO_PASSWORD_CONFIGURED")
-      return "Esta cuenta aún no tiene contraseña. Pide una con «¿Olvidaste la contraseña?» en la pantalla de entrada.";
+      return "Esta cuenta aún no tiene contraseña. Pide una con «¿Olvidaste tu contraseña?» en la pantalla de entrada.";
     if (err.message) return err.message;
   }
   return fallback;

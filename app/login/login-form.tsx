@@ -172,7 +172,7 @@ export function LoginForm() {
               onClick={() => setForgot(true)}
               className="w-full text-center text-xs text-muted-foreground hover:text-[#D4AF37] transition-colors"
             >
-              ¿Olvidaste la contraseña?
+              ¿Olvidaste tu contraseña?
             </button>
           </form>
           </>

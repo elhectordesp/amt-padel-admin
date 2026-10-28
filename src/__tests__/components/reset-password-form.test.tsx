@@ -102,7 +102,9 @@ describe("/restablecer (P2-26)", () => {
     await userEvent.type(screen.getByLabelText("Repite la contraseña"), "ClaveNueva1");
     await userEvent.click(screen.getByRole("button", { name: "Cambiar contraseña" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("¿Olvidaste tu contraseña?");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Pide uno nuevo desde la app o desde el acceso al panel con «¿Olvidaste tu contraseña?».",
+    );
   });
 
   it("invitación (mode=activate, también por ?token=): activar la cuenta", async () => {
@@ -114,6 +116,8 @@ describe("/restablecer (P2-26)", () => {
   it("sin token: enlace no válido, y qué hacer si se ha recargado la página", async () => {
     await renderAt("");
     expect(await screen.findByRole("heading", { name: "Enlace no válido" })).toBeInTheDocument();
+    expect(screen.getByText(/pide uno nuevo desde la app o desde el acceso al panel con «¿Olvidaste tu contraseña\?»/))
+      .toBeInTheDocument();
     expect(
       screen.getByText(
         "Si has recargado la página, vuelve a abrir el enlace del email (sigue valiendo si no lo has usado).",

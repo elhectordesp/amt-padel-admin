@@ -33,7 +33,7 @@ describe("cuenta del panel (hueco #5)", () => {
     expect(setToken).not.toHaveBeenCalled();
   });
 
-  it("«¿Olvidaste la contraseña?» llama a /auth/forgot-password con el email limpio", async () => {
+  it("«¿Olvidaste tu contraseña?» llama a /auth/forgot-password con el email limpio", async () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: {} });
     await requestPasswordReset("  ana@club.es ");
     expect(api.post).toHaveBeenCalledWith("/auth/forgot-password", { email: "ana@club.es" });
@@ -97,7 +97,7 @@ describe("accountErrorMessage", () => {
 
   it("contraseña actual mal y cuenta sin contraseña, con su texto", () => {
     expect(accountErrorMessage(new ApiError("x", 400, "CURRENT_PASSWORD_WRONG"), "y")).toBe("La contraseña actual no es correcta.");
-    expect(accountErrorMessage(new ApiError("x", 400, "NO_PASSWORD_CONFIGURED"), "y")).toMatch(/olvidaste la contraseña/i);
+    expect(accountErrorMessage(new ApiError("x", 400, "NO_PASSWORD_CONFIGURED"), "y")).toMatch(/olvidaste tu contraseña/i);
   });
 
   it("otro error del back: su mensaje; algo que no es del back: el de reserva", () => {
