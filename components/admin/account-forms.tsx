@@ -6,11 +6,12 @@ import { Eye, EyeOff, KeyRound, Loader2, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { ME_QUERY_KEY, roleLabel, useMe } from "@/lib/use-me";
 import {
-  MY_PROFILE_QUERY_KEY, PASSWORD_RULES,
+  MY_PROFILE_QUERY_KEY,
   accountErrorMessage, changePassword, initialProfileForm, passwordProblem,
   profileProblems, updateMyProfile,
   type MyProfile, type ProfileField,
 } from "@/lib/account";
+import { PASSWORD_RULES_MESSAGE } from "@/lib/password-rules";
 
 const inputCls =
   "w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] disabled:opacity-60";
@@ -172,7 +173,7 @@ export function ChangePasswordForm() {
             onChange={(e) => setForm((f) => ({ ...f, next: e.target.value }))} className={inputCls} />
           {touched && nextProblem
             ? <FieldError text={nextProblem} />
-            : <p className="text-[11px] text-muted-foreground">{PASSWORD_RULES}</p>}
+            : <p className="text-[11px] text-muted-foreground">{PASSWORD_RULES_MESSAGE}.</p>}
         </div>
         <div className="space-y-1">
           <label htmlFor="pass-repetir" className="text-xs font-medium text-muted-foreground">Repite la contraseña nueva</label>

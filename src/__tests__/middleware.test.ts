@@ -225,10 +225,15 @@ describe("middleware — solo entran admin y club (P2-16)", () => {
     expect(redirectMock.mock.calls[0][0].searchParams.get("motivo")).toBe("sin-acceso");
   });
 
-  it("las páginas públicas siguen abiertas con la cookie de un jugador", () => {
+  it("las páginas públicas siguen abiertas con la cookie de un jugador (también la de restablecer y la de aceptar la invitación)", () => {
     const playerToken = makeToken({ exp: futureExp, role: "user" });
-    middleware(makeRequest("/torneo/x", playerToken));
-    expect(nextMock).toHaveBeenCalled();
-    expect(redirectMock).not.toHaveBeenCalled();
+    for (const path of ["/torneo/x", "/restablecer", "/aceptar-invitacion"]) {
+      nextMock.mockClear();
+      redirectMock.mockClear();
+      middleware(makeRequest(path, playerToken));
+      expect(nextMock).toHaveBeenCalled();
+      expect(redirectMock).not.toHaveBeenCalled();
+      expect(deleteCookieMock).not.toHaveBeenCalled();
+    }
   });
 });

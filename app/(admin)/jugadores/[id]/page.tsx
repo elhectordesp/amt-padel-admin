@@ -100,7 +100,13 @@ export default function JugadorDetailPage() {
       else toast.success(text);
       setShowEdit(false);
     },
-    onError: (err: Error) => toast.error(err.message ?? "Error al actualizar"),
+    onError: (err: Error) => {
+      toast.error(err.message ?? "Error al actualizar");
+      // Activó su cuenta mientras se editaba y el back no deja quitarle el
+      // email: con sus datos al día, el formulario ya lo avisa y no deja guardar
+      if (err instanceof ApiError && err.code === "ACTIVE_PLAYER_EMAIL_REQUIRED")
+        qc.invalidateQueries({ queryKey: ["player", id] });
+    },
   });
 
   const deleteMutation = useMutation({

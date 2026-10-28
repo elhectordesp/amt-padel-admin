@@ -1,4 +1,5 @@
-import { api, ApiError, setToken, setRefreshToken } from "./api";
+import { api, ApiError, setToken, setRefreshToken, TOO_MANY_REQUESTS_MESSAGE } from "./api";
+import { PASSWORD_RULES } from "./password-rules";
 
 /**
  * La cuenta con la que se ha entrado al panel: su perfil, cambiar la
@@ -90,21 +91,22 @@ export function profileProblems(form: Record<ProfileField, string>): Partial<Rec
   return problems;
 }
 
-/** Las reglas del back para una contraseña nueva: 8 caracteres, una mayúscula y un número. */
-export const PASSWORD_RULES = "Mínimo 8 caracteres, con una mayúscula y un número.";
+const PASSWORD_PROBLEM: Record<(typeof PASSWORD_RULES)[number]["id"], string> = {
+  length: "Tiene que tener al menos 8 caracteres.",
+  upper:  "Tiene que tener al menos una mayúscula.",
+  digit:  "Tiene que tener al menos un número.",
+};
 
-/** Qué le falta a una contraseña nueva; null si cumple. */
+/** Qué le falta a una contraseña nueva (las reglas del back); null si cumple. */
 export function passwordProblem(password: string): string | null {
-  if (password.length < 8) return "Tiene que tener al menos 8 caracteres.";
-  if (!/[A-Z]/.test(password)) return "Tiene que tener al menos una mayúscula.";
-  if (!/\d/.test(password)) return "Tiene que tener al menos un número.";
-  return null;
+  const broken = PASSWORD_RULES.find((rule) => !rule.test(password));
+  return broken ? PASSWORD_PROBLEM[broken.id] : null;
 }
 
 /** El texto de un error de estas pantallas. */
 export function accountErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
-    if (err.status === 429) return "Demasiados intentos. Espera unos minutos y vuelve a probar.";
+    if (err.status === 429) return TOO_MANY_REQUESTS_MESSAGE;
     if (err.code === "CURRENT_PASSWORD_WRONG") return "La contraseña actual no es correcta.";
     if (err.code === "NO_PASSWORD_CONFIGURED")
       return "Esta cuenta aún no tiene contraseña. Pide una con «¿Olvidaste la contraseña?» en la pantalla de entrada.";
