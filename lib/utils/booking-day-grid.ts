@@ -7,7 +7,13 @@
  * zona del navegador.
  */
 
-import { dateOnlyKey, zonedMinutes } from "@/lib/utils/time-zone";
+import {
+  addDaysToKey,
+  dateOnlyKey,
+  startOfZonedDay,
+  zonedDayKey,
+  zonedMinutes,
+} from "@/lib/utils/time-zone";
 import type { Court, CourtBlock } from "@/types";
 import type {
   Booking,
@@ -58,6 +64,43 @@ export function isoDayOfWeek(dayKey: string): number {
   const [y, m, d] = dayKey.split("-").map(Number);
   const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   return day === 0 ? 7 : day;
+}
+
+/**
+ * El rango de GET /bookings para los días `fromKey` a `toKey` del club: de
+ * las 00:00 del primero al último milisegundo del último, en la zona del
+ * club (con el cambio de hora, un día dura 23 o 25 horas).
+ */
+export function dayRangeIso(
+  fromKey: string,
+  toKey: string,
+  timeZone: string,
+): { fromDate: string; toDate: string } {
+  const start = startOfZonedDay(fromKey, timeZone)!;
+  const nextStart = startOfZonedDay(addDaysToKey(toKey, 1), timeZone)!;
+  return {
+    fromDate: start.toISOString(),
+    toDate: new Date(nextStart.getTime() - 1).toISOString(),
+  };
+}
+
+/** Lunes a domingo («YYYY-MM-DD») de la semana de `dayKey`, movida `weekOffset` semanas. */
+export function weekDayKeys(dayKey: string, weekOffset = 0): string[] {
+  const monday = addDaysToKey(dayKey, 1 - isoDayOfWeek(dayKey) + weekOffset * 7);
+  return Array.from({ length: 7 }, (_, i) => addDaysToKey(monday, i));
+}
+
+/** Las reservas por pista y por día del club, cada día por hora de inicio. */
+export function bookingsByCourtAndDay(
+  bookings: Booking[],
+  timeZone: string,
+): Record<string, Record<string, Booking[]>> {
+  const map: Record<string, Record<string, Booking[]>> = {};
+  for (const b of [...bookings].sort((x, y) => x.startsAt.localeCompare(y.startsAt))) {
+    const day = zonedDayKey(b.startsAt, timeZone);
+    ((map[b.courtId] ??= {})[day] ??= []).push(b);
+  }
+  return map;
 }
 
 /**

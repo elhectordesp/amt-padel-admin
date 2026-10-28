@@ -150,8 +150,12 @@ export function ReservasDayGrid({
 function BookingBlock({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
   const players = activeParticipants(b);
   const isOpen = b.matchMode === "OPEN";
-  // Reserva por teléfono: el contacto va como invitado sin cuenta
-  const contact = players.find((p) => !p.userId && p.guestName)?.guestName;
+  // Reserva por teléfono: el contacto va como invitado sin cuenta (en otro
+  // modo, un invitado es un jugador más, no quien reserva)
+  const contact =
+    b.matchMode === "ADMIN_MANUAL"
+      ? players.find((p) => !p.userId && p.guestName)?.guestName
+      : undefined;
   const label = isOpen
     ? `Abierta · ${players.length}/${bookingCapacity(b)}`
     : contact ?? `${players.length} jug.`;
