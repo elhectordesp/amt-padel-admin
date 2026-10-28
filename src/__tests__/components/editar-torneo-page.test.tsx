@@ -7,6 +7,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// La ficha es grande: con toda la suite a la vez puede tardar más del segundo
+// por defecto de findBy
+const WAIT = { timeout: 5000 };
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "t-1" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -65,7 +69,7 @@ function renderPage() {
 const deadlineInput = () => screen.getByDisplayValue("2026-11-10T20:00");
 const saveButton = () => screen.getByRole("button", { name: /Guardar cambios/ });
 
-describe("Editar torneo — zona del torneo", () => {
+describe("Editar torneo — zona del torneo", { timeout: 30_000 }, () => {
   beforeEach(() => {
     update.mockClear();
     matches = [];
@@ -73,12 +77,12 @@ describe("Editar torneo — zona del torneo", () => {
 
   it("el cierre se enseña en la hora de Canarias y se manda en ella: las 18:00 de noviembre son las 18:00 UTC", async () => {
     renderPage();
-    fireEvent.change(await screen.findByDisplayValue("2026-11-10T20:00"), {
+    fireEvent.change(await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT), {
       target: { value: "2026-11-10T18:00" },
     });
     fireEvent.click(saveButton());
 
-    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
     expect(update.mock.calls[0][0]).toBe("t-1");
     expect(update.mock.calls[0][1]).toMatchObject({
       registrationDeadline: "2026-11-10T18:00:00.000Z",
@@ -89,7 +93,7 @@ describe("Editar torneo — zona del torneo", () => {
   it("cambiar la zona con partidos con hora pide confirmación; el cierre no se manda (el back le conserva la hora del reloj)", async () => {
     matches = [{ id: "m-1", date: "2026-11-20T10:00:00.000Z", team1: [], team2: [] }];
     renderPage();
-    await screen.findByDisplayValue("2026-11-10T20:00");
+    await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT);
 
     fireEvent.click(screen.getByRole("button", { name: /^Canarias/ }));
     fireEvent.click(screen.getByRole("button", { name: /Península, Baleares/ }));
@@ -97,11 +101,11 @@ describe("Editar torneo — zona del torneo", () => {
     expect(deadlineInput()).toBeInTheDocument();
     fireEvent.click(saveButton());
 
-    expect(await screen.findByText("Cambio de zona horaria")).toBeInTheDocument();
+    expect(await screen.findByText("Cambio de zona horaria", {}, WAIT)).toBeInTheDocument();
     expect(update).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Sí, cambiar la zona" }));
 
-    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
     expect(update.mock.calls[0][1]).toMatchObject({
       timezone: "Europe/Madrid",
       registrationDeadline: undefined,
@@ -110,13 +114,13 @@ describe("Editar torneo — zona del torneo", () => {
 
   it("sin partidos con hora, cambia la zona sin preguntar", async () => {
     renderPage();
-    await screen.findByDisplayValue("2026-11-10T20:00");
+    await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT);
 
     fireEvent.click(screen.getByRole("button", { name: /^Canarias/ }));
     fireEvent.click(screen.getByRole("button", { name: /Península, Baleares/ }));
     fireEvent.click(saveButton());
 
-    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
     expect(screen.queryByText("Cambio de zona horaria")).not.toBeInTheDocument();
     expect(update.mock.calls[0][1]).toMatchObject({ timezone: "Europe/Madrid" });
   });

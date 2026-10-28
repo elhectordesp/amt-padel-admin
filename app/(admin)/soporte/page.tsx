@@ -4,9 +4,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/admin/header";
 import {
   MessageSquare, HelpCircle, ChevronRight, CheckCircle2,
-  Inbox, Eye, CheckCheck, Clock, AlertCircle, RefreshCw,
+  Inbox, Eye, CheckCheck, Clock, AlertCircle, RefreshCw, Search,
 } from "lucide-react";
+import { Pagination, usePagination } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
+import { paginate } from "@/lib/utils/pagination";
+import { matchesSearch } from "@/lib/utils/search";
 import type { SupportMessage, SupportStatus } from "@/types";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -182,6 +185,8 @@ export default function Page() {
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(false);
+  const [search, setSearch]   = useState("");
+  const { page, setPage, pageSize, setPageSize } = usePagination();
 
   const loadMessages = useCallback(async (f: Filter) => {
     setLoading(true);
@@ -207,6 +212,9 @@ export default function Page() {
   };
 
   const newCount = messages.filter((m) => m.status === "NEW").length;
+  const found = messages.filter((m) =>
+    matchesSearch(search, m.user?.email, SUBJECT_LABEL[m.subject] ?? m.subject, m.message),
+  );
 
   return (
     <div className="flex flex-col min-h-full">
@@ -257,7 +265,7 @@ export default function Page() {
                 {FILTERS.map(({ key, label }) => (
                   <button
                     key={key}
-                    onClick={() => setFilter(key)}
+                    onClick={() => { setFilter(key); setPage(1); }}
                     className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                       filter === key
                         ? "border-amber-400 bg-amber-400/10 text-amber-400"
@@ -295,11 +303,34 @@ export default function Page() {
                 <p className="text-sm">Sin mensajes</p>
               </div>
             ) : (
-              <div className="border border-zinc-800 rounded-lg overflow-hidden">
-                {messages.map((msg) => (
-                  <MessageRow key={msg.id} msg={msg} onStatusChange={handleStatusChange} />
-                ))}
-              </div>
+              <>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-zinc-800">
+                  <Search className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                  <input
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    placeholder="Buscar por email, asunto o texto..."
+                    className="bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none w-full"
+                  />
+                </div>
+                {found.length === 0 ? (
+                  <p className="py-12 text-center text-sm text-zinc-500">Ningún mensaje coincide con «{search}».</p>
+                ) : (
+                  <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                    {paginate(found, page, pageSize).map((msg) => (
+                      <MessageRow key={msg.id} msg={msg} onStatusChange={handleStatusChange} />
+                    ))}
+                  </div>
+                )}
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={found.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="mensajes"
+                />
+              </>
             )}
           </>
         )}

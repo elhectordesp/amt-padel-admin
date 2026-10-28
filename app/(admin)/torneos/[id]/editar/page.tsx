@@ -8,6 +8,7 @@ import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog"
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { hasDate } from "@/lib/utils/match-status";
+import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import {
   dateOnlyKey,
@@ -15,7 +16,6 @@ import {
   timeZoneOptions,
   toZonedDateTimeInput,
   tournamentTimeZone,
-  zonedDateTimeToIso,
 } from "@/lib/utils/time-zone";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,6 +85,10 @@ export default function EditarTorneoPage() {
   // Cambio de zona con partidos con hora, a la espera de confirmar
   const [pendingZone, setPendingZone] = useState<FormData | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  // «Avanzado» (el estado a mano) abierto y a la vista si se llega con
+  // #avanzado (desde la preparación), una vez pintado el formulario
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const jumpedToAdvanced = useRef(false);
 
   const { data: tournament, isLoading } = useQuery({
     queryKey: ["admin-tournament", id],
@@ -97,6 +101,13 @@ export default function EditarTorneoPage() {
     queryFn:  () => adminService.matches.list(id),
   });
   const scheduledMatches = matches.filter(hasDate).length;
+
+  useEffect(() => {
+    if (!tournament || jumpedToAdvanced.current || window.location.hash !== "#avanzado") return;
+    jumpedToAdvanced.current = true;
+    setAdvancedOpen(true);
+    document.getElementById("avanzado")?.scrollIntoView({ block: "start" });
+  }, [tournament]);
 
   // ADMIN ve el listado completo; CLUB solo carga su propio club (el listado
   // 403earía igualmente). El campo Club es read-only para CLUB.
@@ -163,17 +174,9 @@ export default function EditarTorneoPage() {
   }, [tournament, reset]);
 
   const save = useMutation({
+    // El estado y el cierre de inscripciones, solo si se han tocado
     mutationFn: (data: FormData & { force?: boolean }) =>
-      adminService.tournaments.update(id, {
-        ...data,
-        // Solo si se ha tocado (al mostrarlo se pierden los segundos y, en la
-        // hora repetida del cambio de otoño, cuál de las dos era), y como
-        // instante: lo escrito es hora de la zona del torneo
-        registrationDeadline: dirtyFields.registrationDeadline
-          ? zonedDateTimeToIso(data.registrationDeadline, data.timezone)
-          : undefined,
-        timezone: dirtyFields.timezone ? data.timezone : undefined,
-      }),
+      adminService.tournaments.update(id, tournamentUpdatePayload(data, dirtyFields)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -218,7 +221,8 @@ export default function EditarTorneoPage() {
   /** Guarda, pidiendo antes confirmación si cambia a un estado delicado. */
   const saveOrConfirmStatus = (data: FormData) => {
     const DESTRUCTIVE = ["DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"];
-    const statusChanged = tournament && data.status !== tournament.status?.toUpperCase();
+    const statusChanged =
+      tournament && dirtyFields.status && data.status !== tournament.status?.toUpperCase();
     if (statusChanged && DESTRUCTIVE.includes(data.status)) {
       setPendingData(data);
     } else {
@@ -287,7 +291,7 @@ export default function EditarTorneoPage() {
               ...data,
               imageUrl: data.imageUrl?.trim() ? data.imageUrl : null,
             };
-            // Otra zona con partidos con hora: se mueven, así que se confirma
+            // Otra zona con partidos con hora: cambian de instante, así que se confirma
             const zoneChanged = sanitized.timezone !== tournamentTimeZone(tournament);
             if (zoneChanged && scheduledMatches > 0) {
               setPendingZone(sanitized);
@@ -366,21 +370,6 @@ export default function EditarTorneoPage() {
             </Field>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <Field label="Estado">
-                <CustomSelect
-                  options={[
-                    { value: "DRAFT",     label: "🔵 Borrador" },
-                    { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
-                    { value: "DRAW",      label: "🟣 Sorteo (Generando cuadro)" },
-                    { value: "SCHEDULED", label: "🩵 Programado (Cuadro listo)" },
-                    { value: "ONGOING",   label: "🟡 En curso" },
-                    { value: "FINISHED",  label: "⚫ Finalizado" },
-                    { value: "CANCELLED", label: "🔴 Cancelado" },
-                  ]}
-                  value={watch("status") ?? "OPEN"}
-                  onChange={(v) => setValue("status", v as FormData["status"], { shouldValidate: true, shouldDirty: true })}
-                />
-              </Field>
               <Field label="Formato">
                 <CustomSelect
                   options={[
@@ -513,6 +502,38 @@ export default function EditarTorneoPage() {
               </button>
             </div>
           </div>
+
+          {/* Avanzado: el estado avanza solo con la preparación (ficha → Resumen);
+              aquí queda para corregirlo a mano */}
+          <details
+            id="avanzado"
+            open={advancedOpen}
+            onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+            className="rounded-lg border border-border bg-card/40 p-4"
+          >
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">Avanzado</summary>
+            <p className="text-xs text-muted-foreground mt-2">
+              El estado avanza solo al completar la preparación del torneo (en su ficha, pestaña Resumen):
+              abrir inscripciones, cerrarlas y publicar y avisar. Cámbialo aquí solo para corregirlo a mano.
+            </p>
+            <div className="mt-3 max-w-sm">
+              <Field label="Estado">
+                <CustomSelect
+                  options={[
+                    { value: "DRAFT",     label: "🔵 Borrador" },
+                    { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
+                    { value: "DRAW",      label: "🟣 Sorteo (Generando cuadro)" },
+                    { value: "SCHEDULED", label: "🩵 Programado (Cuadro listo)" },
+                    { value: "ONGOING",   label: "🟡 En curso" },
+                    { value: "FINISHED",  label: "⚫ Finalizado" },
+                    { value: "CANCELLED", label: "🔴 Cancelado" },
+                  ]}
+                  value={watch("status") ?? "OPEN"}
+                  onChange={(v) => setValue("status", v as FormData["status"], { shouldValidate: true, shouldDirty: true })}
+                />
+              </Field>
+            </div>
+          </details>
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">

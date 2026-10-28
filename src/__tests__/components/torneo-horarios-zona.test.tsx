@@ -7,6 +7,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// La ficha es grande: con toda la suite a la vez puede tardar más del segundo
+// por defecto de findBy
+const WAIT = { timeout: 5000 };
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "t-1" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -76,30 +80,30 @@ async function openHorarios() {
       <TorneoDetailPage />
     </QueryClientProvider>,
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Horarios" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Horarios" }, WAIT));
 }
 
-describe("Horarios — hora del partido en la zona del torneo", () => {
+describe("Horarios — hora del partido en la zona del torneo", { timeout: 30_000 }, () => {
   beforeEach(() => patchMatch.mockClear());
 
   it("el editor enseña las 18:00 de Canarias y guarda las 10:00 escritas como las 10:00 UTC", async () => {
     await openHorarios();
-    fireEvent.click(await screen.findByRole("button", { name: "Editar fecha y pista" }));
-    const input = await screen.findByDisplayValue("2026-11-20T18:00");
+    fireEvent.click(await screen.findByRole("button", { name: "Editar fecha y pista" }, WAIT));
+    const input = await screen.findByDisplayValue("2026-11-20T18:00", {}, WAIT);
     fireEvent.change(input, { target: { value: "2026-11-20T10:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => expect(patchMatch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(patchMatch).toHaveBeenCalledTimes(1), WAIT);
     expect(patchMatch.mock.calls[0][0]).toBe("m-1");
     expect(patchMatch.mock.calls[0][1]).toMatchObject({ date: "2026-11-20T10:00:00.000Z" });
   });
 
   it("mover en la rejilla manda la hora de Canarias", async () => {
     await openHorarios();
-    fireEvent.click(await screen.findByTitle("Vista grid (por pistas)"));
-    fireEvent.click(await screen.findByRole("button", { name: "Mover a las 10:00" }));
+    fireEvent.click(await screen.findByTitle("Vista grid (por pistas)", {}, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Mover a las 10:00" }, WAIT));
 
-    await waitFor(() => expect(patchMatch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(patchMatch).toHaveBeenCalledTimes(1), WAIT);
     expect(patchMatch.mock.calls[0][1]).toMatchObject({
       date: "2026-11-20T10:00:00.000Z",
       court: "Pista 2",

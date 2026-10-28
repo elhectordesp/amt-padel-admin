@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  Search, X, ChevronLeft, ChevronRight, Loader2, ExternalLink, ChevronDown,
+  Search, X, Loader2, ExternalLink, ChevronDown,
 } from "lucide-react";
 import { Header } from "@/components/admin/header";
+import { Pagination, useKeepPageInRange } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
+import { DEFAULT_PAGE_SIZE, type PageSize } from "@/lib/utils/pagination";
 
 interface Filters {
   search: string;
@@ -16,7 +18,7 @@ interface Filters {
   from: string;
   to: string;
   page: number;
-  pageSize: number;
+  pageSize: PageSize;
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -26,7 +28,7 @@ const EMPTY_FILTERS: Filters = {
   from: "",
   to: "",
   page: 1,
-  pageSize: 50,
+  pageSize: DEFAULT_PAGE_SIZE,
 };
 
 function fmtDateTime(iso: string): string {
@@ -81,13 +83,16 @@ export default function HistorialPage() {
     [filters],
   );
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useQuery({
     queryKey: ["audit-logs", queryArgs],
     queryFn: () => adminService.auditLogs(queryArgs),
     placeholderData: (prev) => prev,
   });
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / filters.pageSize)) : 1;
+  const setPage = useCallback((page: number) => setFilters((f) => ({ ...f, page })), []);
+  // Si baja el total y la página ya no existe, a la última que haya
+  useKeepPageInRange(filters.page, setPage, filters.pageSize, isPlaceholderData ? undefined : data?.total);
+
   const hasActiveFilters =
     !!filters.search || !!filters.action || !!filters.tournamentId || !!filters.from || !!filters.to;
 
@@ -159,7 +164,7 @@ export default function HistorialPage() {
                 {data ? `${data.total} resultado${data.total !== 1 ? "s" : ""}` : "—"}
               </p>
               <button
-                onClick={() => setFilters(EMPTY_FILTERS)}
+                onClick={() => setFilters((f) => ({ ...EMPTY_FILTERS, pageSize: f.pageSize }))}
                 className="inline-flex items-center gap-1 text-xs text-[#D4AF37] hover:text-foreground transition-colors"
               >
                 <X size={11} /> Limpiar filtros
@@ -256,30 +261,16 @@ export default function HistorialPage() {
         </div>
 
         {/* ── Paginación ──────────────────────────────────────────── */}
-        {data && data.total > filters.pageSize && (
-          <div className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2">
-            <p className="text-xs text-muted-foreground">
-              Página {filters.page} de {totalPages} · {data.total} totales
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setFilters((f) => ({ ...f, page: Math.max(1, f.page - 1) }))}
-                disabled={filters.page === 1}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                aria-label="Página anterior"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                onClick={() => setFilters((f) => ({ ...f, page: Math.min(totalPages, f.page + 1) }))}
-                disabled={filters.page >= totalPages}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                aria-label="Página siguiente"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
+        {data && (
+          <Pagination
+            page={filters.page}
+            pageSize={filters.pageSize}
+            total={data.total}
+            onPageChange={setPage}
+            onPageSizeChange={(pageSize) => setFilters((f) => ({ ...f, pageSize, page: 1 }))}
+            itemLabel="registros"
+            busy={isFetching}
+          />
         )}
       </div>
     </div>

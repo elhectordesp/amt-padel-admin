@@ -13,6 +13,7 @@ vi.mock('js-cookie', () => ({
 vi.mock('../../../lib/api', async (importOriginal) => ({
   // ApiError real: es lo que deja el interceptor en las rutas que no son de login
   ApiError: (await importOriginal<typeof import('../../../lib/api')>()).ApiError,
+  TOO_MANY_REQUESTS_MESSAGE: (await importOriginal<typeof import('../../../lib/api')>()).TOO_MANY_REQUESTS_MESSAGE,
   api: {
     post: vi.fn(),
     get:  vi.fn(),
@@ -24,7 +25,14 @@ vi.mock('../../../lib/api', async (importOriginal) => ({
   getRefreshToken: vi.fn(),
 }));
 
-import { acceptClubInvite, login, logout } from '../../../lib/auth';
+import {
+  acceptClubInvite,
+  ACTIVATE_LINK_EXPIRED_MESSAGE,
+  login,
+  logout,
+  resetPassword,
+  RESET_LINK_EXPIRED_MESSAGE,
+} from '../../../lib/auth';
 import { api, ApiError, setToken, setRefreshToken, removeTokens, getRefreshToken } from '../../../lib/api';
 
 describe('auth helpers', () => {
@@ -70,10 +78,22 @@ describe('auth helpers', () => {
 
     it('con otro error del back enseña su texto (`error`, no `message`)', async () => {
       (api.post as any).mockRejectedValueOnce({
-        response: { status: 429, data: { success: false, error: 'Demasiados intentos' } },
+        response: { status: 503, data: { success: false, error: 'No se pudo enviar el email' } },
       });
 
-      await expect(login('x@x.com', 'pass')).rejects.toThrow('Demasiados intentos');
+      await expect(login('x@x.com', 'pass')).rejects.toThrow('No se pudo enviar el email');
+    });
+
+    // P2-17: antes, "ThrottlerException: Too Many Requests" o "Error al conectar con el servidor"
+    it.each([
+      ['el back de antes', { error: 'ThrottlerException: Too Many Requests' }],
+      ['con su código', { code: 'TOO_MANY_REQUESTS', error: 'Demasiados intentos.' }],
+    ])('con un 429 (%s) dice que espere', async (_caso, data) => {
+      (api.post as any).mockRejectedValueOnce({ response: { status: 429, data: { success: false, ...data } } });
+
+      await expect(login('x@x.com', 'pass')).rejects.toThrow(
+        'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.',
+      );
     });
   });
 
@@ -94,6 +114,48 @@ describe('auth helpers', () => {
       (api.post as any).mockRejectedValueOnce(new ApiError('Algo concreto', 400, 'OTRO'));
 
       await expect(acceptClubInvite('tok', 'Nombre', 'Clave123!')).rejects.toThrow('Algo concreto');
+    });
+  });
+
+  // P2-26: la página web del enlace del email llama al mismo endpoint que la app
+  describe('resetPassword', () => {
+    it('manda el token y la contraseña nueva y no inicia sesión', async () => {
+      (api.post as any).mockResolvedValueOnce({ data: { message: 'ok' } });
+
+      await resetPassword('tok', 'Clave123!');
+
+      expect(api.post).toHaveBeenCalledWith('/auth/reset-password', { token: 'tok', newPassword: 'Clave123!' });
+      expect(setToken).not.toHaveBeenCalled();
+    });
+
+    it.each(['RESET_LINK_INVALID', 'RESET_LINK_USED'])('%s: el enlace caducó o ya se usó', async (code) => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('texto del back', 400, code));
+
+      await expect(resetPassword('tok', 'Clave123!')).rejects.toThrow(RESET_LINK_EXPIRED_MESSAGE);
+    });
+
+    // Un admin o un club también lo pide, desde el acceso al panel
+    it('dice que se pide otro desde la app o desde el acceso al panel', () => {
+      for (const message of [RESET_LINK_EXPIRED_MESSAGE, ACTIVATE_LINK_EXPIRED_MESSAGE])
+        expect(message).toContain('Pide uno nuevo desde la app o desde el acceso al panel con «¿Olvidaste tu contraseña?»');
+    });
+
+    // Quien activa una cuenta puede no tener la app: también, que se la reenvíen
+    it('al activar una cuenta, el enlace caducado dice además que pida la invitación otra vez', async () => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('texto del back', 400, 'RESET_LINK_INVALID'));
+
+      await expect(resetPassword('tok', 'Clave123!', { activate: true })).rejects.toThrow(
+        ACTIVATE_LINK_EXPIRED_MESSAGE,
+      );
+      expect(ACTIVATE_LINK_EXPIRED_MESSAGE).toContain('pide a quien te invitó que te reenvíe la invitación');
+    });
+
+    it('otro error (p. ej. el 429): su texto', async () => {
+      (api.post as any).mockRejectedValueOnce(
+        new ApiError('Demasiados intentos. Espera unos minutos y vuelve a intentarlo.', 429, 'TOO_MANY_REQUESTS'),
+      );
+
+      await expect(resetPassword('tok', 'Clave123!')).rejects.toThrow('Demasiados intentos');
     });
   });
 

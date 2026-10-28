@@ -6,6 +6,8 @@ import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide
 import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, levelLabel } from "@/lib/constants";
+import { invitationNotice } from "@/lib/player-invite";
+import { isClub, useRole } from "@/lib/use-role";
 import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 interface Props {
@@ -82,6 +84,7 @@ interface PlayerSlotSectionProps {
 
 function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }: PlayerSlotSectionProps) {
   const qc = useQueryClient();
+  const { role } = useRole();
   const createMut = useMutation({ mutationFn: (d: CreatePlayerPayload) => adminService.players.create(d) });
 
   const handleCreatePlayer = async () => {
@@ -110,6 +113,10 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
       };
       setSlot((s) => ({ ...s, player: asPlayer, query: asPlayer.name, creating: false, createErrors: {} }));
       qc.invalidateQueries({ queryKey: ["admin", "players"] });
+      // Si no le ha llegado la invitación, decirlo: el club no ve el ajuste
+      // de AMT que la apaga, ni la ficha del jugador desde la que se reenvía
+      const notice = invitationNotice(created.invitation, { fromPlayerPage: !isClub(role) });
+      if (notice?.kind === "warning") toast.warning(`${asPlayer.name}: ${notice.text}`);
     } catch {
       toast.error("No se pudo crear el jugador");
     }

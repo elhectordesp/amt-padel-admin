@@ -37,6 +37,9 @@ vi.mock("@/lib/services/admin", () => ({
 import NuevoTorneoPage from "../../../app/(admin)/torneos/nuevo/page";
 
 const input = (name: string) => document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+// Cada paso valida y vuelve a pintar el asistente: con toda la suite a la
+// vez puede tardar más del segundo por defecto de findBy
+const WAIT = { timeout: 5000 };
 const next = () => fireEvent.click(screen.getByRole("button", { name: /Siguiente|Crear torneo/ }));
 
 describe("Crear torneo — zona del club y cierre en ella", () => {
@@ -49,30 +52,30 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
     );
 
     // Paso 1: información (el club es el del usuario)
-    await screen.findByDisplayValue("Club Las Palmas — Las Palmas");
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
     fireEvent.change(input("name"), { target: { value: "Open Gran Canaria" } });
     fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
     // Paso 2: categorías (la de por defecto vale)
-    await screen.findByLabelText("Plazas");
+    await screen.findByLabelText("Plazas", {}, WAIT);
     next();
     // Paso 3: configuración, con la zona del club
-    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy());
-    expect(await screen.findByText("Hora del torneo (Canarias)")).toBeInTheDocument();
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    expect(await screen.findByText("Hora del torneo (Canarias)", {}, WAIT)).toBeInTheDocument();
     fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
     next();
     // Paso 4: jornadas (las genera de las fechas) y 5: confirmar
-    await screen.findByText("Horarios por jornada");
+    await screen.findByText("Horarios por jornada", {}, WAIT);
     next();
-    await screen.findByRole("button", { name: /Crear torneo/ });
+    await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
     next();
 
-    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
     expect(create.mock.calls[0][0]).toMatchObject({
       clubId: "club-1",
       timezone: "Atlantic/Canary",
       registrationDeadline: "2099-11-10T20:00:00.000Z",
     });
-  });
+  }, 30_000);
 });

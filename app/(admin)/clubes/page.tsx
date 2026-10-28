@@ -6,10 +6,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
-  LayoutGrid, X, Navigation,
+  LayoutGrid, X, Navigation, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
+import { Pagination, usePagination } from "@/components/admin/pagination";
+import { paginate } from "@/lib/utils/pagination";
+import { matchesSearch } from "@/lib/utils/search";
 import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
@@ -643,6 +646,8 @@ export default function ClubesPage() {
   const [quickInvite,  setQuickInvite]  = useState(false);
   const [courtsClub,   setCourtsClub]   = useState<Club | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [search,       setSearch]       = useState("");
+  const { page, setPage, pageSize, setPageSize } = usePagination();
 
   const { data: clubs = [], isLoading } = useQuery({
     queryKey:  ["admin-clubs", showInactive],
@@ -653,6 +658,9 @@ export default function ClubesPage() {
   const inactive = clubs.filter((c) => c.active === false);
   const displayed = showInactive ? clubs : active;
   const noCoords  = displayed.filter((c) => c.lat == null || c.lng == null);
+  // Por nombre, ciudad o provincia, sin tildes
+  const found = displayed.filter((c) => matchesSearch(search, c.name, c.city, c.province));
+  const pageClubs = paginate(found, page, pageSize);
 
   const batchGeocode = useMutation({
     mutationFn: () => adminService.clubs.geocodeBatch(),
@@ -694,7 +702,7 @@ export default function ClubesPage() {
               {inactive.length > 0 && ` · ${inactive.length} inactivo${inactive.length !== 1 ? "s" : ""}`}
             </p>
             <button
-              onClick={() => setShowInactive((v) => !v)}
+              onClick={() => { setShowInactive((v) => !v); setPage(1); }}
               className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
               {showInactive ? "Ocultar inactivos" : "Ver inactivos"}
@@ -731,6 +739,18 @@ export default function ClubesPage() {
           </div>
         </div>
 
+        {displayed.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border">
+            <Search size={14} className="text-muted-foreground shrink-0" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Buscar club, ciudad o provincia..."
+              className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
+            />
+          </div>
+        )}
+
         {/* Grid */}
         {isLoading ? (
           <div className="flex justify-center py-16">
@@ -747,17 +767,31 @@ export default function ClubesPage() {
               Crear el primero
             </button>
           </div>
+        ) : found.length === 0 ? (
+          <p className="text-center py-12 text-sm text-muted-foreground">
+            Ningún club coincide con «{search}».
+          </p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayed.map((club) => (
-              <ClubCard
-                key={club.id}
-                club={club}
-                onEdit={(c) => setModal({ open: true, club: c })}
-                onCourts={(c) => setCourtsClub(c)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pageClubs.map((club) => (
+                <ClubCard
+                  key={club.id}
+                  club={club}
+                  onEdit={(c) => setModal({ open: true, club: c })}
+                  onCourts={(c) => setCourtsClub(c)}
+                />
+              ))}
+            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={found.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="clubes"
+            />
+          </>
         )}
       </div>
     </>

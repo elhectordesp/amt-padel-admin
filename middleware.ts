@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { LOGIN_REASON_NO_ACCESS, isPanelRole } from "./lib/session";
 
 const TOKEN_KEY = "amt_admin_token";
-// Rutas públicas (sin login): login/gestión de cuenta + visor de torneo (modo
-// espectador y Widget TV), que usan solo endpoints públicos sin datos sensibles.
-const PUBLIC_PATHS = ["/login", "/eliminar-cuenta", "/privacidad", "/ayuda", "/aceptar-invitacion", "/torneo"];
+const REFRESH_TOKEN_KEY = "amt_admin_refresh";
+// Rutas públicas (sin login): login/gestión de cuenta (también /restablecer, la
+// del enlace del email de la contraseña) + visor de torneo (modo espectador y
+// Widget TV), que usan solo endpoints públicos sin datos sensibles.
+const PUBLIC_PATHS = [
+  "/login",
+  "/eliminar-cuenta",
+  "/privacidad",
+  "/ayuda",
+  "/aceptar-invitacion",
+  "/restablecer",
+  "/torneo",
+];
 
 // Páginas del admin a las que un user CLUB NO debe entrar — operaciones
 // globales del circuito (estadísticas globales, finanzas, config, etc).
@@ -70,6 +81,20 @@ export function middleware(request: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
+  }
+
+  // Token vigente de quien no entra al panel: un jugador, o un admin al que
+  // le quitaron el rol y renovó la sesión. Antes solo se miraba la caducidad
+  // y se pintaba el panel entero con todo a 0 (P2-16). Fuera, sin sus cookies.
+  if (!isPublic && !isPanelRole(payload?.role)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("motivo", LOGIN_REASON_NO_ACCESS);
+    const res = NextResponse.redirect(url);
+    res.cookies.delete(TOKEN_KEY);
+    res.cookies.delete(REFRESH_TOKEN_KEY);
+    return res;
   }
 
   // Role gate: si el user es CLUB y la ruta cae en un prefijo bloqueado,

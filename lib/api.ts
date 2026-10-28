@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
+import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE, isPanelRole, tokenRole } from "./session";
 
 const TOKEN_KEY         = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
@@ -23,6 +24,13 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+/**
+ * Lo que se enseña con un 429 (pasado un límite de peticiones). El back manda
+ * el código TOO_MANY_REQUESTS; antes mandaba "ThrottlerException: Too Many
+ * Requests" y el login decía "Error al conectar con el servidor".
+ */
+export const TOO_MANY_REQUESTS_MESSAGE = "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
 
 // ── Token helpers ──────────────────────────────────────────────────────────
 const SECURE_COOKIE = process.env.NODE_ENV === "production";
@@ -132,6 +140,14 @@ api.interceptors.response.use(
         );
         // La respuesta está envuelta en { success, data: { token, refreshToken } }
         const tokens = data?.data ?? data;
+        // Un admin al que le quitaron el rol renueva como jugador: se quedaba
+        // dentro con todo a 0 y cada llamada en 403 (P2-16). Fuera.
+        if (!isPanelRole(tokenRole(tokens.token))) {
+          const noAccess = new ApiError(NO_ACCESS_MESSAGE, 403);
+          processQueue(noAccess, null);
+          forceLogout(LOGIN_REASON_NO_ACCESS);
+          return Promise.reject(noAccess);
+        }
         setToken(tokens.token);
         setRefreshToken(tokens.refreshToken);
 
@@ -145,6 +161,10 @@ api.interceptors.response.use(
       } finally {
         isRefreshing = false;
       }
+    }
+
+    if (err.response?.status === 429) {
+      return Promise.reject(new ApiError(TOO_MANY_REQUESTS_MESSAGE, 429, "TOO_MANY_REQUESTS"));
     }
 
     const message =

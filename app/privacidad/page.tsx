@@ -97,7 +97,7 @@ export default function PrivacidadPage() {
               Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.
             </p>
             <div style={{ fontSize: 12, color: "#666", marginTop: 12 }}>
-              Versión 1.0 · Última actualización: julio 2026 · Ámbito: España (Unión Europea)
+              Versión 1.1 · Última actualización: octubre 2026 · Ámbito: España (Unión Europea)
             </div>
           </div>
 
@@ -330,7 +330,7 @@ export default function PrivacidadPage() {
                   </tr>
                   <tr>
                     <td style={tdHead}>Tokens push (Expo)</td>
-                    <td style={td}>Mientras las notificaciones estén activadas o la cuenta esté activa</td>
+                    <td style={td}>Mientras la cuenta esté activa; se desvincula al cerrar sesión o al entrar otra cuenta en ese dispositivo, y se borra con la cuenta</td>
                   </tr>
                   <tr>
                     <td style={tdHead}>Logs de servidor / IPs</td>
@@ -339,6 +339,10 @@ export default function PrivacidadPage() {
                   <tr>
                     <td style={tdHead}>Mensajes de soporte</td>
                     <td style={td}>2 años desde la resolución</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHead}>Mensajes del organizador a los inscritos de un torneo (historial de envíos)</td>
+                    <td style={td}>12 meses desde el envío</td>
                   </tr>
                 </tbody>
               </table>
@@ -385,6 +389,18 @@ export default function PrivacidadPage() {
                     <td style={tdHead}>Expo (Notifications)</td>
                     <td style={td}>Envío de notificaciones push a dispositivos móviles</td>
                     <td style={td}>EE.UU.</td>
+                    <td style={td}>Cláusulas contractuales estándar (SCC)</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHead}>Google (Firebase Cloud Messaging y Firebase Installations)</td>
+                    <td style={td}>Registro del dispositivo y entrega de las notificaciones push en Android</td>
+                    <td style={td}>EE.UU.</td>
+                    <td style={td}>Marco de Privacidad de Datos UE-EE. UU. y cláusulas contractuales estándar (SCC)</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHead}>Sentry</td>
+                    <td style={td}>Registro de errores técnicos de la app, el panel y el servidor</td>
+                    <td style={td}>UE (Alemania)</td>
                     <td style={td}>Cláusulas contractuales estándar (SCC)</td>
                   </tr>
                   <tr>
@@ -450,7 +466,8 @@ export default function PrivacidadPage() {
             <ul style={{ margin: 0, paddingLeft: 20, color: "#ccc", fontSize: 14, lineHeight: 1.9 }}>
               <li><strong style={{ color: "#fff" }}>Qué notificamos:</strong> nuevos partidos programados, publicación de resultados, cambios en el torneo, novedades del circuito.</li>
               <li><strong style={{ color: "#fff" }}>Cómo desactivarlas:</strong> puedes revocar el permiso en cualquier momento desde los ajustes de notificaciones de tu dispositivo o desde la sección de perfil de la aplicación.</li>
-              <li><strong style={{ color: "#fff" }}>Token push:</strong> tu dispositivo genera un token único (Expo Push Token) que utilizamos exclusivamente para enviarte notificaciones. Este token no identifica a la persona y no se comparte con terceros salvo con Expo para la entrega técnica del mensaje.</li>
+              <li><strong style={{ color: "#fff" }}>Token push:</strong> tu dispositivo genera un token único (Expo Push Token) que utilizamos exclusivamente para enviarte notificaciones. Este token no identifica a la persona y no se comparte con terceros salvo con Expo y, en Android, con Google (Firebase Cloud Messaging) para la entrega técnica del mensaje. Lo desvinculamos de tu cuenta cuando cierras sesión o entra otra cuenta en ese dispositivo.</li>
+              <li><strong style={{ color: "#fff" }}>Android:</strong> en los dispositivos Android, las notificaciones se entregan a través de Firebase Cloud Messaging (Google). Para recibirlas, Firebase asigna a la aplicación instalada un identificador de instalación (Firebase Installations). Google trata estos datos como encargado del tratamiento, solo para entregar las notificaciones.</li>
             </ul>
           </section>
 
@@ -538,7 +555,7 @@ export default function PrivacidadPage() {
 
           {/* Footer */}
           <div style={{ marginTop: 32, fontSize: 12, color: "#666", borderTop: "1px solid #1a1a1a", paddingTop: 20, lineHeight: 1.7 }}>
-            AMT Padel Circuit · Política de Privacidad v1.0 · Última actualización: julio 2026
+            AMT Padel Circuit · Política de Privacidad v1.1 · Última actualización: octubre 2026
             <br />
             <a href="/eliminar-cuenta" style={{ color: "#D4AF37" }}>
               Eliminar cuenta
