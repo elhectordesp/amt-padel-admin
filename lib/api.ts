@@ -25,6 +25,13 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Lo que se enseña con un 429 (pasado un límite de peticiones). El back manda
+ * el código TOO_MANY_REQUESTS; antes mandaba "ThrottlerException: Too Many
+ * Requests" y el login decía "Error al conectar con el servidor".
+ */
+export const TOO_MANY_REQUESTS_MESSAGE = "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
+
 // ── Token helpers ──────────────────────────────────────────────────────────
 const SECURE_COOKIE = process.env.NODE_ENV === "production";
 
@@ -154,6 +161,10 @@ api.interceptors.response.use(
       } finally {
         isRefreshing = false;
       }
+    }
+
+    if (err.response?.status === 429) {
+      return Promise.reject(new ApiError(TOO_MANY_REQUESTS_MESSAGE, 429, "TOO_MANY_REQUESTS"));
     }
 
     const message =

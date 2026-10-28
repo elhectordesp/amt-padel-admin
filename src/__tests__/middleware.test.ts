@@ -70,8 +70,14 @@ describe("middleware — auth gate", () => {
     }
   });
 
+  it("la página del enlace del email de la contraseña (/restablecer) pasa sin token", () => {
+    middleware(makeRequest("/restablecer"));
+    expect(nextMock).toHaveBeenCalled();
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
+
   it("las páginas del admin que empiezan igual (/torneos, /torneos/x) no son públicas: sin token → /login", () => {
-    for (const path of ["/torneos", "/torneos/x", "/torneos/x/editar", "/loginx"]) {
+    for (const path of ["/torneos", "/torneos/x", "/torneos/x/editar", "/loginx", "/restablecerx"]) {
       redirectMock.mockClear();
       nextMock.mockClear();
       middleware(makeRequest(path));

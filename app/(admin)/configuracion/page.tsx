@@ -650,7 +650,14 @@ function TabNotificaciones() {
 
   const testPush = useMutation({
     mutationFn: () => adminService.config.testPush(),
-    onSuccess:  () => toast.success("Push de prueba enviado a tu dispositivo"),
+    // El back espera el recibo unos segundos: dice si Apple/Google lo recibieron
+    onSuccess:  ({ delivery }) => {
+      if (delivery === "confirmed") toast.success("Push de prueba entregado: debería llegarte al móvil");
+      else if (delivery === "pending")
+        toast.info("El push de prueba ha salido, pero aún no hay confirmación de entrega. Si no te llega en unos minutos, revisa las notificaciones del móvil.");
+      // Un back anterior no lo dice
+      else toast.success("Push de prueba enviado a tu dispositivo");
+    },
     onError:    (e: Error) => toast.error(e.message),
   });
 
