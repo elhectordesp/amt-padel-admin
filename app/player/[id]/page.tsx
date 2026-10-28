@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Image from "next/image";
-import { Trophy, TrendingUp, TrendingDown, Minus, Star } from "lucide-react";
+import { Star } from "lucide-react";
+import { fetchPublicApi } from "@/lib/utils/public-api";
+import type { PublicPlayer } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -16,55 +17,32 @@ const LEVEL_COLOR: Record<string, string> = {
   iniciacion: "#607D8B",
 };
 
-// Un fallo de red o una respuesta que no es JSON es «no encontrado» (404),
-// como en la imagen OG, no un 500
-async function getPlayer(id: string) {
-  try {
-    const res = await fetch(`${API_URL}/players/${id}/profile`, {
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? json;
-  } catch {
-    return null;
-  }
+// Solo nombre, categoría, SPA y puesto (PublicPlayer): lo que da el back sin
+// sesión. Solo un 404 es «no encontrado»: un 429 (límite de peticiones) o un 5xx se
+// enseñan como error, para no decir que un jugador que existe no existe
+function getPlayer(id: string) {
+  return fetchPublicApi<{ player: PublicPlayer }>(`${API_URL}/players/${id}/profile`, {
+    next: { revalidate: 300 },
+  });
 }
 
 // En Next 16 params es una promesa: con params.id (síncrono) llegaba undefined
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const player = await getPlayer(id);
-  if (!player) return { title: "Jugador no encontrado · AMT Pádel" };
-  const level: string | null = player.player.level;
+  const result = await getPlayer(id);
+  if (result.kind === "not-found") return { title: "Jugador no encontrado · AMT Pádel" };
+  if (result.kind === "error") return { title: "Jugador · AMT Pádel" };
+  const { player } = result.data;
+  const level = player.level;
   return {
-    title: `${player.player.name} · AMT Pádel`,
+    title: `${player.name} · AMT Pádel`,
     // Un jugador nuevo no tiene categoría (antes la API decía 4ª)
-    description: `Perfil de ${player.player.name} en el circuito AMT Pádel. ${level ? `Categoría ${CATEGORY_LABEL[level] ?? level}` : "Sin categoría"}.`,
-    openGraph: {
-      title: `${player.player.name} · AMT Pádel`,
-      images: player.player.photoUrl ? [player.player.photoUrl] : [],
-    },
+    description: `Perfil de ${player.name} en el circuito AMT Pádel. ${level ? `Categoría ${CATEGORY_LABEL[level] ?? level}` : "Sin categoría"}.`,
+    openGraph: { title: `${player.name} · AMT Pádel` },
   };
 }
 
-export default async function PublicPlayerPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const data = await getPlayer(id);
-  if (!data) notFound();
-
-  const { player, tournaments } = data;
-  const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
-  const spaLevel = player.spa?.spaLevel;
-  const levelColor = spaLevel ? (LEVEL_COLOR[spaLevel] ?? "#D4AF37") : "#D4AF37";
-  // El distintivo, con su categoría oficial (no la del SPA); un jugador nuevo
-  // no tiene: «Sin categoría», como la app
-  const category: string | null = player.level ?? null;
-  const categoryColor = category ? (LEVEL_COLOR[category] ?? "#D4AF37") : "#71717A";
-
-  const TrendIcon = player.trend === "up" ? TrendingUp : player.trend === "down" ? TrendingDown : Minus;
-  const trendColor = player.trend === "up" ? "text-green-400" : player.trend === "down" ? "text-red-400" : "text-zinc-500";
-
+function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#0C0C0C] text-white">
       {/* Header AMT */}
@@ -73,97 +51,81 @@ export default async function PublicPlayerPage({ params }: { params: Promise<{ i
         <div className="w-px h-5 bg-zinc-700" />
         <span className="text-xs text-zinc-500 uppercase tracking-widest">Circuito de Pádel</span>
       </header>
-
       <main className="max-w-2xl mx-auto px-4 py-10 space-y-8">
-
-        {/* Perfil */}
-        <div className="flex items-center gap-5">
-          {player.photoUrl ? (
-            <Image src={player.photoUrl} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full object-cover border-2 border-[#D4AF37]" />
-          ) : (
-            <div className="w-20 h-20 rounded-full bg-zinc-800 border-2 border-[#D4AF37] flex items-center justify-center">
-              <span className="text-2xl font-bold text-[#D4AF37]">
-                {player.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-              </span>
-            </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-serif font-bold">{player.name}</h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full border" style={{ color: categoryColor, borderColor: categoryColor + "66", backgroundColor: categoryColor + "22" }}>
-                {category ? (CATEGORY_LABEL[category] ?? category) : "Sin categoría"}
-              </span>
-              {player.city && <span className="text-xs text-zinc-500">{player.city}</span>}
-              <span className="text-xs text-zinc-500">{player.gender === "M" ? "Masculino" : "Femenino"}</span>
-            </div>
-            {player.bio && <p className="text-sm text-zinc-400 mt-2 max-w-sm">{player.bio}</p>}
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Partidos", value: player.played },
-            { label: "Victorias", value: player.wins },
-            { label: "% victorias", value: `${winRate}%` },
-          ].map(({ label, value }) => (
-            <div key={label} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-              <p className="text-xl font-bold text-[#D4AF37]">{value}</p>
-              <p className="text-xs text-zinc-500 mt-1">{label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* SPA */}
-        {player.spa && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Star size={15} className="text-[#D4AF37]" />
-                <span className="text-sm font-semibold">Rating SPA</span>
-              </div>
-              <div className={`flex items-center gap-1 ${trendColor}`}>
-                <TrendIcon size={13} />
-                <span className="text-xs">{player.trend === "up" ? "Subiendo" : player.trend === "down" ? "Bajando" : "Estable"}</span>
-              </div>
-            </div>
-            <div className="flex items-end gap-3">
-              <span className="text-3xl font-serif font-bold" style={{ color: levelColor }}>
-                {Number(player.spa.spaPoints).toFixed(0)}
-              </span>
-              <span className="text-sm text-zinc-400 mb-1">puntos · {player.spa.spaMatches} partidos</span>
-            </div>
-          </div>
-        )}
-
-        {/* Torneos recientes */}
-        {tournaments.length > 0 && (
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">Torneos recientes</h2>
-            <div className="space-y-2">
-              {tournaments.slice(0, 5).map((t: { name: string; categoryDisplay: string; result: string }, i: number) => (
-                <div key={i} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium">{t.name}</p>
-                    <p className="text-xs text-zinc-500">{t.categoryDisplay}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold ${t.result.includes("Ganador") || t.result.includes("Final") ? "text-[#D4AF37]" : "text-zinc-400"}`}>
-                      {t.result}
-                    </span>
-                    {(t.result.includes("Ganador") || t.result.includes("Final")) && <Trophy size={13} className="text-[#D4AF37]" />}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {children}
         {/* Footer */}
         <p className="text-center text-xs text-zinc-600 pt-4">
           Perfil generado por <span className="text-[#D4AF37]">AMT Pádel</span>
         </p>
       </main>
     </div>
+  );
+}
+
+export default async function PublicPlayerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = await getPlayer(id);
+  if (result.kind === "not-found") notFound();
+  if (result.kind === "error") {
+    return (
+      <Layout>
+        <div role="alert" className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 text-center">
+          <p className="text-sm font-semibold">No se ha podido cargar el perfil</p>
+          <p className="text-xs text-zinc-500 mt-1">Vuelve a intentarlo en unos minutos.</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  const { player } = result.data;
+  const spaLevel = player.spa?.spaLevel;
+  const levelColor = spaLevel ? (LEVEL_COLOR[spaLevel] ?? "#D4AF37") : "#D4AF37";
+  // El distintivo, con su categoría oficial (no la del SPA); un jugador nuevo
+  // no tiene: «Sin categoría», como la app
+  const category = player.level ?? null;
+  const categoryColor = category ? (LEVEL_COLOR[category] ?? "#D4AF37") : "#71717A";
+  const initials = player.name.split(" ").map((n) => n[0] ?? "").join("").slice(0, 2);
+
+  return (
+    <Layout>
+      {/* Perfil */}
+      <div className="flex items-center gap-5">
+        <div className="w-20 h-20 rounded-full bg-zinc-800 border-2 border-[#D4AF37] flex items-center justify-center">
+          <span className="text-2xl font-bold text-[#D4AF37]">{initials}</span>
+        </div>
+        <div>
+          <h1 className="text-2xl font-serif font-bold">{player.name}</h1>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full border" style={{ color: categoryColor, borderColor: categoryColor + "66", backgroundColor: categoryColor + "22" }}>
+              {category ? (CATEGORY_LABEL[category] ?? category) : "Sin categoría"}
+            </span>
+            {/* Su puesto en el circuito de la temporada (en su categoría, como
+                el «#N Circuito» de la app, y en general) */}
+            {player.categoryRank != null && (
+              <span className="text-xs text-zinc-500">#{player.categoryRank} Circuito</span>
+            )}
+            {player.globalRank != null && (
+              <span className="text-xs text-zinc-500">· #{player.globalRank} general</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* SPA */}
+      {player.spa && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Star size={15} className="text-[#D4AF37]" />
+            <span className="text-sm font-semibold">Rating SPA</span>
+          </div>
+          <div className="flex items-end gap-3">
+            <span className="text-3xl font-serif font-bold" style={{ color: levelColor }}>
+              {Number(player.spa.spaPoints).toFixed(0)}
+            </span>
+            <span className="text-sm text-zinc-400 mb-1">puntos</span>
+          </div>
+        </div>
+      )}
+    </Layout>
   );
 }

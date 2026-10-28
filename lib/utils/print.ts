@@ -141,12 +141,13 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
     .check { color: #16a34a; font-weight: 700; font-size: 13px; }
     .cross  { color: #dc2626; font-weight: 700; font-size: 13px; }
 
-    .print-btn { position: fixed; top: 16px; right: 20px; padding: 8px 16px; background: #D4AF37; color: #111; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    @media print { .print-btn { display: none; } body { padding: 0; } }
+    .print-bar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .print-btn { padding: 8px 16px; background: #D4AF37; color: #111; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    @media print { .print-bar { display: none; } body { padding: 0; } }
   </style>
 </head>
 <body>
-  <button class="print-btn" onclick="window.print()">Imprimir</button>
+  <div class="print-bar"><button class="print-btn" onclick="window.print()">Imprimir</button></div>
   <div class="page-header">
     <div>
       <h1>${esc(tournament.name)}</h1>
@@ -355,14 +356,15 @@ export function printTournamentReport(
     .winner { font-weight: 700; }
     .score { font-weight: 700; white-space: nowrap; color: ${accent}; }
     .pending { color: #bbb; font-style: italic; font-size: 10px; }
+    .print-bar { display: flex; justify-content: flex-end; padding: 12px 32px; }
     .print-btn {
-      position: fixed; top: 16px; right: 20px; padding: 8px 18px;
+      padding: 8px 18px;
       background: ${accent}; color: #111; border: none; border-radius: 4px;
       font-size: 12px; font-weight: 700; cursor: pointer;
       box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     }
     @media print {
-      .print-btn { display: none; }
+      .print-bar { display: none; }
       body { background: #fff; }
       .report-header, .champion-card, .cat-header, .phase-label {
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -371,7 +373,7 @@ export function printTournamentReport(
   </style>
 </head>
 <body>
-  <button class="print-btn" onclick="window.print()">Guardar PDF</button>
+  <div class="print-bar"><button class="print-btn" onclick="window.print()">Guardar PDF</button></div>
   <div class="report-header">
     <div class="header-top">
       <div class="logo">AMT P&aacute;del</div>
@@ -517,12 +519,13 @@ export function printSchedule(
     .vs { color: #999; font-size: 10px; }
     .score { font-weight: 700; white-space: nowrap; }
     .pending { color: #999; font-style: italic; font-size: 10px; }
-    .print-btn { position: fixed; top: 16px; right: 20px; padding: 8px 16px; background: #D4AF37; color: #111; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    @media print { .print-btn { display: none; } body { padding: 0; } }
+    .print-bar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .print-btn { padding: 8px 16px; background: #D4AF37; color: #111; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    @media print { .print-bar { display: none; } body { padding: 0; } }
   </style>
 </head>
 <body>
-  <button class="print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+  <div class="print-bar"><button class="print-btn" onclick="window.print()">Imprimir / Guardar PDF</button></div>
   <div class="page-header">
     <div>
       <h1>Horario — ${esc(tournament.name)}</h1>

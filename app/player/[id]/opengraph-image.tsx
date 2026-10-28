@@ -1,4 +1,6 @@
 import { ImageResponse } from "next/og";
+import { fetchPublicApi } from "@/lib/utils/public-api";
+import type { PublicPlayer } from "@/types";
 
 export const runtime = "nodejs";
 export const size    = { width: 1200, height: 630 };
@@ -17,16 +19,14 @@ const LEVEL_COLOR: Record<string, string> = {
   iniciacion: "#607D8B",
 };
 
-async function getPlayer(id: string) {
-  try {
-    // La misma caché que la página del jugador
-    const res = await fetch(`${API_URL}/players/${id}/profile`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? json;
-  } catch {
-    return null;
-  }
+// La misma caché que la página del jugador. Si no existe o falla, la imagen
+// genérica («Jugador AMT»). Solo trae nombre, categoría, SPA y puesto
+// (PublicPlayer): ni foto, ni género, ni partidos
+async function getPlayer(id: string): Promise<PublicPlayer | null> {
+  const result = await fetchPublicApi<{ player: PublicPlayer }>(`${API_URL}/players/${id}/profile`, {
+    next: { revalidate: 300 },
+  });
+  return result.kind === "ok" ? result.data.player : null;
 }
 
 async function loadInterFont(): Promise<ArrayBuffer | null> {
@@ -43,18 +43,6 @@ async function loadInterFont(): Promise<ArrayBuffer | null> {
   }
 }
 
-async function toDataUrl(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const buf  = await res.arrayBuffer();
-    const mime = res.headers.get("content-type") ?? "image/jpeg";
-    return `data:${mime};base64,${Buffer.from(buf).toString("base64")}`;
-  } catch {
-    return null;
-  }
-}
-
 // En Next 16 params es una promesa: con params.id (síncrono) llegaba undefined
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -63,8 +51,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     loadInterFont(),
   ]);
 
-  const player     = data?.player ?? null;
-  const winRate    = player && player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
+  const player     = data;
   const spaPoints  = player?.spa ? Math.round(Number(player.spa.spaPoints)) : null;
   // Su categoría oficial (la del circuito, la del «#N Circuito»), no la del
   // SPA; un jugador nuevo no tiene: «Sin categoría», como la app
@@ -73,10 +60,8 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   const catLabel   = category ? (CATEGORY_LABEL[category] ?? category) : "SIN CATEGORÍA";
   const catColor   = category ? color : "#888888";
   const initials   = player
-    ? player.name.split(" ").map((n: string) => n[0] ?? "").join("").slice(0, 2).toUpperCase()
+    ? player.name.split(" ").map((n) => n[0] ?? "").join("").slice(0, 2).toUpperCase()
     : "?";
-
-  const avatarSrc = player?.photoUrl ? await toDataUrl(player.photoUrl) : null;
 
   const fonts = fontData
     ? [{ name: "Inter", data: fontData, style: "normal" as const, weight: 400 as const }]
@@ -134,10 +119,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             flexShrink: 0,
             overflow: "hidden",
           }}>
-            {avatarSrc
-              ? <img src={avatarSrc} width={200} height={200} style={{ objectFit: "cover", borderRadius: "50%" }} />
-              : <span style={{ fontSize: 80, color, fontWeight: 700 }}>{initials}</span>
-            }
+            <span style={{ fontSize: 80, color, fontWeight: 700 }}>{initials}</span>
           </div>
 
           {/* Text info */}
@@ -171,20 +153,6 @@ export default async function Image({ params }: { params: Promise<{ id: string }
                   {catLabel}
                 </div>
               )}
-              {player?.gender && (
-                <div style={{
-                  display: "flex",
-                  padding: "5px 14px",
-                  borderRadius: 24,
-                  border: "1.5px solid #333",
-                  background: "#1A1A1A",
-                  color: "#888",
-                  fontSize: 14,
-                  letterSpacing: 1,
-                }}>
-                  {player.gender === "M" ? "MASCULINO" : "FEMENINO"}
-                </div>
-              )}
               {/* Su puesto en el circuito de la temporada, como «#N Circuito» de la
                   app (la página pública de ranking es la de SPA) */}
               {player?.categoryRank != null && (
@@ -201,18 +169,6 @@ export default async function Image({ params }: { params: Promise<{ id: string }
                   <span style={{ fontSize: 48, fontWeight: 700, color, lineHeight: 1 }}>{spaPoints}</span>
                   <span style={{ fontSize: 13, color: "#666", letterSpacing: 2 }}>PUNTOS SPA</span>
                 </div>
-              )}
-              {player && player.played > 0 && (
-                <>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span style={{ fontSize: 48, fontWeight: 700, color: "#E8E8E8", lineHeight: 1 }}>{player.played}</span>
-                    <span style={{ fontSize: 13, color: "#666", letterSpacing: 2 }}>PARTIDOS</span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span style={{ fontSize: 48, fontWeight: 700, color: "#E8E8E8", lineHeight: 1 }}>{winRate}%</span>
-                    <span style={{ fontSize: 13, color: "#666", letterSpacing: 2 }}>VICTORIAS</span>
-                  </div>
-                </>
               )}
             </div>
           </div>

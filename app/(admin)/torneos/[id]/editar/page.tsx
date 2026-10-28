@@ -6,10 +6,12 @@ import { TournamentImageUploader } from "@/components/admin/tournament-image-upl
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
+import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
 import { hasDate } from "@/lib/utils/match-status";
 import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
+import { isStandardTransition, standardNextStatuses } from "@/lib/utils/tournament-status";
 import {
   dateOnlyKey,
   timeZoneLabel,
@@ -26,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import type { TournamentStatus } from "@/types";
 
 /** Lo que tenía el torneo al abrir el formulario (para saber qué se ha tocado). */
 interface Original {
@@ -217,6 +220,8 @@ export default function EditarTorneoPage() {
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const imageUrlValue = watch("imageUrl") ?? "";
+  // El estado guardado: desde él se ve qué cambios son los habituales
+  const savedStatus = (tournament.status?.toUpperCase() ?? "DRAFT") as TournamentStatus;
 
   /** Guarda, pidiendo antes confirmación si cambia a un estado delicado. */
   const saveOrConfirmStatus = (data: FormData) => {
@@ -519,7 +524,10 @@ export default function EditarTorneoPage() {
             <div className="mt-3 max-w-sm">
               <Field label="Estado">
                 <CustomSelect
-                  options={[
+                  // Los saltos que no son el paso habitual desde el estado
+                  // guardado lo dicen: antes se ofrecían todos igual y luego
+                  // pedía forzar los que no lo eran (p. ej. Sorteo → En curso)
+                  options={([
                     { value: "DRAFT",     label: "🔵 Borrador" },
                     { value: "OPEN",      label: "🟢 Abierto (Inscripciones)" },
                     { value: "DRAW",      label: "🟣 Sorteo (Generando cuadro)" },
@@ -527,11 +535,19 @@ export default function EditarTorneoPage() {
                     { value: "ONGOING",   label: "🟡 En curso" },
                     { value: "FINISHED",  label: "⚫ Finalizado" },
                     { value: "CANCELLED", label: "🔴 Cancelado" },
-                  ]}
+                  ] as const).map((o) => ({
+                    value: o.value,
+                    label: isStandardTransition(savedStatus, o.value) ? o.label : `${o.label} · pide forzar`,
+                  }))}
                   value={watch("status") ?? "OPEN"}
                   onChange={(v) => setValue("status", v as FormData["status"], { shouldValidate: true, shouldDirty: true })}
                 />
               </Field>
+              <p className="text-xs text-muted-foreground mt-2">
+                {standardNextStatuses(savedStatus).length > 0
+                  ? `Desde «${TOURNAMENT_STATUS_LABEL[savedStatus]}», lo habitual es pasar a ${standardNextStatuses(savedStatus).map((s) => `«${TOURNAMENT_STATUS_LABEL[s]}»`).join(", ")}. Los demás cambios piden confirmar al guardar.`
+                  : `Desde «${TOURNAMENT_STATUS_LABEL[savedStatus]}», cualquier cambio pide confirmar al guardar.`}
+              </p>
             </div>
           </details>
 

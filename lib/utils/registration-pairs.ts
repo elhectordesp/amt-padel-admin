@@ -126,3 +126,21 @@ export function pairPlayers(reg: AdminRegistration): { player: PaymentPlayer; id
       : []),
   ];
 }
+
+/**
+ * El recuento de las parejas para un texto, como el resumen de la ficha: las
+ * que ocupan plaza (pendientes y confirmadas) y, aparte, las que esperan y las
+ * canceladas. Contarlas todas juntas daba 18 frente al «17 (+1 en espera)» de
+ * arriba.
+ */
+export function pairsSummary(pairs: Pick<PairRegistration, "status">[]): string {
+  const count = (statuses: RegistrationStatus[]) => pairs.filter((p) => statuses.includes(p.status)).length;
+  const inscribed = count(["PENDING", "CONFIRMED"]);
+  const waiting   = count(["WAITLIST"]);
+  const cancelled = count(["CANCELLED"]);
+  const plural = (n: number) => (n !== 1 ? "s" : "");
+  let text = `${inscribed} pareja${plural(inscribed)} inscrita${plural(inscribed)}`;
+  if (waiting) text += ` (+${waiting} en espera)`;
+  if (cancelled) text += ` · ${cancelled} cancelada${plural(cancelled)}`;
+  return text;
+}

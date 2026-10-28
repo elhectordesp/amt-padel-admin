@@ -17,7 +17,7 @@ beforeEach(() => {
   } as any);
 });
 
-import { downloadCsv } from '../../../lib/utils/csv';
+import { downloadCsv, toCsv } from '../../../lib/utils/csv';
 
 describe('downloadCsv', () => {
   it('no hace nada si rows está vacío', () => {
@@ -62,5 +62,37 @@ describe('downloadCsv', () => {
     vi.spyOn(document, 'createElement').mockReturnValue(anchor as any);
     downloadCsv('mi-reporte', [{ x: 1 }]);
     expect(anchor.download).toBe('mi-reporte.csv');
+  });
+});
+
+describe('toCsv — para el Excel en español (D09)', () => {
+  it('separa con «;» y pone los decimales con coma', () => {
+    expect(toCsv([{ Concepto: 'Inscripciones', Importe: 442.98, Parejas: 12 }])).toBe(
+      ['Concepto;Importe;Parejas', 'Inscripciones;442,98;12'].join('\n'),
+    );
+  });
+
+  it('entrecomilla lo que lleva «;» o comillas; un importe con coma va tal cual', () => {
+    expect(toCsv([{ a: 'uno; dos', b: '1.234,56', c: 'di "hola"' }])).toBe(
+      ['a;b;c', '"uno; dos";1.234,56;"di ""hola"""'].join('\n'),
+    );
+  });
+
+  it('entrecomilla los saltos de línea, también un \\r suelto, para no partir la fila', () => {
+    expect(toCsv([{ a: 'línea 1\nlínea 2', b: 'antes\rdespués', c: 'x' }])).toBe(
+      ['a;b;c', '"línea 1\nlínea 2";"antes\rdespués";x'].join('\n'),
+    );
+  });
+
+  it('neutraliza las fórmulas de los textos (inyección CSV)', () => {
+    expect(toCsv([{ a: '=SUMA(1)' }]).split('\n')[1]).toBe('\t=SUMA(1)');
+    // Un texto que empieza por «-» también: puede venir del usuario
+    expect(toCsv([{ a: '-2+3' }]).split('\n')[1]).toBe('\t-2+3');
+  });
+
+  it('un número negativo va tal cual, para que Excel lo sume (Finanzas)', () => {
+    expect(toCsv([{ Concepto: 'Gastos operativos', 'Con IVA (€)': -134, 'Sin IVA (€)': -110.74 }])).toBe(
+      ['Concepto;Con IVA (€);Sin IVA (€)', 'Gastos operativos;-134;-110,74'].join('\n'),
+    );
   });
 });

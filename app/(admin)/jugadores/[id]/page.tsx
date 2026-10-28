@@ -23,10 +23,14 @@ import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, levelLabel } from "
 import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
+import { dateOnlyKey, formatDayKey, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 import type { CategoryLevel, CategoryChange, UpdatePlayerPayload, Gender, PlayerRegistrationEntry, AuditLogEntry, RegistrationStatus } from "@/types";
 
 /** El back responde 404 a un jugador borrado o inexistente. */
 const isNotFound = (err: unknown) => err instanceof ApiError && err.status === 404;
+
+/** Las fechas de las tablas, como las enseñaba toLocaleDateString («20/11/2026»). */
+const DATE_NUMERIC: Intl.DateTimeFormatOptions = { day: "numeric", month: "numeric", year: "numeric" };
 
 const LEVEL_COLOR: Record<string, string> = {
   "1a":"#D4AF37","2a":"#C084FC","3a":"#60A5FA",
@@ -359,8 +363,9 @@ export default function JugadorDetailPage() {
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="flex flex-col gap-2 shrink-0">
+              {/* Actions: en el móvil, debajo y a lo ancho (a la derecha partían
+                  en varias líneas el nombre, la ciudad, el email y el teléfono) */}
+              <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:flex-col sm:w-auto shrink-0">
                 <button
                   onClick={() => setShowCatModal(true)}
                   className="px-4 py-2 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-sm text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
@@ -549,7 +554,7 @@ export default function JugadorDetailPage() {
 
           {/* Tournament registrations */}
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+            <div className="px-3 sm:px-5 py-3 border-b border-border flex items-center gap-2">
               <Trophy size={15} className="text-[#D4AF37]" />
               <h3 className="text-sm font-semibold text-foreground">Torneos</h3>
               {playerRegs.length > 0 && (
@@ -564,7 +569,7 @@ export default function JugadorDetailPage() {
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
                       {["Torneo", "Fecha", "Categoría", "Estado", "Pago"].map((h) => (
-                        <th key={h} className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
+                        <th key={h} className="px-3 sm:px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -573,19 +578,20 @@ export default function JugadorDetailPage() {
                       const scfg = REGISTRATION_STATUS_CONFIG[r.status as RegistrationStatus] ?? REGISTRATION_STATUS_CONFIG.PENDING;
                       return (
                         <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                          <td className="px-5 py-3 text-xs text-foreground max-w-[180px] truncate">{r.tournament}</td>
-                          <td className="px-5 py-3 text-xs text-muted-foreground">
-                            {new Date(r.startDate).toLocaleDateString("es-ES")}
+                          <td className="px-3 sm:px-5 py-3 text-xs text-foreground max-w-[120px] sm:max-w-[180px] truncate">{r.tournament}</td>
+                          <td className="px-3 sm:px-5 py-3 text-xs text-muted-foreground">
+                            {/* Fecha de calendario: con la zona del navegador, al oeste de UTC salía el día anterior */}
+                            {formatDayKey(dateOnlyKey(r.startDate), DATE_NUMERIC)}
                           </td>
-                          <td className="px-5 py-3 text-xs text-muted-foreground">
-                            {r.gender} {CATEGORY_LABEL[r.level as CategoryLevel] ?? r.level}
+                          <td className="px-3 sm:px-5 py-3 text-xs text-muted-foreground">
+                            {r.gender === "M" ? "Masc." : r.gender === "F" ? "Fem." : r.gender} {CATEGORY_LABEL[r.level as CategoryLevel] ?? r.level}
                           </td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 sm:px-5 py-3">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
                               {scfg.label}
                             </span>
                           </td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 sm:px-5 py-3">
                             <span className={`text-xs font-medium ${r.paid ? "text-green-400" : "text-yellow-400"}`}>
                               {r.paid ? "Pagado" : "Pendiente"}
                             </span>
@@ -620,7 +626,8 @@ export default function JugadorDetailPage() {
                     {player.matches.map((m) => (
                       <tr key={m.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                         <td className="px-5 py-3 text-xs text-muted-foreground">
-                          {m.date ? new Date(m.date).toLocaleDateString("es-ES") : "—"}
+                          {/* En la zona de su torneo (la manda el back), no en la del navegador */}
+                          {m.date ? formatInTimeZone(m.date, tournamentTimeZone(m), DATE_NUMERIC) : "—"}
                         </td>
                         <td className="px-5 py-3 text-xs text-foreground max-w-[160px] truncate">{m.tournament}</td>
                         <td className="px-5 py-3 text-xs text-muted-foreground">{m.category}</td>

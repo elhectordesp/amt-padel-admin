@@ -64,6 +64,14 @@ describe('printRegistrations', () => {
     expect(() => printRegistrations(makeTournament(), [makePair()])).not.toThrow();
   });
 
+  it('el botón de imprimir va en su barra, encima de la cabecera y no flotando sobre ella (D10)', () => {
+    printRegistrations(makeTournament(), [makePair()]);
+    const html = mockData.getHtml();
+    expect(html).toContain('<div class="print-bar"><button class="print-btn"');
+    expect(html).not.toContain('position: fixed');
+    expect(html.indexOf('class="print-bar"')).toBeLessThan(html.indexOf('class="page-header"'));
+  });
+
   it('escapa < y > en el nombre del torneo', () => {
     printRegistrations(makeTournament({ name: '<script>xss</script>' }), [makePair()]);
     const html = mockData.getHtml();

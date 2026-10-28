@@ -146,6 +146,32 @@ export interface Tournament {
   season?:     number;
 }
 
+/**
+ * Un jugador en la API pública (`GET /players/:id/profile`, sin sesión): solo
+ * nombre, categoría, SPA y puesto en el ranking, lo que cubre la política de
+ * privacidad (decisión del 28-10). Ni foto, ni bio, ni ciudad, ni partidos.
+ */
+export interface PublicPlayer {
+  id:            string;
+  name:          string;
+  level:         CategoryLevel | null;
+  spa?:          { spaPoints: number | string; spaLevel?: CategoryLevel | null } | null;
+  /** Su puesto en el circuito de la temporada (null si no está clasificado). */
+  globalRank?:   number | null;
+  categoryRank?: number | null;
+}
+
+/** Un torneo borrado (borrado lógico), para restaurarlo (`GET /admin/deleted-tournaments`). */
+export interface DeletedTournament {
+  id:        string;
+  name:      string;
+  status:    TournamentStatus;
+  startDate: string;
+  endDate:   string;
+  deletedAt: string;
+  club:      { id: string; name: string };
+}
+
 export interface SpaProfile {
   spaPoints:      number;
   spaLevel:       CategoryLevel;
@@ -319,6 +345,9 @@ export interface UpdatePlayerPayload {
 export interface PlayerMatch {
   id:         string;
   date:       string | null;
+  // Zona del torneo del partido: su fecha se enseña en ella. No viene con
+  // un back anterior (entonces, Madrid)
+  timezone?:  string | null;
   tournament: string;
   category:   string;
   isWinner:   boolean;
