@@ -203,6 +203,8 @@ function TestersSection({ clubId }: { clubId: string }) {
       setValidUntil("");
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["bookings", "testers", clubId] });
+      // El estado del módulo cuenta los testers activos («N tester(s)»)
+      qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) });
     },
     onError: showErr,
   });
@@ -213,6 +215,7 @@ function TestersSection({ clubId }: { clubId: string }) {
     onSuccess: () => {
       toast.success("Tester eliminado");
       qc.invalidateQueries({ queryKey: ["bookings", "testers", clubId] });
+      qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) });
     },
     onError: showErr,
   });

@@ -40,6 +40,21 @@ import type {
 
 const base = (clubId: string) => `/admin/clubs/${clubId}/booking-config`;
 
+/** Lo más que devuelve el back en una página de GET /bookings. */
+const BOOKINGS_PAGE_SIZE = 100;
+
+function listBookings(filters: BookingFiltersQuery = {}) {
+  return api
+    .get<PaginatedBookings>(`/bookings`, {
+      params: filters,
+      // Los estados, como claves repetidas (statuses=A&statuses=B): el back
+      // (Express 5) no entiende «statuses[]=A», el formato por defecto de
+      // axios, y el filtro se perdía
+      paramsSerializer: { indexes: null },
+    })
+    .then((r) => r.data);
+}
+
 export const bookingsService = {
   // ── Operating hours ────────────────────────────────────────────────────
 
@@ -227,10 +242,24 @@ export const bookingsService = {
   // ── Bookings (lista + acciones admin) ──────────────────────────────────
 
   bookings: {
-    list: (filters: BookingFiltersQuery = {}) =>
-      api
-        .get<PaginatedBookings>(`/bookings`, { params: filters })
-        .then((r) => r.data),
+    list: listBookings,
+
+    /**
+     * Todas las reservas del filtro, página a página: el back no da más de
+     * 100 por petición (pedir 200 devolvía 100 sin avisar).
+     */
+    listAll: async (
+      filters: Omit<BookingFiltersQuery, "limit" | "offset">,
+    ): Promise<Booking[]> => {
+      const byId = new Map<string, Booking>();
+      for (let offset = 0; ; offset += BOOKINGS_PAGE_SIZE) {
+        const page = await listBookings({ ...filters, limit: BOOKINGS_PAGE_SIZE, offset });
+        for (const b of page.items) byId.set(b.id, b);
+        if (page.items.length < BOOKINGS_PAGE_SIZE || offset + BOOKINGS_PAGE_SIZE >= page.total) {
+          return [...byId.values()];
+        }
+      }
+    },
 
     detail: (id: string) =>
       api.get<Booking>(`/bookings/${id}`).then((r) => r.data),
@@ -285,6 +314,9 @@ export const bookingsQK = {
     ["bookings", "testers", clubId, includeExpired] as const,
   bookingsList: (filters: BookingFiltersQuery) =>
     ["bookings", "list", JSON.stringify(filters)] as const,
+  /** Las de `listAll` (todas las páginas). Bajo «list»: se refresca con las listas. */
+  bookingsAll: (filters: BookingFiltersQuery) =>
+    ["bookings", "list", "all", JSON.stringify(filters)] as const,
   bookingDetail: (id: string) => ["bookings", "detail", id] as const,
   availability: (clubId: string, courtId: string, date: string, duration: number) =>
     ["bookings", "availability", clubId, courtId, date, duration] as const,

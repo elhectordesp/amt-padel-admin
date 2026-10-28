@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { activeParticipants } from "@/lib/utils/booking-participants";
 import type {
   Booking,
   BookingFiltersQuery,
@@ -39,6 +40,8 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
   CANCELLED: "Cancelada",
   WITHOUT_RESULT: "Sin resultado",
 };
+
+const UPCOMING_STATUSES: BookingStatus[] = ["PENDING_INVITES", "CONFIRMED", "IN_PROGRESS"];
 
 const STATUS_COLORS: Record<BookingStatus, string> = {
   PENDING_INVITES: "bg-amber-500/15 text-amber-500",
@@ -70,7 +73,8 @@ export default function BookingsListPage() {
       };
     }
     if (tab === "upcoming") {
-      return { ...base, fromDate: end.toISOString() };
+      // Las que siguen en pie: sin las canceladas
+      return { ...base, fromDate: end.toISOString(), statuses: UPCOMING_STATUSES };
     }
     if (tab === "history") {
       return { ...base, toDate: start.toISOString() };
@@ -225,7 +229,7 @@ function BookingRow({ booking: b }: { booking: Booking }) {
             {b.court?.name ?? "Pista?"} · {dateStr} · {timeStr}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            {b.participants?.length ?? 0} jugadores · {(b.priceCents / 100).toFixed(2)} €
+            {activeParticipants(b).length} jugadores · {(b.priceCents / 100).toFixed(2)} €
             {b.paidAt && <span> · pagada</span>}
           </div>
         </Link>

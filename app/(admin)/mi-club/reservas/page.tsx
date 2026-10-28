@@ -156,8 +156,8 @@ export default function MiClubReservasPage() {
         <NavCard
           href="/mi-club/reservas/calendario"
           icon={<Eye className="h-5 w-5" />}
-          title="Calendario semanal"
-          description="Vista general estilo Google Calendar"
+          title="Calendario"
+          description="Día por horas y pistas (crear desde un hueco) y resumen semanal"
         />
       </div>
     </div>

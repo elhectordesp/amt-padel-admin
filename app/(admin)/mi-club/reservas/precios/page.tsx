@@ -28,7 +28,9 @@ import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { centsToEurosText, eurosToCents } from "@/lib/utils/booking-price";
 import type { Court } from "@/types";
+import type { PriceSlotInput } from "@/types/bookings";
 
 const DAY_NAMES = ["", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -37,7 +39,9 @@ type Row = {
   startTime: string;
   endTime: string;
   durationMinutes: number;
-  priceCents: number;
+  // Tal cual se escribe: reescribirlo con dos decimales en cada pulsación
+  // dejaba «2.01» al teclear «25». Se pasa a céntimos al guardar
+  priceEur: string;
 };
 
 const EMPTY_ROW: Row = {
@@ -45,7 +49,7 @@ const EMPTY_ROW: Row = {
   startTime: "09:00",
   endTime: "23:00",
   durationMinutes: 90,
-  priceCents: 2000,
+  priceEur: "20",
 };
 
 export default function PreciosPage() {
@@ -182,7 +186,7 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
             startTime: s.startTime,
             endTime: s.endTime,
             durationMinutes: s.durationMinutes,
-            priceCents: s.priceCents,
+            priceEur: centsToEurosText(s.priceCents),
           }))
           .sort(
             (a, b) =>
@@ -197,8 +201,8 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const save = useMutation({
-    mutationFn: () =>
-      bookingsService.courtPricing.replace(clubId, courtId, { slots: rows }),
+    mutationFn: (slots: PriceSlotInput[]) =>
+      bookingsService.courtPricing.replace(clubId, courtId, { slots }),
     onSuccess: () => {
       toast.success("Precios guardados");
       qc.invalidateQueries({ queryKey: bookingsQK.courtPricing(clubId, courtId) });
@@ -211,6 +215,19 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
       toast.error(msg);
     },
   });
+
+  const saveRows = () => {
+    const slots: PriceSlotInput[] = [];
+    for (const [i, { priceEur, ...r }] of rows.entries()) {
+      const priceCents = eurosToCents(priceEur);
+      if (priceCents === null) {
+        toast.error(`Fila ${i + 1}: el precio no es válido (p. ej. 25 o 12,50).`);
+        return;
+      }
+      slots.push({ ...r, priceCents });
+    }
+    save.mutate(slots);
+  };
 
   const updateRow = (idx: number, patch: Partial<Row>) => {
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -250,13 +267,13 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Tabla de precios</h3>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={addRow}>
             <Plus className="h-3.5 w-3.5" /> Añadir fila
           </Button>
-          <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button size="sm" onClick={saveRows} disabled={save.isPending}>
             {save.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
@@ -274,8 +291,9 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
           Sin precios definidos. Añade filas con el botón de arriba.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
+        // En el móvil la tabla no cabe: se desplaza de lado en vez de cortarse
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Día</th>
@@ -334,16 +352,13 @@ function PricingTable({ clubId, courtId }: { clubId: string; courtId: string }) 
                   </td>
                   <td className="px-3 py-2">
                     <input
-                      type="number"
-                      step="0.5"
-                      min={0}
-                      value={(r.priceCents / 100).toFixed(2)}
-                      onChange={(e) =>
-                        updateRow(i, {
-                          priceCents: Math.round(parseFloat(e.target.value || "0") * 100),
-                        })
-                      }
-                      className="w-24 rounded border border-border bg-background px-2 py-1 text-sm"
+                      type="text"
+                      inputMode="decimal"
+                      value={r.priceEur}
+                      onChange={(e) => updateRow(i, { priceEur: e.target.value })}
+                      aria-label={`Precio de la fila ${i + 1} (€)`}
+                      aria-invalid={eurosToCents(r.priceEur) === null}
+                      className="w-24 rounded border border-border bg-background px-2 py-1 text-sm aria-[invalid=true]:border-destructive"
                     />
                   </td>
                   <td className="px-3 py-2 text-right">

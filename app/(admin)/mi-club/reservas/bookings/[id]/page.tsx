@@ -19,7 +19,9 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
+import { cancellationNoticeCount } from "@/lib/utils/booking-participants";
 import type {
   BookingMatchMode, BookingParticipant, BookingParticipantStatus,
   BookingPaymentMethod, BookingStatus,
@@ -81,6 +83,7 @@ export default function BookingDetailPage({
 }) {
   const { id } = use(params);
   const { role, clubId } = useRole();
+  const { data: me } = useMe();
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason] = useState("");
@@ -165,6 +168,8 @@ export default function BookingDetailPage({
   const timeStr = `${start.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} – ${end.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
   const isOpen = b.matchMode === "OPEN";
   const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
+  // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien cancela
+  const noticeCount = cancellationNoticeCount(b, me?.id);
 
   return (
     <div className="p-6 max-w-4xl">
@@ -323,7 +328,9 @@ export default function BookingDetailPage({
         <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
           <p className="text-sm font-medium text-destructive">¿Cancelar esta reserva?</p>
           <p className="text-xs text-muted-foreground">
-            Se notificará a los {b.participants?.length ?? 0} participantes por push y email.
+            {noticeCount === 0
+              ? "No hay jugadores con cuenta a los que avisar."
+              : `Se avisará por push y email a ${noticeCount === 1 ? "1 jugador" : `${noticeCount} jugadores`}.`}
           </p>
           <input
             type="text"

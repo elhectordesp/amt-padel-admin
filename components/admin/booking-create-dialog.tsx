@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { DEFAULT_TIME_ZONE, zonedDayKey } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
 import type { CreateBookingPayload } from "@/types/bookings";
 
@@ -30,28 +31,53 @@ interface Guest {
   guestName: string;
 }
 
+/** Con qué se abre el alta (desde el calendario: pista, día y hora del hueco). */
+export interface BookingCreateInitial {
+  courtId?: string;
+  date?: string; // "YYYY-MM-DD"
+  startsAt?: string; // ISO UTC del hueco elegido
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   clubId: string;
+  /** Se lee al montar: quien lo pase, que monte el diálogo al abrirlo. */
+  initial?: BookingCreateInitial;
 }
 
 const MAX_COMPANIONS = 3;
+// Lo que pide el back para el rango de un partido abierto (enteros, mín. 40)
+const MIN_LSPA = 40;
 
-/** "YYYY-MM-DD" de hoy en local. */
+/** "YYYY-MM-DD" de hoy en el club (las reservas van en hora de España). */
 function todayISODate() {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
+  return zonedDayKey(new Date(), DEFAULT_TIME_ZONE);
 }
 
-export function BookingCreateDialog({ open, onClose, clubId }: Props) {
+/** Error del rango LSPA (vacío = sin límite), o null si vale. */
+export function lspaRangeError(min: string, max: string): string | null {
+  const parse = (v: string) => (v.trim() ? Number(v) : null);
+  const lo = parse(min);
+  const hi = parse(max);
+  for (const v of [lo, hi]) {
+    if (v !== null && (!Number.isInteger(v) || v < MIN_LSPA)) {
+      return `El LSPA es un número entero de ${MIN_LSPA} o más.`;
+    }
+  }
+  if (lo !== null && hi !== null && lo > hi) {
+    return "El LSPA mínimo no puede ser mayor que el máximo.";
+  }
+  return null;
+}
+
+export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   const qc = useQueryClient();
 
-  const [courtId, setCourtId] = useState("");
-  const [date, setDate] = useState(todayISODate());
+  const [courtId, setCourtId] = useState(initial?.courtId ?? "");
+  const [date, setDate] = useState(initial?.date ?? todayISODate());
   const [duration, setDuration] = useState(90);
-  const [startsAt, setStartsAt] = useState(""); // ISO UTC del slot elegido
+  const [startsAt, setStartsAt] = useState(initial?.startsAt ?? ""); // ISO UTC del slot elegido
   const [mode, setMode] = useState<Mode>("PLAYERS");
   const [isCompetitive, setIsCompetitive] = useState(false);
   const [notes, setNotes] = useState("");
@@ -120,13 +146,20 @@ export function BookingCreateDialog({ open, onClose, clubId }: Props) {
     [availabilityQuery.data, courtId],
   );
 
-  // Resetea la hora elegida si desaparece de los huecos disponibles
+  // Resetea la hora elegida si desaparece de los huecos disponibles.
+  // Solo cuando la búsqueda de huecos ha terminado (si no, borraría un prefill
+  // válido mientras aún está cargando).
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (startsAt && !slots.some((s) => s.startsAt === startsAt)) {
+    if (
+      startsAt &&
+      availabilityQuery.isSuccess &&
+      !availabilityQuery.isFetching &&
+      !slots.some((s) => s.startsAt === startsAt)
+    ) {
       setStartsAt("");
     }
-  }, [slots, startsAt]);
+  }, [slots, startsAt, availabilityQuery.isSuccess, availabilityQuery.isFetching]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const create = useMutation({
@@ -225,7 +258,14 @@ export function BookingCreateDialog({ open, onClose, clubId }: Props) {
     };
   }
 
-  const canSubmit = !!courtId && !!startsAt && !create.isPending;
+  const lspaError = mode === "OPEN" ? lspaRangeError(minLspa, maxLspa) : null;
+  // La hora tiene que ser uno de los huecos libres de ahora (no basta con la
+  // que vino del calendario si aún se están buscando o ya no está libre)
+  const canSubmit =
+    !!courtId &&
+    slots.some((s) => s.startsAt === startsAt) &&
+    !lspaError &&
+    !create.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -261,10 +301,9 @@ export function BookingCreateDialog({ open, onClose, clubId }: Props) {
             <span className="text-xs text-muted-foreground">Pista</span>
             <select
               value={courtId}
-              onChange={(e) => {
-                setCourtId(e.target.value);
-                setStartsAt("");
-              }}
+              // La hora se queda si en esta pista también está libre (la
+              // quita el efecto de arriba si no)
+              onChange={(e) => setCourtId(e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
             >
               {courts.length === 0 && (
@@ -296,10 +335,9 @@ export function BookingCreateDialog({ open, onClose, clubId }: Props) {
               <span className="text-xs text-muted-foreground">Duración</span>
               <select
                 value={duration}
-                onChange={(e) => {
-                  setDuration(Number(e.target.value));
-                  setStartsAt("");
-                }}
+                // Igual que la pista: la hora elegida en el calendario se
+                // conserva si con esta duración sigue libre
+                onChange={(e) => setDuration(Number(e.target.value))}
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
               >
                 {durations.map((m) => (
@@ -373,9 +411,12 @@ export function BookingCreateDialog({ open, onClose, clubId }: Props) {
                 </span>
                 <input
                   type="number"
-                  step="0.1"
+                  inputMode="numeric"
+                  step={1}
+                  min={MIN_LSPA}
                   value={minLspa}
                   onChange={(e) => setMinLspa(e.target.value)}
+                  aria-invalid={!!lspaError}
                   className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                 />
               </label>
@@ -385,12 +426,20 @@ export function BookingCreateDialog({ open, onClose, clubId }: Props) {
                 </span>
                 <input
                   type="number"
-                  step="0.1"
+                  inputMode="numeric"
+                  step={1}
+                  min={MIN_LSPA}
                   value={maxLspa}
                   onChange={(e) => setMaxLspa(e.target.value)}
+                  aria-invalid={!!lspaError}
                   className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                 />
               </label>
+              {lspaError && (
+                <p role="alert" className="col-span-2 text-xs text-destructive">
+                  {lspaError}
+                </p>
+              )}
             </div>
           )}
 
