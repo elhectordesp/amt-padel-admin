@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel } from "@/lib/constants";
+import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel, trendLabel } from "@/lib/constants";
 import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
@@ -331,8 +331,8 @@ export default function JugadorDetailPage() {
                   })()}
                   <div className={`flex items-center gap-1 ${trendColor}`}>
                     <TrendIcon size={14} />
-                    {/* En español, como en el perfil público (salía «Stable») */}
-                    <span className="text-xs font-medium">{player.trend === "up" ? "Subiendo" : player.trend === "down" ? "Bajando" : "Estable"}</span>
+                    {/* En español (salía «Stable») */}
+                    <span className="text-xs font-medium">{trendLabel(player.trend)}</span>
                   </div>
                 </div>
 

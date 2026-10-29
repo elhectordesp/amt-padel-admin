@@ -55,27 +55,14 @@ export const REGISTRATION_STATUS_CONFIG: Record<RegistrationStatus, { label: str
   CANCELLED: { label: "Cancelado",  cls: "text-red-400 bg-red-400/10 border-red-400/30"          },
 };
 
+/** La tendencia de un jugador para un texto («Estable», no «stable»). */
+export function trendLabel(trend: string | null | undefined): string {
+  return trend === "up" ? "Subiendo" : trend === "down" ? "Bajando" : "Estable";
+}
+
 /** El estado de una inscripción para un texto («En espera», no «WAITLIST»). */
 export function registrationStatusLabel(status: string): string {
   return REGISTRATION_STATUS_CONFIG[status as RegistrationStatus]?.label ?? status;
-}
-
-/** La fase en la que está una categoría (`TournamentCategory.currentPhase`). */
-const CATEGORY_PHASE_LABEL: Record<string, string> = {
-  REGISTRATION: "Inscripciones",
-  GROUPS:       "Fase de grupos",
-  R32:          "Dieciseisavos",
-  R16:          "Octavos",
-  QF:           "Cuartos",
-  SF:           "Semifinales",
-  FINAL:        "Final",
-  CONSOLATION:  "Consolación",
-  FINISHED:     "Finalizada",
-};
-
-/** La fase de una categoría para un texto («Inscripciones», no «REGISTRATION»). */
-export function categoryPhaseLabel(phase: string | null | undefined): string {
-  return phase ? (CATEGORY_PHASE_LABEL[phase] ?? phase) : "—";
 }
 
 /** De qué es una entrada del historial (`AdminLog.resource`). */
@@ -160,17 +147,26 @@ export const SPA_TIER_COLOR: Record<string, string> = {
 };
 
 // Resolves whichever tier field is present and returns { label, color } for display
-export const MATCH_PHASE_LABEL: Record<string, string> = {
-  GROUPS: "Grupos",
-  R32:    "Dieciseisavos",
-  R16:    "Octavos",
-  QF:     "Cuartos",
-  SF:     "Semifinal",
-  FINAL:  "Final",
+/**
+ * Las fases con su nombre, una sola tabla: las de un partido y las de una
+ * categoría (`TournamentCategory.currentPhase`, que además puede estar en
+ * inscripciones o terminada). Salían los códigos («REGISTRATION»).
+ */
+const PHASE_LABEL: Record<string, string> = {
+  REGISTRATION: "Inscripciones",
+  GROUPS:       "Grupos",
+  R32:          "Dieciseisavos",
+  R16:          "Octavos",
+  QF:           "Cuartos",
+  SF:           "Semifinal",
+  FINAL:        "Final",
+  CONSOLATION:  "Consolación",
+  FINISHED:     "Finalizada",
 };
 
-export function phaseLabel(phase: string): string {
-  return MATCH_PHASE_LABEL[phase?.toUpperCase()] ?? phase ?? "—";
+/** La fase de un partido o de una categoría para un texto («Cuartos», no «QF»). */
+export function phaseLabel(phase: string | null | undefined): string {
+  return phase ? (PHASE_LABEL[phase.toUpperCase()] ?? phase) : "—";
 }
 
 export function resolveTier(spaTier?: string, tier?: TournamentTier): { label: string; color: string } | null {

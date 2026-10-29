@@ -44,7 +44,7 @@ function StatusBadge({ status }: { status: SupportStatus }) {
  */
 function senderName(user: SupportMessage["user"]): string {
   const full = [user.firstName, user.lastName].filter(Boolean).join(" ");
-  return full || user.name || "Jugador sin nombre";
+  return full || user.name;
 }
 
 function formatDate(iso: string) {

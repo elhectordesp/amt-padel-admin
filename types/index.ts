@@ -660,10 +660,11 @@ export interface SupportMessage {
   createdAt: string;
   user: {
     id:         string;
-    // Nombre y apellidos: un back anterior solo mandaba `name`
+    // Nombre y apellidos: un back anterior solo mandaba `name`, que el back
+    // manda siempre (User.name es obligatorio)
     firstName?: string | null;
     lastName?:  string | null;
-    name?:      string | null;
+    name:       string;
     // Puede no tener email (cuenta creada por el admin)
     email:      string | null;
   };

@@ -6,8 +6,9 @@ import { describe, it, expect } from "vitest";
 import {
   auditActionText,
   auditResourceLabel,
-  categoryPhaseLabel,
+  phaseLabel,
   registrationStatusLabel,
+  trendLabel,
 } from "@/lib/constants";
 
 describe("etiquetas de códigos del back", () => {
@@ -17,11 +18,23 @@ describe("etiquetas de códigos del back", () => {
     expect(registrationStatusLabel("RARO")).toBe("RARO");
   });
 
-  it("fase de una categoría", () => {
-    expect(categoryPhaseLabel("REGISTRATION")).toBe("Inscripciones");
-    expect(categoryPhaseLabel("SF")).toBe("Semifinales");
-    expect(categoryPhaseLabel("FINISHED")).toBe("Finalizada");
-    expect(categoryPhaseLabel(null)).toBe("—");
+  it("fase de un partido o de una categoría: una sola tabla", () => {
+    // Las de una categoría (salía «REGISTRATION» en el Cuadro)
+    expect(phaseLabel("REGISTRATION")).toBe("Inscripciones");
+    expect(phaseLabel("FINISHED")).toBe("Finalizada");
+    expect(phaseLabel("CONSOLATION")).toBe("Consolación");
+    // Las de un partido, también en minúsculas
+    expect(phaseLabel("SF")).toBe("Semifinal");
+    expect(phaseLabel("qf")).toBe("Cuartos");
+    expect(phaseLabel("RARA")).toBe("RARA");
+    expect(phaseLabel(null)).toBe("—");
+  });
+
+  it("tendencia de un jugador", () => {
+    expect(trendLabel("up")).toBe("Subiendo");
+    expect(trendLabel("down")).toBe("Bajando");
+    expect(trendLabel("stable")).toBe("Estable");
+    expect(trendLabel(undefined)).toBe("Estable");
   });
 
   it("recurso del historial", () => {
