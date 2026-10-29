@@ -71,6 +71,13 @@ export function BookingResultPanel({ booking: b }: { booking: Booking }) {
         </p>
       )}
 
+      {/* P. ej. una que el club apuntó ya empezada (fila 39) */}
+      {!b.isCompetitive && (
+        <p className="text-xs text-muted-foreground">
+          Partido no competitivo: el resultado se guarda, pero no puntúa en el SPA.
+        </p>
+      )}
+
       {result ? (
         <div className="space-y-1">
           <p className="text-base font-semibold tabular-nums">{formatScore(result)}</p>

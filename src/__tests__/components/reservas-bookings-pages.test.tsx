@@ -276,6 +276,18 @@ describe("Detalle de reserva — resultado (R2-7)", () => {
     expect(screen.getByRole("button", { name: /Poner resultado/ })).toBeInTheDocument();
   });
 
+  it("en una no competitiva (p. ej. apuntada ya empezada) dice que el resultado no puntúa, y se puede poner", async () => {
+    await renderDetail({ ...PLAYED, isCompetitive: false, result: null });
+    expect(await screen.findByText(/el resultado se guarda, pero no puntúa/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Poner resultado/ })).toBeInTheDocument();
+  });
+
+  it("en una competitiva no sale esa nota", async () => {
+    await renderDetail(PLAYED);
+    await screen.findByText("6-4 · 6-3");
+    expect(screen.queryByText(/no puntúa en el SPA/)).not.toBeInTheDocument();
+  });
+
   it("pasado el plazo de 30 días no se puede tocar", async () => {
     await renderDetail({ ...PLAYED, resultAdminDeadlineAt: "2020-01-01T00:00:00.000Z" });
     expect(await screen.findByText("6-4 · 6-3")).toBeInTheDocument();
