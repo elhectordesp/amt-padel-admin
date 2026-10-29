@@ -54,9 +54,11 @@ export function ResultModal({
     const max = Math.max(a, b), min = Math.min(a, b);
     return (max === 6 && min <= 4) || (max === 7 && min === 5) || (max === 7 && min === 6);
   }
+  // La misma regla que el back: se acaba en cuanto alguien llega a 10 con 2
+  // de diferencia (10-8 o menos) o, desde 9-9, al sacar 2 (11-9, 12-10…)
   function isValidSuperTiebreak(a: number, b: number) {
     const max = Math.max(a, b), min = Math.min(a, b);
-    return max >= 10 && max - min >= 2;
+    return (max === 10 && min <= 8) || (max > 10 && max - min === 2);
   }
 
   const handleSave = () => {
@@ -81,7 +83,7 @@ export function ResultModal({
       const isSuperTb = match.scoringFormat === "BEST_OF_2_SUPERTB" && setNum === 3;
       const valid = isSuperTb ? isValidSuperTiebreak(a, b) : isValidNormalSet(a, b);
       if (!valid) {
-        const hint = isSuperTb ? "supertiebreak: primero a 10 con dif. de 2 (ej: 10-8)" : "set normal: 6-x, 7-5 o 7-6";
+        const hint = isSuperTb ? "supertiebreak: primero a 10 con dif. de 2 (ej: 10-8, 11-9)" : "set normal: 6-x, 7-5 o 7-6";
         setValidationError(`Set ${setNum}: resultado inválido (${a}-${b}). Formato: ${hint}`);
         return;
       }
