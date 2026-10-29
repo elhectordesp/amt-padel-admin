@@ -22,7 +22,9 @@ describe("ReservasPage", () => {
     );
     const header = screen.getByTestId("header");
     const back = screen.getByRole("link", { name: "Volver a Reservas" });
-    const content = back.parentElement!;
+    const day = screen.getByRole("button", { name: "Día" });
+    const backLine = back.parentElement!;
+    const content = backLine.parentElement!;
 
     expect(header).toHaveTextContent("Calendario de reservas");
     expect(back).toHaveAttribute("href", "/mi-club/reservas");
@@ -30,8 +32,13 @@ describe("ReservasPage", () => {
     expect(header.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(content).not.toContainElement(header);
     // Ni comparte fila con los botones de la página
-    expect(content).toContainElement(screen.getByRole("button", { name: "Día" }));
-    expect(header.parentElement).not.toBe(screen.getByRole("button", { name: "Día" }).parentElement);
+    expect(content).toContainElement(day);
+    expect(header.parentElement).not.toBe(day.parentElement);
+    // El enlace va solo en su línea (un bloque para él): lo de en línea que
+    // venga detrás, como Día/Semana, no se le pega al lado
+    expect(backLine.tagName).toBe("DIV");
+    expect(backLine.children).toHaveLength(1);
+    expect(backLine).not.toContainElement(day);
   });
 
   it("el enlace de volver puede ir a otro sitio (el detalle vuelve al listado)", () => {
@@ -42,6 +49,6 @@ describe("ReservasPage", () => {
     );
     const back = screen.getByRole("link", { name: "Volver al listado" });
     expect(back).toHaveAttribute("href", "/mi-club/reservas/bookings");
-    expect(back.parentElement).toHaveClass("max-w-4xl");
+    expect(back.parentElement!.parentElement).toHaveClass("max-w-4xl");
   });
 });
