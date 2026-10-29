@@ -79,3 +79,69 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
     });
   }, 30_000);
 });
+
+describe("Crear torneo — tramos del paso 4 (P2-10)", () => {
+  /** Hasta el paso 4 de un torneo de un día, con su tramo de por defecto (16:00-21:00). */
+  async function goToStep4() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    fireEvent.change(input("name"), { target: { value: "Open de un día" } });
+    fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
+    fireEvent.change(input("endDate"), { target: { value: "2099-11-20" } });
+    next();
+    await screen.findByLabelText("Plazas", {}, WAIT);
+    next();
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+  }
+  const starts = () => screen.getAllByLabelText("Inicio del tramo") as HTMLInputElement[];
+  const ends = () => screen.getAllByLabelText("Fin del tramo") as HTMLInputElement[];
+  const OVERLAP = "Este bloque se solapa con otro de la misma jornada";
+
+  it("un tramo que pisa a otro que no es el de justo antes también se marca (09-14, 10-11 y 12-13)", async () => {
+    await goToStep4();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir tramo/ }, WAIT));
+    fireEvent.click(screen.getByRole("button", { name: /Añadir tramo/ }));
+    const set = (i: number, start: string, end: string) => {
+      fireEvent.change(starts()[i], { target: { value: start } });
+      fireEvent.change(ends()[i], { target: { value: end } });
+    };
+    set(0, "09:00", "14:00");
+    set(1, "10:00", "11:00");
+    set(2, "12:00", "13:00");
+    next();
+    // Uno por tramo que pisa: el de 12-13 no salía (solo se comparaba con el de antes)
+    await waitFor(() => expect(screen.getAllByText(OVERLAP)).toHaveLength(2), WAIT);
+  }, 30_000);
+
+  it("«Añadir tramo» no repite el de por defecto, y un solape se dice en el tramo", async () => {
+    await goToStep4();
+
+    // Antes añadía otro 16:00-21:00 y «Siguiente» no hacía nada sin decir por qué
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir tramo/ }, WAIT));
+    expect(starts().map((i) => i.value)).toEqual(["16:00", "09:00"]);
+    expect(ends().map((i) => i.value)).toEqual(["21:00", "14:00"]);
+
+    // Lo movemos encima del de la tarde: el error sale en ese tramo
+    fireEvent.change(starts()[1], { target: { value: "17:00" } });
+    fireEvent.change(ends()[1], { target: { value: "19:00" } });
+    next();
+    expect(await screen.findByText("Este bloque se solapa con otro de la misma jornada", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("Hay tramos que corregir: revisa los marcados en rojo.")).toBeInTheDocument();
+
+    // Al corregirlo, el error se va y se avanza
+    fireEvent.change(starts()[1], { target: { value: "10:00" } });
+    fireEvent.change(ends()[1], { target: { value: "13:00" } });
+    await waitFor(() => expect(screen.queryByText("Este bloque se solapa con otro de la misma jornada")).not.toBeInTheDocument(), WAIT);
+    next();
+    expect(await screen.findByRole("button", { name: /Crear torneo/ }, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("16:00-21:00, 10:00-13:00")).toBeInTheDocument();
+  }, 30_000);
+});

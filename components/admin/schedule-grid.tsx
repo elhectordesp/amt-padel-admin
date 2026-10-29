@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, RotateCcw, X, Plus } from "lucide-react";
 import {
   DndContext,
@@ -18,6 +18,7 @@ import {
 import { phaseLabel, GENDER_LABEL, CATEGORY_LABEL_SHORT } from "@/lib/constants";
 import { isByeMatch } from "@/lib/utils/match-status";
 import { dateOnlyKey, formatDayKey, tournamentTimeZone, zonedDayKey, zonedMinutes } from "@/lib/utils/time-zone";
+import { fitsInWindows, phaseDuration, windowsForDay } from "@/lib/utils/schedule-windows";
 import type { MatchResult, Gender, CategoryLevel } from "@/types";
 
 const ROW_H = 64; // px per 30-min slot
@@ -190,9 +191,13 @@ function DraggableMatch({
   );
 }
 
+/** Fondo de las celdas fuera de los tramos de la jornada (rayado tenue). */
+const OUTSIDE_BG = "repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 6px, transparent 6px 12px)";
+const OUTSIDE_TITLE = "Fuera de los tramos de la jornada";
+
 /** Celda de fondo: destino de drop y (si `canCreate`) click para crear partido. */
 function DroppableCell({
-  slotMin, court, colIdx, rowIdx, borderClass, canCreate, onCreate,
+  slotMin, court, colIdx, rowIdx, borderClass, canCreate, outside, onCreate,
 }: {
   slotMin:     number;
   court:       string;
@@ -200,6 +205,8 @@ function DroppableCell({
   rowIdx:      number;
   borderClass: string;
   canCreate:   boolean;
+  /** Fuera de los tramos de la jornada: se puede usar, pero se ve. */
+  outside:     boolean;
   onCreate:    (slotMin: number, court: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -213,8 +220,9 @@ function DroppableCell({
       className={`group border-r border-border ${borderClass} ${
         isOver ? "bg-[rgba(212,175,55,0.15)]" : canCreate ? "cursor-pointer hover:bg-secondary/40" : ""
       }`}
-      style={{ gridColumn: colIdx + 2, gridRow: rowIdx + 2 }}
-      title={canCreate ? "Crear partido aquí" : undefined}
+      style={{ gridColumn: colIdx + 2, gridRow: rowIdx + 2, backgroundImage: outside ? OUTSIDE_BG : undefined }}
+      title={canCreate ? (outside ? `Crear partido aquí (${OUTSIDE_TITLE.toLowerCase()})` : "Crear partido aquí") : outside ? OUTSIDE_TITLE : undefined}
+      data-outside={outside || undefined}
     >
       {canCreate && (
         <div className="h-full w-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -231,6 +239,13 @@ export function ScheduleGrid({
   // Días y horas en la zona del torneo: antes el día era el de UTC y la hora
   // la del navegador
   const tz = tournamentTimeZone(tournament);
+  // Lo que dura cada partido en la rejilla: los de eliminatoria pueden durar
+  // más (elimMatchDuration), como cuenta el back al buscar choques
+  const elimMatchDuration = tournament?.elimMatchDuration;
+  const matchMinutes = useCallback(
+    (m: MatchResult) => phaseDuration({ matchDuration: duration, elimMatchDuration }, m.phase),
+    [duration, elimMatchDuration],
+  );
   const matchesByDate = useMemo(() => {
     const map: Record<string, MatchResult[]> = {};
     for (const m of matches) {
@@ -327,7 +342,7 @@ export function ScheduleGrid({
     for (const m of dayMatches) {
       const t = zonedMinutes((m as any).date, tz);
       lo = Math.min(lo, t);
-      hi = Math.max(hi, t + duration);
+      hi = Math.max(hi, t + matchMinutes(m));
     }
     lo = Math.floor(lo / 30) * 30;
     hi = Math.ceil(hi / 30) * 30;
@@ -335,7 +350,17 @@ export function ScheduleGrid({
     const s: number[] = [];
     for (let t = lo; t < hi; t += 30) s.push(t);
     return { minMin: lo, slots: s };
-  }, [range, dayMatches, duration, tz]);
+  }, [range, dayMatches, tz, matchMinutes]);
+
+  // Los tramos de las jornadas de ese día (null: el torneo no tiene jornadas
+  // con fecha y no hay con qué comparar). Las celdas fuera se ven rayadas:
+  // antes se podía crear o mover un partido ahí sin ningún aviso
+  const windows = useMemo(
+    () => (effectiveDate ? windowsForDay(tournament?.schedule, effectiveDate) : null),
+    [tournament, effectiveDate],
+  );
+  const isOutside = (slotMin: number) => windows !== null && !fitsInWindows(windows, slotMin, 30);
+  const anyOutside = windows !== null && slots.some(isOutside);
 
   // Un bye no se juega: no está «sin programar» aunque no tenga hora.
   const unscheduled = matches.filter((m) => !m.date && !isByeMatch(m));
@@ -446,9 +471,12 @@ export function ScheduleGrid({
               Restablecer
             </button>
           )}
-          {interactive && (
+          {(interactive || anyOutside) && (
             <span className="ml-auto text-[11px] text-muted-foreground/50">
-              Arrastra para mover · click en hueco para crear
+              {[
+                interactive ? "Arrastra para mover · click en hueco para crear" : null,
+                anyOutside ? "Rayado: fuera de los tramos de la jornada" : null,
+              ].filter(Boolean).join(" · ")}
             </span>
           )}
         </div>
@@ -494,6 +522,7 @@ export function ScheduleGrid({
                 const borderClass = isHour
                   ? "border-t border-t-border/50"
                   : "border-t border-t-border/10";
+                const outside = isOutside(slotMin);
                 return [
                   <div
                     key={`t-${slotMin}`}
@@ -516,13 +545,16 @@ export function ScheduleGrid({
                         rowIdx={si}
                         borderClass={borderClass}
                         canCreate={canCreate && col !== "Sin pista"}
+                        outside={outside}
                         onCreate={handleCreate}
                       />
                     ) : (
                       <div
                         key={`cell-${slotMin}-${ci}`}
                         className={`border-r border-border ${borderClass}`}
-                        style={{ gridColumn: ci + 2, gridRow: si + 2 }}
+                        style={{ gridColumn: ci + 2, gridRow: si + 2, backgroundImage: outside ? OUTSIDE_BG : undefined }}
+                        title={outside ? OUTSIDE_TITLE : undefined}
+                        data-outside={outside || undefined}
                       />
                     ),
                   ),
@@ -533,7 +565,7 @@ export function ScheduleGrid({
               {dayMatches.map((m) => {
                 const matchMin = zonedMinutes((m as any).date, tz);
                 const rowStart = (matchMin - minMin) / 30 + 2;
-                const rowSpan  = Math.max(1, Math.ceil(duration / 30));
+                const rowSpan  = Math.max(1, Math.ceil(matchMinutes(m) / 30));
                 const court    = (m as any).court ?? "Sin pista";
                 const colIdx   = columns.indexOf(court);
                 if (colIdx < 0) return null;

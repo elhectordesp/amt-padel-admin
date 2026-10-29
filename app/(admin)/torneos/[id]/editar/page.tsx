@@ -567,6 +567,9 @@ export default function EditarTorneoPage() {
             slots: d.slots,
             maxUnavailableHours: d.maxUnavailableHours,
           }))}
+          // Las fechas guardadas: las jornadas se guardan aparte del formulario
+          startDate={dateOnlyKey(tournament.startDate)}
+          endDate={dateOnlyKey(tournament.endDate)}
           onSaved={() => qc.invalidateQueries({ queryKey: ["admin-tournament", id] })}
         />
       )}
