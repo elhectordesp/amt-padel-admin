@@ -47,6 +47,8 @@ export interface TournamentCategory {
 export interface TournamentScheduleDay {
   id:                      string;
   label:                   string;
+  // Medianoche UTC del día (dateOnlyKey); null en jornadas antiguas sin fecha
+  date?:                   string | null;
   slots:                   string[];
   maxUnavailableHours:     number;
   isFinal?:                boolean;
@@ -626,6 +628,8 @@ export interface AuditLogEntry {
   id:          string;
   adminName:   string;
   action:      string;
+  // La acción en español («reenvió la invitación a»); no viene con un back anterior
+  actionLabel?: string;
   resource:    string;
   resourceId?: string | null;
   details?:    Record<string, unknown> | null;
@@ -657,9 +661,13 @@ export interface SupportMessage {
   status:    SupportStatus;
   createdAt: string;
   user: {
-    id:        string;
-    firstName: string;
-    lastName:  string;
-    email:     string;
+    id:         string;
+    // Nombre y apellidos: un back anterior solo mandaba `name`, que el back
+    // manda siempre (User.name es obligatorio)
+    firstName?: string | null;
+    lastName?:  string | null;
+    name:       string;
+    // Puede no tener email (cuenta creada por el admin)
+    email:      string | null;
   };
 }

@@ -102,3 +102,34 @@ describe("JugadorDetailPage — «Editar datos» y el email de quien ya usa la a
     expect(playersMock.detail).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("JugadorDetailPage — textos sin códigos internos (P3-11)", () => {
+  const player = {
+    id: "p-1", name: "Ana López", email: "ana@x.com", gender: "F", level: "3a",
+    played: 0, wins: 0, points: 0, trend: "stable",
+    managedByAdmin: true, activationStatus: "invited",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    playersMock.detail.mockResolvedValue(player);
+    playersMock.categoryHistory.mockResolvedValue([]);
+    playersMock.registrations.mockResolvedValue([]);
+  });
+
+  it("la actividad admin es una frase en español y la tendencia dice «Estable»", async () => {
+    playersMock.auditLog.mockResolvedValue([
+      { id: "l-1", adminName: "Admin AMT", action: "INVITE_REENVIADO", actionLabel: "reenvió la invitación a", resource: "player", createdAt: "2026-10-20T10:00:00.000Z" },
+      // Un back anterior, sin etiqueta: el código legible
+      { id: "l-2", adminName: "Admin AMT", action: "ACCION_NUEVA", resource: "player", createdAt: "2026-10-20T09:00:00.000Z" },
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("Reenvió la invitación a Ana López")).toBeInTheDocument();
+    expect(screen.getByText("ACCION NUEVA")).toBeInTheDocument();
+    expect(screen.getAllByText("Jugador")).toHaveLength(2);
+    expect(screen.queryByText("INVITE REENVIADO")).not.toBeInTheDocument();
+    expect(screen.getByText("Estable")).toBeInTheDocument();
+    expect(screen.queryByText(/^stable$/i)).not.toBeInTheDocument();
+  });
+});

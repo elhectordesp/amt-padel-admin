@@ -5,6 +5,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
+import { ApiError } from "@/lib/api";
 
 const createManualMatch = vi.fn().mockResolvedValue({ matchId: "m-1" });
 vi.mock("@/lib/services/admin", () => ({
@@ -33,7 +35,12 @@ function renderDialog(timeZone: string, initialDate?: string) {
 }
 
 describe("MatchCreateDialog — hora en la zona del torneo", () => {
-  beforeEach(() => createManualMatch.mockClear());
+  // Con cuerpo: mockClear() devuelve el mock, y lo que devuelve un beforeEach
+  // vitest lo ejecuta al acabar el test como limpieza (una llamada de más a
+  // createManualMatch, que con un rechazo hacía fallar el test)
+  beforeEach(() => {
+    createManualMatch.mockClear();
+  });
 
   it("torneo de Canarias: las 10:00 escritas en noviembre son las 10:00 UTC", async () => {
     renderDialog("Atlantic/Canary");
@@ -57,5 +64,55 @@ describe("MatchCreateDialog — hora en la zona del torneo", () => {
     await waitFor(() => expect(createManualMatch).toHaveBeenCalledTimes(1));
     // Verano en Canarias: +1
     expect(createManualMatch.mock.calls[0][1].date).toBe("2026-07-01T09:00:00.000Z");
+  });
+});
+
+describe("MatchCreateDialog — fuera de los tramos y mensajes del back", () => {
+  beforeEach(() => {
+    createManualMatch.mockClear();
+  });
+
+  // Jornada del 20-nov de 16:00 a 21:00; los grupos duran 60 min y la eliminatoria 90
+  const SCHEDULE = [
+    { date: "2026-11-20T00:00:00.000Z", slots: ["16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"] },
+  ];
+  const renderWithSchedule = (initialDate: string) =>
+    render(
+      <MatchCreateDialog
+        open
+        onClose={vi.fn()}
+        tournamentId="t-1"
+        categoryId="c-1"
+        categoryLabel="Masc. 4ª"
+        groups={[]}
+        pairs={[]}
+        initialDate={initialDate}
+        timeZone="Europe/Madrid"
+        schedule={SCHEDULE}
+        durations={{ matchDuration: 60, elimMatchDuration: 90 }}
+      />,
+    );
+
+  it("el hueco de las 22:00 avisa de que está fuera de los tramos, y deja crearlo", async () => {
+    createManualMatch.mockResolvedValue({ matchId: "m-1" });
+    renderWithSchedule("2026-11-20T22:00");
+    expect(screen.getByRole("alert")).toHaveTextContent("Está fuera de los tramos de la jornada (16:00-21:00).");
+    fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
+    await waitFor(() => expect(createManualMatch).toHaveBeenCalledTimes(1));
+  });
+
+  it("un cuarto de 90 min a las 20:00 acabaría después del cierre; a las 19:00, sin aviso", () => {
+    renderWithSchedule("2026-11-20T20:00");
+    expect(screen.getByRole("alert")).toHaveTextContent("Acabaría a las 21:30, después del cierre del tramo (21:00).");
+    fireEvent.change(screen.getByLabelText("Hora (opcional)"), { target: { value: "2026-11-20T19:00" } });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("si el back lo rechaza, se ve su mensaje y no un genérico", async () => {
+    createManualMatch.mockRejectedValueOnce(new ApiError("Las dos parejas tienen que ser de esta categoría.", 400));
+    renderWithSchedule("2026-11-20T17:00");
+    fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Las dos parejas tienen que ser de esta categoría."));
+    expect(createManualMatch).toHaveBeenCalledTimes(1);
   });
 });

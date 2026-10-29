@@ -6,6 +6,7 @@ import { TournamentImageUploader } from "@/components/admin/tournament-image-upl
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
+import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
 import { hasDate } from "@/lib/utils/match-status";
 import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
@@ -260,7 +261,7 @@ export default function EditarTorneoPage() {
         <ConfirmModal
           open={!!pendingData}
           title="Cambio de estado"
-          description={`¿Confirmas cambiar el estado a "${pendingData?.status}"? Esta acción puede afectar a inscripciones y partidos en curso.`}
+          description={`¿Confirmas cambiar el estado a «${pendingData ? TOURNAMENT_STATUS_LABEL[pendingData.status] : ""}»? Esta acción puede afectar a inscripciones y partidos en curso.`}
           confirmLabel="Sí, cambiar estado"
           danger
           onConfirm={() => { if (pendingData) save.mutate(pendingData); setPendingData(null); }}
@@ -567,6 +568,9 @@ export default function EditarTorneoPage() {
             slots: d.slots,
             maxUnavailableHours: d.maxUnavailableHours,
           }))}
+          // Las fechas guardadas: las jornadas se guardan aparte del formulario
+          startDate={dateOnlyKey(tournament.startDate)}
+          endDate={dateOnlyKey(tournament.endDate)}
           onSaved={() => qc.invalidateQueries({ queryKey: ["admin-tournament", id] })}
         />
       )}
