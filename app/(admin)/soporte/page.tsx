@@ -38,6 +38,15 @@ function StatusBadge({ status }: { status: SupportStatus }) {
   );
 }
 
+/**
+ * Quién escribe: nombre y apellidos y, si no los tiene (cuentas antiguas o un
+ * back anterior, que solo mandaba `name`), su nombre completo.
+ */
+function senderName(user: SupportMessage["user"]): string {
+  const full = [user.firstName, user.lastName].filter(Boolean).join(" ");
+  return full || user.name;
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-ES", {
     day: "2-digit", month: "short", year: "numeric",
@@ -81,9 +90,9 @@ function MessageRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-zinc-200 truncate">
-              {msg.user.firstName} {msg.user.lastName}
+              {senderName(msg.user)}
             </span>
-            <span className="text-xs text-zinc-500">{msg.user.email}</span>
+            {msg.user.email && <span className="text-xs text-zinc-500">{msg.user.email}</span>}
             <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
               {SUBJECT_LABEL[msg.subject] ?? msg.subject}
             </span>
@@ -135,11 +144,11 @@ function MessageRow({
 // ── FAQ (admin help) ──────────────────────────────────────────────────────────
 
 const FAQS = [
-  { q: "¿Cómo cambio el estado de un torneo?",        a: "Ve a Torneos → selecciona el torneo → usa el botón de cambio de estado en la cabecera. Los estados siguen el flujo: Borrador → Inscripciones → Sorteo → Programado → En curso → Finalizado." },
-  { q: "¿Cómo genero el cuadro de eliminación?",      a: "Una vez el torneo está en estado 'Sorteo', entra en la categoría y usa el botón 'Generar sorteo'. El sistema asigna cabezas de serie automáticamente según el ranking." },
+  { q: "¿Cómo cambio el estado de un torneo?",        a: "El estado avanza solo con la preparación del torneo (en su ficha, pestaña Resumen): abrir las inscripciones lo pasa a Abierto; cerrarlas, a Sorteo; y «Publicar y avisar», a Programado. El flujo es Borrador → Abierto → Sorteo → Programado → En curso → Finalizado. Para corregirlo a mano: Editar → Avanzado." },
+  { q: "¿Cómo genero el cuadro de eliminación?",      a: "Con el torneo en Sorteo, ve a la pestaña Cuadro de su ficha, elige la categoría y usa «Generar cuadro». Si el torneo tiene activados los cabezas de serie, se reparten según el ranking SPA; si no, el sorteo es aleatorio." },
   { q: "¿Qué ocurre si cancelo una inscripción?",     a: "La plaza queda libre y el jugador en lista de espera más antiguo pasa automáticamente a pendiente. El jugador cancelado recibe una notificación push." },
   { q: "¿Cómo registro el resultado de un partido?",  a: "En la vista de partidos del torneo, haz clic en el partido → introduce los sets → guarda. El resultado se emite en tiempo real a todos los espectadores conectados." },
-  { q: "¿Puedo modificar el cuadro después de generarlo?", a: "No directamente desde el panel. Usa 'Regenerar sorteo' para volver a generar con las inscripciones actuales, o 'Regenerar eliminatoria' si solo necesitas rehacer la fase final." },
+  { q: "¿Puedo modificar el cuadro después de generarlo?", a: "Sí. En la pestaña Cuadro puedes mover parejas entre grupos, cambiar las parejas de un partido («Cambiar parejas»), crear o borrar partidos a mano y definir los cruces de la eliminatoria. También puedes rehacerlo entero con «Regenerar cuadro», o solo la fase final con «Regenerar eliminatorias». Si el cuadro está publicado, los grupos quedan bloqueados: ocúltalo antes de cambiarlos o fuerza el cambio." },
 ];
 
 function FaqSection() {
@@ -213,7 +222,7 @@ export default function Page() {
 
   const newCount = messages.filter((m) => m.status === "NEW").length;
   const found = messages.filter((m) =>
-    matchesSearch(search, m.user?.email, SUBJECT_LABEL[m.subject] ?? m.subject, m.message),
+    matchesSearch(search, senderName(m.user), m.user.email, SUBJECT_LABEL[m.subject] ?? m.subject, m.message),
   );
 
   return (
@@ -309,7 +318,7 @@ export default function Page() {
                   <input
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    placeholder="Buscar por email, asunto o texto..."
+                    placeholder="Buscar por nombre, email, asunto o texto..."
                     className="bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none w-full"
                   />
                 </div>

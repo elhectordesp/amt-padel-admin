@@ -9,6 +9,7 @@ import {
 import { Header } from "@/components/admin/header";
 import { Pagination, useKeepPageInRange } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
+import { auditResourceLabel } from "@/lib/constants";
 import { DEFAULT_PAGE_SIZE, type PageSize } from "@/lib/utils/pagination";
 
 interface Filters {
@@ -221,7 +222,7 @@ export default function HistorialPage() {
                                 {it.entityName ?? it.resourceId} <ExternalLink size={9} />
                               </Link>
                             ) : (
-                              <span className="text-muted-foreground">{it.entityName ?? it.resource}</span>
+                              <span className="text-muted-foreground">{it.entityName ?? auditResourceLabel(it.resource)}</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-[10px] text-muted-foreground font-mono max-w-md truncate">

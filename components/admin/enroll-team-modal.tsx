@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, levelLabel } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
 import { isClub, useRole } from "@/lib/use-role";
 import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
@@ -366,7 +366,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
             <div className="flex items-start gap-2 bg-yellow-400/10 border border-yellow-400/30 rounded-md px-3 py-2.5">
               <AlertTriangle size={14} className="text-yellow-400 mt-0.5 shrink-0" />
               <p className="text-xs text-yellow-400">
-                El torneo está en estado <strong>{tournament.status}</strong> (no OPEN). La inscripción se creará igualmente.
+                El torneo está <strong>«{TOURNAMENT_STATUS_LABEL[tournament.status] ?? tournament.status}»</strong>. La inscripción se creará igualmente.
               </p>
             </div>
           )}

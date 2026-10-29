@@ -16,7 +16,7 @@ import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
 import { compareWaitlist, groupByPair, paymentCsvColumns, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import { matchesSearch } from "@/lib/utils/search";
@@ -300,7 +300,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
       <ConfirmModal
         open={!!confirmBulk}
         title={`Cambiar estado en bloque (${confirmBulk?.count ?? 0} parejas)`}
-        description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a "${confirmBulk?.status ?? ""}"? Esta acción no se puede deshacer.`}
+        description={`¿Confirmas cambiar el estado de ${confirmBulk?.count ?? 0} inscripción(es) a «${registrationStatusLabel(confirmBulk?.status ?? "")}»? Esta acción no se puede deshacer.`}
         confirmLabel="Sí, confirmar"
         danger={confirmBulk?.status === "CANCELLED" || confirmBulk?.status === "REJECTED"}
         onConfirm={() => {
