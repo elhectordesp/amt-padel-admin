@@ -11,10 +11,8 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   Loader2,
   Plus,
@@ -26,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { DEFAULT_TIME_ZONE, formatInTimeZone, zonedDateTimeToIso } from "@/lib/utils/time-zone";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
@@ -46,20 +44,16 @@ export default function ActivacionPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Activación" />
+      <ReservasPage title="Activación">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <Header title="Activación + Testers" />
+    <ReservasPage title="Activación + Testers">
       <p className="mt-2 text-sm text-muted-foreground">
         Solicita la activación al equipo AMT cuando hayas terminado de configurar
         horarios, pistas, precios y extras. Una vez aprobado, podrás usar el
@@ -70,7 +64,7 @@ export default function ActivacionPage() {
         <LifecycleSection clubId={clubId} />
         <TestersSection clubId={clubId} />
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -203,6 +197,8 @@ function TestersSection({ clubId }: { clubId: string }) {
       setValidUntil("");
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["bookings", "testers", clubId] });
+      // El estado del módulo cuenta los testers activos («N tester(s)»)
+      qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) });
     },
     onError: showErr,
   });
@@ -213,6 +209,7 @@ function TestersSection({ clubId }: { clubId: string }) {
     onSuccess: () => {
       toast.success("Tester eliminado");
       qc.invalidateQueries({ queryKey: ["bookings", "testers", clubId] });
+      qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) });
     },
     onError: showErr,
   });
@@ -391,16 +388,5 @@ function PlayerSearch({ onPick }: { onPick: (p: Player) => void }) {
         </div>
       )}
     </div>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

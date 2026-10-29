@@ -9,10 +9,9 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
@@ -111,13 +110,11 @@ export default function ConfiguracionPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Configuración" />
+      <ReservasPage title="Configuración">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
@@ -125,10 +122,9 @@ export default function ConfiguracionPage() {
     setForm((prev) => (prev ? { ...prev, [key]: val } : prev));
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <div className="flex items-center justify-between">
-        <Header title="Configuración" />
+    <ReservasPage title="Configuración">
+      {/* Guardar, en el contenido: la cabecera del panel va sola y a todo el ancho */}
+      <div className="mt-2 flex justify-end">
         <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
           {save.isPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -251,7 +247,7 @@ export default function ConfiguracionPage() {
           />
         </Section>
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -314,16 +310,5 @@ function BoolField({
         {help && <p className="mt-0.5 text-xs text-muted-foreground">{help}</p>}
       </div>
     </div>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

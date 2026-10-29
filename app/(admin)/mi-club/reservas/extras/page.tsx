@@ -8,9 +8,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import {
-  ArrowLeft,
   Loader2,
   Plus,
   Save,
@@ -18,10 +16,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { formatCents } from "@/lib/utils/booking-price";
 import type { BookingExtra } from "@/types/bookings";
 
 type ExtraForm = {
@@ -89,22 +88,18 @@ export default function ExtrasPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Extras" />
+      <ReservasPage title="Extras">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   const extras = query.data ?? [];
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <Header title="Extras" />
+    <ReservasPage title="Extras">
       <p className="mt-2 text-sm text-muted-foreground">
         Extras que el club ofrece con cada reserva (luz, alquiler de palas,
         climatización). Pueden ser opcionales, obligatorios, o auto-aplicarse
@@ -206,7 +201,7 @@ export default function ExtrasPage() {
           ))
         )}
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -282,7 +277,7 @@ function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
               )}
             </div>
             <div className="mt-1 text-sm text-muted-foreground">
-              {(extra.priceCents / 100).toFixed(2)} €
+              {formatCents(extra.priceCents)}
               {extra.description && ` · ${extra.description}`}
             </div>
           </div>
@@ -386,16 +381,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       {children}
     </label>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

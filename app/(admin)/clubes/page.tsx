@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
-  LayoutGrid, X, Navigation, Search,
+  LayoutGrid, X, Navigation, Search, CalendarCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -16,6 +16,7 @@ import { matchesSearch } from "@/lib/utils/search";
 import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { ClubBookingsActivationModal } from "@/components/admin/club-bookings-activation-modal";
 import { adminService } from "@/lib/services/admin";
 import {
   clubStatus, toggleConfirm, type ClubStatus, type ClubToggle, type ToggleConfirm,
@@ -488,7 +489,14 @@ function PowerIcon({ active }: { active: boolean }) {
     : <PowerOff size={13} className="text-destructive" />;
 }
 
-function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) => void; onCourts: (c: Club) => void }) {
+function ClubCard({
+  club, onEdit, onCourts, onBookings,
+}: {
+  club: Club;
+  onEdit: (c: Club) => void;
+  onCourts: (c: Club) => void;
+  onBookings: (c: Club) => void;
+}) {
   const qc = useQueryClient();
   const status = clubStatus(club);
   const button = toggleConfirm(club);
@@ -577,6 +585,14 @@ function ClubCard({ club, onEdit, onCourts }: { club: Club; onEdit: (c: Club) =>
             <LayoutGrid size={13} />
           </button>
           <button
+            onClick={() => onBookings(club)}
+            className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            title="Reservas del club"
+            aria-label="Reservas del club"
+          >
+            <CalendarCheck size={13} />
+          </button>
+          <button
             onClick={() => onEdit(club)}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
             title="Editar club"
@@ -645,6 +661,7 @@ export default function ClubesPage() {
   const [modal,        setModal]        = useState<{ open: boolean; club?: Club }>({ open: false });
   const [quickInvite,  setQuickInvite]  = useState(false);
   const [courtsClub,   setCourtsClub]   = useState<Club | null>(null);
+  const [bookingsClub, setBookingsClub] = useState<Club | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [search,       setSearch]       = useState("");
   const { page, setPage, pageSize, setPageSize } = usePagination();
@@ -688,6 +705,12 @@ export default function ClubesPage() {
         <CourtsPanel
           club={courtsClub}
           onClose={() => setCourtsClub(null)}
+        />
+      )}
+      {bookingsClub && (
+        <ClubBookingsActivationModal
+          club={bookingsClub}
+          onClose={() => setBookingsClub(null)}
         />
       )}
 
@@ -780,6 +803,7 @@ export default function ClubesPage() {
                   club={club}
                   onEdit={(c) => setModal({ open: true, club: c })}
                   onCourts={(c) => setCourtsClub(c)}
+                  onBookings={(c) => setBookingsClub(c)}
                 />
               ))}
             </div>

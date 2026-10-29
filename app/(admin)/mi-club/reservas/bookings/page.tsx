@@ -11,18 +11,26 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Calendar,
   Loader2,
   Plus,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { dayRangeIso } from "@/lib/utils/booking-day-grid";
+import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
+import { formatCents } from "@/lib/utils/booking-price";
+import {
+  DEFAULT_TIME_ZONE,
+  formatInTimeZone,
+  zonedDayKey,
+  zonedTime,
+} from "@/lib/utils/time-zone";
 import type {
   Booking,
   BookingFiltersQuery,
@@ -30,6 +38,9 @@ import type {
 } from "@/types/bookings";
 
 type Tab = "today" | "upcoming" | "history" | "all";
+
+// Las reservas van en hora de España: el back las calcula en Europe/Madrid
+const TZ = DEFAULT_TIME_ZONE;
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   PENDING_INVITES: "Esperando invitaciones",
@@ -39,6 +50,8 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
   CANCELLED: "Cancelada",
   WITHOUT_RESULT: "Sin resultado",
 };
+
+const UPCOMING_STATUSES: BookingStatus[] = ["PENDING_INVITES", "CONFIRMED", "IN_PROGRESS"];
 
 const STATUS_COLORS: Record<BookingStatus, string> = {
   PENDING_INVITES: "bg-amber-500/15 text-amber-500",
@@ -56,24 +69,20 @@ export default function BookingsListPage() {
 
   const filters = useMemo<BookingFiltersQuery>(() => {
     if (!clubId) return {};
-    const today = new Date();
-    const start = new Date(today);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(today);
-    end.setHours(23, 59, 59, 999);
+    // «Hoy» es el día del club (Madrid, como el back y el calendario), no el
+    // del navegador
+    const todayKey = zonedDayKey(new Date(), TZ);
+    const today = dayRangeIso(todayKey, todayKey, TZ);
     const base: BookingFiltersQuery = { clubId, limit: 50 };
     if (tab === "today") {
-      return {
-        ...base,
-        fromDate: start.toISOString(),
-        toDate: end.toISOString(),
-      };
+      return { ...base, ...today };
     }
     if (tab === "upcoming") {
-      return { ...base, fromDate: end.toISOString() };
+      // Las que siguen en pie: sin las canceladas
+      return { ...base, fromDate: today.toDate, statuses: UPCOMING_STATUSES };
     }
     if (tab === "history") {
-      return { ...base, toDate: start.toISOString() };
+      return { ...base, toDate: today.fromDate };
     }
     return base;
   }, [clubId, tab]);
@@ -93,13 +102,11 @@ export default function BookingsListPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Reservas" />
+      <ReservasPage title="Reservas">
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
@@ -107,18 +114,17 @@ export default function BookingsListPage() {
   const total = query.data?.total ?? 0;
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <div className="flex items-start justify-between gap-3">
-        <Header title="Reservas" />
+    <ReservasPage title="Reservas">
+      {/* El botón va con el texto, no junto a la cabecera: en el móvil se cortaba */}
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">
+          Listado de reservas de tu club. Cancelar aquí notifica automáticamente
+          a los jugadores con el motivo opcional.
+        </p>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="h-3.5 w-3.5" /> Crear reserva
         </Button>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Listado de reservas de tu club. Cancelar aquí notifica automáticamente
-        a los jugadores con el motivo opcional.
-      </p>
 
       <BookingCreateDialog
         open={showCreate}
@@ -165,7 +171,7 @@ export default function BookingsListPage() {
           )}
         </div>
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -190,16 +196,9 @@ function BookingRow({ booking: b }: { booking: Booking }) {
     },
   });
 
-  const start = new Date(b.startsAt);
-  const end = new Date(b.endsAt);
-  const timeStr = `${start.toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })} - ${end.toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
-  const dateStr = start.toLocaleDateString("es-ES", {
+  // En hora del club, como el detalle y el calendario
+  const timeStr = `${zonedTime(b.startsAt, TZ)} - ${zonedTime(b.endsAt, TZ)}`;
+  const dateStr = formatInTimeZone(b.startsAt, TZ, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -225,7 +224,7 @@ function BookingRow({ booking: b }: { booking: Booking }) {
             {b.court?.name ?? "Pista?"} · {dateStr} · {timeStr}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            {b.participants?.length ?? 0} jugadores · {(b.priceCents / 100).toFixed(2)} €
+            {playersLabel(activeParticipants(b).length)} · {formatCents(b.priceCents)}
             {b.paidAt && <span> · pagada</span>}
           </div>
         </Link>
@@ -293,16 +292,5 @@ function TabButton({
     >
       {children}
     </button>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }

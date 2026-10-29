@@ -217,6 +217,15 @@ export function formatDayKey(dayKey: string, opts: Intl.DateTimeFormatOptions): 
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("es-ES", { ...opts, timeZone: "UTC" });
 }
 
+/**
+ * Una fecha para un texto con la primera letra en mayúscula y el resto como
+ * viene: «jueves, 29 de octubre» → «Jueves, 29 de octubre». Con `capitalize`
+ * de CSS salía «Jueves, 29 De Octubre».
+ */
+export function capitalizeFirst(text: string): string {
+  return text ? text.charAt(0).toLocaleUpperCase("es-ES") + text.slice(1) : text;
+}
+
 /** El día `days` días después de `dayKey` («YYYY-MM-DD»), sin zona ni cambio de hora. */
 export function addDaysToKey(dayKey: string, days: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);

@@ -26,6 +26,12 @@ const clubsMock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/services/admin", () => ({ adminService: { clubs: clubsMock } }));
 
+const activationMock = vi.hoisted(() => ({ state: vi.fn(), approve: vi.fn() }));
+vi.mock("@/lib/services/bookings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/bookings")>("@/lib/services/bookings");
+  return { ...actual, bookingsService: { activation: activationMock } };
+});
+
 import ClubesPage from "../../../app/(admin)/clubes/page";
 
 const base = { city: "Madrid", lat: 40.4, lng: -3.7, isAmtPartner: false, tournamentCount: 0 };
@@ -180,6 +186,42 @@ describe("ClubesPage — estado de los clubes", () => {
 
     await waitFor(() => expect(clubsMock.update).toHaveBeenCalledWith("c-viejo", { active: true }));
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Club activado"));
+  });
+});
+
+describe("ClubesPage — reservas del club (R1-7)", () => {
+  const state = (status: string, extra = {}) => ({
+    bookingEnabled: status !== "INACTIVE", bookingPublicAt: null, status, activeTesterCount: 0, ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.list.mockResolvedValue([ACTIVE]);
+  });
+
+  it("AMT aprueba la activación desde la tarjeta y el estado pasa a modo prueba", async () => {
+    activationMock.state.mockResolvedValueOnce(state("INACTIVE")).mockResolvedValue(state("TESTER_MODE"));
+    activationMock.approve.mockResolvedValue({});
+    renderPage();
+
+    fireEvent.click(within(await cardOf("Club Activo")).getByRole("button", { name: "Reservas del club" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reservas — Club Activo" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Aprobar activación" }));
+
+    await waitFor(() => expect(activationMock.approve).toHaveBeenCalledWith("c-activo"));
+    expect(await within(dialog).findByText(/Aprobado, en modo prueba/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Aprobar activación" })).not.toBeInTheDocument();
+    expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining("Activación aprobada"));
+  });
+
+  it("si ya es público no ofrece aprobar", async () => {
+    activationMock.state.mockResolvedValue(state("PUBLIC", { bookingPublicAt: "2026-10-01T10:00:00.000Z" }));
+    renderPage();
+
+    fireEvent.click(within(await cardOf("Club Activo")).getByRole("button", { name: "Reservas del club" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText(/Abierto al público desde el 1\/10\/26/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Aprobar activación" })).not.toBeInTheDocument();
   });
 });
 

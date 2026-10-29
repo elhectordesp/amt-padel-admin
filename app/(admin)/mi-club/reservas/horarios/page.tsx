@@ -10,16 +10,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   CalendarOff,
   Loader2,
   Plus,
   Save,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
 import { toast } from "sonner";
-import { Header } from "@/components/admin/header";
+import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
@@ -57,20 +55,16 @@ export default function HorariosPage() {
   }
   if (!isClub(role) || !clubId) {
     return (
-      <div className="p-6">
-        <BackLink />
-        <Header title="Horarios" />
+      <ReservasPage title="Horarios">
         <p className="mt-6 text-sm text-muted-foreground">
           Esta página requiere un usuario con rol CLUB y club asignado.
         </p>
-      </div>
+      </ReservasPage>
     );
   }
 
   return (
-    <div className="p-6">
-      <BackLink />
-      <Header title="Horarios" />
+    <ReservasPage title="Horarios">
       <p className="mt-2 text-sm text-muted-foreground">
         Define el horario de apertura semanal del club. Las excepciones por
         fecha (festivos, cierres puntuales) sobreescriben el horario regular.
@@ -80,7 +74,7 @@ export default function HorariosPage() {
         <WeeklyHoursSection clubId={clubId} />
         <ExceptionsSection clubId={clubId} />
       </div>
-    </div>
+    </ReservasPage>
   );
 }
 
@@ -495,16 +489,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       {children}
     </label>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/mi-club/reservas"
-      className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-3 w-3" /> Volver a Reservas
-    </Link>
   );
 }
