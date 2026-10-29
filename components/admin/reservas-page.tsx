@@ -30,12 +30,16 @@ export function ReservasPage({ title, back = RESERVAS_HOME, className, children 
     <>
       <Header title={title} />
       <div className={cn("p-4 sm:p-6", className)}>
-        <Link
-          href={back.href}
-          className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" /> {back.label}
-        </Link>
+        {/* En su propia línea: si el contenido empieza con algo en línea
+            (Día/Semana del calendario), no se le pega al lado */}
+        <div>
+          <Link
+            href={back.href}
+            className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" /> {back.label}
+          </Link>
+        </div>
         {children}
       </div>
     </>
