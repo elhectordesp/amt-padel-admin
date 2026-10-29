@@ -75,11 +75,11 @@ export default function BookingsListPage() {
     const today = dayRangeIso(todayKey, todayKey, TZ);
     const base: BookingFiltersQuery = { clubId, limit: 50 };
     if (tab === "today") {
-      return { ...base, ...today };
+      return { ...base, ...today, order: "asc" };
     }
     if (tab === "upcoming") {
-      // Las que siguen en pie: sin las canceladas
-      return { ...base, fromDate: today.toDate, statuses: UPCOMING_STATUSES };
+      // Las que siguen en pie, de la más cercana a la más lejana
+      return { ...base, fromDate: today.toDate, statuses: UPCOMING_STATUSES, order: "asc" };
     }
     if (tab === "history") {
       return { ...base, toDate: today.fromDate };
