@@ -43,3 +43,18 @@ const CHANGED_MEANWHILE = new Set([
 export function invitationsChangedMeanwhile(err: unknown): boolean {
   return err instanceof ApiError && !!err.code && CHANGED_MEANWHILE.has(err.code);
 }
+
+/**
+ * Al invitar o reenviar, la invitación quedó creada pero el email no salió
+ * (el enlace anterior, si lo había, ya no vale): hay que reenviarla.
+ */
+export function invitationEmailFailed(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "INVITE_EMAIL_FAILED";
+}
+
+/** Lo que se enseña de un error al invitar, reenviar o anular. */
+export function invitationErrorMessage(err: Error): string {
+  return invitationEmailFailed(err)
+    ? "La invitación está creada, pero el email no ha salido. Reenvíala desde la lista en unos minutos."
+    : err.message;
+}

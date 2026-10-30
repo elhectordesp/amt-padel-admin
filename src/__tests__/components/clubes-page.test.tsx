@@ -377,6 +377,34 @@ describe("ClubesPage — administradores del club (L25)", () => {
     expect(clubsMock.admins).toHaveBeenCalledTimes(2);
   });
 
+  it("Invitar admin con el email caído: dice que quedó creada y que se puede reenviar, y recarga la lista", async () => {
+    clubsMock.inviteAdmin.mockRejectedValue(
+      new ApiError("No se pudo enviar el email de invitación. Inténtalo de nuevo en unos minutos.", 503, "INVITE_EMAIL_FAILED"),
+    );
+    clubsMock.admins
+      .mockResolvedValueOnce({ admins: [ADMIN], invitations: [PENDING] })
+      .mockResolvedValue({
+        admins: [ADMIN],
+        invitations: [{ ...PENDING, id: "inv-9", email: "nuevo@club.com" }, PENDING],
+      });
+    renderPage();
+    const dialog = await openAdmins();
+    const input = await within(dialog).findByLabelText("Invitar admin");
+
+    fireEvent.change(input, { target: { value: "nuevo@club.com" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Invitar" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(
+        "La invitación está creada, pero el email no ha salido. Reenvíala desde la lista en unos minutos.",
+      ),
+    );
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(await within(dialog).findByRole("button", { name: "Reenviar la invitación a nuevo@club.com" })).toBeEnabled();
+    expect(clubsMock.admins).toHaveBeenCalledTimes(2);
+    expect(input).toHaveValue("");
+  });
+
   it("club desactivado: no deja invitar ni reenviar (el back lo rechazaría), sí anular", async () => {
     clubsMock.list.mockResolvedValue([ACTIVE, OFF]);
     renderPage();

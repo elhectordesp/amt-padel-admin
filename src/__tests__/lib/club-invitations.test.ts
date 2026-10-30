@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { ApiError } from "../../../lib/api";
 import {
-  adminSinceLabel, clubAdminsQueryKey, invitationDetail,
-  invitationStatusLabel, invitationsChangedMeanwhile,
+  adminSinceLabel, clubAdminsQueryKey, invitationDetail, invitationEmailFailed,
+  invitationErrorMessage, invitationStatusLabel, invitationsChangedMeanwhile,
 } from "../../../lib/utils/club-invitations";
 
 describe("invitationStatusLabel", () => {
@@ -63,6 +63,23 @@ describe("invitationsChangedMeanwhile", () => {
     expect(invitationsChangedMeanwhile(new ApiError("Registrado", 409, "CLUB_INVITATION_EMAIL_TAKEN"))).toBe(false);
     expect(invitationsChangedMeanwhile(new ApiError("Error de conexión"))).toBe(false);
     expect(invitationsChangedMeanwhile(new Error("CLUB_INVITATION_NOT_FOUND"))).toBe(false);
+  });
+});
+
+describe("invitationErrorMessage", () => {
+  it("si el email no salió, dice que la invitación quedó creada y que se puede reenviar", () => {
+    const err = new ApiError("No se pudo enviar el email de invitación.", 503, "INVITE_EMAIL_FAILED");
+    expect(invitationEmailFailed(err)).toBe(true);
+    expect(invitationErrorMessage(err)).toBe(
+      "La invitación está creada, pero el email no ha salido. Reenvíala desde la lista en unos minutos.",
+    );
+  });
+
+  it("los demás, el mensaje del back", () => {
+    const err = new ApiError("Ese email ya está registrado en la plataforma", 409, "CLUB_INVITATION_EMAIL_TAKEN");
+    expect(invitationEmailFailed(err)).toBe(false);
+    expect(invitationErrorMessage(err)).toBe("Ese email ya está registrado en la plataforma");
+    expect(invitationEmailFailed(new Error("INVITE_EMAIL_FAILED"))).toBe(false);
   });
 });
 

@@ -15,8 +15,8 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { clubStatus } from "@/lib/utils/club-status";
 import {
-  adminSinceLabel, clubAdminsQueryKey, invitationDetail,
-  invitationStatusLabel, invitationsChangedMeanwhile,
+  adminSinceLabel, clubAdminsQueryKey, invitationDetail, invitationEmailFailed,
+  invitationErrorMessage, invitationStatusLabel, invitationsChangedMeanwhile,
 } from "@/lib/utils/club-invitations";
 import type { Club, ClubAdminInvitation } from "@/types";
 
@@ -46,7 +46,7 @@ export function ClubAdminsModal({
   const refresh = () => qc.invalidateQueries({ queryKey });
 
   const onError = (err: Error) => {
-    toast.error(err.message);
+    toast.error(invitationErrorMessage(err));
     if (invitationsChangedMeanwhile(err)) refresh();
   };
 
@@ -57,7 +57,11 @@ export function ClubAdminsModal({
       setEmail("");
       toast.success(`Invitación enviada a ${to}`);
     },
-    onError,
+    onError: (err: Error) => {
+      onError(err);
+      // Quedó creada: ya sale en la lista para reenviarla
+      if (invitationEmailFailed(err)) setEmail("");
+    },
   });
 
   // La invitación va en las variables: el modal de confirmación se cierra
