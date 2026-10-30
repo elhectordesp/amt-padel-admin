@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2, Plus, Pencil, Power, PowerOff, Globe, AtSign,
   MapPin, Phone, Mail, Image as ImageIcon, Loader2, Trophy,
-  LayoutGrid, X, Navigation, Search, CalendarCheck,
+  LayoutGrid, X, Navigation, Search, CalendarCheck, Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
@@ -17,6 +17,7 @@ import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ClubBookingsActivationModal } from "@/components/admin/club-bookings-activation-modal";
+import { ClubAdminsModal } from "@/components/admin/club-admins-modal";
 import { adminService } from "@/lib/services/admin";
 import {
   clubStatus, toggleConfirm, type ClubStatus, type ClubToggle, type ToggleConfirm,
@@ -490,12 +491,13 @@ function PowerIcon({ active }: { active: boolean }) {
 }
 
 function ClubCard({
-  club, onEdit, onCourts, onBookings,
+  club, onEdit, onCourts, onBookings, onAdmins,
 }: {
   club: Club;
   onEdit: (c: Club) => void;
   onCourts: (c: Club) => void;
   onBookings: (c: Club) => void;
+  onAdmins: (c: Club) => void;
 }) {
   const qc = useQueryClient();
   const status = clubStatus(club);
@@ -593,6 +595,14 @@ function ClubCard({
             <CalendarCheck size={13} />
           </button>
           <button
+            onClick={() => onAdmins(club)}
+            className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+            title="Administradores del club"
+            aria-label="Administradores del club"
+          >
+            <Users size={13} />
+          </button>
+          <button
             onClick={() => onEdit(club)}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
             title="Editar club"
@@ -662,6 +672,7 @@ export default function ClubesPage() {
   const [quickInvite,  setQuickInvite]  = useState(false);
   const [courtsClub,   setCourtsClub]   = useState<Club | null>(null);
   const [bookingsClub, setBookingsClub] = useState<Club | null>(null);
+  const [adminsClub,   setAdminsClub]   = useState<Club | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [search,       setSearch]       = useState("");
   const { page, setPage, pageSize, setPageSize } = usePagination();
@@ -711,6 +722,12 @@ export default function ClubesPage() {
         <ClubBookingsActivationModal
           club={bookingsClub}
           onClose={() => setBookingsClub(null)}
+        />
+      )}
+      {adminsClub && (
+        <ClubAdminsModal
+          club={adminsClub}
+          onClose={() => setAdminsClub(null)}
         />
       )}
 
@@ -804,6 +821,7 @@ export default function ClubesPage() {
                   onEdit={(c) => setModal({ open: true, club: c })}
                   onCourts={(c) => setCourtsClub(c)}
                   onBookings={(c) => setBookingsClub(c)}
+                  onAdmins={(c) => setAdminsClub(c)}
                 />
               ))}
             </div>

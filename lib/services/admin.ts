@@ -8,7 +8,7 @@ import type {
   CreatePlayerPayload, UpdatePlayerPayload,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
-  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember,
+  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember, ClubAdmins,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
@@ -640,6 +640,16 @@ export const adminService = {
         "/admin/clubs/quick-invite",
         { email },
       ).then((r) => r.data),
+    // Sus admins y sus invitaciones sin aceptar (solo AMT). Invitar o
+    // reenviar deja un solo enlace vivo por persona: el anterior deja de valer
+    admins: (clubId: string) =>
+      api.get<ClubAdmins>(`/admin/clubs/${clubId}/admins`).then((r) => r.data),
+    inviteAdmin: (clubId: string, email: string) =>
+      api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/admins/invite`, { email }).then((r) => r.data),
+    resendInvitation: (clubId: string, invitationId: string) =>
+      api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/invitations/${invitationId}/resend`).then((r) => r.data),
+    revokeInvitation: (clubId: string, invitationId: string) =>
+      api.delete(`/admin/clubs/${clubId}/invitations/${invitationId}`).then((r) => r.data),
   },
 
   courts: {

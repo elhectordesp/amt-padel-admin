@@ -622,6 +622,34 @@ export interface AdminMember {
   pendingActivation?: boolean;
 }
 
+/** Un admin de un club (cuenta CLUB), en la sección Administradores del club. */
+export interface ClubAdminAccount {
+  id:        string;
+  name:      string;
+  email:     string | null;
+  createdAt: string;
+}
+
+/**
+ * Invitación sin aceptar a administrar un club. Su estado lo calcula el back:
+ * `pending` mientras el enlace vale, `expired` cuando ya no.
+ */
+export interface ClubAdminInvitation {
+  id:        string;
+  email:     string;
+  createdAt: string;
+  expiresAt: string;
+  status:    "pending" | "expired";
+  // Quién la mandó (null: ya no está)
+  invitedBy: { id: string; name: string } | null;
+}
+
+/** GET /admin/clubs/:clubId/admins (solo AMT). */
+export interface ClubAdmins {
+  admins:      ClubAdminAccount[];
+  invitations: ClubAdminInvitation[];
+}
+
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";
 
 export interface AuditLogEntry {
