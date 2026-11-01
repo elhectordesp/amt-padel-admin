@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type KeyboardEvent } from "react";
-import { Copy, Tv2 } from "lucide-react";
+import { Share2, Tv2 } from "lucide-react";
 import { toast } from "sonner";
 
 const DRAFT_HINT = "Publica el torneo para compartirlo";
@@ -68,7 +68,8 @@ export function PublicViewerActions({
         onClick={isDraft ? explain : onShare}
         className={`${BUTTON} ${state}`}
       >
-        <Copy size={14} />
+        {/* Compartir, no Copy: en el móvil, sin texto, era el mismo icono que «Duplicar torneo» */}
+        <Share2 size={14} />
         <span className="hidden sm:inline">Visor público</span>
       </button>
       {isDraft && (

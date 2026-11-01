@@ -409,12 +409,13 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                   <option value="all">Todas las categorías</option>
                   {availableCategories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.gender === "M" ? "Masc." : "Fem."} {c.level}
+                      {c.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[c.level as CategoryLevel] ?? c.level}
                     </option>
                   ))}
                 </select>
               )}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border flex-1 max-w-xs">
+              {/* En el móvil, en su propia línea: junto al selector y al botón se quedaba en «Bu» */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary border border-border w-full sm:w-auto sm:flex-1 sm:max-w-xs">
                 <Search size={14} className="text-muted-foreground shrink-0" />
                 <input
                   value={search}
@@ -433,8 +434,9 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                   "Email J2":       p.primary.partner?.email ?? "",
                   "Nivel SPA J2":   p.primary.partner?.categoryLevel ?? "",
                   "SPA J2":         p.primary.partner?.spaPoints ?? "",
-                  "Categoría":      `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${p.primary.category.level}`,
-                  "Estado":         p.status,
+                  "Categoría":      `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${CATEGORY_LABEL[p.primary.category.level as CategoryLevel] ?? p.primary.category.level}`,
+                  // Por su nombre: salía el código («WAITLIST»)
+                  "Estado":         STATUS_CFG[p.status]?.label ?? p.status,
                   ...paymentCsvColumns(p.primary),
                   "Fecha":          new Date(p.primary.createdAt).toLocaleDateString("es-ES"),
                 })))}

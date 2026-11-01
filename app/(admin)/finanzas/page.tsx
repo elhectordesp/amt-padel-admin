@@ -140,11 +140,15 @@ export default function FinanzasPage() {
   ].filter((i) => i.value > 0);
 
   const exportCsv = () => {
+    // Números (a céntimos), no texto formateado: así el CSV los escribe con
+    // coma decimal y Excel los suma; un negativo en texto empezaba por «-» y
+    // salía neutralizado como si fuera una fórmula
+    const cents = (n: number) => Math.round(n * 100) / 100;
     const line = (concept: string, v: VatSplit, sign = 1) => ({
       Concepto:      concept,
-      "Con IVA (€)": fmt(sign * v.withVat),
-      "Sin IVA (€)": fmt(sign * v.withoutVat),
-      "IVA (€)":     fmt(sign * v.vat),
+      "Con IVA (€)": cents(sign * v.withVat),
+      "Sin IVA (€)": cents(sign * v.withoutVat),
+      "IVA (€)":     cents(sign * v.vat),
     });
     downloadCsv(`finanzas-${period}`, [
       ...tableRows.map((r) => line(r.concept, rowVat(r.withVat))),

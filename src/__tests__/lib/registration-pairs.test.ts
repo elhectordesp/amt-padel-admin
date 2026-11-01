@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
-import { compareWaitlist, groupByPair, pairKeyOf, pairPlayers, paymentCsvColumns, playerPayment, waitlistPositions } from '../../../lib/utils/registration-pairs';
+import { compareWaitlist, groupByPair, pairKeyOf, pairPlayers, pairsSummary, paymentCsvColumns, playerPayment, waitlistPositions } from '../../../lib/utils/registration-pairs';
 import { needsForce } from '../../../lib/utils/registration-force';
 import { ApiError } from '../../../lib/api';
 
@@ -191,5 +191,20 @@ describe('needsForce', () => {
     expect(needsForce(new ApiError('cola', 409, 'CATEGORY_WAITLIST_AHEAD'))).toBe(true);
     expect(needsForce(new ApiError('ya inscrito', 409, 'ALREADY_REGISTERED'))).toBe(false);
     expect(needsForce(new Error('red'))).toBe(false);
+  });
+});
+
+describe('pairsSummary — como el resumen de la ficha', () => {
+  const pairs = (...statuses: string[]) => statuses.map((status) => ({ status }) as any);
+
+  it('las que ocupan plaza, y aparte las que esperan y las canceladas', () => {
+    expect(pairsSummary(pairs('CONFIRMED', 'PENDING', 'WAITLIST', 'CANCELLED', 'CANCELLED'))).toBe(
+      '2 parejas inscritas (+1 en espera) · 2 canceladas',
+    );
+  });
+
+  it('en singular y sin extras', () => {
+    expect(pairsSummary(pairs('CONFIRMED'))).toBe('1 pareja inscrita');
+    expect(pairsSummary([])).toBe('0 parejas inscritas');
   });
 });

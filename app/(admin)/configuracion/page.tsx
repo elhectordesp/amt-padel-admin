@@ -52,9 +52,11 @@ function Section({
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-border last:border-0">
+    // flex-wrap y max-w-full: en el móvil el campo baja bajo la etiqueta en vez
+    // de salirse de la tarjeta (los de w-56 y w-72)
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 py-2.5 border-b border-border last:border-0">
       <span className="text-sm text-muted-foreground flex-1">{label}</span>
-      <div className="flex items-center gap-2">{children}</div>
+      <div className="flex items-center gap-2 max-w-full">{children}</div>
     </div>
   );
 }
@@ -68,7 +70,7 @@ function TextInput({ value, onChange, placeholder, type = "text", className = ""
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className={`h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] ${className || "w-56"}`}
+      className={`h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] max-w-full ${className || "w-56"}`}
     />
   );
 }
@@ -611,7 +613,7 @@ function TabComunicaciones() {
             value={testTo}
             onChange={(e) => setTestTo(e.target.value)}
             placeholder="Email destino (opcional)"
-            className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37] w-64"
+            className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37] w-full sm:w-64"
           />
           <button
             onClick={() => testEmail.mutate()}

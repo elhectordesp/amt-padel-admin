@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { fetchPublicApi, type PublicApiResult } from "@/lib/utils/public-api";
 
 export const metadata: Metadata = {
   title:       "Ranking · AMT Pádel",
@@ -25,39 +25,36 @@ const LEVEL_COLOR: Record<string, string> = {
   iniciacion: "#607D8B",
 };
 
-async function getPublicRanking(gender: string) {
-  try {
-    const res = await fetch(`${API_URL}/ranking/public?gender=${gender}&type=spa&limit=100`, {
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return Array.isArray(json) ? json : (json.data ?? []);
-  } catch {
-    return [];
-  }
-}
-
-function TrendIcon({ trend }: { trend: string }) {
-  if (trend === "up")   return <TrendingUp   size={12} className="text-green-400" />;
-  if (trend === "down") return <TrendingDown  size={12} className="text-red-400" />;
-  return <Minus size={12} className="text-zinc-600" />;
-}
-
+/**
+ * Un jugador del ranking público: lo que da el back sin sesión (id para
+ * enlazar su perfil, nombre, categoría, SPA y puesto), lo que cubre la
+ * política de privacidad (decisión del 28-10). Ni pareja ni partidos.
+ */
 interface RankingPlayer {
   id: string;
   name: string;
-  level?: string;
-  categoryLevel?: string;
+  level?: string | null;
   spaPoints?: number | string | null;
   globalRank?: number;
-  partner?: string;
-  played?: number;
-  wins?: number;
-  trend?: string;
 }
 
-function RankingTable({ players }: { players: RankingPlayer[] }) {
+// Un 429 (límite de peticiones) o un 5xx se enseñan como error: antes salían
+// como «Sin datos disponibles», igual que un ranking vacío
+function getPublicRanking(gender: string): Promise<PublicApiResult<RankingPlayer[]>> {
+  return fetchPublicApi<RankingPlayer[]>(`${API_URL}/ranking/public?gender=${gender}&type=spa&limit=100`, {
+    next: { revalidate: 300 },
+  });
+}
+
+function RankingTable({ result }: { result: PublicApiResult<RankingPlayer[]> }) {
+  if (result.kind !== "ok") {
+    return (
+      <p role="alert" className="text-center text-zinc-400 py-12 text-sm">
+        No se ha podido cargar el ranking. Vuelve a intentarlo en unos minutos.
+      </p>
+    );
+  }
+  const players = result.data;
   if (players.length === 0) {
     return <p className="text-center text-zinc-500 py-12 text-sm">Sin datos disponibles</p>;
   }
@@ -70,14 +67,11 @@ function RankingTable({ players }: { players: RankingPlayer[] }) {
             <th className="px-4 py-3 text-left">Jugador</th>
             <th className="px-4 py-3 text-center">Cat.</th>
             <th className="px-4 py-3 text-center">SPA</th>
-            <th className="px-4 py-3 text-center">PJ</th>
-            <th className="px-4 py-3 text-center">PG</th>
-            <th className="px-4 py-3 text-center w-8"></th>
           </tr>
         </thead>
         <tbody>
           {players.map((p, i) => {
-            const color = LEVEL_COLOR[p.level ?? p.categoryLevel ?? ""] ?? "#D4AF37";
+            const color = LEVEL_COLOR[p.level ?? ""] ?? "#D4AF37";
             const spa   = p.spaPoints != null ? Math.round(Number(p.spaPoints)) : null;
             const rank  = p.globalRank ?? i + 1;
             return (
@@ -97,25 +91,17 @@ function RankingTable({ players }: { players: RankingPlayer[] }) {
                   >
                     {p.name}
                   </Link>
-                  {p.partner && (
-                    <span className="block text-xs text-zinc-500">{p.partner}</span>
-                  )}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span
                     className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border"
                     style={{ color, borderColor: color + "66", backgroundColor: color + "22" }}
                   >
-                    {CATEGORY_LABEL[p.level ?? p.categoryLevel ?? ""] ?? p.level}
+                    {CATEGORY_LABEL[p.level ?? ""] ?? p.level ?? "—"}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center font-mono font-semibold text-[#D4AF37]">
                   {spa ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-center text-zinc-400">{p.played ?? "—"}</td>
-                <td className="px-4 py-3 text-center text-zinc-400">{p.wins ?? "—"}</td>
-                <td className="px-4 py-3 text-center">
-                  <TrendIcon trend={p.trend ?? "stable"} />
                 </td>
               </tr>
             );
@@ -124,6 +110,11 @@ function RankingTable({ players }: { players: RankingPlayer[] }) {
       </table>
     </div>
   );
+}
+
+/** «(12 jugadores)», o nada si no se pudo cargar. */
+function countLabel(result: PublicApiResult<RankingPlayer[]>, noun: string) {
+  return result.kind === "ok" ? `(${result.data.length} ${noun})` : "";
 }
 
 export default async function PublicRankingPage() {
@@ -151,18 +142,18 @@ export default async function PublicRankingPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-zinc-800">
               <span className="text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Masculino</span>
-              <span className="text-xs text-zinc-600">({masc.length} jugadores)</span>
+              <span className="text-xs text-zinc-600">{countLabel(masc, "jugadores")}</span>
             </div>
-            <RankingTable players={masc} />
+            <RankingTable result={masc} />
           </div>
 
           {/* Femenino */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-zinc-800">
               <span className="text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Femenino</span>
-              <span className="text-xs text-zinc-600">({fem.length} jugadoras)</span>
+              <span className="text-xs text-zinc-600">{countLabel(fem, "jugadoras")}</span>
             </div>
-            <RankingTable players={fem} />
+            <RankingTable result={fem} />
           </div>
         </div>
 
