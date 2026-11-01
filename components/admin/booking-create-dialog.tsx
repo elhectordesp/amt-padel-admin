@@ -6,7 +6,8 @@
  * (GET /availability) y escoge una hora de inicio, luego el modo:
  *  - Abierta (OPEN) + min/max LSPA opcional
  *  - Con jugadores (PRIVATE_AMT / PRIVATE_WITH_GUESTS) — busca jugadores AMT
- *    y/o añade invitados por nombre (máx. 3 acompañantes)
+ *    y/o añade invitados por nombre (hasta 4 en dobles y 2 en individual: el
+ *    club reserva para ellos y no figura como jugador)
  *  - Por teléfono / sin gente (ADMIN_MANUAL) — un contacto libre opcional
  *
  * Submit → bookingsService.bookings.create. Al éxito cierra + refresca la lista.
@@ -46,13 +47,21 @@ interface Props {
   initial?: BookingCreateInitial;
 }
 
-const MAX_COMPANIONS = 3;
 // Lo que pide el back para el rango de un partido abierto (enteros, mín. 40)
 const MIN_LSPA = 40;
 
 /** "YYYY-MM-DD" de hoy en el club (las reservas van en hora de España). */
 function todayISODate() {
   return zonedDayKey(new Date(), DEFAULT_TIME_ZONE);
+}
+
+/**
+ * Si la reserva ya ha empezado (el club apunta una ya jugada o en juego). El
+ * back la guarda como registro de la pista: nunca competitiva ni abierta
+ * (fila 39; BOOKING_PAST_NOT_COMPETITIVE y BOOKING_PAST_OPEN_MATCH).
+ */
+export function hasStarted(startsAtIso: string, nowMs: number = Date.now()): boolean {
+  return !!startsAtIso && Date.parse(startsAtIso) <= nowMs;
 }
 
 /** Error del rango LSPA (vacío = sin límite), o null si vale. */
@@ -150,6 +159,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
 
   // La hora con la que se crea: la pedida, si es uno de los huecos libres
   const startsAt = slots.some((s) => s.startsAt === wantedStartsAt) ? wantedStartsAt : "";
+  // Una reserva ya empezada se apunta como registro: ni competitiva ni abierta
+  const started = hasStarted(startsAt);
   // Si ya se sabe que no cabe (huecos cargados para una duración que admite
   // la pista), se dice por qué en vez de dejar la hora en blanco sin más
   const slotsSettled =
@@ -181,6 +192,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   if (!open) return null;
 
   const companionCount = players.length + guests.length;
+  // El club no ocupa plaza (D14): caben todos los de la pista
+  const maxPlayers = courts.find((c) => c.id === courtId)?.type === "SINGLES" ? 2 : 4;
 
   function resetAndClose() {
     setWantedStartsAt("");
@@ -197,8 +210,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   }
 
   function addPlayer(p: Player) {
-    if (companionCount >= MAX_COMPANIONS) {
-      toast.info(`Máximo ${MAX_COMPANIONS} acompañantes`);
+    if (companionCount >= maxPlayers) {
+      toast.info(`Máximo ${maxPlayers} jugadores en esta pista`);
       return;
     }
     if (players.some((x) => x.id === p.id)) return;
@@ -208,8 +221,8 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   function addGuest() {
     const name = guestDraft.trim();
     if (!name) return;
-    if (companionCount >= MAX_COMPANIONS) {
-      toast.info(`Máximo ${MAX_COMPANIONS} acompañantes`);
+    if (companionCount >= maxPlayers) {
+      toast.info(`Máximo ${maxPlayers} jugadores en esta pista`);
       return;
     }
     setGuests((prev) => [...prev, { guestName: name }]);
@@ -221,7 +234,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
       courtId,
       startsAt,
       durationMinutes: duration,
-      isCompetitive,
+      isCompetitive: isCompetitive && !started,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     };
 
@@ -258,12 +271,18 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
   }
 
   const lspaError = mode === "OPEN" ? lspaRangeError(minLspa, maxLspa) : null;
+  // Pasa a una pista individual con más jugadores de los que caben
+  const tooManyPlayers = mode === "PLAYERS" && companionCount > maxPlayers;
+  // Abierta y con una hora que ya ha empezado: el back no la crea
+  const openButStarted = mode === "OPEN" && started;
   // La hora tiene que ser uno de los huecos libres de ahora (no basta con la
   // que vino del calendario si aún se están buscando o ya no está libre)
   const canSubmit =
     !!courtId &&
     slots.some((s) => s.startsAt === startsAt) &&
     !lspaError &&
+    !tooManyPlayers &&
+    !openButStarted &&
     !create.isPending;
 
   return (
@@ -389,7 +408,12 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
                 checked={mode === "OPEN"}
                 onChange={() => setMode("OPEN")}
                 label="Abierta"
-                hint="Partido abierto a jugadores AMT"
+                hint={
+                  started
+                    ? "No se puede: el partido ya ha empezado"
+                    : "Partido abierto a jugadores AMT"
+                }
+                disabled={started}
               />
               <ModeRadio
                 checked={mode === "PLAYERS"}
@@ -404,6 +428,13 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
                 hint="Reserva manual con un contacto opcional"
               />
             </div>
+            {openButStarted && (
+              <p role="alert" className="mt-1.5 text-xs text-destructive">
+                Esa hora ya ha empezado: una reserva así se apunta como
+                registro de la pista y no se puede abrir a otros jugadores.
+                Elige otro modo.
+              </p>
+            )}
           </div>
 
           {/* Modo OPEN */}
@@ -450,8 +481,9 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
           {/* Modo PLAYERS */}
           {mode === "PLAYERS" && (
             <div className="space-y-2 rounded-md border border-border bg-background p-3">
-              <p className="text-xs text-muted-foreground">
-                Acompañantes: {companionCount}/{MAX_COMPANIONS}
+              <p className={`text-xs ${tooManyPlayers ? "text-destructive" : "text-muted-foreground"}`}>
+                Jugadores: {companionCount}/{maxPlayers}
+                {tooManyPlayers && " — quita alguno: en esta pista no caben tantos"}
               </p>
 
               {(players.length > 0 || guests.length > 0) && (
@@ -502,7 +534,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
                 </ul>
               )}
 
-              {companionCount < MAX_COMPANIONS && (
+              {companionCount < maxPlayers && (
                 <>
                   <PlayerSearch onPick={addPlayer} />
                   <div className="flex items-center gap-2">
@@ -549,16 +581,25 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
             </label>
           )}
 
-          {/* Competitivo */}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={isCompetitive}
-              onChange={(e) => setIsCompetitive(e.target.checked)}
-              className="h-4 w-4 accent-primary"
-            />
-            Partido competitivo (cuenta para LSPA)
-          </label>
+          {/* Competitivo (no en una reserva ya empezada: fila 39) */}
+          <div>
+            <label className={`flex items-center gap-2 text-sm ${started ? "opacity-50" : ""}`}>
+              <input
+                type="checkbox"
+                checked={isCompetitive && !started}
+                onChange={(e) => setIsCompetitive(e.target.checked)}
+                disabled={started}
+                className="h-4 w-4 accent-primary"
+              />
+              Partido competitivo (cuenta para LSPA)
+            </label>
+            {started && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Esa hora ya ha empezado: se apunta como registro de la pista y su
+                resultado no puntúa.
+              </p>
+            )}
+          </div>
 
           {/* Notas */}
           <label className="block">
@@ -604,15 +645,19 @@ function ModeRadio({
   onChange,
   label,
   hint,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: () => void;
   label: string;
   hint: string;
+  disabled?: boolean;
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-sm ${
+      className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-sm ${
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+      } ${
         checked
           ? "border-primary bg-primary/5"
           : "border-border bg-background hover:border-foreground/30"
@@ -622,6 +667,7 @@ function ModeRadio({
         type="radio"
         checked={checked}
         onChange={onChange}
+        disabled={disabled}
         className="mt-0.5 h-4 w-4 accent-primary"
       />
       <span>

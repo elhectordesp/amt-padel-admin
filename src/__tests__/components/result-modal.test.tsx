@@ -135,6 +135,34 @@ describe('ResultModal', () => {
     expect(screen.getByText(/resultado inválido/i)).toBeInTheDocument();
   });
 
+  it.each([['11', '9'], ['12', '10']])('acepta supertiebreak alargado (%s-%s)', (a, b) => {
+    const onSave = vi.fn();
+    const match  = makeMatch({ scoringFormat: 'BEST_OF_2_SUPERTB' });
+    render(<ResultModal {...baseProps({ match, onSave })} />);
+    fillSet(0, '6', '3');
+    fillSet(1, '3', '6');
+    fillSet(2, a, b);
+    fireEvent.click(screen.getByRole('button', { name: /guardar resultado/i }));
+    expect(onSave).toHaveBeenCalledWith([6, 3, Number(a)], [3, 6, Number(b)]);
+  });
+
+  // Se acaba en cuanto alguien llega a 10 con 2 de diferencia: el back rechaza
+  // estos marcadores con 400 MATCH_SCORE_INVALID
+  it.each([['11', '8'], ['15', '3'], ['99', '0'], ['13', '10']])(
+    'rechaza supertiebreak imposible (%s-%s)',
+    (a, b) => {
+      const onSave = vi.fn();
+      const match  = makeMatch({ scoringFormat: 'BEST_OF_2_SUPERTB' });
+      render(<ResultModal {...baseProps({ match, onSave })} />);
+      fillSet(0, '6', '3');
+      fillSet(1, '3', '6');
+      fillSet(2, a, b);
+      fireEvent.click(screen.getByRole('button', { name: /guardar resultado/i }));
+      expect(screen.getByText(/resultado inválido/i)).toBeInTheDocument();
+      expect(onSave).not.toHaveBeenCalled();
+    },
+  );
+
   it('rechaza valores negativos en un set', () => {
     render(<ResultModal {...baseProps()} />);
     fillSet(0, '-1', '6');

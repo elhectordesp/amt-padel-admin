@@ -146,6 +146,38 @@ export interface BookingParticipant {
   invitedAt: string;
   respondedAt: string | null;
   user?: { id: string; name: string; email: string | null };
+  /**
+   * Equipo con el que puntúa el partido (solo en el detalle): en los
+   * jugadores con cuenta aceptados cuando son justo 2 o 4; si no, null.
+   * No viene con un back anterior.
+   */
+  team?: 1 | 2 | null;
+}
+
+/** Resultado de una reserva («Home» = equipo 1). */
+export interface BookingResult {
+  set1Home: number;
+  set1Away: number;
+  set2Home: number;
+  set2Away: number;
+  set3Home: number | null;
+  set3Away: number | null;
+  winnerTeam: 1 | 2 | null;
+  enteredByUserId: string | null;
+  enteredAt: string;
+  /** Firme: los jugadores ya no lo cambian (lo cerró la ventana o el club). */
+  finalizedAt: string | null;
+  /** Ya puntuó el SPA con este resultado. */
+  processedLspaAt: string | null;
+}
+
+export interface ResultEntryPayload {
+  set1Home: number;
+  set1Away: number;
+  set2Home: number;
+  set2Away: number;
+  set3Home?: number;
+  set3Away?: number;
 }
 
 export interface Booking {
@@ -193,6 +225,12 @@ export interface Booking {
   court?: { id: string; name: string; type: CourtType; isIndoor: boolean };
   club?: { id: string; name: string; city: string };
   participants?: BookingParticipant[];
+  // Solo en el detalle (GET /bookings/:id). No vienen con un back anterior
+  result?: BookingResult | null;
+  /** Hasta cuándo meten o cambian el resultado los jugadores. */
+  resultEntryDeadlineAt?: string | null;
+  /** Hasta cuándo lo puede poner o corregir el club (fin del partido + 30 días). */
+  resultAdminDeadlineAt?: string | null;
 }
 
 // ── DTOs de input ──────────────────────────────────────────────────────────
@@ -313,6 +351,8 @@ export interface BookingFiltersQuery {
   matchMode?: BookingMatchMode;
   fromDate?: string;
   toDate?: string;
+  /** Por hora de inicio; el back, por defecto «desc» (las más lejanas primero). */
+  order?: "asc" | "desc";
   limit?: number;
   offset?: number;
 }
