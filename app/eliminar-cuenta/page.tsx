@@ -51,10 +51,10 @@ export default function EliminarCuentaPage() {
               Send an email from the address associated with your account · Envíanos un email desde la dirección asociada a tu cuenta:
             </p>
             <a
-              href="mailto:hectordura74@gmail.com?subject=Account%20deletion%20request%20%2F%20Solicitud%20eliminaci%C3%B3n%20de%20cuenta"
+              href="mailto:info@amtpadel.com?subject=Account%20deletion%20request%20%2F%20Solicitud%20eliminaci%C3%B3n%20de%20cuenta"
               style={{ display: "inline-block", background: "#D4AF37", color: "#111", fontWeight: 700, fontSize: 14, padding: "10px 20px", borderRadius: 8, textDecoration: "none" }}
             >
-              hectordura74@gmail.com
+              info@amtpadel.com
             </a>
             <p style={{ fontSize: 12, color: "#666", margin: "12px 0 0", lineHeight: 1.6 }}>
               Subject: <em>Account deletion request</em>. Requests are processed within 30 days ·
@@ -68,14 +68,19 @@ export default function EliminarCuentaPage() {
               What data is deleted · ¿Qué datos se eliminan?
             </h3>
             <ul style={{ margin: 0, paddingLeft: 20, color: "#999", fontSize: 13, lineHeight: 2 }}>
-              <li>Name, email, profile photo and contact details · Nombre, email, foto y contacto</li>
-              <li>Tournament history and registration records · Historial de torneos e inscripciones</li>
-              <li>SPA score and match statistics · Puntuación SPA y estadísticas</li>
-              <li>Session tokens and push notification tokens · Tokens de sesión y notificaciones</li>
+              <li>Name, email, profile photo and contact details · Nombre, email, foto y datos de contacto</li>
+              <li>Linked Google/Apple sign-in, password and session and push tokens · Inicio de sesión con Google/Apple vinculado, contraseña y tokens de sesión y de notificaciones</li>
+              <li>Your notifications, favourites and support messages · Tus avisos, favoritos y mensajes de soporte</li>
+              <li>Pending registrations in tournaments whose draw has not been made yet · Tus inscripciones en torneos que aún no tienen el cuadro hecho</li>
             </ul>
             <p style={{ fontSize: 12, color: "#666", margin: "16px 0 0", lineHeight: 1.6 }}>
-              Internal audit logs may be retained for up to 12 months for legal purposes.
-              Anonymised aggregate data may be retained indefinitely.
+              Published tournament results and SPA history are kept as part of the circuit&apos;s
+              record, under the name &quot;Usuario eliminado&quot; (deleted user). The admin activity log keeps a record
+              without your contact details for up to 3 years, and database backups are deleted after
+              30 days. · Los resultados de torneos ya publicados y el historial SPA se conservan como
+              historial del circuito, con el nombre «Usuario eliminado». El registro de actividad del
+              panel guarda una entrada sin tus datos de contacto hasta 3 años, y las copias de
+              seguridad se borran a los 30 días.
             </p>
           </div>
 
