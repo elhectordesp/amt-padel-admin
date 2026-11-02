@@ -539,4 +539,26 @@ describe('adminService', () => {
       expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/regenerate', { categoryId: 'c1', forceLocked: true });
     });
   });
+
+  describe('administradores de un club (L25)', () => {
+    it('la lista: GET /admin/clubs/:id/admins', async () => {
+      const body = { admins: [], invitations: [] };
+      mockGet.mockResolvedValueOnce({ data: body });
+      await expect(adminService.clubs.admins('c1')).resolves.toEqual(body);
+      expect(mockGet).toHaveBeenCalledWith('/admin/clubs/c1/admins');
+    });
+
+    it('invitar a un club que ya existe, reenviar y anular', async () => {
+      const created = { data: { id: 'inv-2', expiresAt: '2026-11-06T09:00:00.000Z' } };
+      mockPost.mockResolvedValueOnce(created).mockResolvedValueOnce(created);
+      mockDelete.mockResolvedValueOnce({ data: '' });
+
+      await adminService.clubs.inviteAdmin('c1', 'admin@club.com');
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/clubs/c1/admins/invite', { email: 'admin@club.com' });
+      await adminService.clubs.resendInvitation('c1', 'inv-1');
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/clubs/c1/invitations/inv-1/resend');
+      await adminService.clubs.revokeInvitation('c1', 'inv-1');
+      expect(mockDelete).toHaveBeenLastCalledWith('/admin/clubs/c1/invitations/inv-1');
+    });
+  });
 });

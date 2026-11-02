@@ -19,10 +19,14 @@ vi.mock("@/components/admin/quick-invite-modal", () => ({ QuickInviteClubModal: 
 vi.mock("@/components/admin/courts-manager", () => ({ CourtsManager: () => null }));
 
 const clubsMock = vi.hoisted(() => ({
-  list:         vi.fn(),
-  update:       vi.fn(),
-  deactivate:   vi.fn(),
-  geocodeBatch: vi.fn(),
+  list:             vi.fn(),
+  update:           vi.fn(),
+  deactivate:       vi.fn(),
+  geocodeBatch:     vi.fn(),
+  admins:           vi.fn(),
+  inviteAdmin:      vi.fn(),
+  resendInvitation: vi.fn(),
+  revokeInvitation: vi.fn(),
 }));
 vi.mock("@/lib/services/admin", () => ({ adminService: { clubs: clubsMock } }));
 
@@ -33,6 +37,7 @@ vi.mock("@/lib/services/bookings", async () => {
 });
 
 import ClubesPage from "../../../app/(admin)/clubes/page";
+import { ApiError } from "@/lib/api";
 
 const base = { city: "Madrid", lat: 40.4, lng: -3.7, isAmtPartner: false, tournamentCount: 0 };
 const ACTIVE = { ...base, id: "c-activo", name: "Club Activo", active: true, deactivatedAt: null, status: "active", pendingSetup: false };
@@ -222,6 +227,203 @@ describe("ClubesPage — reservas del club (R1-7)", () => {
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText(/Abierto al público desde el 1\/10\/26/)).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Aprobar activación" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ClubesPage — administradores del club (L25)", () => {
+  const ADMIN = { id: "u-1", name: "Admin Club", email: "admin@club.com", createdAt: "2026-09-01T10:00:00.000Z" };
+  const PENDING = {
+    id: "inv-1", email: "viva@club.com", status: "pending",
+    createdAt: "2026-10-30T09:00:00.000Z", expiresAt: "2026-11-06T09:00:00.000Z",
+    invitedBy: { id: "amt-1", name: "Ana AMT" },
+  };
+  const EXPIRED = {
+    id: "inv-2", email: "caducada@club.com", status: "expired",
+    createdAt: "2026-10-01T09:00:00.000Z", expiresAt: "2026-10-08T09:00:00.000Z",
+    invitedBy: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.list.mockResolvedValue([ACTIVE]);
+    clubsMock.admins.mockResolvedValue({ admins: [ADMIN], invitations: [PENDING, EXPIRED] });
+  });
+
+  async function openAdmins(name = "Club Activo") {
+    fireEvent.click(within(await cardOf(name)).getByRole("button", { name: "Administradores del club" }));
+    return screen.findByRole("dialog", { name: `Administradores — ${name}` });
+  }
+
+  it("desde la tarjeta: sus admins y sus invitaciones pendientes y caducadas, con sus fechas", async () => {
+    renderPage();
+    const dialog = await openAdmins();
+
+    expect(await within(dialog).findByText("Admin Club")).toBeInTheDocument();
+    expect(within(dialog).getByText("admin@club.com · Desde el 1/9/26")).toBeInTheDocument();
+    expect(within(dialog).getByText("viva@club.com")).toBeInTheDocument();
+    expect(within(dialog).getByText("Pendiente")).toBeInTheDocument();
+    expect(within(dialog).getByText("Enviada el 30/10/26 por Ana AMT · caduca el 6/11/26")).toBeInTheDocument();
+    expect(within(dialog).getByText("caducada@club.com")).toBeInTheDocument();
+    expect(within(dialog).getByText("Caducada")).toBeInTheDocument();
+    expect(within(dialog).getByText("Enviada el 1/10/26 · caducó el 8/10/26")).toBeInTheDocument();
+    expect(clubsMock.admins).toHaveBeenCalledWith("c-activo");
+  });
+
+  it("sin admins ni invitaciones lo dice", async () => {
+    clubsMock.admins.mockResolvedValue({ admins: [], invitations: [] });
+    renderPage();
+    const dialog = await openAdmins();
+
+    expect(await within(dialog).findByText("Aún no tiene ningún administrador.")).toBeInTheDocument();
+    expect(within(dialog).getByText("No hay invitaciones pendientes.")).toBeInTheDocument();
+  });
+
+  it("Reenviar pide confirmación, reenvía y vuelve a pedir la lista", async () => {
+    clubsMock.resendInvitation.mockResolvedValue({ id: "inv-3", expiresAt: "2026-11-07T09:00:00.000Z" });
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Reenviar la invitación a caducada@club.com" }));
+    expect(screen.getByText("¿Reenviar la invitación a caducada@club.com?")).toBeInTheDocument();
+    expect(screen.getByText(/El que tenga ahora dejará de valer/)).toBeInTheDocument();
+    expect(clubsMock.resendInvitation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Reenviar" }));
+
+    await waitFor(() => expect(clubsMock.resendInvitation).toHaveBeenCalledWith("c-activo", "inv-2"));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Invitación reenviada a caducada@club.com"));
+    expect(clubsMock.admins).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("¿Reenviar la invitación a caducada@club.com?")).not.toBeInTheDocument();
+  });
+
+  it("Anular pide confirmación, la anula y deja de salir", async () => {
+    clubsMock.admins
+      .mockResolvedValueOnce({ admins: [ADMIN], invitations: [PENDING, EXPIRED] })
+      .mockResolvedValue({ admins: [ADMIN], invitations: [EXPIRED] });
+    clubsMock.revokeInvitation.mockResolvedValue("");
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Anular la invitación a viva@club.com" }));
+    expect(screen.getByText("¿Anular la invitación a viva@club.com?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Anular invitación" }));
+
+    await waitFor(() => expect(clubsMock.revokeInvitation).toHaveBeenCalledWith("c-activo", "inv-1"));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Invitación a viva@club.com anulada"));
+    await waitFor(() => expect(within(dialog).queryByText("viva@club.com")).not.toBeInTheDocument());
+  });
+
+  it("Cancelar no anula nada", async () => {
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Anular la invitación a viva@club.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByText("¿Anular la invitación a viva@club.com?")).not.toBeInTheDocument();
+    expect(clubsMock.revokeInvitation).not.toHaveBeenCalled();
+  });
+
+  it("si la invitación cambió mientras tanto: el error del back y la lista se recarga", async () => {
+    clubsMock.resendInvitation.mockRejectedValue(
+      new ApiError("Esta invitación ya se aceptó: su admin ya tiene cuenta", 409, "CLUB_INVITATION_ALREADY_ACCEPTED"),
+    );
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Reenviar la invitación a viva@club.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reenviar" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("Esta invitación ya se aceptó: su admin ya tiene cuenta"),
+    );
+    await waitFor(() => expect(clubsMock.admins).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("¿Reenviar la invitación a viva@club.com?")).not.toBeInTheDocument();
+  });
+
+  it("otro error (el email ya tiene cuenta): lo dice, sin recargar la lista", async () => {
+    clubsMock.resendInvitation.mockRejectedValue(
+      new ApiError("Ese email ya está registrado en la plataforma", 409, "CLUB_INVITATION_EMAIL_TAKEN"),
+    );
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Reenviar la invitación a viva@club.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reenviar" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("Ese email ya está registrado en la plataforma"),
+    );
+    expect(clubsMock.admins).toHaveBeenCalledTimes(1);
+  });
+
+  it("Invitar admin a este club: comprueba el email, invita y vacía el campo", async () => {
+    clubsMock.inviteAdmin.mockResolvedValue({ id: "inv-9", expiresAt: "2026-11-06T09:00:00.000Z" });
+    renderPage();
+    const dialog = await openAdmins();
+    const input = await within(dialog).findByLabelText("Invitar admin");
+
+    // Sin dominio con punto: el navegador lo da por bueno, el panel no
+    fireEvent.change(input, { target: { value: "admin@club" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Invitar" }));
+    expect(toastMock.error).toHaveBeenCalledWith("Introduce un email válido");
+    expect(clubsMock.inviteAdmin).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "  nuevo@club.com " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Invitar" }));
+
+    await waitFor(() => expect(clubsMock.inviteAdmin).toHaveBeenCalledWith("c-activo", "nuevo@club.com"));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Invitación enviada a nuevo@club.com"));
+    expect(input).toHaveValue("");
+    expect(clubsMock.admins).toHaveBeenCalledTimes(2);
+  });
+
+  it("Invitar admin con el email caído: dice que quedó creada y que se puede reenviar, y recarga la lista", async () => {
+    clubsMock.inviteAdmin.mockRejectedValue(
+      new ApiError("No se pudo enviar el email de invitación. Inténtalo de nuevo en unos minutos.", 503, "INVITE_EMAIL_FAILED"),
+    );
+    clubsMock.admins
+      .mockResolvedValueOnce({ admins: [ADMIN], invitations: [PENDING] })
+      .mockResolvedValue({
+        admins: [ADMIN],
+        invitations: [{ ...PENDING, id: "inv-9", email: "nuevo@club.com" }, PENDING],
+      });
+    renderPage();
+    const dialog = await openAdmins();
+    const input = await within(dialog).findByLabelText("Invitar admin");
+
+    fireEvent.change(input, { target: { value: "nuevo@club.com" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Invitar" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(
+        "La invitación está creada, pero el email no ha salido. Reenvíala desde la lista en unos minutos.",
+      ),
+    );
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(await within(dialog).findByRole("button", { name: "Reenviar la invitación a nuevo@club.com" })).toBeEnabled();
+    expect(clubsMock.admins).toHaveBeenCalledTimes(2);
+    expect(input).toHaveValue("");
+  });
+
+  it("club desactivado: no deja invitar ni reenviar (el back lo rechazaría), sí anular", async () => {
+    clubsMock.list.mockResolvedValue([ACTIVE, OFF]);
+    renderPage();
+    await showInactive();
+    const dialog = await openAdmins("Club Apagado");
+
+    expect(await within(dialog).findByRole("button", { name: "Reenviar la invitación a viva@club.com" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Anular la invitación a viva@club.com" })).toBeEnabled();
+    expect(within(dialog).getByLabelText("Invitar admin")).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Invitar" })).toBeDisabled();
+    expect(within(dialog).getByText(/El club está desactivado: reactívalo/)).toBeInTheDocument();
+  });
+
+  it("si no carga, lo dice", async () => {
+    clubsMock.admins.mockRejectedValue(new ApiError("Error de conexión"));
+    renderPage();
+    const dialog = await openAdmins();
+
+    expect(await within(dialog).findByText("No se pudieron cargar los administradores del club.")).toBeInTheDocument();
   });
 });
 
