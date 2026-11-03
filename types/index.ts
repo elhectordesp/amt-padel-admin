@@ -1,4 +1,7 @@
 export type Gender             = "M" | "F";
+// El de una CATEGORÍA, no el de una persona: Masculina, Femenina, Mixta,
+// General y Junior (lib/category-gender.ts)
+export type CategoryGender     = "M" | "F" | "MX" | "G" | "J";
 export type SponsorScope       = "CIRCUIT" | "TOURNAMENT" | "REGIONAL";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
 export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
