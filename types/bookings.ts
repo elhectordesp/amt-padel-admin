@@ -197,7 +197,8 @@ export interface Booking {
     extras: { id: string; name: string; cents: number }[];
   };
   status: BookingStatus;
-  paymentMethod: BookingPaymentMethod;
+  // null: no consta (el back borra los datos de cobro a los 6 años)
+  paymentMethod: BookingPaymentMethod | null;
   paidAt: string | null;
   paidAmountCents: number | null;
   paymentNotes: string | null;

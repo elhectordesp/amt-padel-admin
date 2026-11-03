@@ -22,6 +22,7 @@ import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
 import { bookingCapacity, cancellationNoticeCount } from "@/lib/utils/booking-participants";
+import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
   DEFAULT_TIME_ZONE,
@@ -61,13 +62,6 @@ const MODE_LABELS: Record<BookingMatchMode, string> = {
 };
 
 const BACK_TO_LIST = { href: "/mi-club/reservas/bookings", label: "Volver al listado" };
-
-const PAYMENT_LABELS: Record<BookingPaymentMethod, string> = {
-  PENDING: "Pendiente",
-  CASH_AT_VENUE: "Efectivo en pista",
-  ONLINE: "Online",
-  PAID_MANUAL: "Cobrado manualmente",
-};
 
 const PARTICIPANT_STATUS_LABELS: Record<BookingParticipantStatus, string> = {
   INVITED: "Invitado",
@@ -175,6 +169,7 @@ export default function BookingDetailPage({
   // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien
   // cancela. Sin saber aún quién es, no hay número (contaría al propio club)
   const noticeCount = me ? cancellationNoticeCount(b, me.id) : null;
+  const payment = paymentAction(b.paymentMethod);
 
   return (
     <ReservasPage title="Reserva" back={BACK_TO_LIST} className="max-w-4xl">
@@ -225,7 +220,7 @@ export default function BookingDetailPage({
         <Row icon={CreditCard} label="Precio">
           {formatCents(b.priceCents)}
           <span className="ml-2 text-xs text-muted-foreground">
-            ({PAYMENT_LABELS[b.paymentMethod]})
+            ({paymentMethodLabel(b.paymentMethod)})
           </span>
           {b.paidAt && (
             <span className="ml-2 text-xs text-green-500">
@@ -233,9 +228,9 @@ export default function BookingDetailPage({
             </span>
           )}
         </Row>
-        {b.status !== "CANCELLED" && (
+        {b.status !== "CANCELLED" && payment && (
           <div className="ml-7 flex flex-wrap items-center gap-2">
-            {b.paymentMethod === "PENDING" ? (
+            {payment === "markPaid" ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("CASH_AT_VENUE")} disabled={markPaidMut.isPending}>
                   {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar pagado (efectivo)

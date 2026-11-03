@@ -207,6 +207,26 @@ describe("Detalle de reserva", () => {
     expect(screen.getByText("Se avisará por push y email a los jugadores con cuenta.")).toBeInTheDocument();
     expect(screen.queryByText(/a 3 jugadores/)).not.toBeInTheDocument();
   });
+
+  it("cobrada: con su método y ofrece marcarla como no pagada", async () => {
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING,
+      paymentMethod: "CASH_AT_VENUE",
+      paidAt: "2026-10-27T10:00:00.000Z",
+    });
+    await renderDetail();
+    expect(await screen.findByText("(Efectivo en pista)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Marcar como no pagada/ })).toBeInTheDocument();
+  });
+
+  it("sin datos de cobro (el back los borra a los 6 años): ni «()» ni botones de pago", async () => {
+    svc.bookings.detail.mockResolvedValue({ ...BOOKING, paymentMethod: null, paidAt: null });
+    await renderDetail();
+    expect(await screen.findByText("(sin datos de cobro)")).toBeInTheDocument();
+    expect(screen.queryByText("()")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Marcar pagado/ })).not.toBeInTheDocument();
+  });
 });
 
 describe("Detalle de reserva — resultado (R2-7)", () => {
