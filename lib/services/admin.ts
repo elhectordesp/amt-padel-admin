@@ -12,7 +12,7 @@ import type {
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
-  DeletedTournament, DeletedPlayer,
+  DeletedTournament, DeletedPlayer, CategoryGender,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
@@ -483,7 +483,7 @@ export const adminService = {
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}/prizes`, prizes).then(r => r.data),
     add: (
       tournamentId: string,
-      data: { gender: "M" | "F"; level: string; totalSpots: number; price?: number; scoringFormat?: string },
+      data: { gender: CategoryGender; level: string; totalSpots: number; price?: number; scoringFormat?: string },
     ) =>
       api.post(`/admin/tournaments/${tournamentId}/categories`, data).then(r => r.data),
     update: (

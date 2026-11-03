@@ -18,7 +18,7 @@ import type { CategoryGender, CategoryLevel, Gender } from "@/types";
  *
  * Quien no tiene el género en su ficha no juega las que tienen regla.
  */
-export const CATEGORY_GENDERS: readonly CategoryGender[] = ["M", "F", "MX", "G", "J"];
+export const CATEGORY_GENDERS = ["M", "F", "MX", "G", "J"] as const satisfies readonly CategoryGender[];
 
 const NAME: Record<CategoryGender, { full: string; short: string }> = {
   M:  { full: "Masculina", short: "Masc."   },

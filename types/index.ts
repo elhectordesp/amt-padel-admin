@@ -564,7 +564,7 @@ export interface CreateTournamentPayload {
   maxMatchesPerPlayerPerDay?: number | null;
   maxUnavailableTotalHours?:  number;
   categories:  {
-    gender:          Gender;
+    gender:          CategoryGender;
     level:           CategoryLevel;
     totalSpots:      number;
     price:           number;

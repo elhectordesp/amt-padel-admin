@@ -52,14 +52,14 @@ import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status
 import { groupByPair, pairsSummary, paymentCsvColumns, pendingInviteLabel, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
-import { categoryLabel } from "@/lib/category-gender";
+import { CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
 import {
   CATEGORY_LABEL_SHORT, LEVELS,
   REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel, registrationStatusLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryGender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import {
   formatDayKey,
@@ -1527,7 +1527,7 @@ export default function TorneoDetailPage() {
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
   const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ totalSpots: 0, price: 0, scoringFormat: "BEST_OF_3" });
   const [addCatOpen,          setAddCatOpen]           = useState(false);
-  const [addCatForm,          setAddCatForm]           = useState<{ gender: "M" | "F"; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
+  const [addCatForm,          setAddCatForm]           = useState<{ gender: CategoryGender; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
   const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
   // Borrar una categoría con inscripciones o partidos: lo que dice el back que se borra con ella
   const [cascadeCat,          setCascadeCat]           = useState<{ catId: string; message: string } | null>(null);
@@ -2454,11 +2454,10 @@ export default function TorneoDetailPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <select
                       value={addCatForm.gender}
-                      onChange={(e) => setAddCatForm((f) => ({ ...f, gender: e.target.value as "M" | "F" }))}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, gender: e.target.value as CategoryGender }))}
                       className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                     >
-                      <option value="M">Masculino</option>
-                      <option value="F">Femenino</option>
+                      {CATEGORY_GENDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <select
                       value={addCatForm.level}
