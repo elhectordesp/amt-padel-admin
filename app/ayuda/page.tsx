@@ -63,7 +63,7 @@ export default function SoportePage() {
               laborables):
             </p>
             <a
-              href="mailto:info@amtpadel.es?subject=Soporte%20AMT%20P%C3%A1del"
+              href="mailto:info@amtpadel.com?subject=Soporte%20AMT%20P%C3%A1del"
               style={{
                 display: "inline-block",
                 background: "#D4AF37",
@@ -75,7 +75,7 @@ export default function SoportePage() {
                 textDecoration: "none",
               }}
             >
-              info@amtpadel.es
+              info@amtpadel.com
             </a>
             <p style={{ ...p, margin: "14px 0 0", fontSize: 13, color: "#999" }}>
               Para agilizar tu consulta, indícanos tu nombre de usuario y, si es un problema técnico,
@@ -91,8 +91,8 @@ export default function SoportePage() {
             <p style={p}>
               Revisa la carpeta de spam o correo no deseado. Comprueba que el correo esté bien
               escrito. Si aun así no lo recibes, escríbenos a{" "}
-              <a href="mailto:info@amtpadel.es" style={a}>
-                info@amtpadel.es
+              <a href="mailto:info@amtpadel.com" style={a}>
+                info@amtpadel.com
               </a>{" "}
               y te ayudamos a activar la cuenta.
             </p>
@@ -155,8 +155,8 @@ export default function SoportePage() {
             </a>
             <br />
             Contacto:{" "}
-            <a href="mailto:info@amtpadel.es" style={a}>
-              info@amtpadel.es
+            <a href="mailto:info@amtpadel.com" style={a}>
+              info@amtpadel.com
             </a>
           </div>
         </div>

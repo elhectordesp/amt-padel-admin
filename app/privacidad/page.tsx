@@ -51,6 +51,8 @@ const th = {
 };
 const td = { padding: "10px 12px", color: "#ccc", borderBottom: "1px solid #222", verticalAlign: "top" as const, lineHeight: 1.55 };
 const tdHead = { ...td, color: "#fff", fontWeight: 700, whiteSpace: "nowrap" as const };
+/* Plazos de conservación: etiquetas largas que tienen que partir línea. */
+const tdHeadWrap = { ...tdHead, whiteSpace: "normal" as const, width: "40%" };
 const note = {
   background: "#141414",
   borderLeft: "3px solid #D4AF37",
@@ -97,8 +99,21 @@ export default function PrivacidadPage() {
               Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.
             </p>
             <div style={{ fontSize: 12, color: "#666", marginTop: 12 }}>
-              Versión 1.1 · Última actualización: octubre 2026 · Ámbito: España (Unión Europea)
+              Versión 1.2 · Última actualización: noviembre 2026 · Ámbito: España (Unión Europea)
             </div>
+          </div>
+
+          {/* Qué cambia en la v1.2 */}
+          <div style={{ ...note, margin: "0 0 20px" }}>
+            <strong style={{ color: "#ddd" }}>Qué cambia en la v1.2:</strong>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+              <li>El registro de actividad del panel de administración se conserva 3 años.</li>
+              <li>
+                Si la baja de tu cuenta la da el organizador, los resultados publicados conservan
+                tu nombre; puedes pedirnos que lo anonimicemos.
+              </li>
+              <li>Los datos de cobro de inscripciones y reservas se conservan 6 años desde el cobro.</li>
+            </ul>
           </div>
 
           {/* Intro */}
@@ -138,8 +153,8 @@ export default function PrivacidadPage() {
                   <tr>
                     <td style={tdHead}>Email</td>
                     <td style={td}>
-                      <a href="mailto:info@amtpadel.es" style={{ color: "#D4AF37" }}>
-                        info@amtpadel.es
+                      <a href="mailto:info@amtpadel.com" style={{ color: "#D4AF37" }}>
+                        info@amtpadel.com
                       </a>
                     </td>
                   </tr>
@@ -313,36 +328,80 @@ export default function PrivacidadPage() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td style={tdHead}>Datos de cuenta (nombre, email)</td>
-                    <td style={td}>Mientras la cuenta esté activa + 3 años tras la baja</td>
+                    <td style={tdHeadWrap}>Datos de cuenta y de contacto (email, teléfono, ciudad, foto, biografía, contraseña, cuentas de Google/Apple vinculadas)</td>
+                    <td style={td}>Mientras la cuenta esté activa. Se borran en el momento de la baja.</td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Historial deportivo y estadísticas</td>
-                    <td style={td}>Indefinidamente de forma anonimizada tras la baja; con nombre identificable mientras la cuenta esté activa</td>
+                    <td style={tdHeadWrap}>Nombre en los resultados y en el historial deportivo (partidos, cuadros, SPA, ranking)</td>
+                    <td style={td}>
+                      Se conserva como historial del circuito. Si la baja la pides tú (desde la app o
+                      por email), tu nombre se sustituye en ese momento por «Usuario eliminado». Si la
+                      cuenta la da de baja el organizador (por ejemplo, porque estaba duplicada o la
+                      creó el club), tu ficha deja de verse, pero los resultados publicados siguen con
+                      tu nombre. En ese caso puedes pedirnos que lo anonimicemos escribiendo a{" "}
+                      <a href="mailto:info@amtpadel.com" style={{ color: "#D4AF37" }}>
+                        info@amtpadel.com
+                      </a>
+                      .
+                    </td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Resultados de torneos (publicados)</td>
+                    <td style={tdHeadWrap}>Resultados de torneos (publicados)</td>
                     <td style={td}>Indefinidamente como parte del historial del circuito</td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Tokens de sesión (JWT)</td>
+                    <td style={tdHeadWrap}>Tokens de sesión (JWT)</td>
                     <td style={td}>Hasta expiración o cierre de sesión explícito</td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Tokens push (Expo)</td>
+                    <td style={tdHeadWrap}>Tokens push (Expo)</td>
                     <td style={td}>Mientras la cuenta esté activa; se desvincula al cerrar sesión o al entrar otra cuenta en ese dispositivo, y se borra con la cuenta</td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Logs de servidor / IPs</td>
+                    <td style={tdHeadWrap}>Logs de servidor / IPs</td>
                     <td style={td}>90 días máximo</td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Mensajes de soporte</td>
+                    <td style={tdHeadWrap}>Mensajes de soporte</td>
                     <td style={td}>2 años desde la resolución</td>
                   </tr>
                   <tr>
-                    <td style={tdHead}>Mensajes del organizador a los inscritos de un torneo (historial de envíos)</td>
+                    <td style={tdHeadWrap}>Mensajes del organizador a los inscritos de un torneo (historial de envíos)</td>
                     <td style={td}>12 meses desde el envío</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Avisos dentro de la app</td>
+                    <td style={td}>12 meses</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Reservas de pista: historial de cambios, notas y nombre de los invitados sin cuenta</td>
+                    <td style={td}>12 meses (el invitado pasa a figurar como «Invitado»)</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Notas de cobro de las inscripciones</td>
+                    <td style={td}>12 meses</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Datos de cobro de inscripciones y reservas (importe, método y fecha)</td>
+                    <td style={td}>6 años desde el cobro; después se borran</td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Registro de actividad del panel de administración (quién hizo qué)</td>
+                    <td style={td}>
+                      3 años. Si tu cuenta se da de baja, se quitan de ese registro tus datos de
+                      contacto; si la baja la pides tú, también tu nombre.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Invitaciones para administrar un club</td>
+                    <td style={td}>
+                      La invitación se borra 1 mes después de aceptarse o de caducar. Su registro en el
+                      panel se guarda 12 meses, y el de quién dio acceso de administrador, 3 años.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={tdHeadWrap}>Copias de seguridad de la base de datos</td>
+                    <td style={td}>30 días; después se borran</td>
                   </tr>
                 </tbody>
               </table>
@@ -440,8 +499,8 @@ export default function PrivacidadPage() {
             <div style={note}>
               📧 <strong style={{ color: "#ddd" }}>Cómo ejercer tus derechos:</strong> envía un email
               a{" "}
-              <a href="mailto:info@amtpadel.es" style={{ color: "#D4AF37" }}>
-                info@amtpadel.es
+              <a href="mailto:info@amtpadel.com" style={{ color: "#D4AF37" }}>
+                info@amtpadel.com
               </a>{" "}
               indicando el derecho que deseas ejercitar y adjuntando una copia de tu documento de
               identidad. Responderemos en un plazo máximo de 30 días.
@@ -449,7 +508,9 @@ export default function PrivacidadPage() {
             <p style={{ ...p, margin: "12px 0 0", color: "#999", fontSize: 13 }}>
               Algunos derechos pueden estar limitados cuando el tratamiento sea necesario para el
               cumplimiento de obligaciones legales o para la defensa de reclamaciones (por ejemplo, el
-              historial de resultados deportivos publicados en el circuito).
+              historial de resultados deportivos publicados en el circuito). Si la baja de tu cuenta
+              la dio el organizador, puedes pedirnos además que anonimicemos tu nombre en los
+              resultados publicados.
             </p>
           </section>
 
@@ -508,8 +569,8 @@ export default function PrivacidadPage() {
             <p style={{ ...p, margin: 0 }}>
               Si tienes conocimiento de que un menor de 14 años ha facilitado datos personales sin el
               consentimiento de sus tutores legales, te rogamos que nos lo comuniques a{" "}
-              <a href="mailto:info@amtpadel.es" style={{ color: "#D4AF37" }}>
-                info@amtpadel.es
+              <a href="mailto:info@amtpadel.com" style={{ color: "#D4AF37" }}>
+                info@amtpadel.com
               </a>{" "}
               para proceder a su eliminación inmediata.
             </p>
@@ -539,8 +600,8 @@ export default function PrivacidadPage() {
             <p style={p}>
               Para cualquier consulta sobre esta política o para ejercer tus derechos, contacta con
               nosotros en{" "}
-              <a href="mailto:info@amtpadel.es" style={{ color: "#D4AF37" }}>
-                info@amtpadel.es
+              <a href="mailto:info@amtpadel.com" style={{ color: "#D4AF37" }}>
+                info@amtpadel.com
               </a>{" "}
               (asunto: «Protección de datos»). Respuesta en un máximo de 30 días naturales.
             </p>
@@ -555,14 +616,14 @@ export default function PrivacidadPage() {
 
           {/* Footer */}
           <div style={{ marginTop: 32, fontSize: 12, color: "#666", borderTop: "1px solid #1a1a1a", paddingTop: 20, lineHeight: 1.7 }}>
-            AMT Padel Circuit · Política de Privacidad v1.1 · Última actualización: octubre 2026
+            AMT Padel Circuit · Política de Privacidad v1.2 · Última actualización: noviembre 2026
             <br />
             <a href="/eliminar-cuenta" style={{ color: "#D4AF37" }}>
               Eliminar cuenta
             </a>{" "}
             · Para dudas:{" "}
-            <a href="mailto:info@amtpadel.es" style={{ color: "#D4AF37" }}>
-              info@amtpadel.es
+            <a href="mailto:info@amtpadel.com" style={{ color: "#D4AF37" }}>
+              info@amtpadel.com
             </a>
           </div>
         </div>
