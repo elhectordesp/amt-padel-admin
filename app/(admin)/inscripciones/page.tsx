@@ -212,7 +212,10 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
         search,
         p.primary.user.name,
         p.primary.partner?.name,
-        `${p.primary.category.gender} ${p.primary.category.level}`,
+        // La categoría por su nombre, como se ve («mixta», «general»), y el
+        // nivel también como «4a» (la «ª» no se escribe)
+        categoryLabel(p.primary.category, "full"),
+        p.primary.category.level,
       ));
     // «En espera»: en el orden de la cola de cada categoría (el de subir)
     return statusFilter === "WAITLIST"

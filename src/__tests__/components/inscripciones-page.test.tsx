@@ -199,3 +199,47 @@ describe("InscripcionesPage — invitación a la pareja pendiente", () => {
     expect(screen.getByText(/quedará sin efecto/).textContent).toBe("La invitación a Bea Ruiz quedará sin efecto.");
   });
 });
+
+describe("InscripcionesPage — la categoría por su género (D2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParams = new URLSearchParams("torneo=t1");
+  });
+
+  const pair = (id: string, name: string, categoryId: string, gender: string) => ({
+    id,
+    tournamentId: "t1",
+    categoryId,
+    userId:       `u-${id}`,
+    user:         { name },
+    partnerId:    null,
+    partner:      null,
+    category:     { gender, level: "4a", price: 30 },
+    status:       "PENDING",
+    paid:         false,
+    createdAt:    "2026-11-01T10:00:00.000Z",
+  });
+
+  it("cada fila nombra su categoría (la mixta ya no sale «Fem.») y el buscador la encuentra por su nombre", async () => {
+    listRegistrations.mockResolvedValueOnce([
+      pair("ana", "Ana López", "c-mx", "MX"),
+      pair("fani", "Fani Martín", "c-f", "F"),
+      pair("gema", "Gema Ruiz", "c-g", "G"),
+    ]);
+
+    renderPage();
+    await screen.findAllByText("Ana López");
+    // En el filtro, en la tarjeta y en la tabla
+    expect(screen.getAllByText("Mixta 4ª").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("General 4ª").length).toBeGreaterThanOrEqual(3);
+
+    fireEvent.change(screen.getByPlaceholderText("Buscar jugador o pareja..."), { target: { value: "mixta" } });
+    await waitFor(() => expect(screen.queryByText("Fani Martín")).not.toBeInTheDocument());
+    expect(screen.queryByText("Gema Ruiz")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Ana López").length).toBeGreaterThan(0);
+
+    // El nivel también se busca como se escribe («4a»)
+    fireEvent.change(screen.getByPlaceholderText("Buscar jugador o pareja..."), { target: { value: "4a" } });
+    expect(await screen.findAllByText("Fani Martín")).not.toHaveLength(0);
+  });
+});
