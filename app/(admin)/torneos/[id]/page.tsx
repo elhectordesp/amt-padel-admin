@@ -107,6 +107,9 @@ const AUDIT_ACTION_LABELS: Record<string, { label: string; color: string }> = {
   ROUND_FORMATS_UPDATED:          { label: "Formatos por ronda",      color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
   INSCRIPCION_ACTUALIZADA:        { label: "Inscripción actualizada", color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
   INSCRIPCIONES_ACTUALIZADAS_BULK:{ label: "Inscripciones bulk",      color: "text-blue-400 bg-blue-400/10 border-blue-400/30"     },
+  // Quién había pagado una inscripción cancelada que se reutiliza (o que se
+  // borra al mover otra a su categoría): quizá hay que devolverlo
+  INSCRIPCION_REUTILIZADA_CON_PAGOS: { label: "Pagos de una cancelada", color: "text-orange-400 bg-orange-400/10 border-orange-400/30" },
   BRACKET_MANUAL_INIT:            { label: "Grupos manuales creados", color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
   GROUP_MEMBERS_UPDATED:          { label: "Grupo actualizado",       color: "text-teal-400 bg-teal-400/10 border-teal-400/30"     },
   PREMIOS_CATEGORIA_ACTUALIZADOS: { label: "Premios actualizados",    color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
