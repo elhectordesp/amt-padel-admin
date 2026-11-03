@@ -20,6 +20,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import ReplacePartnerModal from "../../../components/admin/replace-partner-modal";
 import { adminService } from "@/lib/services/admin";
+import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
 const CARLA = { id: "u-carla", name: "Carla Gil", gender: "F", level: "3a" };
@@ -131,5 +132,70 @@ describe("ReplacePartnerModal — poner o cambiar la pareja", () => {
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(toast.success).toHaveBeenCalledWith("Pareja actualizada a Carla Gil");
+  });
+});
+
+describe("ReplacePartnerModal — quién puede ser la pareja por su género (D2)", () => {
+  const LUIS = { id: "u-luis", name: "Luis Mora", gender: "M", level: "3a", points: 40 };
+  const search = (text: string) =>
+    fireEvent.change(screen.getByPlaceholderText("Nombre o email…"), { target: { value: text } });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminService.players.list).mockImplementation(async (params) =>
+      ({ data: params?.gender === "M" ? [LUIS] : params?.gender === "F" ? [CARLA] : [LUIS, CARLA] }) as any,
+    );
+  });
+
+  it("femenina: solo busca jugadoras y la pista dice qué hacer si falta alguien", async () => {
+    renderModal(withInvitation);
+
+    search("Carla");
+    await screen.findByRole("button", { name: /Carla Gil/ });
+    expect(adminService.players.list).toHaveBeenCalledTimes(1);
+    expect(adminService.players.list).toHaveBeenCalledWith({ q: "Carla", gender: "F", pageSize: 8 });
+    expect(screen.getByText(
+      "Femenina: solo salen jugadoras con el género en su ficha. Si falta alguien, ponle el género en su ficha.",
+    )).toBeInTheDocument();
+  });
+
+  it("mixta: busca jugadores y jugadoras (no los que no tienen género) y el back exige el contrario", async () => {
+    renderModal({ ...withInvitation, category: { gender: "MX", level: "3a", price: 30 } });
+
+    search("Gil M");
+    expect(await screen.findByRole("button", { name: /Luis Mora/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Carla Gil/ })).toBeInTheDocument();
+    expect(adminService.players.list).toHaveBeenCalledWith({ q: "Gil M", gender: "M", pageSize: 8 });
+    expect(adminService.players.list).toHaveBeenCalledWith({ q: "Gil M", gender: "F", pageSize: 8 });
+    expect(adminService.players.list).not.toHaveBeenCalledWith({ q: "Gil M", pageSize: 8 });
+    expect(screen.getByText(/^Mixta, un jugador y una jugadora: solo salen jugadores y jugadoras con el género/)).toBeInTheDocument();
+  });
+
+  it("general y junior: cualquiera, también sin género, y sin pista", async () => {
+    for (const gender of ["G", "J"]) {
+      vi.mocked(adminService.players.list).mockClear();
+      const { unmount } = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ReplacePartnerModal registration={{ ...withInvitation, category: { gender, level: "3a", price: 30 } }} tournamentId="t1" onClose={vi.fn()} />
+        </QueryClientProvider>,
+      );
+      search("Luis");
+      await screen.findByRole("button", { name: /Luis Mora/ });
+      expect(adminService.players.list).toHaveBeenCalledWith({ q: "Luis", pageSize: 8 });
+      expect(screen.queryByText(/con el género en su ficha/)).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("si al titular o a la pareja le falta el género, enseña el aviso del back (GENDER_REQUIRED) y no cierra", async () => {
+    const message = "\"Ana López\" no tiene el género en su ficha: pónselo para inscribirlo en una categoría femenina.";
+    vi.mocked(adminService.registrations.replacePartner).mockRejectedValue(new ApiError(message, 400, "GENDER_REQUIRED"));
+    const { onClose } = renderModal(withInvitation);
+
+    await choose("Carla Gil");
+    fireEvent.click(screen.getByRole("button", { name: "Poner pareja" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -7,9 +7,10 @@ import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
-import { categoryLabel } from "@/lib/category-gender";
+import { categoryLabel, genderSearchHint, searchGendersFor } from "@/lib/category-gender";
 import { isClub, useRole } from "@/lib/use-role";
-import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
+import { searchPlayersForCategory } from "@/lib/utils/eligible-players";
+import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload, Gender } from "@/types";
 
 interface Props {
   tournament: Tournament;
@@ -40,12 +41,17 @@ const emptyCreateForm = (): Partial<CreatePlayerPayload> => ({
 
 // ── Module-level utilities ────────────────────────────────────────────────────
 
-async function searchPlayers(q: string, setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void) {
+// `genders`: los que admite la categoría con el otro de la pareja (searchGendersFor)
+async function searchPlayers(
+  q: string,
+  setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void,
+  genders: readonly Gender[] | null,
+) {
   if (q.length < 2) { setSlot((s) => ({ ...s, results: [], searching: false })); return; }
   setSlot((s) => ({ ...s, searching: true }));
   try {
-    const res = await adminService.players.list({ q, pageSize: 8 });
-    setSlot((s) => ({ ...s, results: res.data, searching: false }));
+    const results = await searchPlayersForCategory(q, genders);
+    setSlot((s) => ({ ...s, results, searching: false }));
   } catch {
     setSlot((s) => ({ ...s, results: [], searching: false }));
   }
@@ -55,10 +61,11 @@ function handleQueryChange(
   val: string,
   setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void,
   debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | undefined>,
+  genders: readonly Gender[] | null,
 ) {
   setSlot((s) => ({ ...s, query: val, player: null }));
   clearTimeout(debounceRef.current);
-  debounceRef.current = setTimeout(() => searchPlayers(val, setSlot), 300);
+  debounceRef.current = setTimeout(() => searchPlayers(val, setSlot, genders), 300);
 }
 
 function selectPlayer(player: Player, setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void) {
@@ -80,13 +87,21 @@ interface PlayerSlotSectionProps {
   slot: PlayerSlot;
   setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void;
   debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | undefined>;
-  otherPlayerId?: string | null;
+  otherPlayer?: Player | null;
+  /** El género de la categoría elegida: solo se buscan los que pueden jugarla. */
+  categoryGender?: string;
 }
 
-function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }: PlayerSlotSectionProps) {
+function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayer, categoryGender }: PlayerSlotSectionProps) {
   const qc = useQueryClient();
   const { role } = useRole();
   const createMut = useMutation({ mutationFn: (d: CreatePlayerPayload) => adminService.players.create(d) });
+  const otherPlayerId = otherPlayer?.id;
+  // En la mixta, con el otro ya elegido, se busca el género contrario
+  const genders = categoryGender ? searchGendersFor(categoryGender, otherPlayer?.gender) : null;
+  const genderHint = categoryGender
+    ? genderSearchHint(categoryGender, otherPlayer?.gender, { canEditPlayer: !isClub(role) })
+    : null;
 
   const handleCreatePlayer = async () => {
     const errs = validateCreateForm(slot.createForm);
@@ -134,7 +149,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
             <input
               type="text"
               value={slot.query}
-              onChange={(e) => handleQueryChange(e.target.value, setSlot, debounceRef)}
+              onChange={(e) => handleQueryChange(e.target.value, setSlot, debounceRef, genders)}
               placeholder="Buscar por nombre o email…"
               className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
@@ -195,6 +210,10 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
                 </p>
               </div>
             </div>
+          )}
+
+          {genderHint && !slot.player && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{genderHint}</p>
           )}
 
           {/* Create new player link */}
@@ -398,7 +417,8 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
             slot={slot1}
             setSlot={setSlot1}
             debounceRef={searchDebounce1}
-            otherPlayerId={slot2.player?.id}
+            otherPlayer={slot2.player}
+            categoryGender={selectedCategory?.gender}
           />
 
           {/* No partner toggle */}
@@ -419,7 +439,8 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               slot={slot2}
               setSlot={setSlot2}
               debounceRef={searchDebounce2}
-              otherPlayerId={slot1.player?.id}
+              otherPlayer={slot1.player}
+              categoryGender={selectedCategory?.gender}
             />
           )}
 

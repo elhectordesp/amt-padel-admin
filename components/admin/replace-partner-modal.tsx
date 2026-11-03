@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, UserCheck, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, registrationsQK } from "@/lib/services/admin";
 import { levelLabel } from "@/lib/constants";
+import { genderSearchHint, searchGendersFor } from "@/lib/category-gender";
+import { isClub, useRole } from "@/lib/use-role";
 import { pendingInviteeName } from "@/lib/utils/registration-pairs";
+import { searchPlayersForCategory } from "@/lib/utils/eligible-players";
 import type { AdminRegistration, Player } from "@/types";
 
 interface Props {
@@ -22,10 +25,15 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const [selected, setSelected] = useState<Player | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const qc = useQueryClient();
+  const { role } = useRole();
 
   const categoryGender = registration.category.gender;
   // Sin pareja, la pone; con ella, la sustituye (el mismo endpoint)
   const isNew = !registration.partnerId;
+  // Quien puede jugar la categoría con el titular. El listado de inscripciones
+  // no trae su género: en la mixta salen los dos y el back exige el contrario
+  const genders = useMemo(() => searchGendersFor(categoryGender), [categoryGender]);
+  const genderHint = genderSearchHint(categoryGender, null, { canEditPlayer: !isClub(role) });
 
   const search = useCallback((q: string) => {
     clearTimeout(debounceRef.current);
@@ -33,15 +41,14 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const data = await adminService.players.list({ q, gender: categoryGender !== "MX" ? categoryGender : undefined, pageSize: 8 });
-        setResults(data.data.slice(0, 8));
+        setResults(await searchPlayersForCategory(q, genders));
       } catch {
         setResults([]);
       } finally {
         setSearching(false);
       }
     }, 350);
-  }, [categoryGender]);
+  }, [genders]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { search(query); }, [query, search]);
@@ -118,6 +125,9 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
                 <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
               )}
             </div>
+            {genderHint && !selected && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">{genderHint}</p>
+            )}
           </div>
 
           {/* Results */}
