@@ -259,6 +259,13 @@ export interface AdminRegistration {
   createdAt:      string;
   /** Cuándo entró en la lista de espera (su puesto en la cola). */
   waitlistedAt?:  string | null;
+  /**
+   * La invitación a ser la pareja, mientras no la acepta: `partnerId` sigue
+   * a null hasta entonces. Solo en el listado; no vienen de un back anterior.
+   */
+  invitedPartnerId?: string | null;
+  partnerInvitedAt?: string | null;
+  invitedPartner?:   { name: string } | null;
 }
 
 export interface Player {

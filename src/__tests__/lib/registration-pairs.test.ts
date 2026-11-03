@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
-import { compareWaitlist, groupByPair, pairKeyOf, pairPlayers, pairsSummary, paymentCsvColumns, playerPayment, waitlistPositions } from '../../../lib/utils/registration-pairs';
+import { compareWaitlist, groupByPair, pairKeyOf, pairPlayers, pairsSummary, paymentCsvColumns, pendingInviteLabel, pendingInviteeName, playerPayment, waitlistPositions } from '../../../lib/utils/registration-pairs';
 import { needsForce } from '../../../lib/utils/registration-force';
 import { ApiError } from '../../../lib/api';
 
@@ -206,5 +206,25 @@ describe('pairsSummary — como el resumen de la ficha', () => {
   it('en singular y sin extras', () => {
     expect(pairsSummary(pairs('CONFIRMED'))).toBe('1 pareja inscrita');
     expect(pairsSummary([])).toBe('0 parejas inscritas');
+  });
+});
+
+describe('invitación a la pareja pendiente (pendingInviteeName, pendingInviteLabel)', () => {
+  const invited = (overrides: any = {}) =>
+    reg({ partnerId: null, partner: null, invitedPartnerId: 'b', partnerInvitedAt: '2026-11-01T10:00:00Z', invitedPartner: { name: 'Bea Ruiz' }, ...overrides });
+
+  it('sin pareja y con la invitación pendiente: el nombre de la invitada y su etiqueta', () => {
+    expect(pendingInviteeName(invited())).toBe('Bea Ruiz');
+    expect(pendingInviteLabel(invited())).toBe('invitada: Bea Ruiz (pendiente)');
+  });
+
+  it('sin invitación, o de un back que no la manda: nada', () => {
+    expect(pendingInviteLabel(invited({ invitedPartnerId: null, partnerInvitedAt: null, invitedPartner: null }))).toBeNull();
+    expect(pendingInviteLabel(reg({ partnerId: null, partner: null }))).toBeNull();
+  });
+
+  it('con pareja puesta: nada, aunque quede una invitación', () => {
+    expect(pendingInviteeName(invited({ partnerId: 'c', partner: { name: 'Carla Gil' } }))).toBeNull();
+    expect(pendingInviteLabel(invited({ partnerId: 'c', partner: { name: 'Carla Gil' } }))).toBeNull();
   });
 });

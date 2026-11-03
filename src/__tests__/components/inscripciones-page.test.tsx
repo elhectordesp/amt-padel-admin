@@ -126,3 +126,42 @@ describe("InscripcionesPage — torneo elegido en la URL", () => {
     expect(screen.getByPlaceholderText("Buscar jugador o pareja...")).toHaveValue("");
   });
 });
+
+describe("InscripcionesPage — invitación a la pareja pendiente", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParams = new URLSearchParams("torneo=t1");
+  });
+
+  const row = (id: string, name: string, extra: Record<string, unknown>) => ({
+    id,
+    tournamentId: "t1",
+    categoryId:   "c-1",
+    userId:       `u-${id}`,
+    user:         { name },
+    category:     { gender: "F", level: "4a", price: 30 },
+    status:       "PENDING",
+    paid:         false,
+    createdAt:    "2026-11-01T10:00:00.000Z",
+    ...extra,
+  });
+
+  it("la fila sin pareja con la invitación pendiente lleva «invitada: … (pendiente)»; sin invitación, nada", async () => {
+    listRegistrations.mockResolvedValueOnce([
+      // Ana invitó a Bea desde la app; Bea aún no ha aceptado
+      row("ana", "Ana López", {
+        partnerId: null, partner: null,
+        invitedPartnerId: "u-bea", partnerInvitedAt: "2026-11-01T10:00:00.000Z", invitedPartner: { name: "Bea Ruiz" },
+      }),
+      // De un back que aún no manda la invitación
+      row("fani", "Fani Martín", { partnerId: null, partner: null }),
+    ]);
+
+    renderPage();
+
+    // En las tarjetas (móvil) y en la tabla
+    expect(await screen.findAllByText("invitada: Bea Ruiz (pendiente)")).toHaveLength(2);
+    expect(screen.getAllByText("Sin pareja")).toHaveLength(4);
+    expect(screen.getAllByText(/invitada:/)).toHaveLength(2);
+  });
+});

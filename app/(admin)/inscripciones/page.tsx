@@ -17,7 +17,7 @@ import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
-import { compareWaitlist, groupByPair, paymentCsvColumns, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { compareWaitlist, groupByPair, paymentCsvColumns, pendingInviteLabel, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import { matchesSearch } from "@/lib/utils/search";
 import { paginate } from "@/lib/utils/pagination";
@@ -538,6 +538,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                       const isSelected = selected.has(pair.pairKey);
                       const isUpdating = pair.ids.some((id) => updatingIds.has(id));
                       const noAvail    = tournamentHasSchedule && !reg.hasAvailability;
+                      const inviteLabel = pendingInviteLabel(reg);
                       return (
                         <div
                           key={pair.pairKey}
@@ -566,6 +567,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                 ? <p className="text-xs text-muted-foreground truncate">{reg.partner.name}</p>
                                 : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
                               }
+                              {inviteLabel && <p className="text-[10px] text-yellow-400 truncate">{inviteLabel}</p>}
                             </div>
                             <span className={`inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
                               {scfg.label}{queuePosition.has(pair.pairKey) ? ` · ${queuePosition.get(pair.pairKey)}º` : ""}
@@ -686,6 +688,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                             const scfg       = STATUS_CFG[pair.status];
                             const isSelected = selected.has(pair.pairKey);
                             const isUpdating = pair.ids.some((id) => updatingIds.has(id));
+                            const inviteLabel = pendingInviteLabel(reg);
                             return (
                               <tr
                                 key={pair.pairKey}
@@ -710,6 +713,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                     ? <p className="text-xs text-muted-foreground">{reg.partner.name}</p>
                                     : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
                                   }
+                                  {inviteLabel && <p className="text-[10px] text-yellow-400">{inviteLabel}</p>}
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="space-y-0.5">
