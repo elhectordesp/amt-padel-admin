@@ -645,6 +645,16 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   <Users size={14} />
                                 </button>
                               )}
+                              {!reg.partnerId && pair.status !== "CANCELLED" && (
+                                <button
+                                  onClick={() => setReplaceReg(reg)}
+                                  disabled={isUpdating}
+                                  title="Poner pareja"
+                                  className="p-2 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40"
+                                >
+                                  <UserPlus size={14} />
+                                </button>
+                              )}
                               <button
                                 onClick={() => handlePairStatus(pair, "CANCELLED")}
                                 disabled={isUpdating}
@@ -816,6 +826,16 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                         className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40 transition-colors"
                                       >
                                         <Users size={14} />
+                                      </button>
+                                    )}
+                                    {!reg.partnerId && pair.status !== "CANCELLED" && (
+                                      <button
+                                        onClick={() => setReplaceReg(reg)}
+                                        disabled={isUpdating}
+                                        title="Poner pareja"
+                                        className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 disabled:opacity-40 transition-colors"
+                                      >
+                                        <UserPlus size={14} />
                                       </button>
                                     )}
                                     <button

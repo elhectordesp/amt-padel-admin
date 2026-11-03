@@ -60,6 +60,9 @@ const REGISTRATIONS = [
     invitedPartnerId: null, partnerInvitedAt: null, invitedPartner: null,
   }),
   row("reg-elena", "u-elena", "Elena Pons", { status: "CANCELLED", partnerId: null, partner: null }),
+  row("reg-gema", "u-gema", "Gema Vidal", { status: "WAITLIST", partnerId: null, partner: null }),
+  // Inscrita por el admin con «Sin pareja»
+  row("reg-ines", "u-ines", "Inés Mora", { status: "CONFIRMED", partnerId: null, partner: null, noPartner: true }),
 ];
 
 const handlers: Record<string, Record<string, (...args: unknown[]) => unknown>> = {
@@ -108,6 +111,8 @@ describe("Inscripciones del torneo — invitación a la pareja", { timeout: 30_0
 
     expect(within(rowOf("Ana López")).getByTitle("Poner pareja")).toBeInTheDocument();
     expect(within(rowOf("Fani Martín")).getByTitle("Poner pareja")).toBeInTheDocument();
+    expect(within(rowOf("Gema Vidal")).getByTitle("Poner pareja")).toBeInTheDocument();
+    expect(within(rowOf("Inés Mora")).getByTitle("Poner pareja")).toBeInTheDocument();
     expect(within(rowOf("Elena Pons")).queryByTitle("Poner pareja")).not.toBeInTheDocument();
 
     const carla = rowOf("Carla Gil");
