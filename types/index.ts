@@ -21,7 +21,7 @@ export interface AdminStats {
 
 export interface TournamentCategory {
   id:               string;
-  gender:           Gender;
+  gender:           CategoryGender;
   level:            CategoryLevel;
   currentPhase:     string;
   currentPhaseLabel?: string;

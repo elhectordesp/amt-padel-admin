@@ -15,11 +15,12 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { phaseLabel, GENDER_LABEL, CATEGORY_LABEL_SHORT } from "@/lib/constants";
+import { phaseLabel } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { isByeMatch } from "@/lib/utils/match-status";
 import { dateOnlyKey, formatDayKey, tournamentTimeZone, zonedDayKey, zonedMinutes } from "@/lib/utils/time-zone";
 import { fitsInWindows, phaseDuration, windowsForDay } from "@/lib/utils/schedule-windows";
-import type { MatchResult, Gender, CategoryLevel } from "@/types";
+import type { MatchResult } from "@/types";
 
 const ROW_H = 64; // px per 30-min slot
 
@@ -49,7 +50,7 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 function catLabel(tournament: any, categoryId: string): string {
   const cat = tournament?.categories?.find((c: any) => c.id === categoryId);
   if (!cat) return "";
-  return `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
+  return categoryLabel(cat);
 }
 
 /** "09:00" -> 540 (minutos). null si no es una hora válida. */

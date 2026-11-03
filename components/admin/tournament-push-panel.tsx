@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Loader2, Send, Users } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { charCount } from "@/lib/utils/char-count";
 import {
   MESSAGE_BODY_MAX,
@@ -14,7 +14,6 @@ import {
   tournamentMessagesService,
   type TournamentMessage,
 } from "@/lib/services/tournament-messages";
-import type { CategoryLevel, Gender } from "@/types";
 
 interface Category {
   id:     string;
@@ -32,13 +31,6 @@ interface Props {
 /** Por qué no se puede mandar en un borrador (también en la pestaña desactivada). */
 export const DRAFT_MESSAGES_HINT =
   "El torneo está en borrador y los jugadores aún no lo ven. Publícalo para poder mandarles mensajes.";
-
-/** "Masc. 3ª" (o el valor tal cual si es uno que el panel aún no conoce). */
-function categoryLabel(c: { gender: string; level: string }): string {
-  const gender = GENDER_LABEL[c.gender as Gender]?.short ?? c.gender;
-  const level = CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level;
-  return `${gender} ${level}`;
-}
 
 /** Fecha y hora del envío en hora de España. */
 function sentAt(iso: string): string {
@@ -283,7 +275,7 @@ export function TournamentPushPanel({ tournamentId, categories, isDraft = false 
                 <p className="text-xs text-muted-foreground break-words">{m.body}</p>
                 <p className="text-[11px] text-muted-foreground">
                   {m.sentBy.name} · {m.recipientCount} {m.recipientCount === 1 ? "jugador" : "jugadores"} ·{" "}
-                  {m.categories.map(categoryLabel).join(", ") || "categorías borradas"}
+                  {m.categories.map((c) => categoryLabel(c)).join(", ") || "categorías borradas"}
                   {m.includeWaitlist && " · con lista de espera"}
                 </p>
               </li>

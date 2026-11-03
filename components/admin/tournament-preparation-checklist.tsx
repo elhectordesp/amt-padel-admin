@@ -7,9 +7,8 @@ import { AlertTriangle, Check, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { adminService } from "@/lib/services/admin";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { formatInTimeZone } from "@/lib/utils/time-zone";
-import type { CategoryLevel, Gender } from "@/types";
 import type {
   PreparationCategory,
   PreparationStepKey,
@@ -35,8 +34,7 @@ const PREPARING = ["DRAFT", "OPEN", "DRAW", "SCHEDULED"];
 
 type Confirm = "open" | "close" | "publish" | "publish-force" | null;
 
-const catName = (c: { gender: string; level: string }) =>
-  `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`;
+const catName = (c: { gender: string; level: string }) => categoryLabel(c);
 
 // En la zona del torneo, no en la del navegador
 const fmtDeadline = (iso: string, timeZone: string) =>

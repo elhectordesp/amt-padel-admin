@@ -20,6 +20,7 @@ import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
 import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel, trendLabel } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
@@ -585,7 +586,7 @@ export default function JugadorDetailPage() {
                             {formatDayKey(dateOnlyKey(r.startDate), DATE_NUMERIC)}
                           </td>
                           <td className="px-3 sm:px-5 py-3 text-xs text-muted-foreground">
-                            {r.gender === "M" ? "Masc." : r.gender === "F" ? "Fem." : r.gender} {CATEGORY_LABEL[r.level as CategoryLevel] ?? r.level}
+                            {categoryLabel(r)}
                           </td>
                           <td className="px-3 sm:px-5 py-3">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>

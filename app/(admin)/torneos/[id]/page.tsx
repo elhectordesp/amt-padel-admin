@@ -52,13 +52,14 @@ import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status
 import { groupByPair, pairsSummary, paymentCsvColumns, pendingInviteLabel, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
+import { categoryLabel } from "@/lib/category-gender";
 import {
-  CATEGORY_LABEL_SHORT, GENDER_LABEL, LEVELS,
+  CATEGORY_LABEL_SHORT, LEVELS,
   REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel, registrationStatusLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, Gender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import {
   formatDayKey,
@@ -428,7 +429,7 @@ function CalendarTab({
   const catMap = Object.fromEntries(
     (tournament?.categories ?? []).map((c) => [
       c.id,
-      `${GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} ${CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}`,
+      categoryLabel(c),
     ]),
   );
 
@@ -649,7 +650,7 @@ function CalendarTab({
               <div className="flex items-center justify-between px-5 py-3 bg-secondary/50 border-b border-border">
                 <div className="flex items-center gap-3">
                   <h4 className="text-sm font-semibold text-foreground">
-                    {GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} {CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}
+                    {categoryLabel(cat)}
                   </h4>
                   {isPublished ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-green-400/30 text-green-400 bg-green-400/10">
@@ -909,7 +910,7 @@ function CalendarTab({
         categoryId={lockedPrompt.categoryId}
         categoryLabel={(() => {
           const c = tournament?.categories.find((x) => x.id === lockedPrompt.categoryId);
-          return c ? `${GENDER_LABEL[c.gender].short} ${CATEGORY_LABEL_SHORT[c.level]}` : "la categoría";
+          return c ? categoryLabel(c) : "la categoría";
         })()}
         onClose={lockedPrompt.close}
         onForce={lockedPrompt.force}
@@ -1016,7 +1017,7 @@ function StatusTab({ status, loading, onRefresh, timeZone }: { status: any; load
       {/* ── Category cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {categories.map((cat: any) => {
-          const catLabel = `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
+          const catLabel = categoryLabel(cat);
           const catPct   = cat.totalMatches > 0 ? Math.round((cat.finishedMatches / cat.totalMatches) * 100) : 0;
           const hasConflicts  = cat.conflicts.length > 0;
           const hasUnscheduled = cat.unscheduled > 0;
@@ -1125,7 +1126,7 @@ function CourtBoard({
   const catMap = useMemo(() => {
     const m: Record<string, string> = {};
     for (const c of categories) {
-      m[c.id] = `${c.gender === "M" ? "Masc." : "Fem."} ${c.level}`;
+      m[c.id] = categoryLabel(c);
     }
     return m;
   }, [categories]);
@@ -2214,7 +2215,7 @@ export default function TorneoDetailPage() {
     { value: "", label: "Seleccionar categoría..." },
     ...tournament.categories.map((cat) => ({
       value: cat.id,
-      label: `${GENDER_LABEL[cat.gender].short} ${CATEGORY_LABEL_SHORT[cat.level]}`,
+      label: categoryLabel(cat),
     })),
   ];
 
@@ -2529,7 +2530,7 @@ export default function TorneoDetailPage() {
                     return (
                       <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-foreground">
-                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                          {categoryLabel(cat)}
                         </td>
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
@@ -2643,7 +2644,7 @@ export default function TorneoDetailPage() {
                 {tournament.categories.map((cat) => (
                   <div key={cat.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-secondary/40">
                     <span className="text-xs text-muted-foreground truncate">
-                      {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                      {categoryLabel(cat)}
                     </span>
                     <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[rgba(212,175,55,0.3)] bg-[rgba(212,175,55,0.08)] text-[#D4AF37]">
                       {cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}
@@ -2667,7 +2668,7 @@ export default function TorneoDetailPage() {
               </div>
               <div className="divide-y divide-border">
                 {tournament.categories.map((cat: any) => {
-                  const catLabel = `${GENDER_LABEL[cat.gender as Gender]?.short ?? cat.gender} ${CATEGORY_LABEL_SHORT[cat.level as CategoryLevel] ?? cat.level}`;
+                  const catLabel = categoryLabel(cat);
                   const isEditing = editPrizesCatId === cat.id;
                   const hasPrizes = cat.prizeChampion || cat.prizeRunnerUp || (cat.hasConsolation && cat.prizeConsolation);
 
@@ -2822,7 +2823,7 @@ export default function TorneoDetailPage() {
                     <option value="all">Todas las categorías</option>
                     {tournament.categories.map((c: any) => (
                       <option key={c.id} value={c.id}>
-                        {c.gender === "M" ? "Masc." : "Fem."} {c.level}
+                        {categoryLabel(c)}
                       </option>
                     ))}
                   </select>
@@ -2847,7 +2848,7 @@ export default function TorneoDetailPage() {
                       "Email J2": p.primary.partner?.email ?? "",
                       "Nivel J2": p.primary.partner?.categoryLevel ?? "",
                       "SPA J2":   p.primary.partner?.spaPoints ?? "",
-                      Categoría:  `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${CATEGORY_LABEL_SHORT[p.primary.category.level as CategoryLevel] ?? p.primary.category.level}`,
+                      Categoría:  categoryLabel(p.primary.category),
                       // Por su nombre: salía el código («WAITLIST»)
                       Estado:     REGISTRATION_STATUS_CONFIG[p.status]?.label ?? p.status,
                       ...paymentCsvColumns(p.primary),
@@ -2994,7 +2995,7 @@ export default function TorneoDetailPage() {
                             </div>
                           </td>
                           <td className="px-5 py-3.5">
-                            <span className="text-xs text-muted-foreground">{`${reg.category.gender === "M" ? "Masc." : "Fem."} ${reg.category.level}`}</span>
+                            <span className="text-xs text-muted-foreground">{categoryLabel(reg.category)}</span>
                           </td>
                           <td className="px-5 py-3.5">
                             <StatusBadge status={pair.status} />
@@ -3528,7 +3529,7 @@ export default function TorneoDetailPage() {
                           : "border-border text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.4)]"
                       }`}
                     >
-                      {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                      {categoryLabel(cat)}
                     </button>
                   );
                 })}
@@ -3573,7 +3574,7 @@ export default function TorneoDetailPage() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 sm:px-5 border-b border-border">
                       <div className="flex items-center gap-3 min-w-0">
                         <h4 className="text-sm font-semibold text-foreground truncate">
-                          {GENDER_LABEL[cat.gender].short} {CATEGORY_LABEL_SHORT[cat.level]}
+                          {categoryLabel(cat)}
                         </h4>
                         <span className="text-xs text-[#D4AF37] truncate">{cat.currentPhaseLabel ?? phaseLabel(cat.currentPhase)}</span>
                       </div>
@@ -4377,7 +4378,7 @@ export default function TorneoDetailPage() {
             <div>
               <h3 className="text-base font-semibold text-foreground">Reestructurar grupos</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                {cat?.gender === "M" ? "Masculino" : "Femenino"} {cat?.level} — {totalPairs} parejas confirmadas
+                {cat ? categoryLabel(cat, "full") : ""} — {totalPairs} parejas confirmadas
               </p>
             </div>
 

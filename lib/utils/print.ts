@@ -4,6 +4,7 @@ import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { playerPayment, type PairRegistration } from "@/lib/utils/registration-pairs";
 import { hasDate, isMatchFinished, type DatedMatch } from "@/lib/utils/match-status";
 import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
+import { categoryLabel } from "@/lib/category-gender";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
@@ -40,8 +41,6 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
     const [gender, level] = key.split("__");
     const catPairs = buildCategoryRows(pairs, gender, level);
     if (catPairs.length === 0) return "";
-
-    const genderLabel = gender === "M" ? "Masculino" : "Femenino";
 
     const rows = catPairs.map((pair, i) => {
       const reg      = pair.primary;
@@ -81,7 +80,7 @@ export function printRegistrations(tournament: Tournament, pairs: PairReg[]): vo
     return `
       <div class="category-block">
         <div class="category-header">
-          <span>${genderLabel} · ${esc(level)}</span>
+          <span>${esc(categoryLabel({ gender, level }, "full"))}</span>
           <span class="cat-count">${catPairs.length} ${catPairs.length === 1 ? "pareja" : "parejas"}</span>
         </div>
         <table>
@@ -187,7 +186,7 @@ export function printTournamentReport(
 
   const catMap: Record<string, string> = {};
   for (const c of tournament.categories ?? []) {
-    catMap[(c as any).id] = `${(c as any).gender === "M" ? "Masc." : "Fem."} ${(c as any).level}`;
+    catMap[(c as any).id] = categoryLabel(c as any);
   }
 
   const finals        = matches.filter((m) => m.phase === "FINAL" && m.winner);

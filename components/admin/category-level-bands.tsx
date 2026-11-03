@@ -3,8 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { adminService } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
-import type { CategoryLevel, Gender } from "@/types";
+import { categoryLabel } from "@/lib/category-gender";
 import type { CategoryLevelSummary } from "@/types/preparation";
 
 const fmt = (n: number) => n.toLocaleString("es-ES", { maximumFractionDigits: 1 });
@@ -83,7 +82,7 @@ export function CategoryLevelBands({ tournamentId }: { tournamentId: string }) {
       ) : (
         <ul className="divide-y divide-border">
           {data.map((s) => {
-            const name = `${GENDER_LABEL[s.gender as Gender]?.short ?? s.gender} ${CATEGORY_LABEL_SHORT[s.level as CategoryLevel] ?? s.level}`;
+            const name = categoryLabel(s);
             return (
               <li key={s.categoryId} className="px-5 py-3 space-y-2">
                 <div className="flex items-center justify-between gap-3 flex-wrap">

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
+import { categoryLabel } from "@/lib/category-gender";
 import { isClub, useRole } from "@/lib/use-role";
 import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
 
@@ -384,7 +385,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               <option value="">Selecciona categoría…</option>
               {(tournament.categories ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.gender === "M" ? "Masculina" : c.gender === "F" ? "Femenina" : "Mixta"} · {LEVEL_LABEL[c.level] ?? c.level}
+                  {categoryLabel(c, "full")}
                   {" "}({c.occupiedCount}/{c.totalSpots} plazas{c.waitlistCount > 0 ? `, ${c.waitlistCount} en espera` : ""})
                 </option>
               ))}

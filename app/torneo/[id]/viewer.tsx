@@ -5,13 +5,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Trophy, Users, Calendar, MapPin, Clock, ListTree } from "lucide-react";
 import { DEFAULT_TIME_ZONE, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import type { TournamentStatus } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª", "4a": "4ª", "5a": "5ª", "6a": "6ª", iniciacion: "Iniciación",
-};
 const TIER_COLOR: Record<string, string> = {
   PLATINUM: "#E5E4E2", GOLD: "#D4AF37", SILVER: "#C0C0C0", BRONZE: "#CD7F32",
 };
@@ -34,7 +32,8 @@ async function fetchJson(url: string) {
   }
 }
 
-const catName = (c: any) => `${c.gender === "M" ? "Masculino" : "Femenino"} · ${CATEGORY_LABEL[c.level] ?? c.level}`;
+// «Mixta · 3ª»: antes, todo lo que no era masculina salía «Femenino»
+const catName = (c: any) => categoryLabel(c, "full");
 const pairLabel = (arr?: string[]) => (arr && arr.length ? arr.join(" / ") : "Por definir");
 // Etiqueta corta (móvil): usa los nombres abreviados del backend; si no llegan
 // (deploy desfasado), cae al nombre completo.

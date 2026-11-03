@@ -17,6 +17,7 @@ import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { compareWaitlist, groupByPair, paymentCsvColumns, pendingInviteLabel, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import { matchesSearch } from "@/lib/utils/search";
@@ -409,7 +410,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                   <option value="all">Todas las categorías</option>
                   {availableCategories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.gender === "M" ? "Masc." : "Fem."} {CATEGORY_LABEL[c.level as CategoryLevel] ?? c.level}
+                      {categoryLabel(c)}
                     </option>
                   ))}
                 </select>
@@ -434,7 +435,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                   "Email J2":       p.primary.partner?.email ?? "",
                   "Nivel SPA J2":   p.primary.partner?.categoryLevel ?? "",
                   "SPA J2":         p.primary.partner?.spaPoints ?? "",
-                  "Categoría":      `${p.primary.category.gender === "M" ? "Masc." : "Fem."} ${CATEGORY_LABEL[p.primary.category.level as CategoryLevel] ?? p.primary.category.level}`,
+                  "Categoría":      categoryLabel(p.primary.category),
                   // Por su nombre: salía el código («WAITLIST»)
                   "Estado":         STATUS_CFG[p.status]?.label ?? p.status,
                   ...paymentCsvColumns(p.primary),
@@ -577,7 +578,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                           {/* Metadata row */}
                           <div className="flex items-center gap-2 mt-2 text-[11px] text-muted-foreground flex-wrap">
                             <span className="font-medium text-foreground">
-                              {reg.category.gender === "M" ? "Masc." : "Fem."} {reg.category.level}
+                              {categoryLabel(reg.category)}
                             </span>
                             <span>·</span>
                             <span>
@@ -748,7 +749,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   </div>
                                 </td>
                                 <td className="px-5 py-3.5">
-                                  <span className="text-xs text-muted-foreground">{`${reg.category.gender === "M" ? "Masc." : "Fem."} ${reg.category.level}`}</span>
+                                  <span className="text-xs text-muted-foreground">{categoryLabel(reg.category)}</span>
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <span className="text-xs text-muted-foreground">

@@ -7,6 +7,7 @@ import { TournamentImageUploader } from "@/components/admin/tournament-image-upl
 import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { useRole, isClub } from "@/lib/use-role";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
@@ -947,7 +948,7 @@ export default function NuevoTorneoPage() {
                       <div key={i} className="space-y-0.5">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground font-medium">
-                            {c.gender === "M" ? "Masc." : "Fem."} {LEVELS.find((l) => l.value === c.level)?.label}
+                            {categoryLabel(c)}
                           </span>
                           <span className="text-foreground">{c.totalSpots} plazas · {c.price} €/pareja</span>
                         </div>
