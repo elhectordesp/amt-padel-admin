@@ -7,6 +7,8 @@ import {
   auditActionText,
   auditResourceLabel,
   phaseLabel,
+  playerGender,
+  playerGenderLabel,
   registrationStatusLabel,
   trendLabel,
 } from "@/lib/constants";
@@ -35,6 +37,16 @@ describe("etiquetas de códigos del back", () => {
     expect(trendLabel("down")).toBe("Bajando");
     expect(trendLabel("stable")).toBe("Estable");
     expect(trendLabel(undefined)).toBe("Estable");
+  });
+
+  it("género de un jugador: sin él en su ficha, «Sin género» (el back manda 'M' con hasGender false)", () => {
+    expect(playerGender({ gender: "F", hasGender: true })).toBe("F");
+    expect(playerGender({ gender: "M", hasGender: false })).toBeNull();
+    // De un endpoint que no manda hasGender: su gender
+    expect(playerGender({ gender: "M" })).toBe("M");
+    expect(playerGenderLabel({ gender: "F", hasGender: true })).toBe("Fem.");
+    expect(playerGenderLabel({ gender: "M", hasGender: true })).toBe("Masc.");
+    expect(playerGenderLabel({ gender: "M", hasGender: false })).toBe("Sin género");
   });
 
   it("recurso del historial", () => {

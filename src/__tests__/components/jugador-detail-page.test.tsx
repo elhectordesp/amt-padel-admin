@@ -103,6 +103,86 @@ describe("JugadorDetailPage — «Editar datos» y el email de quien ya usa la a
   });
 });
 
+describe("JugadorDetailPage — el género de quien no lo tiene en su ficha", () => {
+  // El back lo manda con gender 'M' y hasGender false
+  const noGender = {
+    id: "p-1", name: "Leo Martín", email: "leo@x.com", gender: "M", hasGender: false, level: "3a",
+    played: 0, wins: 0, points: 0, trend: "stable", globalRank: 12,
+    managedByAdmin: true, activationStatus: "invited",
+  };
+  const genderButton = (name: "Masculino" | "Femenino") => screen.getByRole("button", { name });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    playersMock.categoryHistory.mockResolvedValue([]);
+    playersMock.registrations.mockResolvedValue([]);
+    playersMock.auditLog.mockResolvedValue([]);
+    playersMock.update.mockResolvedValue({ genderConflicts: [] });
+  });
+
+  it("la ficha dice «Sin género», no «Masc.», también al cambiarle la categoría", async () => {
+    playersMock.detail.mockResolvedValue(noGender);
+    renderPage();
+
+    expect(await screen.findByText("Sin género 3ª")).toBeInTheDocument();
+    // Debajo del ranking global
+    expect(screen.getByText("Sin género")).toBeInTheDocument();
+    expect(screen.queryByText(/Masc\./)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar categoría" }));
+    expect(screen.getAllByText("Sin género 3ª")).toHaveLength(2);
+  });
+
+  it("«Editar datos» no marca ninguno, dice «Sin género» y guardar otro dato no le pone Masculino", async () => {
+    playersMock.detail.mockResolvedValue(noGender);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /editar datos/i }));
+    expect(genderButton("Masculino")).toHaveAttribute("aria-pressed", "false");
+    expect(genderButton("Femenino")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/^Sin género: no juega masculina, femenina ni mixta/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("leo@x.com"), { target: { value: "leo.martin@x.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(playersMock.update).toHaveBeenCalledTimes(1));
+    expect(playersMock.update.mock.calls[0][1]).toMatchObject({ email: "leo.martin@x.com" });
+    expect(playersMock.update.mock.calls[0][1].gender).toBeUndefined();
+  });
+
+  it("si el organizador le elige uno, lo manda", async () => {
+    playersMock.detail.mockResolvedValue(noGender);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /editar datos/i }));
+    fireEvent.click(genderButton("Masculino"));
+    expect(genderButton("Masculino")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/^Sin género:/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(playersMock.update).toHaveBeenCalledWith("p-1", expect.objectContaining({ gender: "M" })));
+  });
+
+  it("a quien lo tiene, marcado el suyo; sin cambiarlo no se manda y, cambiado, sí", async () => {
+    playersMock.detail.mockResolvedValue({ ...noGender, gender: "F", hasGender: true });
+    renderPage();
+
+    expect(await screen.findByText("Fem. 3ª")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+    expect(genderButton("Femenino")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/^Sin género:/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    await waitFor(() => expect(playersMock.update).toHaveBeenCalledTimes(1));
+    expect(playersMock.update.mock.calls[0][1].gender).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+    fireEvent.click(genderButton("Masculino"));
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    await waitFor(() => expect(playersMock.update).toHaveBeenCalledTimes(2));
+    expect(playersMock.update.mock.calls[1][1].gender).toBe("M");
+  });
+});
+
 describe("JugadorDetailPage — textos sin códigos internos (P3-11)", () => {
   const player = {
     id: "p-1", name: "Ana López", email: "ana@x.com", gender: "F", level: "3a",

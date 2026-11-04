@@ -297,6 +297,12 @@ export interface Player {
   bio?:           string | null;
   photoUrl?:      string | null;
   gender:         Gender;
+  /**
+   * false: no tiene el género en su ficha (`gender` sale 'M' igualmente) y no
+   * juega masculina, femenina ni mixta. Lo mandan la lista y la ficha de
+   * /admin/players: el género se lee con playerGender (lib/constants.ts).
+   */
+  hasGender?:     boolean;
   // null: sin categoría asignada (nunca se toma una por defecto)
   level:          CategoryLevel | null;
   played:         number;
