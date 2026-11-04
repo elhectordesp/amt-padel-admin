@@ -37,12 +37,14 @@ export default function RankingsPage() {
   const [catFilter,         setCatFilter]         = useState<CatFilter>("global");
   const { page, setPage, pageSize, setPageSize } = usePagination();
   const [showRecalcConfirm, setShowRecalcConfirm] = useState(false);
+  // El ranking que se pide y se enseña: con el SPA, nunca el Mixto (el back responde 400 a MX)
+  const shownGender = keepRankingGender(rankType, gender);
 
   // Siempre pedimos todo el ranking global (sin filtro de level) para tener los ranks correctos
   const { data: allPlayers = [], isLoading } = useQuery({
-    queryKey: ["ranking-admin", gender, rankType],
+    queryKey: ["ranking-admin", shownGender, rankType],
     queryFn:  () => adminService.rankings.list(
-      gender,
+      shownGender,
       rankType,
       rankType === "circuit" ? CURRENT_YEAR : undefined,
     ),
@@ -62,7 +64,7 @@ export default function RankingsPage() {
   const pagedPlayers = paginate(displayPlayers, current, pageSize);
 
   const handleCatChange = (cat: CatFilter) => { setCatFilter(cat); setPage(1); };
-  // El Mixto solo existe en el de circuito: al pasar al SPA, vuelve al Masculino
+  // El Mixto solo existe en el de circuito: al pasar al SPA, vuelve al Masculino y sigue en él al volver
   const handleTypeChange = (t: RankingType) => { setRankType(t); setGender(keepRankingGender(t, gender)); setCatFilter("global"); setPage(1); };
   const handleGenderChange = (g: RankingGender) => { setGender(g); setCatFilter("global"); setPage(1); };
 
@@ -121,7 +123,7 @@ export default function RankingsPage() {
                 key={g}
                 onClick={() => handleGenderChange(g)}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  gender === g
+                  shownGender === g
                     ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -133,7 +135,7 @@ export default function RankingsPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => downloadCsv(`ranking-${gender}-${catFilter}`, displayPlayers.map((p: Player, i: number) => ({
+              onClick={() => downloadCsv(`ranking-${shownGender}-${catFilter}`, displayPlayers.map((p: Player, i: number) => ({
                 "#Global":    p.globalRank   ?? i + 1,
                 "#Categoría": p.categoryRank ?? "—",
                 Jugador:      p.name,
@@ -214,8 +216,8 @@ export default function RankingsPage() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">
               {catFilter === "global"
-                ? `Ranking global — ${RANKING_GENDER_LABEL[gender]}`
-                : `Ranking ${CATEGORY_LABEL[catFilter as CategoryLevel]}ª — ${RANKING_GENDER_LABEL[gender]}`
+                ? `Ranking global — ${RANKING_GENDER_LABEL[shownGender]}`
+                : `Ranking ${CATEGORY_LABEL[catFilter as CategoryLevel]}ª — ${RANKING_GENDER_LABEL[shownGender]}`
               }
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
