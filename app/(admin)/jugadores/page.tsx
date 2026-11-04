@@ -18,9 +18,11 @@ import { downloadCsv } from "@/lib/utils/csv";
 import Link from "next/link";
 import { Header } from "@/components/admin/header";
 import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
+import { DeletedAccounts } from "@/components/admin/deleted-accounts";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, levelLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
+import { useRole } from "@/lib/use-role";
 import type { Player, Gender, CategoryLevel, CreatePlayerPayload } from "@/types";
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -77,6 +79,7 @@ function AccessWarning({ status }: { status?: string }) {
 export default function JugadoresPage() {
   const router  = useRouter();
   const qc      = useQueryClient();
+  const { role } = useRole();
 
   const { page, setPage, pageSize, setPageSize } = usePagination();
   const [searchInput,  setSearchInput]  = useState("");
@@ -570,6 +573,9 @@ export default function JugadoresPage() {
             busy={isFetching}
           />
         )}
+
+        {/* Anonimizar a petición de la persona: solo AMT */}
+        {role === "admin" && <DeletedAccounts />}
       </div>
 
       {/* Create player modal */}

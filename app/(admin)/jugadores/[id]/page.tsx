@@ -955,7 +955,7 @@ export default function JugadorDetailPage() {
               />
               <span>
                 La baja la pide el propio jugador
-                <span className="block text-xs text-muted-foreground">Derecho de supresión: igual que si borrara él su cuenta. Márcala ahora si es el caso: después no se puede cambiar.</span>
+                <span className="block text-xs text-muted-foreground">Derecho de supresión: igual que si borrara él su cuenta. Si lo pide más adelante, se anonimiza desde «Cuentas borradas», en Jugadores.</span>
               </span>
             </label>
             <div className="flex gap-3 pt-1">
