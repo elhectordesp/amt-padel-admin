@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel, playerGender } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
 import { categoryLabel, genderSearchHint, searchGendersFor } from "@/lib/category-gender";
 import { isClub, useRole } from "@/lib/use-role";
@@ -97,10 +97,12 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayer, cat
   const { role } = useRole();
   const createMut = useMutation({ mutationFn: (d: CreatePlayerPayload) => adminService.players.create(d) });
   const otherPlayerId = otherPlayer?.id;
-  // En la mixta, con el otro ya elegido, se busca el género contrario
-  const genders = categoryGender ? searchGendersFor(categoryGender, otherPlayer?.gender) : null;
+  // En la mixta, con el otro ya elegido, se busca el género contrario. El
+  // suyo de verdad: elegido en una general sin género en su ficha, sale 'M'
+  const otherGender = otherPlayer ? playerGender(otherPlayer) : null;
+  const genders = categoryGender ? searchGendersFor(categoryGender, otherGender) : null;
   const genderHint = categoryGender
-    ? genderSearchHint(categoryGender, otherPlayer?.gender, { canEditPlayer: !isClub(role) })
+    ? genderSearchHint(categoryGender, otherGender, { canEditPlayer: !isClub(role) })
     : null;
 
   const handleCreatePlayer = async () => {

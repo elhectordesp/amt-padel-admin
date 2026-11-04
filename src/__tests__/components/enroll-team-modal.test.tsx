@@ -89,6 +89,26 @@ describe("EnrollTeamModal — quién sale en los buscadores por su género", () 
     expect(list).toHaveBeenCalledWith({ q: "Car", gender: "F", pageSize: 8 });
   });
 
+  it("mixta: si el otro se eligió en una general y no tiene género, su pareja se busca entre los dos, no entre jugadoras", async () => {
+    // El back lo manda con gender 'M' y hasGender false
+    const LEO = { id: "u-leo", name: "Leo Martín", gender: "M", hasGender: false, level: "3a", points: 10 };
+    list.mockImplementation(async (params) =>
+      ({ data: params?.gender === "M" ? [LUIS] : params?.gender === "F" ? [CARLA] : [LEO, LUIS, CARLA] }) as any,
+    );
+    renderModal();
+    pickCategory("c-g");
+    fireEvent.change(searchBoxes()[0], { target: { value: "Leo" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Leo Martín/ }));
+    pickCategory("c-mx");
+
+    list.mockClear();
+    expect(screen.getByText(/^Mixta, un jugador y una jugadora: solo salen jugadores y jugadoras con el género/)).toBeInTheDocument();
+    fireEvent.change(searchBoxes()[1], { target: { value: "Gil" } });
+    await screen.findByRole("button", { name: /Carla Gil/ });
+    expect(list).toHaveBeenCalledWith({ q: "Gil", gender: "M", pageSize: 8 });
+    expect(list).toHaveBeenCalledWith({ q: "Gil", gender: "F", pageSize: 8 });
+  });
+
   it("general: cualquiera, también sin género, y sin pista", async () => {
     renderModal();
     pickCategory("c-g");

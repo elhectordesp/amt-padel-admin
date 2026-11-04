@@ -31,7 +31,7 @@ const base: any = {
   tournamentId: "t1",
   categoryId:   "cat-1",
   userId:       "u-ana",
-  user:         { name: "Ana López" },
+  user:         { name: "Ana López", gender: "F" },
   category:     { gender: "F", level: "3a", price: 30 },
   status:       "PENDING",
   paid:         false,
@@ -159,8 +159,31 @@ describe("ReplacePartnerModal — quién puede ser la pareja por su género (D2)
     )).toBeInTheDocument();
   });
 
-  it("mixta: busca jugadores y jugadoras (no los que no tienen género) y el back exige el contrario", async () => {
-    renderModal({ ...withInvitation, category: { gender: "MX", level: "3a", price: 30 } });
+  const mixed = { gender: "MX", level: "3a", price: 30 };
+
+  it("mixta: con una titular, solo busca jugadores (el listado trae su género) y la pista lo dice", async () => {
+    renderModal({ ...withInvitation, category: mixed });
+
+    search("Gil M");
+    expect(await screen.findByRole("button", { name: /Luis Mora/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Carla Gil/ })).not.toBeInTheDocument();
+    expect(adminService.players.list).toHaveBeenCalledTimes(1);
+    expect(adminService.players.list).toHaveBeenCalledWith({ q: "Gil M", gender: "M", pageSize: 8 });
+    expect(screen.getByText(/^Mixta, un jugador y una jugadora: solo salen jugadores con el género/)).toBeInTheDocument();
+  });
+
+  it("mixta: con un titular, solo busca jugadoras", async () => {
+    renderModal({ ...withInvitation, user: { name: "Luis Mora", gender: "M" }, category: mixed });
+
+    search("Gil M");
+    expect(await screen.findByRole("button", { name: /Carla Gil/ })).toBeInTheDocument();
+    expect(adminService.players.list).toHaveBeenCalledTimes(1);
+    expect(adminService.players.list).toHaveBeenCalledWith({ q: "Gil M", gender: "F", pageSize: 8 });
+    expect(screen.getByText(/^Mixta, un jugador y una jugadora: solo salen jugadoras con el género/)).toBeInTheDocument();
+  });
+
+  it("mixta: con el titular sin género en su ficha, jugadores y jugadoras (no los que no lo tienen); el back pedirá ponérselo", async () => {
+    renderModal({ ...withInvitation, user: { name: "Ana López", gender: null }, category: mixed });
 
     search("Gil M");
     expect(await screen.findByRole("button", { name: /Luis Mora/ })).toBeInTheDocument();

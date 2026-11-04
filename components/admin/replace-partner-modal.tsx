@@ -30,10 +30,11 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const categoryGender = registration.category.gender;
   // Sin pareja, la pone; con ella, la sustituye (el mismo endpoint)
   const isNew = !registration.partnerId;
-  // Quien puede jugar la categoría con el titular. El listado de inscripciones
-  // no trae su género: en la mixta salen los dos y el back exige el contrario
-  const genders = useMemo(() => searchGendersFor(categoryGender), [categoryGender]);
-  const genderHint = genderSearchHint(categoryGender, null, { canEditPlayer: !isClub(role) });
+  // Quien puede jugar la categoría con el titular: en la mixta, el género
+  // contrario al suyo (sin él en su ficha, los dos: el back pide ponérselo)
+  const titularGender = registration.user.gender;
+  const genders = useMemo(() => searchGendersFor(categoryGender, titularGender), [categoryGender, titularGender]);
+  const genderHint = genderSearchHint(categoryGender, titularGender, { canEditPlayer: !isClub(role) });
 
   const search = useCallback((q: string) => {
     clearTimeout(debounceRef.current);

@@ -239,6 +239,8 @@ export interface AdminRegistrationUser {
   name:          string;
   email:         string;
   phone?:        string | null;
+  /** Tal cual: null si no lo tiene en su ficha. Solo en el listado. */
+  gender?:       Gender | null;
   categoryLevel?: string | null;
   spaPoints?:    number | null;
 }
