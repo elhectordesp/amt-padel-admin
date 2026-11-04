@@ -3,11 +3,13 @@
  * invitó a alguien desde la app sale «Sin pareja» con la etiqueta
  * «invitada: … (pendiente)», y las filas sin pareja que no están canceladas
  * tienen «Poner pareja» (el modal de cambiar la pareja, que vacía la
- * invitación).
+ * invitación). Y reactivar una cancelada que ya no encaja por género (D2)
+ * enseña el 400 del back sin cambiar la fila.
  */
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 
 // La ficha es grande: con toda la suite a la vez puede tardar más del segundo
 // por defecto de findBy
@@ -18,7 +20,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock("@/components/admin/header", () => ({ Header: () => null }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toastMock }));
 
 const TOURNAMENT = {
   id: "t-1",
@@ -65,9 +68,10 @@ const REGISTRATIONS = [
   row("reg-ines", "u-ines", "Inés Mora", { status: "CONFIRMED", partnerId: null, partner: null, noPartner: true }),
 ];
 
+const bulkStatus = vi.fn();
 const handlers: Record<string, Record<string, (...args: unknown[]) => unknown>> = {
   tournaments:   { adminDetail: async () => TOURNAMENT },
-  registrations: { list: async () => REGISTRATIONS },
+  registrations: { list: async () => REGISTRATIONS, bulkStatus },
 };
 // El resto de llamadas de la ficha: listas vacías
 vi.mock("@/lib/services/admin", () => ({
@@ -79,6 +83,7 @@ vi.mock("@/lib/services/admin", () => ({
   registrationsQK: { list: (id: string) => ["registrations", id] },
 }));
 
+import { invalidateRegistrations } from "@/lib/services/admin";
 import TorneoDetailPage from "../../../app/(admin)/torneos/[id]/page";
 
 async function openRegistrations() {
@@ -128,5 +133,30 @@ describe("Inscripciones del torneo — invitación a la pareja", { timeout: 30_0
 
     expect(await screen.findByRole("heading", { name: "Poner pareja" })).toBeInTheDocument();
     expect(screen.getByText(/quedará sin efecto/).textContent).toBe("La invitación a Bea Ruiz quedará sin efecto.");
+  });
+});
+
+describe("Inscripciones del torneo — reactivar una cancelada que no encaja por género (D2)", { timeout: 30_000 }, () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("el 400 del back sale tal cual, sin «Forzar», y la fila sigue cancelada y sin cargar", async () => {
+    // El texto real del back (categoryGenderError, por su nombre)
+    const message = '"Elena Pons" no tiene el género en su perfil: sin él no puede jugar una categoría femenina. Lo puede poner desde la app, o AMT desde su ficha.';
+    bulkStatus.mockRejectedValueOnce(new ApiError(message, 400, "GENDER_REQUIRED"));
+    await openRegistrations();
+
+    fireEvent.click(within(rowOf("Elena Pons")).getByTitle("Confirmar pareja"));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(message), WAIT);
+    expect(bulkStatus).toHaveBeenCalledWith(["reg-elena"], "CONFIRMED", undefined);
+    // No es de aforo: no pregunta si se fuerza
+    expect(screen.queryByText("¿Forzar el cambio?")).not.toBeInTheDocument();
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(invalidateRegistrations).not.toHaveBeenCalled();
+    // El back no cambió nada: la fila sigue «Cancelado» y se puede volver a intentar
+    const elena = rowOf("Elena Pons");
+    expect(within(elena).getByText("Cancelado")).toBeInTheDocument();
+    expect(within(elena).getByTitle("Confirmar pareja")).toBeEnabled();
+    expect(within(elena).getByTitle("Mover a espera")).toBeEnabled();
   });
 });
