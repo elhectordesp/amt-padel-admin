@@ -105,3 +105,60 @@ export function genderSearchHint(
   const fix = canEditPlayer ? "ponle el género en su ficha" : "pide a AMT que le ponga el género en su ficha";
   return `${rule}: solo salen ${who} con el género en su ficha. Si falta alguien, ${fix}.`;
 }
+
+/**
+ * Por qué un jugador no puede jugar la categoría: otro género ('mismatch') o
+ * sin el género en su ficha ('unknown'), como `GenderRejection` del back.
+ */
+export type GenderRejection = "mismatch" | "unknown";
+
+/**
+ * Si un jugador ya elegido puede jugar la categoría por su género (el de
+ * playerGender: null, sin él en su ficha): null si puede. Con `partnerGender`,
+ * el del otro de la pareja, la regla de los buscadores (en la mixta, el
+ * contrario); sin él, como titular. Un género de categoría que el panel no
+ * conoce no lo juega nadie, como en el back.
+ */
+export function genderRejection(
+  categoryGender: string,
+  playerGender: Gender | null | undefined,
+  partnerGender?: Gender | null,
+): GenderRejection | null {
+  if (!isCategoryGender(categoryGender)) return "mismatch";
+  const genders = searchGendersFor(categoryGender, partnerGender);
+  if (!genders) return null;
+  if (!playerGender) return "unknown";
+  return genders.includes(playerGender) ? null : "mismatch";
+}
+
+/** La regla de cada categoría con regla, con las palabras del back. */
+const RULE: Record<"M" | "F" | "MX", { name: string; rule: string }> = {
+  M:  { name: "masculina", rule: "la categoría masculina es solo de jugadores" },
+  F:  { name: "femenina",  rule: "la categoría femenina es solo de jugadoras" },
+  MX: { name: "mixta",     rule: "la categoría mixta es de un jugador y una jugadora" },
+};
+
+function ruleOf(categoryGender: string) {
+  return categoryGender === "M" || categoryGender === "F" || categoryGender === "MX"
+    ? RULE[categoryGender]
+    : { name: "con regla de género", rule: "la categoría no lo admite" };
+}
+
+/**
+ * El aviso de un jugador ya elegido que no puede jugar la categoría por su
+ * género, antes de que lo rechace el back: con otro género, la regla; sin él
+ * en su ficha, que se lo ponga (un club, que no ve la ficha, que se lo pida a
+ * AMT) para `goal`: inscribirlo ('enroll') o buscarle pareja ('partner').
+ */
+export function genderRejectionNotice(
+  rejection: GenderRejection,
+  categoryGender: string,
+  playerName: string,
+  { canEditPlayer, goal }: { canEditPlayer: boolean; goal: "enroll" | "partner" },
+): string {
+  const { name, rule } = ruleOf(categoryGender);
+  if (rejection === "mismatch") return `"${playerName}" no puede jugarla: ${rule}.`;
+  const fix = canEditPlayer ? "pónselo" : "pide a AMT que se lo ponga";
+  const purpose = goal === "partner" ? "para buscarle pareja" : `para que pueda jugar una categoría ${name}`;
+  return `"${playerName}" no tiene el género en su ficha: ${fix} ${purpose}.`;
+}

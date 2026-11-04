@@ -47,6 +47,10 @@ describe("etiquetas de códigos del back", () => {
     expect(playerGenderLabel({ gender: "F", hasGender: true })).toBe("Fem.");
     expect(playerGenderLabel({ gender: "M", hasGender: true })).toBe("Masc.");
     expect(playerGenderLabel({ gender: "M", hasGender: false })).toBe("Sin género");
+    // En largo (CSV, confirmaciones), igual: sin él, «Sin género», nunca «Masculino»
+    expect(playerGenderLabel({ gender: "F", hasGender: true }, "full")).toBe("Femenino");
+    expect(playerGenderLabel({ gender: "M" }, "full")).toBe("Masculino");
+    expect(playerGenderLabel({ gender: "M", hasGender: false }, "full")).toBe("Sin género");
   });
 
   it("recurso del historial", () => {

@@ -52,10 +52,13 @@ export function playerGender(player: Pick<Player, "gender" | "hasGender">): Gend
   return player.hasGender === false ? null : player.gender;
 }
 
-/** El género de un jugador para pantalla, en corto («Masc.»); sin él, «Sin género». */
-export function playerGenderLabel(player: Pick<Player, "gender" | "hasGender">): string {
+/** El género de un jugador para pantalla, en corto («Masc.») o en largo («Masculino»); sin él, «Sin género». */
+export function playerGenderLabel(
+  player: Pick<Player, "gender" | "hasGender">,
+  variant: "short" | "full" = "short",
+): string {
   const gender = playerGender(player);
-  return gender ? GENDER_LABEL[gender].short : NO_GENDER_LABEL;
+  return gender ? GENDER_LABEL[gender][variant] : NO_GENDER_LABEL;
 }
 
 export const LEVELS: CategoryLevel[] = [

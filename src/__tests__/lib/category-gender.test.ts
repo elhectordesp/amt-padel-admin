@@ -9,6 +9,8 @@ import {
   CATEGORY_GENDER_OPTIONS,
   categoryGenderLabel,
   categoryLabel,
+  genderRejection,
+  genderRejectionNotice,
   genderSearchHint,
   searchGendersFor,
 } from "@/lib/category-gender";
@@ -87,6 +89,56 @@ describe("a quién ofrece el buscador de jugadores", () => {
   it("a un club, que no ve la ficha del jugador, no le pide que se la ponga él", () => {
     expect(genderSearchHint("F", null, { canEditPlayer: false })).toBe(
       "Femenina: solo salen jugadoras con el género en su ficha. Si falta alguien, pide a AMT que le ponga el género en su ficha.",
+    );
+  });
+});
+
+describe("si un jugador ya elegido puede jugar la categoría", () => {
+  it("como titular: su regla; sin género, solo general y junior", () => {
+    expect(genderRejection("F", "F")).toBeNull();
+    expect(genderRejection("F", "M")).toBe("mismatch");
+    expect(genderRejection("M", null)).toBe("unknown");
+    expect(genderRejection("MX", "M")).toBeNull();
+    expect(genderRejection("MX", "F")).toBeNull();
+    expect(genderRejection("MX", null)).toBe("unknown");
+    expect(genderRejection("G", null)).toBeNull();
+    expect(genderRejection("J", "F")).toBeNull();
+  });
+
+  it("con su pareja: en la mixta, el contrario; con la pareja sin género, el suyo basta", () => {
+    expect(genderRejection("MX", "F", "M")).toBeNull();
+    expect(genderRejection("MX", "M", "M")).toBe("mismatch");
+    expect(genderRejection("MX", null, "M")).toBe("unknown");
+    expect(genderRejection("MX", "M", null)).toBeNull();
+    expect(genderRejection("F", "F", "F")).toBeNull();
+  });
+
+  it("un género de categoría que el panel no conoce no lo juega nadie", () => {
+    expect(genderRejection("MIXED", "M")).toBe("mismatch");
+    expect(genderRejection("MIXED", null)).toBe("mismatch");
+  });
+
+  it("el aviso: la regla con las palabras del back o qué hacer si le falta el género", () => {
+    const admin = { canEditPlayer: true };
+    const club = { canEditPlayer: false };
+    expect(genderRejectionNotice("mismatch", "F", "Luis Mora", { ...admin, goal: "partner" })).toBe(
+      "\"Luis Mora\" no puede jugarla: la categoría femenina es solo de jugadoras.",
+    );
+    expect(genderRejectionNotice("mismatch", "MX", "Luis Mora", { ...admin, goal: "enroll" })).toBe(
+      "\"Luis Mora\" no puede jugarla: la categoría mixta es de un jugador y una jugadora.",
+    );
+    expect(genderRejectionNotice("unknown", "MX", "Ana López", { ...admin, goal: "partner" })).toBe(
+      "\"Ana López\" no tiene el género en su ficha: pónselo para buscarle pareja.",
+    );
+    expect(genderRejectionNotice("unknown", "M", "Leo Martín", { ...admin, goal: "enroll" })).toBe(
+      "\"Leo Martín\" no tiene el género en su ficha: pónselo para que pueda jugar una categoría masculina.",
+    );
+    // Un club no ve la ficha del jugador: se lo pide a AMT
+    expect(genderRejectionNotice("unknown", "F", "Ana López", { ...club, goal: "partner" })).toBe(
+      "\"Ana López\" no tiene el género en su ficha: pide a AMT que se lo ponga para buscarle pareja.",
+    );
+    expect(genderRejectionNotice("mismatch", "MIXED", "Ana López", { ...admin, goal: "partner" })).toBe(
+      "\"Ana López\" no puede jugarla: la categoría no lo admite.",
     );
   });
 });
