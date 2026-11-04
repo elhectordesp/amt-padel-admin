@@ -159,7 +159,7 @@ export function DeletedAccounts() {
         open={target !== null}
         danger
         title="Anonimizar cuenta"
-        description={`Se quitará el nombre de ${target?.name ?? ""} y es definitivo: no se puede deshacer. Los cuadros y resultados en los que jugó mostrarán «Usuario eliminado» en vez de su nombre, y se borrarán sus mensajes de soporte.`}
+        description={`Se quitará el nombre de ${target?.name ?? ""} y es definitivo: no se puede deshacer. Los cuadros y resultados en los que jugó mostrarán «Usuario eliminado» en vez de su nombre, y se borrarán sus mensajes de soporte. Antes, comprueba que quien lo pide es esta persona (por ejemplo, que te diga torneos y parejas con los que jugó).`}
         confirmLabel="Anonimizar"
         loading={anonymize.isPending}
         onClose={() => { if (!anonymize.isPending) setTarget(null); }}

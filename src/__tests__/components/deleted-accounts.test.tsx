@@ -84,6 +84,7 @@ describe("DeletedAccounts", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /Anonimizar/ })[0]);
     expect(screen.getByText(/Se quitará el nombre de Ana López y es definitivo/)).toBeInTheDocument();
+    expect(screen.getByText(/comprueba que quien lo pide es esta persona/)).toBeInTheDocument();
     expect(screen.getByText(/mostrarán «Usuario eliminado» en vez de su nombre/)).toBeInTheDocument();
     expect(playersMock.anonymize).not.toHaveBeenCalled();
 
