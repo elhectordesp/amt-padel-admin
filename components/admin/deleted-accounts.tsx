@@ -59,13 +59,15 @@ export function DeletedAccounts() {
       setTarget(null);
     },
     onError: (err: Error) => {
-      toast.error(err.message || "No se pudo anonimizar la cuenta");
       // Ya no está para anonimizar (otro admin lo hizo entretanto): cada
       // reintento fallaría igual, así que se cierra y se recarga la lista
       if (err instanceof ApiError && err.code === "PLAYER_NOT_FOUND") {
+        toast.error("Esta cuenta ya no se puede anonimizar (quizá ya se hizo). Se ha recargado la lista.");
         qc.invalidateQueries({ queryKey: DELETED_PLAYERS_QK });
         setTarget(null);
+        return;
       }
+      toast.error(err.message || "No se pudo anonimizar la cuenta");
     },
     onSettled: () => { anonymizingRef.current = false; },
   });

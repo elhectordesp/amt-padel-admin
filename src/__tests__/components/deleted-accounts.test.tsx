@@ -120,7 +120,9 @@ describe("DeletedAccounts", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Anonimizar/ })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: "Anonimizar" }).at(-1)!);
 
-    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith("Jugador no encontrado"));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(
+      "Esta cuenta ya no se puede anonimizar (quizá ya se hizo). Se ha recargado la lista.",
+    ));
     await waitFor(() => expect(screen.queryByText("Ana López")).not.toBeInTheDocument());
     expect(screen.queryByText(/es definitivo/)).not.toBeInTheDocument();
   });
