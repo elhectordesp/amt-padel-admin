@@ -15,7 +15,8 @@ import { clampPage, paginate } from "@/lib/utils/pagination";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT, levelLabel } from "@/lib/constants";
 import { downloadCsv } from "@/lib/utils/csv";
-import type { CategoryLevel, Gender, Player, RankingType } from "@/types";
+import { RANKING_GENDER_LABEL, keepRankingGender, rankingGendersFor } from "@/lib/ranking-gender";
+import type { CategoryLevel, Player, RankingGender, RankingType } from "@/types";
 
 const CATEGORY_LABEL = CATEGORY_LABEL_SHORT;
 const ALL_LEVELS: CategoryLevel[] = ["1a", "2a", "3a", "4a", "5a", "6a", "iniciacion"];
@@ -31,7 +32,7 @@ type CatFilter = "global" | CategoryLevel;
 
 export default function RankingsPage() {
   const qc = useQueryClient();
-  const [gender,            setGender]            = useState<Gender>("M");
+  const [gender,            setGender]            = useState<RankingGender>("M");
   const [rankType,          setRankType]          = useState<RankingType>("circuit");
   const [catFilter,         setCatFilter]         = useState<CatFilter>("global");
   const { page, setPage, pageSize, setPageSize } = usePagination();
@@ -61,8 +62,9 @@ export default function RankingsPage() {
   const pagedPlayers = paginate(displayPlayers, current, pageSize);
 
   const handleCatChange = (cat: CatFilter) => { setCatFilter(cat); setPage(1); };
-  const handleTypeChange = (t: RankingType) => { setRankType(t); setCatFilter("global"); setPage(1); };
-  const handleGenderChange = (g: Gender) => { setGender(g); setCatFilter("global"); setPage(1); };
+  // El Mixto solo existe en el de circuito: al pasar al SPA, vuelve al Masculino
+  const handleTypeChange = (t: RankingType) => { setRankType(t); setGender(keepRankingGender(t, gender)); setCatFilter("global"); setPage(1); };
+  const handleGenderChange = (g: RankingGender) => { setGender(g); setCatFilter("global"); setPage(1); };
 
   const recalculate = useMutation({
     mutationFn: adminService.rankings.recalculate,
@@ -114,20 +116,17 @@ export default function RankingsPage() {
         {/* Gender + controls row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
-            {([
-              { key: "M", label: "Masculino" },
-              { key: "F", label: "Femenino"  },
-            ] as { key: Gender; label: string }[]).map((g) => (
+            {rankingGendersFor(rankType).map((g) => (
               <button
-                key={g.key}
-                onClick={() => handleGenderChange(g.key)}
+                key={g}
+                onClick={() => handleGenderChange(g)}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  gender === g.key
+                  gender === g
                     ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {g.label}
+                {RANKING_GENDER_LABEL[g]}
               </button>
             ))}
           </div>
@@ -215,8 +214,8 @@ export default function RankingsPage() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">
               {catFilter === "global"
-                ? `Ranking global — ${gender === "M" ? "Masculino" : "Femenino"}`
-                : `Ranking ${CATEGORY_LABEL[catFilter as CategoryLevel]}ª — ${gender === "M" ? "Masculino" : "Femenino"}`
+                ? `Ranking global — ${RANKING_GENDER_LABEL[gender]}`
+                : `Ranking ${CATEGORY_LABEL[catFilter as CategoryLevel]}ª — ${RANKING_GENDER_LABEL[gender]}`
               }
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">

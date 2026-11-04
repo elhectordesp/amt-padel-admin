@@ -8,6 +8,9 @@ export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGO
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
 export type RankingType        = "spa" | "circuit";
+// El de un ranking: el de una persona o, solo en el de circuito, el Mixto
+// (lib/ranking-gender.ts)
+export type RankingGender      = Gender | "MX";
 
 export interface AdminStats {
   activeTournaments: number;

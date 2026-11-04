@@ -4,7 +4,7 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
+  SpaConfig, RankingType, RankingGender, GrowthStats, Sponsor, SponsorScope, Club,
   CreatePlayerPayload, UpdatePlayerPayload, GenderConflict,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
@@ -707,7 +707,8 @@ export const adminService = {
   },
 
   rankings: {
-    list: (gender: string, type: RankingType = "circuit", season?: number, level?: string) =>
+    // gender MX: el ranking Mixto, solo con type circuit (lib/ranking-gender.ts)
+    list: (gender: RankingGender, type: RankingType = "circuit", season?: number, level?: string) =>
       fetchAllRankingPages({
         gender, type,
         ...(season ? { season } : {}),
