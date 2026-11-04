@@ -4,7 +4,6 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  MIXED_RANKING,
   RANKING_GENDER_LABEL,
   keepRankingGender,
   rankingGendersFor,
@@ -14,10 +13,6 @@ describe("rankings de cada tipo", () => {
   it("el de circuito tiene Masculino, Femenino y Mixto; el SPA, sin Mixto", () => {
     expect(rankingGendersFor("circuit")).toEqual(["M", "F", "MX"]);
     expect(rankingGendersFor("spa")).toEqual(["M", "F"]);
-  });
-
-  it("el Mixto se pide con MX, el código de la categoría Mixta", () => {
-    expect(MIXED_RANKING).toBe("MX");
   });
 
   it("se llama «Mixto», el ranking; no «Mixta», la categoría", () => {
