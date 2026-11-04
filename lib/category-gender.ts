@@ -67,15 +67,18 @@ const PLAYER_GENDERS: Record<CategoryGender, readonly Gender[] | null> = {
 
 /**
  * Con qué géneros buscar a un jugador para la categoría; null, sin filtro
- * (General, Junior o un valor que el panel no conoce). `partnerGender`: el del
- * otro de la pareja, si ya está elegido; en la mixta se busca el contrario.
- * Buscar por género deja fuera a quien no lo tiene en su ficha.
+ * (General o Junior). Un valor que el panel no conoce no admite a nadie ([]):
+ * falla cerrado, como el back (`playerGendersFor`), no se trata como abierto.
+ * `partnerGender`: el del otro de la pareja, si ya está elegido; en la mixta
+ * se busca el contrario. Buscar por género deja fuera a quien no lo tiene en
+ * su ficha.
  */
 export function searchGendersFor(
   categoryGender: string,
   partnerGender?: Gender | null,
 ): readonly Gender[] | null {
-  const allowed = isCategoryGender(categoryGender) ? PLAYER_GENDERS[categoryGender] : null;
+  if (!isCategoryGender(categoryGender)) return [];
+  const allowed = PLAYER_GENDERS[categoryGender];
   if (!allowed) return null;
   if (categoryGender === "MX" && partnerGender) return [partnerGender === "M" ? "F" : "M"];
   return allowed;
@@ -84,8 +87,9 @@ export function searchGendersFor(
 /**
  * Debajo de un buscador de jugadores de una categoría con regla: a quién
  * ofrece y qué hacer si falta alguien (sin el género en su ficha no sale);
- * null si la categoría no tiene regla. `canEditPlayer`: quien lo ve puede abrir
- * la ficha del jugador (AMT); un club no la ve.
+ * null si la categoría no tiene regla. Con un género de categoría que el panel
+ * no conoce, que no sale nadie. `canEditPlayer`: quien lo ve puede abrir la
+ * ficha del jugador (AMT); un club no la ve.
  */
 export function genderSearchHint(
   categoryGender: string,
@@ -94,6 +98,8 @@ export function genderSearchHint(
 ): string | null {
   const genders = searchGendersFor(categoryGender, partnerGender);
   if (!genders) return null;
+  if (!isCategoryGender(categoryGender))
+    return `El panel no conoce el género de esta categoría («${categoryGender}»): no sale nadie.`;
   const rule = categoryGender === "MX" ? "Mixta, un jugador y una jugadora" : categoryGenderLabel(categoryGender);
   const who = genders.length > 1 ? "jugadores y jugadoras" : genders[0] === "F" ? "jugadoras" : "jugadores";
   const fix = canEditPlayer ? "ponle el género en su ficha" : "pide a AMT que le ponga el género en su ficha";

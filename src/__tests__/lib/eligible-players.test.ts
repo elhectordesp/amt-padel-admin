@@ -35,6 +35,11 @@ describe("searchPlayersForCategory", () => {
     expect(list).toHaveBeenCalledWith({ q: "be", gender: "F", pageSize: 8 });
   });
 
+  it("sin ningún género (una categoría que el panel no conoce): nadie, sin preguntar al back", async () => {
+    expect(await searchPlayersForCategory("an", [])).toEqual([]);
+    expect(list).not.toHaveBeenCalled();
+  });
+
   it("con los dos (mixta sin pareja): una por género, juntas por puntos y hasta el tamaño pedido", async () => {
     list.mockImplementation(async (params) =>
       (params?.gender === "M"

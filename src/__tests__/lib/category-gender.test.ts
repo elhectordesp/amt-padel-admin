@@ -58,10 +58,18 @@ describe("a quién ofrece el buscador de jugadores", () => {
     expect(searchGendersFor("MX", null)).toEqual(["M", "F"]);
   });
 
-  it("general, junior o un valor desconocido: sin filtro (también quien no tiene género)", () => {
+  it("general y junior: sin filtro (también quien no tiene género)", () => {
     expect(searchGendersFor("G", "M")).toBeNull();
     expect(searchGendersFor("J")).toBeNull();
-    expect(searchGendersFor("MIXED")).toBeNull();
+  });
+
+  it("un género de categoría que el panel no conoce no ofrece a nadie: falla cerrado, como el back", () => {
+    expect(searchGendersFor("MIXED")).toEqual([]);
+    expect(searchGendersFor("MIXED", "F")).toEqual([]);
+    expect(searchGendersFor("toString")).toEqual([]);
+    expect(genderSearchHint("MIXED", null, { canEditPlayer: true })).toBe(
+      "El panel no conoce el género de esta categoría («MIXED»): no sale nadie.",
+    );
   });
 
   it("la pista dice a quién ofrece y cómo arreglar a quien falta; sin regla, ninguna", () => {
