@@ -25,6 +25,8 @@ const playersMock = vi.hoisted(() => ({
   deleted:    vi.fn(),
 }));
 vi.mock("@/lib/services/admin", () => ({ adminService: { players: playersMock } }));
+const downloadCsvMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/utils/csv", () => ({ downloadCsv: downloadCsvMock }));
 
 import JugadoresPage from "../../../app/(admin)/jugadores/page";
 
@@ -59,6 +61,47 @@ describe("JugadoresPage — crear jugador", () => {
 
     await waitFor(() => expect(playersMock.create).toHaveBeenCalled());
     expect(playersMock.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("JugadoresPage — el género de cada jugador", () => {
+  const player = (id: string, name: string, gender: "M" | "F", hasGender: boolean) =>
+    ({ id, name, gender, hasGender, level: "3a", played: 0, wins: 0, points: 0, trend: "stable" });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Leo no tiene el género en su ficha: el back lo manda con 'M' y hasGender false
+    playersMock.list.mockResolvedValue({
+      data: [player("u-leo", "Leo Martín", "M", false), player("u-ana", "Ana López", "F", true), player("u-luis", "Luis Mora", "M", true)],
+      total: 3, page: 1, pageSize: 50,
+    });
+  });
+
+  it("quien no lo tiene sale «Sin género» en la tabla y en la tarjeta del móvil, no «Masc.»", async () => {
+    renderPage();
+
+    await screen.findAllByText("Leo Martín");
+    expect(screen.getByRole("row", { name: /Leo Martín/ })).toHaveTextContent("Sin género");
+    expect(screen.getByRole("row", { name: /Leo Martín/ })).not.toHaveTextContent("Masc.");
+    // Una vez en la tabla y otra en la tarjeta del móvil
+    expect(screen.getAllByText("Sin género")).toHaveLength(2);
+    // «Masc.» y «Fem.»: el botón del filtro, la tabla y la tarjeta
+    expect(screen.getAllByText("Fem.")).toHaveLength(3);
+    expect(screen.getAllByText("Masc.")).toHaveLength(3);
+  });
+
+  it("y en el CSV, «Sin género»; el resto, en largo", async () => {
+    renderPage();
+    await screen.findAllByText("Leo Martín");
+
+    fireEvent.click(screen.getByRole("button", { name: "Exportar CSV" }));
+
+    const [, rows] = downloadCsvMock.mock.calls[0] as [string, Record<string, string>[]];
+    expect(rows.map((r) => [r.Jugador, r.Género])).toEqual([
+      ["Leo Martín", "Sin género"],
+      ["Ana López", "Femenino"],
+      ["Luis Mora", "Masculino"],
+    ]);
   });
 });
 
