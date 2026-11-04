@@ -378,7 +378,9 @@ export interface UpdatePlayerPayload {
  * Dónde ya no encaja un jugador tras cambiarle el género desde su ficha: una
  * inscripción viva suya (titular o pareja) en una masculina, femenina o mixta
  * de un torneo sin terminar, o una invitación pendiente. La devuelve el back
- * en `genderConflicts` al guardar «Editar datos».
+ * en `genderConflicts` al guardar «Editar datos» y, con las del torneo (el
+ * titular o la pareja que no encajan, también sin género), al restaurar un
+ * torneo borrado.
  */
 export interface GenderConflict {
   registrationId: string;

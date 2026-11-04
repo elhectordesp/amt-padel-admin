@@ -41,7 +41,7 @@ const TOURNAMENT = {
   courts: [],
 };
 const remove = vi.fn();
-const restore = vi.fn().mockResolvedValue({ success: true });
+const restore = vi.fn().mockResolvedValue({ success: true, genderConflicts: [] });
 const removeCategory = vi.fn().mockResolvedValue({ success: true });
 const handlers: Record<string, Record<string, (...args: unknown[]) => unknown>> = {
   tournaments: {
@@ -77,8 +77,12 @@ describe("Ficha del torneo — borrar y restaurar", { timeout: 30_000 }, () => {
     roleMock.role = "admin";
   });
 
-  it("AMT: el aviso dice dónde restaurarlo y, tras borrar, «Deshacer» lo restaura", async () => {
+  it("AMT: el aviso dice dónde restaurarlo y, tras borrar, «Deshacer» lo restaura (y avisa de lo que ya no encaja por género)", async () => {
     remove.mockResolvedValue({ success: true });
+    restore.mockResolvedValueOnce({
+      success: true,
+      genderConflicts: [{ registrationId: "r-1", tournamentId: "t-1", tournamentName: "Open de otoño", categoryLabel: "4ª Masculina", invitation: false }],
+    });
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Eliminar torneo" }, WAIT));
     expect(screen.getByText(/Podrás restaurarlo desde Torneos → Eliminados/)).toBeInTheDocument();
@@ -90,6 +94,8 @@ describe("Ficha del torneo — borrar y restaurar", { timeout: 30_000 }, () => {
     expect(options.action.label).toBe("Deshacer");
     options.action.onClick();
     await waitFor(() => expect(restore).toHaveBeenCalledWith("t-1"), WAIT);
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Torneo restaurado"), WAIT);
+    expect(toastMock.warning).toHaveBeenCalledWith("En «Open de otoño» una inscripción ya no encaja por género:", expect.anything());
   });
 
   it("un club: solo AMT puede restaurarlo, y sin «Deshacer»", async () => {
