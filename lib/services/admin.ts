@@ -5,7 +5,7 @@ import type {
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
-  CreatePlayerPayload, UpdatePlayerPayload,
+  CreatePlayerPayload, UpdatePlayerPayload, GenderConflict,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember, ClubAdmins,
@@ -587,7 +587,8 @@ export const adminService = {
     auditLog:          (id: string) => api.get<AuditLogEntry[]>(`/admin/players/${id}/audit`).then((r) => r.data ?? []).catch(() => [] as AuditLogEntry[]),
     // invitation: qué pasó con la invitación que sale sola (sin ella, no tocaba)
     create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null; invitation?: AutomaticInvite }>("/admin/players", data).then((r) => r.data),
-    update:       (id: string, data: UpdatePlayerPayload) => api.patch<{ invitation?: AutomaticInvite }>(`/admin/players/${id}/profile`, data).then((r) => r.data),
+    // genderConflicts: dónde ya no encaja con el género nuevo (vacío si no se cambió o si encaja)
+    update:       (id: string, data: UpdatePlayerPayload) => api.patch<{ invitation?: AutomaticInvite; genderConflicts: GenderConflict[] }>(`/admin/players/${id}/profile`, data).then((r) => r.data),
     // erasure: la baja la pide el propio jugador (supresión completa)
     delete:       (id: string, { erasure = false }: { erasure?: boolean } = {}) =>
       api.delete(`/admin/players/${id}`, { params: erasure ? { erasure: true } : undefined }).then((r) => r.data),

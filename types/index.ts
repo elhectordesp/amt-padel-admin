@@ -372,6 +372,22 @@ export interface UpdatePlayerPayload {
   bio?:          string | null;
 }
 
+/**
+ * Dónde ya no encaja un jugador tras cambiarle el género desde su ficha: una
+ * inscripción viva suya (titular o pareja) en una masculina, femenina o mixta
+ * de un torneo sin terminar, o una invitación pendiente. La devuelve el back
+ * en `genderConflicts` al guardar «Editar datos».
+ */
+export interface GenderConflict {
+  registrationId: string;
+  tournamentId:   string;
+  tournamentName: string;
+  /** La categoría ya nombrada por el back («3ª Masculina»). */
+  categoryLabel:  string;
+  /** Lo que no encaja es una invitación pendiente (ya no se podrá aceptar), no la inscripción. */
+  invitation:     boolean;
+}
+
 export interface PlayerMatch {
   id:         string;
   date:       string | null;

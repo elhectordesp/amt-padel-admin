@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { playerEditProblem, playerUpdatePayload } from "../../../lib/player-edit";
+import { genderConflictsNotice, playerEditProblem, playerUpdatePayload } from "../../../lib/player-edit";
 
 const noLevel = { level: null };
 
@@ -65,5 +65,38 @@ describe("playerEditProblem", () => {
 
   it("cambiar el email (sin vaciarlo) siempre se puede", () => {
     expect(playerEditProblem({ email: "nuevo@x.com" }, { ...current, usesApp: true })).toBeNull();
+  });
+});
+
+describe("genderConflictsNotice (tras cambiarle el género)", () => {
+  const inscription = {
+    registrationId: "r-1", tournamentId: "t-1", tournamentName: "Open de otoño",
+    categoryLabel: "3ª Masculina", invitation: false,
+  };
+  const invitation = {
+    registrationId: "r-2", tournamentId: "t-2", tournamentName: "Liga de invierno",
+    categoryLabel: "2ª Mixta", invitation: true,
+  };
+
+  it("si todo encaja (o no se cambió el género), no hay aviso", () => {
+    expect(genderConflictsNotice([])).toBeNull();
+  });
+
+  it("una: el torneo y la categoría, y qué hacer", () => {
+    expect(genderConflictsNotice([inscription])).toEqual({
+      title: "Con su género nuevo ya no encaja en una inscripción:",
+      items: [{ id: "r-1", text: "Open de otoño · 3ª Masculina" }],
+      fix:   "Muévela a otra categoría o cámbiale la pareja en las inscripciones del torneo.",
+    });
+  });
+
+  it("varias, y la invitación pendiente dice que ya no se podrá aceptar", () => {
+    const notice = genderConflictsNotice([inscription, invitation]);
+    expect(notice?.title).toBe("Con su género nuevo ya no encaja en 2 inscripciones:");
+    expect(notice?.items).toEqual([
+      { id: "r-1", text: "Open de otoño · 3ª Masculina" },
+      { id: "r-2", text: "Liga de invierno · 2ª Mixta (invitación pendiente: ya no se podrá aceptar)" },
+    ]);
+    expect(notice?.fix).toBe("Muévelas a otra categoría o cámbiales la pareja en las inscripciones de cada torneo.");
   });
 });

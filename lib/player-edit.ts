@@ -1,4 +1,4 @@
-import type { CategoryLevel, Gender, UpdatePlayerPayload } from "@/types";
+import type { CategoryLevel, Gender, GenderConflict, UpdatePlayerPayload } from "@/types";
 
 /** Lo que tiene ahora el jugador de lo que se edita en «Editar datos». */
 export interface PlayerEditCurrent {
@@ -55,4 +55,28 @@ export function playerEditProblem(form: UpdatePlayerPayload, current: PlayerEdit
   if (current.usesApp && current.email && !form.email?.trim())
     return "Este jugador ya usa la app y entra con su email: no se le puede dejar sin email.";
   return null;
+}
+
+/**
+ * El aviso tras cambiarle el género en «Editar datos» si ya no encaja en
+ * alguna inscripción (o en una invitación pendiente, que ya no se podrá
+ * aceptar): cuáles, por torneo y categoría, y qué hacer. null si todo encaja.
+ */
+export function genderConflictsNotice(
+  conflicts: GenderConflict[],
+): { title: string; items: { id: string; text: string }[]; fix: string } | null {
+  if (conflicts.length === 0) return null;
+  const one = conflicts.length === 1;
+  return {
+    title: one
+      ? "Con su género nuevo ya no encaja en una inscripción:"
+      : `Con su género nuevo ya no encaja en ${conflicts.length} inscripciones:`,
+    items: conflicts.map((c) => ({
+      id:   c.registrationId,
+      text: `${c.tournamentName} · ${c.categoryLabel}${c.invitation ? " (invitación pendiente: ya no se podrá aceptar)" : ""}`,
+    })),
+    fix: one
+      ? "Muévela a otra categoría o cámbiale la pareja en las inscripciones del torneo."
+      : "Muévelas a otra categoría o cámbiales la pareja en las inscripciones de cada torneo.",
+  };
 }

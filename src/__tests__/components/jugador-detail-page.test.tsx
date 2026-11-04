@@ -2,10 +2,11 @@
  * Ficha del jugador: un jugador borrado o inexistente (404) dejaba la
  * pantalla en blanco (P3-7). Ahora dice «Jugador no encontrado», sin
  * reintentar; otro error se reintenta una vez, como el resto del panel.
- * Y «Editar datos» ante el 409 ACTIVE_PLAYER_EMAIL_REQUIRED del back.
+ * Y «Editar datos» ante el 409 ACTIVE_PLAYER_EMAIL_REQUIRED del back, con
+ * quien no tiene el género en su ficha y al cambiárselo (genderConflicts).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api";
 
@@ -180,6 +181,59 @@ describe("JugadorDetailPage — el género de quien no lo tiene en su ficha", ()
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
     await waitFor(() => expect(playersMock.update).toHaveBeenCalledTimes(2));
     expect(playersMock.update.mock.calls[1][1].gender).toBe("M");
+  });
+});
+
+describe("JugadorDetailPage — al cambiarle el género, lo que ya no encaja", () => {
+  const player = {
+    id: "p-1", name: "Leo Martín", email: "leo@x.com", gender: "F", hasGender: true, level: "3a",
+    played: 0, wins: 0, points: 0, trend: "stable",
+    managedByAdmin: true, activationStatus: "invited",
+  };
+  const conflicts = [
+    { registrationId: "r-1", tournamentId: "t-1", tournamentName: "Open de otoño", categoryLabel: "3ª Femenina", invitation: false },
+    { registrationId: "r-2", tournamentId: "t-2", tournamentName: "Liga de invierno", categoryLabel: "2ª Mixta", invitation: true },
+  ];
+
+  async function saveAsMale() {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /editar datos/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Masculino" }));
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Datos del jugador actualizados."));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    playersMock.detail.mockResolvedValue(player);
+    playersMock.categoryHistory.mockResolvedValue([]);
+    playersMock.registrations.mockResolvedValue([]);
+    playersMock.auditLog.mockResolvedValue([]);
+  });
+
+  it("avisa con cada torneo y categoría, marca la invitación y dice qué hacer, hasta que se cierra", async () => {
+    playersMock.update.mockResolvedValue({ gender: "M", genderConflicts: conflicts });
+    await saveAsMale();
+
+    expect(playersMock.update).toHaveBeenCalledWith("p-1", expect.objectContaining({ gender: "M" }));
+    expect(toastMock.warning).toHaveBeenCalledTimes(1);
+    const [title, options] = toastMock.warning.mock.calls[0];
+    expect(title).toBe("Con su género nuevo ya no encaja en 2 inscripciones:");
+    expect(options).toMatchObject({ duration: Infinity, closeButton: true });
+    render(<div data-testid="aviso">{options.description}</div>);
+    const aviso = within(screen.getByTestId("aviso"));
+    expect(aviso.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Open de otoño · 3ª Femenina",
+      "Liga de invierno · 2ª Mixta (invitación pendiente: ya no se podrá aceptar)",
+    ]);
+    expect(aviso.getByText("Muévelas a otra categoría o cámbiales la pareja en las inscripciones de cada torneo.")).toBeInTheDocument();
+  });
+
+  it("si todo encaja, solo dice que se ha guardado", async () => {
+    playersMock.update.mockResolvedValue({ gender: "M", genderConflicts: [] });
+    await saveAsMale();
+
+    expect(toastMock.warning).not.toHaveBeenCalled();
   });
 });
 

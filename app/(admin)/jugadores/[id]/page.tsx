@@ -21,7 +21,7 @@ import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
 import { CATEGORY_LABEL, LEVELS, NO_GENDER_LABEL, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel, playerGender, playerGenderLabel, trendLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
-import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
+import { genderConflictsNotice, playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
 import { dateOnlyKey, formatDayKey, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
@@ -103,6 +103,23 @@ export default function JugadorDetailPage() {
       const text = `Datos del jugador actualizados.${notice ? ` ${notice.text}` : ""}`;
       if (notice?.kind === "warning") toast.warning(text);
       else toast.success(text);
+      // Con el género nuevo ya no encaja en alguna inscripción: cuáles y qué hacer
+      const conflicts = genderConflictsNotice(res.genderConflicts);
+      if (conflicts) {
+        toast.warning(conflicts.title, {
+          description: (
+            <>
+              <ul className="list-disc pl-4">
+                {conflicts.items.map((item) => <li key={item.id}>{item.text}</li>)}
+              </ul>
+              <p className="mt-1">{conflicts.fix}</p>
+            </>
+          ),
+          // Es lo que queda por hacer: no se va sola, se cierra
+          duration: Infinity,
+          closeButton: true,
+        });
+      }
       setShowEdit(false);
     },
     onError: (err: Error) => {
