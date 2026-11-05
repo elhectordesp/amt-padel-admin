@@ -7,10 +7,36 @@
  * Hoy es el domingo 25/10/2026 (cambio de hora) a las 11:00 de Madrid y el
  * navegador está en Canarias: lo esperado va en literales, así que volver a
  * la hora del navegador haría fallar los tests.
+ *
+ * Recepción (B2): se actualiza sola, marca la hora actual solo hoy, filtra
+ * mañana/tarde con `?franja=`, navega por fechas y tiene modo mostrador.
  */
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// La URL como la lleva Next: history.replaceState cambia lo que lee useSearchParams
+const url = vi.hoisted(() => {
+  let params = new URLSearchParams();
+  const listeners = new Set<() => void>();
+  return {
+    get: () => params,
+    set(search: string) {
+      params = new URLSearchParams(search);
+      listeners.forEach((l) => l());
+    },
+    subscribe(l: () => void) {
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
+    },
+  };
+});
+vi.mock("next/navigation", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return { useSearchParams: () => useSyncExternalStore(url.subscribe, url.get) };
+});
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/components/admin/header", () => ({
@@ -62,8 +88,9 @@ const booking = (over: object) => ({
   ...over,
 });
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+// staleTime: el del panel (components/providers.tsx) cuando lo que se prueba es cuándo se vuelve a pedir
+function renderPage({ staleTime = 0 }: { staleTime?: number } = {}) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime } } });
   return render(
     <QueryClientProvider client={qc}>
       <CalendarioPage />
@@ -71,12 +98,14 @@ function renderPage() {
   );
 }
 
+const NOW = new Date("2026-10-25T10:00:00.000Z"); // 11:00 en Madrid
 const browserTz = process.env.TZ;
+const realReplaceState = window.history.replaceState.bind(window.history);
 
 beforeAll(() => {
   // Solo el reloj: los temporizadores siguen siendo los de verdad (findBy, React Query)
   vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-25T10:00:00.000Z"));
+  vi.setSystemTime(NOW);
   process.env.TZ = "Atlantic/Canary";
 });
 
@@ -87,6 +116,11 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  url.set("");
+  vi.spyOn(window.history, "replaceState").mockImplementation((data, unused, href) => {
+    realReplaceState(data, unused, href);
+    url.set(window.location.search);
+  });
   courtsMock.list.mockResolvedValue(COURTS);
   // Abierto todos los días de 09:00 a 23:00
   svc.operatingHours.list.mockResolvedValue(
@@ -96,6 +130,10 @@ beforeEach(() => {
   svc.bookings.listAll.mockResolvedValue([]);
   svc.courtDurations.list.mockResolvedValue([{ id: "d1", courtId: "p2", minutes: 90, isDefault: true }]);
   svc.availability.mockResolvedValue(SLOTS);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("Calendario de reservas — vista Día", () => {
@@ -116,7 +154,9 @@ describe("Calendario de reservas — vista Día", () => {
 
     expect(await screen.findByText("Crear reserva", { selector: "h2" })).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Pista 2")).toHaveValue("p2");
-    expect(screen.getByDisplayValue("2026-10-25")).toHaveAttribute("type", "date");
+    // «Fecha» es la del alta; la de la barra del día es «Elegir fecha»
+    expect(screen.getByLabelText("Fecha")).toHaveValue("2026-10-25");
+    expect(screen.getByLabelText("Fecha")).toHaveAttribute("type", "date");
     // La hora llega elegida cuando se cargan los huecos libres
     expect(await screen.findByDisplayValue("18:00")).toHaveValue("2026-10-25T17:00:00.000Z");
     await waitFor(() => expect(screen.getByRole("button", { name: "Crear reserva" })).toBeEnabled());
@@ -241,5 +281,306 @@ describe("Calendario de reservas — vista Semana", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
     expect(await screen.findByText("No se pudo cargar la semana. Vuelve a intentarlo.")).toBeInTheDocument();
     expect(screen.queryByText(/Sin pistas activas/)).not.toBeInTheDocument();
+  });
+});
+
+const firstSlot = () => screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 09:00" });
+
+describe("Recepción — navegar por fechas", () => {
+  it("día siguiente y anterior piden ese día del club; «Hoy» solo sale fuera de hoy y vuelve", async () => {
+    renderPage();
+    await firstSlot();
+    expect(screen.queryByRole("button", { name: "Hoy" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    expect(await screen.findByText("Lunes, 26 oct")).toBeInTheDocument();
+    expect(svc.bookings.listAll).toHaveBeenLastCalledWith({
+      clubId: "c1",
+      fromDate: "2026-10-25T23:00:00.000Z",
+      toDate: "2026-10-26T22:59:59.999Z",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(await screen.findByText("Domingo, 25 oct")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hoy" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Día anterior" }));
+    expect(await screen.findByText("Sábado, 24 oct")).toBeInTheDocument();
+    expect(svc.bookings.listAll).toHaveBeenLastCalledWith({
+      clubId: "c1",
+      fromDate: "2026-10-23T22:00:00.000Z",
+      toDate: "2026-10-24T21:59:59.999Z",
+    });
+  });
+
+  it("el selector de fecha lleva a ese día, con su horario y sus reservas", async () => {
+    renderPage();
+    await firstSlot();
+    const picker = screen.getByLabelText("Elegir fecha");
+    expect(picker).toHaveValue("2026-10-25");
+
+    fireEvent.change(picker, { target: { value: "2026-11-03" } });
+
+    expect(await screen.findByText("Martes, 3 nov")).toBeInTheDocument();
+    expect(picker).toHaveValue("2026-11-03");
+    expect(svc.bookings.listAll).toHaveBeenLastCalledWith({
+      clubId: "c1",
+      fromDate: "2026-11-02T23:00:00.000Z",
+      toDate: "2026-11-03T22:59:59.999Z",
+    });
+    expect(svc.exceptions.list).toHaveBeenLastCalledWith("c1", { fromDate: "2026-11-03", toDate: "2026-11-03" });
+    expect(screen.getByRole("button", { name: "Hoy" })).toBeInTheDocument();
+  });
+});
+
+describe("Recepción — hora actual", () => {
+  it("hoy, una línea en la franja de la hora del club (11:00 en Madrid, aunque el navegador esté en Canarias)", async () => {
+    renderPage();
+    const line = await screen.findByRole("separator", { name: "Hora actual, 11:00" });
+    expect(line.closest("td")).toHaveTextContent("11:00");
+    expect(line).toHaveStyle({ top: "0%" });
+  });
+
+  it("otro día no hay línea", async () => {
+    renderPage();
+    await screen.findByRole("separator", { name: "Hora actual, 11:00" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    await screen.findByText("Lunes, 26 oct");
+    await firstSlot();
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  });
+});
+
+describe("Recepción — franja mañana / tarde", () => {
+  it("sin ?franja= se ve el día entero", async () => {
+    renderPage();
+    await firstSlot();
+    expect(screen.getByRole("button", { name: "Todo", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crear reserva en Pista 1 a las 22:30" })).toBeInTheDocument();
+  });
+
+  it("con ?franja=tarde abre la tarde: desde las 15:00", async () => {
+    url.set("franja=tarde");
+    renderPage();
+    expect(await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 15:00" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tarde", pressed: true })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 14:30" })).not.toBeInTheDocument();
+  });
+
+  it("elegir «Mañana» la deja en la URL y enseña solo hasta las 14:30; «Todo» quita el parámetro", async () => {
+    renderPage();
+    await firstSlot();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mañana" }));
+
+    expect(window.history.replaceState).toHaveBeenLastCalledWith(null, "", "/mi-club/reservas/calendario?franja=manana");
+    expect(await screen.findByRole("button", { name: "Mañana", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crear reserva en Pista 1 a las 14:30" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 15:00" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+
+    expect(window.history.replaceState).toHaveBeenLastCalledWith(null, "", "/mi-club/reservas/calendario");
+    expect(await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 15:00" })).toBeInTheDocument();
+  });
+
+  it("una reserva que cruza las 15:00 sale por la tarde desde la primera fila", async () => {
+    // De 14:00 a 15:30 en Madrid
+    svc.bookings.listAll.mockResolvedValue([
+      booking({ startsAt: "2026-10-25T13:00:00.000Z", endsAt: "2026-10-25T14:30:00.000Z" }),
+    ]);
+    url.set("franja=tarde");
+    renderPage();
+
+    const block = await screen.findByRole("link", { name: /14:00–15:30/ });
+    expect(block.closest("td")).toHaveAttribute("rowspan", "1");
+    expect(within(block.closest("tr")!).getByText("15:00")).toBeInTheDocument();
+  });
+});
+
+describe("Recepción — modo mostrador", () => {
+  let fullscreenElement: Element | null;
+
+  const dayView = () => screen.getByRole("table").closest("div.fixed");
+
+  function installFullscreenApi() {
+    fullscreenElement = null;
+    const change = () => document.dispatchEvent(new Event("fullscreenchange"));
+    Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    const exitFullscreen = vi.fn(async () => {
+      fullscreenElement = null;
+      change();
+    });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+    // Se instala en documentElement: pasa a pantalla completa él (con qué `this` se llama, lo mira el test)
+    const requestFullscreen = vi.fn(async () => {
+      fullscreenElement = document.documentElement;
+      change();
+    });
+    Object.defineProperty(document.documentElement, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    return { requestFullscreen, exitFullscreen };
+  }
+
+  afterEach(() => {
+    for (const key of ["fullscreenEnabled", "fullscreenElement", "exitFullscreen"]) Reflect.deleteProperty(document, key);
+    Reflect.deleteProperty(document.documentElement, "requestFullscreen");
+  });
+
+  it("con la Fullscreen API: pide la pantalla completa del documento y la vista del día lo tapa todo", async () => {
+    const api = installFullscreenApi();
+    renderPage();
+    await firstSlot();
+    expect(dayView()).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+
+    expect(api.requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(api.requestFullscreen.mock.contexts[0]).toBe(document.documentElement);
+    expect(dayView()).toHaveClass("fixed", "inset-0", "z-50");
+    expect(await screen.findByRole("button", { name: "Salir del modo mostrador" })).toBeInTheDocument();
+  });
+
+  it("con la Fullscreen API: Esc (el navegador cierra la pantalla completa) saca del modo", async () => {
+    installFullscreenApi();
+    renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    await waitFor(() => expect(document.fullscreenElement).toBe(document.documentElement));
+
+    act(() => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+
+    expect(await screen.findByRole("button", { name: "Modo mostrador" })).toBeInTheDocument();
+    expect(dayView()).toBeNull();
+  });
+
+  it("con la Fullscreen API: el botón sale del modo y de la pantalla completa", async () => {
+    const api = installFullscreenApi();
+    renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    await waitFor(() => expect(document.fullscreenElement).toBe(document.documentElement));
+
+    fireEvent.click(screen.getByRole("button", { name: "Salir del modo mostrador" }));
+
+    expect(api.exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(dayView()).toBeNull();
+    expect(document.fullscreenElement).toBeNull();
+  });
+
+  it("sin la Fullscreen API: el modo funciona igual (tapa la barra lateral) y se sale con Esc o con el botón", async () => {
+    expect(document.fullscreenEnabled).toBeFalsy();
+    renderPage();
+    await firstSlot();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    expect(dayView()).toHaveClass("fixed", "inset-0", "z-50");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(dayView()).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salir del modo mostrador" }));
+    expect(dayView()).toBeNull();
+  });
+
+  it("para el dedo: huecos y botones de 44 px, la columna de horas fija y la de pistas arriba", async () => {
+    renderPage();
+    const slot = await firstSlot();
+    expect(slot).toHaveClass("h-7");
+    // Fuera del modo, la cabecera de pistas no se pega arriba (taparía la del panel)
+    expect(screen.getByRole("columnheader", { name: "Pista 1" })).not.toHaveClass("sticky");
+
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+
+    expect(slot).toHaveClass("h-11");
+    expect(screen.getByRole("button", { name: "Día anterior" })).toHaveClass("size-11");
+    expect(screen.getByRole("button", { name: "Tarde" })).toHaveClass("min-h-11");
+    expect(screen.getByRole("button", { name: "Salir del modo mostrador" })).toHaveClass("h-11");
+    expect(screen.getByRole("columnheader", { name: "Hora" })).toHaveClass("sticky", "left-0", "top-0");
+    expect(screen.getByText("09:00").closest("td")).toHaveClass("sticky", "left-0");
+    expect(screen.getByRole("columnheader", { name: "Pista 1" })).toHaveClass("sticky", "top-0");
+  });
+});
+
+describe("Recepción — se actualiza sola", () => {
+  // Aquí también los temporizadores son falsos (y avanzan con el tiempo real, para findBy)
+  beforeEach(() => {
+    vi.useRealTimers();
+    vi.useFakeTimers({
+      toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+      shouldAdvanceTime: true,
+    });
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  function setVisibility(state: DocumentVisibilityState) {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+    });
+  }
+
+  it("cada 60 s vuelve a pedir el día sin quitar la rejilla (ni su scroll)", async () => {
+    renderPage({ staleTime: 30_000 });
+    await firstSlot();
+    const table = screen.getByRole("table");
+    expect(svc.bookings.listAll).toHaveBeenCalledTimes(1);
+    svc.bookings.listAll.mockResolvedValue([booking({})]);
+
+    await act(() => vi.advanceTimersByTimeAsync(55_000));
+    expect(svc.bookings.listAll).toHaveBeenCalledTimes(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(await screen.findByRole("link", { name: /18:00–19:30/ })).toBeInTheDocument();
+    expect(svc.bookings.listAll).toHaveBeenCalledTimes(2);
+    // La misma tabla: no se cambió por «cargando» mientras llegaba lo nuevo
+    expect(screen.getByRole("table")).toBe(table);
+  });
+
+  it("al volver a la pestaña lo pide otra vez, aunque lo último tenga menos de 30 s", async () => {
+    renderPage({ staleTime: 30_000 });
+    await firstSlot();
+    expect(svc.bookings.listAll).toHaveBeenCalledTimes(1);
+
+    setVisibility("hidden");
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    setVisibility("visible");
+
+    await waitFor(() => expect(svc.bookings.listAll).toHaveBeenCalledTimes(2));
+  });
+
+  it("si falla un refresco, se sigue viendo la rejilla con un aviso", async () => {
+    renderPage({ staleTime: 30_000 });
+    await firstSlot();
+    const table = screen.getByRole("table");
+    svc.bookings.listAll.mockRejectedValue(new Error("500"));
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(await screen.findByText(/No se pudo actualizar el día/)).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBe(table);
+    expect(screen.queryByText("No se pudo cargar el día. Vuelve a intentarlo.")).not.toBeInTheDocument();
+  });
+
+  it("la línea de la hora avanza sola", async () => {
+    renderPage();
+    expect(await screen.findByRole("separator", { name: "Hora actual, 11:00" })).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(15 * 60_000 + 10_000));
+
+    const line = screen.getByRole("separator", { name: "Hora actual, 11:15" });
+    expect(line).toHaveStyle({ top: "50%" });
   });
 });

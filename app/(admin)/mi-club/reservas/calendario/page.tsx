@@ -3,7 +3,9 @@
  *
  * Dos vistas:
  *  - DÍA: rejilla horas × pistas de un día. Click en hueco libre → crear reserva
- *    ahí mismo (pista + hora prefijadas). Es el flujo de recepción.
+ *    ahí mismo (pista + hora prefijadas). Es el flujo de recepción: se
+ *    actualiza sola, marca la hora actual, filtra mañana/tarde (en la URL,
+ *    `?franja=`) y tiene un modo mostrador a pantalla completa para tablet.
  *  - SEMANA: rejilla pistas × días (resumen). Click en reserva → detalle.
  *
  * Días y horas en la zona del club: las reservas van en hora de España
@@ -12,15 +14,18 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   CalendarRange,
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Maximize2,
+  Minimize2,
   Plus,
 } from "lucide-react";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -30,11 +35,14 @@ import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { cn } from "@/lib/utils";
 import {
   bookingsByCourtAndDay,
   dayRangeIso,
+  parseDayPeriod,
   resolveDayWindow,
   weekDayKeys,
+  type DayPeriod,
 } from "@/lib/utils/booking-day-grid";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import {
@@ -43,6 +51,7 @@ import {
   capitalizeFirst,
   formatDayKey,
   zonedDayKey,
+  zonedMinutes,
   zonedTime,
 } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
@@ -52,6 +61,22 @@ const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 // Las reservas van en hora de España: el back las calcula en Europe/Madrid
 const TZ = DEFAULT_TIME_ZONE;
 type View = "day" | "week";
+
+const CALENDAR_PATH = "/mi-club/reservas/calendario";
+// Recepción tiene el día abierto: lo que reservan otros (la app, otro puesto) entra solo
+const REFRESH_MS = 60_000;
+// La línea de la hora actual avanza sola, y «hoy» cambia solo a medianoche
+const CLOCK_TICK_MS = 30_000;
+
+const PERIODS: { value: DayPeriod; label: string; title?: string }[] = [
+  { value: "todo", label: "Todo" },
+  { value: "manana", label: "Mañana", title: "Antes de las 15:00" },
+  { value: "tarde", label: "Tarde", title: "Desde las 15:00" },
+];
+
+function calendarHref(period: DayPeriod): string {
+  return period === "todo" ? CALENDAR_PATH : `${CALENDAR_PATH}?franja=${period}`;
+}
 
 export default function CalendarioPage() {
   const { role, clubId } = useRole();
@@ -99,12 +124,15 @@ export default function CalendarioPage() {
 
       {/* Si fallan las pistas es un fallo de carga, no un club «sin pistas» */}
       {view === "day" ? (
-        <DayView
-          clubId={clubId}
-          courts={courts}
-          courtsLoading={courtsQuery.isLoading}
-          courtsError={courtsQuery.isError}
-        />
+        // La franja sale de la URL (useSearchParams): sin Suspense, el build no prerenderiza la página
+        <Suspense fallback={<Loader2 className="mt-4 h-5 w-5 animate-spin text-muted-foreground" />}>
+          <DayView
+            clubId={clubId}
+            courts={courts}
+            courtsLoading={courtsQuery.isLoading}
+            courtsError={courtsQuery.isError}
+          />
+        </Suspense>
       ) : (
         <WeekView
           clubId={clubId}
@@ -130,14 +158,27 @@ function DayView({
   courtsLoading: boolean;
   courtsError: boolean;
 }) {
-  const [dayOffset, setDayOffset] = useState(0);
+  const now = useNow(CLOCK_TICK_MS);
+  const todayKey = zonedDayKey(now, TZ);
+  // null: hoy, y lo sigue siendo pasada la medianoche (la tablet de recepción se queda abierta)
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const dateStr = pickedDay ?? todayKey;
+  const isToday = dateStr === todayKey;
+  const goToDay = (key: string) => setPickedDay(key === todayKey ? null : key);
+
+  // La franja va en la URL: recepción la deja fija y sobrevive a recargar.
+  // Sin ir al servidor: Next sincroniza useSearchParams con replaceState
+  const period = parseDayPeriod(useSearchParams().get("franja"));
+  const choosePeriod = (p: DayPeriod) => window.history.replaceState(null, "", calendarHref(p));
+
+  const counter = useCounterMode();
+  // Modo mostrador: botones de 44 px, lo mínimo para el dedo
+  const tapIcon = counter.on ? "size-11" : undefined;
+  const tapText = counter.on ? "h-11 px-4" : undefined;
+
   // Abierto: con qué se abre el alta (null: cerrado)
   const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(null);
 
-  const dateStr = useMemo(
-    () => addDaysToKey(zonedDayKey(new Date(), TZ), dayOffset),
-    [dayOffset],
-  );
   const range = useMemo(() => dayRangeIso(dateStr, dateStr, TZ), [dateStr]);
 
   const hoursQuery = useQuery({
@@ -155,6 +196,11 @@ function DayView({
   const bookingsQuery = useQuery({
     queryKey: bookingsQK.bookingsAll(bookingsFilters),
     queryFn: () => bookingsService.bookings.listAll(bookingsFilters),
+    // Lo que reservan otros entra solo. Mientras llega, se queda la rejilla
+    // que había (con su scroll): un refresco no pasa por «cargando»
+    refetchInterval: REFRESH_MS,
+    // Al volver a la pestaña, siempre, aunque lo último tenga menos de 30 s
+    refetchOnWindowFocus: "always",
   });
 
   const dayWindow = useMemo(
@@ -167,54 +213,125 @@ function DayView({
     hoursQuery.isLoading ||
     exceptionsQuery.isLoading ||
     bookingsQuery.isLoading;
+  // Si falla un refresco de las reservas, se sigue viendo lo último que
+  // llegó, con un aviso, en vez de cambiar la rejilla por un error
   const failed =
-    courtsError || hoursQuery.isError || exceptionsQuery.isError || bookingsQuery.isError;
+    courtsError || hoursQuery.isError || exceptionsQuery.isError || bookingsQuery.isLoadingError;
 
   return (
     <>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon-sm" onClick={() => setDayOffset((o) => o - 1)} aria-label="Día anterior">
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
-          <span className="min-w-[11rem] text-center text-sm font-medium">
-            {capitalizeFirst(formatDayKey(dateStr, { weekday: "long", day: "numeric", month: "short" }))}
-          </span>
-          <Button variant="outline" size="icon-sm" onClick={() => setDayOffset((o) => o + 1)} aria-label="Día siguiente">
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-          {dayOffset !== 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setDayOffset(0)}>
-              Hoy
+      {/* En modo mostrador, la vista del día tapa todo (también la barra lateral) */}
+      <div
+        className={
+          counter.on ? "fixed inset-0 z-50 flex flex-col gap-3 bg-background p-3 sm:p-4" : undefined
+        }
+      >
+        <div className={cn("flex flex-wrap items-center justify-between gap-3", !counter.on && "mt-4")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className={tapIcon}
+              onClick={() => goToDay(addDaysToKey(dateStr, -1))}
+              aria-label="Día anterior"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
+            <span className="min-w-[11rem] text-center text-sm font-medium">
+              {capitalizeFirst(formatDayKey(dateStr, { weekday: "long", day: "numeric", month: "short" }))}
+            </span>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className={tapIcon}
+              onClick={() => goToDay(addDaysToKey(dateStr, 1))}
+              aria-label="Día siguiente"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+            {!isToday && (
+              <Button variant="ghost" size="sm" className={tapText} onClick={() => setPickedDay(null)}>
+                Hoy
+              </Button>
+            )}
+            <input
+              type="date"
+              aria-label="Elegir fecha"
+              value={dateStr}
+              onChange={(e) => {
+                // Borrar la fecha no lleva a ningún día: se queda la que había
+                if (e.target.value) goToDay(e.target.value);
+              }}
+              className={cn(
+                "rounded-md border border-border bg-background px-2 text-sm text-foreground",
+                counter.on ? "h-11" : "h-7",
+              )}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Franja del día" className="inline-flex rounded-lg border border-border p-0.5">
+              {PERIODS.map((p) => (
+                <ViewTab
+                  key={p.value}
+                  active={period === p.value}
+                  onClick={() => choosePeriod(p.value)}
+                  title={p.title}
+                  className={counter.on ? "min-h-11 px-4" : undefined}
+                >
+                  {p.label}
+                </ViewTab>
+              ))}
+            </div>
+            <Button size="sm" className={tapText} onClick={() => setCreateInitial({ date: dateStr })}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
+            </Button>
+            <Button variant="outline" size="sm" className={tapText} onClick={counter.on ? counter.exit : counter.enter}>
+              {counter.on ? (
+                <>
+                  <Minimize2 className="mr-1.5 h-3.5 w-3.5" /> Salir del modo mostrador
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Modo mostrador
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {bookingsQuery.isRefetchError && (
+          <p className={cn("text-xs text-amber-600 dark:text-amber-400", !counter.on && "mt-2")}>
+            No se pudo actualizar el día; se ve lo último que llegó y se vuelve a intentar solo.
+          </p>
+        )}
+
+        {/* En modo mostrador la rejilla se desplaza por dentro: la cabecera de
+            pistas queda arriba y la columna de horas, a la izquierda */}
+        <div className={counter.on ? "min-h-0 flex-1 overflow-auto" : "mt-4 overflow-x-auto"}>
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : failed ? (
+            <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
+              No se pudo cargar el día. Vuelve a intentarlo.
+            </p>
+          ) : courts.length === 0 ? (
+            <EmptyCourts />
+          ) : (
+            <ReservasDayGrid
+              date={dateStr}
+              timeZone={TZ}
+              courts={courts}
+              bookings={bookingsQuery.data ?? []}
+              window={dayWindow}
+              onSlotClick={({ courtId, startsAtISO }) =>
+                setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
+              }
+              period={period}
+              nowMinutes={isToday ? zonedMinutes(now, TZ) : null}
+              touch={counter.on}
+            />
           )}
         </div>
-        <Button size="sm" onClick={() => setCreateInitial({ date: dateStr })}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
-        </Button>
-      </div>
-
-      <div className="mt-4 overflow-x-auto">
-        {loading ? (
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : failed ? (
-          <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
-            No se pudo cargar el día. Vuelve a intentarlo.
-          </p>
-        ) : courts.length === 0 ? (
-          <EmptyCourts />
-        ) : (
-          <ReservasDayGrid
-            date={dateStr}
-            timeZone={TZ}
-            courts={courts}
-            bookings={bookingsQuery.data ?? []}
-            window={dayWindow}
-            onSlotClick={({ courtId, startsAtISO }) =>
-              setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
-            }
-          />
-        )}
       </div>
 
       {/* Se monta al abrir: cada alta empieza con lo elegido en la rejilla */}
@@ -354,11 +471,15 @@ function ViewTab({
   active,
   onClick,
   icon,
+  title,
+  className,
   children,
 }: {
   active: boolean;
   onClick: () => void;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
+  title?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -366,16 +487,73 @@ function ViewTab({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-        active
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
+      title={title}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+        active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+        className,
+      )}
     >
       {icon}
       {children}
     </button>
   );
+}
+
+// ── Recepción: reloj y modo mostrador ────────────────────────────────────────
+
+/** La hora actual, puesta al día cada `everyMs`. */
+function useNow(everyMs: number): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), everyMs);
+    return () => clearInterval(id);
+  }, [everyMs]);
+  return now;
+}
+
+/**
+ * Modo mostrador: la vista del día ocupa toda la pantalla, para la tablet de
+ * recepción. Pide al navegador la pantalla completa de todo el documento (no
+ * solo de la rejilla), para que el alta y los avisos, que se abren fuera de
+ * ella, se sigan viendo; la vista ya tapa la barra lateral por sí misma, así
+ * que sin la Fullscreen API (iPhone, un iframe sin permiso) el modo funciona
+ * igual, con las barras del navegador a la vista. Se sale con el botón o con
+ * Esc; también al irse de la página.
+ */
+function useCounterMode() {
+  const [on, setOn] = useState(false);
+
+  useEffect(() => {
+    if (!on) return;
+    // En pantalla completa, Esc la cierra el navegador: el modo se va con ella
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setOn(false);
+    };
+    // Sin pantalla completa, Esc no lo atiende nadie más
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.fullscreenElement) setOn(false);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      window.removeEventListener("keydown", onKeyDown);
+      // Al salir del modo (con el botón o yéndose de la página), sin pantalla completa huérfana
+      if (document.fullscreenElement) void document.exitFullscreen();
+    };
+  }, [on]);
+
+  const enter = () => {
+    setOn(true);
+    const root = document.documentElement;
+    if (document.fullscreenEnabled && typeof root.requestFullscreen === "function") {
+      // Si el navegador la niega, el modo sigue sin ella: la vista ya tapa la barra lateral
+      root.requestFullscreen().catch(() => undefined);
+    }
+  };
+
+  return { on, enter, exit: () => setOn(false) };
 }
 
 function EmptyCourts() {
