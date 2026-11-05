@@ -48,6 +48,20 @@ export interface DayGrid {
   cells: Record<string, DayGridCell[]>;
 }
 
+/**
+ * La parte del día que enseña la rejilla. Es también el valor de `?franja=`
+ * en la URL (sin él, «todo»): recepción deja fija la suya.
+ */
+export type DayPeriod = "todo" | "manana" | "tarde";
+
+/** La tarde empieza a las 15:00 (hora del club): «Mañana» son las franjas que empiezan antes. */
+export const AFTERNOON_START_MINUTES = 15 * 60;
+
+/** La franja de `?franja=`; cualquier otro valor (o ninguno) es el día entero. */
+export function parseDayPeriod(value: string | null | undefined): DayPeriod {
+  return value === "manana" || value === "tarde" ? value : "todo";
+}
+
 export function hhmmToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
@@ -212,4 +226,59 @@ export function buildDayGrid(params: {
   }
 
   return { rows, cells };
+}
+
+/**
+ * La rejilla solo con las franjas de la mañana o de la tarde. Una reserva
+ * que cruza las 15:00 sale en las dos, cada una con las franjas que le tocan
+ * (su hora de inicio y de fin no cambian).
+ */
+export function sliceDayGrid(grid: DayGrid, period: DayPeriod): DayGrid {
+  if (period === "todo") return grid;
+  // Las franjas van en orden: la mañana es el principio y la tarde, el resto
+  const split = grid.rows.findIndex((t) => t >= AFTERNOON_START_MINUTES);
+  const cut = split === -1 ? grid.rows.length : split;
+  const [from, to] = period === "manana" ? [0, cut] : [cut, grid.rows.length];
+
+  const cells: Record<string, DayGridCell[]> = {};
+  for (const [courtId, column] of Object.entries(grid.cells)) {
+    cells[courtId] = column.slice(from, to).map((cell, i): DayGridCell => {
+      // La que empezó antes de la franja se ve desde la primera fila
+      if (cell.kind === "covered" && i === 0) {
+        const head = bookingStartAbove(column, from);
+        return head
+          ? { kind: "booking", booking: head.booking, span: Math.min(head.end, to) - from }
+          : cell;
+      }
+      // La que sigue después de la franja se corta en la última fila
+      if (cell.kind === "booking") return { ...cell, span: Math.min(cell.span, to - from - i) };
+      return cell;
+    });
+  }
+  return { rows: grid.rows.slice(from, to), cells };
+}
+
+/** La reserva que tapa la fila `row` (empieza más arriba) y la fila en la que termina. */
+function bookingStartAbove(
+  column: DayGridCell[],
+  row: number,
+): { booking: Booking; end: number } | null {
+  for (let r = row - 1; r >= 0; r--) {
+    const cell = column[r];
+    if (cell.kind === "booking") return { booking: cell.booking, end: r + cell.span };
+  }
+  return null;
+}
+
+/**
+ * Dónde va la línea de la hora actual: la franja en la que cae `nowMinutes`
+ * (minutos desde las 00:00 del día del club) y cuánto de ella ha pasado, de
+ * 0 a 1. null: la hora está fuera de la rejilla.
+ */
+export function nowMarker(
+  rows: number[],
+  nowMinutes: number,
+): { row: number; offset: number } | null {
+  const row = rows.findIndex((t) => nowMinutes >= t && nowMinutes < t + SLOT_MINUTES);
+  return row === -1 ? null : { row, offset: (nowMinutes - rows[row]) / SLOT_MINUTES };
 }
