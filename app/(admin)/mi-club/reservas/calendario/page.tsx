@@ -14,7 +14,7 @@
 
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -176,13 +176,13 @@ function DayView({
   const period = parseDayPeriod(useSearchParams().get("franja"));
   const choosePeriod = (p: DayPeriod) => window.history.replaceState(null, "", calendarHref(p));
 
-  const counter = useCounterMode();
+  // Abierto: con qué se abre el alta (null: cerrado)
+  const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(null);
+
+  const counter = useCounterMode(createInitial !== null);
   // Modo mostrador: botones de 44 px, lo mínimo para el dedo
   const tapIcon = counter.on ? "size-11" : undefined;
   const tapText = counter.on ? "h-11 px-4" : undefined;
-
-  // Abierto: con qué se abre el alta (null: cerrado)
-  const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(null);
 
   const range = useMemo(() => dayRangeIso(dateStr, dateStr, TZ), [dateStr]);
 
@@ -543,19 +543,26 @@ function useNow(everyMs: number): Date {
  * que sin la Fullscreen API (iPhone, un iframe sin permiso) el modo funciona
  * igual, con las barras del navegador a la vista. Se sale con el botón o con
  * Esc; también al irse de la página.
+ *
+ * `dialogOpen`: el alta está abierta encima, y Esc es suyo.
  */
-function useCounterMode() {
+function useCounterMode(dialogOpen: boolean) {
   const [on, setOn] = useState(false);
+
+  // Sin pantalla completa, Esc saca del modo salvo que sea de otro: ya
+  // atendido, con el alta abierta o en un campo (p. ej. el selector de
+  // fecha). Se lee al pulsar: rehacer el efecto saldría de la pantalla completa
+  const onKeyDown = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key !== "Escape" || document.fullscreenElement || e.defaultPrevented) return;
+    if (dialogOpen || isEditableField(e.target)) return;
+    setOn(false);
+  });
 
   useEffect(() => {
     if (!on) return;
     // En pantalla completa, Esc la cierra el navegador: el modo se va con ella
     const onFullscreenChange = () => {
       if (!document.fullscreenElement) setOn(false);
-    };
-    // Sin pantalla completa, Esc no lo atiende nadie más
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.fullscreenElement) setOn(false);
     };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     window.addEventListener("keydown", onKeyDown);
@@ -577,6 +584,14 @@ function useCounterMode() {
   };
 
   return { on, enter, exit: () => setOn(false) };
+}
+
+/** Un campo en el que se escribe o se elige: ahí Esc es del campo. */
+function isEditableField(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || target.matches("input, textarea, select"))
+  );
 }
 
 function EmptyCourts() {

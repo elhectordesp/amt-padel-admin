@@ -488,6 +488,37 @@ describe("Recepción — modo mostrador", () => {
     expect(dayView()).toBeNull();
   });
 
+  it("sin la Fullscreen API: Esc con el alta abierta es del alta, no cierra el modo", async () => {
+    renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva en Pista 2 a las 18:00" }));
+    await screen.findByText("Crear reserva", { selector: "h2" });
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(dayView()).toHaveClass("fixed", "inset-0", "z-50");
+
+    // Cerrada el alta, Esc vuelve a sacar del modo
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(dayView()).toBeNull();
+  });
+
+  it("sin la Fullscreen API: Esc en un campo (el selector de fecha) o ya atendido por otro no cierra el modo", async () => {
+    renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+
+    fireEvent.keyDown(screen.getByLabelText("Elegir fecha"), { key: "Escape" });
+    expect(dayView()).toHaveClass("fixed", "inset-0", "z-50");
+
+    const handled = (e: KeyboardEvent) => e.preventDefault();
+    document.addEventListener("keydown", handled);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    document.removeEventListener("keydown", handled);
+    expect(dayView()).toHaveClass("fixed", "inset-0", "z-50");
+  });
+
   it("para el dedo: huecos y botones de 44 px, la columna de horas fija y la de pistas arriba", async () => {
     renderPage();
     const slot = await firstSlot();
