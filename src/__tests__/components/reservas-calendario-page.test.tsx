@@ -574,6 +574,43 @@ describe("Recepción — se actualiza sola", () => {
     expect(screen.queryByText("No se pudo cargar el día. Vuelve a intentarlo.")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["los horarios", svc.operatingHours.list],
+    ["las excepciones del día", svc.exceptions.list],
+    ["las pistas", courtsMock.list],
+  ])("si falla el refresco de %s (la tablet vuelve del reposo), se sigue viendo la rejilla con el aviso", async (_, list) => {
+    renderPage({ staleTime: 30_000 });
+    await firstSlot();
+    const table = screen.getByRole("table");
+    list.mockRejectedValue(new Error("500"));
+
+    // Ya viejos: al volver a la pestaña se vuelven a pedir
+    await act(() => vi.advanceTimersByTimeAsync(31_000));
+    setVisibility("hidden");
+    setVisibility("visible");
+
+    expect(await screen.findByText(/No se pudo actualizar el día/)).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("table")).toBe(table);
+    expect(screen.queryByText("No se pudo cargar el día. Vuelve a intentarlo.")).not.toBeInTheDocument();
+  });
+
+  it("en la semana, si falla un refresco, se sigue viendo la semana con un aviso", async () => {
+    renderPage({ staleTime: 30_000 });
+    fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
+    await screen.findByRole("columnheader", { name: "Pista" });
+    const table = screen.getByRole("table");
+    svc.bookings.listAll.mockRejectedValue(new Error("500"));
+
+    await act(() => vi.advanceTimersByTimeAsync(31_000));
+    setVisibility("hidden");
+    setVisibility("visible");
+
+    expect(await screen.findByText(/No se pudo actualizar la semana/)).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBe(table);
+    expect(screen.queryByText("No se pudo cargar la semana. Vuelve a intentarlo.")).not.toBeInTheDocument();
+  });
+
   it("la línea de la hora avanza sola", async () => {
     renderPage();
     expect(await screen.findByRole("separator", { name: "Hora actual, 11:00" })).toBeInTheDocument();

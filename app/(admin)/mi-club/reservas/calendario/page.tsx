@@ -122,7 +122,8 @@ export default function CalendarioPage() {
         </ViewTab>
       </div>
 
-      {/* Si fallan las pistas es un fallo de carga, no un club «sin pistas» */}
+      {/* Si fallan las pistas es un fallo de carga, no un club «sin pistas»;
+          si falla un refresco, se siguen usando las que llegaron, con un aviso */}
       {view === "day" ? (
         // La franja sale de la URL (useSearchParams): sin Suspense, el build no prerenderiza la página
         <Suspense fallback={<Loader2 className="mt-4 h-5 w-5 animate-spin text-muted-foreground" />}>
@@ -130,7 +131,8 @@ export default function CalendarioPage() {
             clubId={clubId}
             courts={courts}
             courtsLoading={courtsQuery.isLoading}
-            courtsError={courtsQuery.isError}
+            courtsError={courtsQuery.isLoadingError}
+            courtsRefreshError={courtsQuery.isRefetchError}
           />
         </Suspense>
       ) : (
@@ -138,7 +140,8 @@ export default function CalendarioPage() {
           clubId={clubId}
           courts={courts}
           courtsLoading={courtsQuery.isLoading}
-          courtsError={courtsQuery.isError}
+          courtsError={courtsQuery.isLoadingError}
+          courtsRefreshError={courtsQuery.isRefetchError}
         />
       )}
     </ReservasPage>
@@ -152,11 +155,13 @@ function DayView({
   courts,
   courtsLoading,
   courtsError,
+  courtsRefreshError,
 }: {
   clubId: string;
   courts: Court[];
   courtsLoading: boolean;
   courtsError: boolean;
+  courtsRefreshError: boolean;
 }) {
   const now = useNow(CLOCK_TICK_MS);
   const todayKey = zonedDayKey(now, TZ);
@@ -213,10 +218,19 @@ function DayView({
     hoursQuery.isLoading ||
     exceptionsQuery.isLoading ||
     bookingsQuery.isLoading;
-  // Si falla un refresco de las reservas, se sigue viendo lo último que
-  // llegó, con un aviso, en vez de cambiar la rejilla por un error
+  // Si falla un refresco (la tablet vuelve del reposo sin red), se sigue
+  // viendo lo último que llegó, con un aviso, en vez de cambiar la rejilla
+  // por un error: el error es solo para lo que no llegó a cargar
   const failed =
-    courtsError || hoursQuery.isError || exceptionsQuery.isError || bookingsQuery.isLoadingError;
+    courtsError ||
+    hoursQuery.isLoadingError ||
+    exceptionsQuery.isLoadingError ||
+    bookingsQuery.isLoadingError;
+  const refreshFailed =
+    courtsRefreshError ||
+    hoursQuery.isRefetchError ||
+    exceptionsQuery.isRefetchError ||
+    bookingsQuery.isRefetchError;
 
   return (
     <>
@@ -299,7 +313,7 @@ function DayView({
           </div>
         </div>
 
-        {bookingsQuery.isRefetchError && (
+        {refreshFailed && (
           <p className={cn("text-xs text-amber-600 dark:text-amber-400", !counter.on && "mt-2")}>
             No se pudo actualizar el día; se ve lo último que llegó y se vuelve a intentar solo.
           </p>
@@ -354,11 +368,13 @@ function WeekView({
   courts,
   courtsLoading,
   courtsError,
+  courtsRefreshError,
 }: {
   clubId: string;
   courts: Court[];
   courtsLoading: boolean;
   courtsError: boolean;
+  courtsRefreshError: boolean;
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -408,10 +424,17 @@ function WeekView({
         </div>
       </div>
 
+      {/* Como en el día: un refresco que falla (al volver a la pestaña) no quita la semana */}
+      {(courtsRefreshError || bookingsQuery.isRefetchError) && (
+        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+          No se pudo actualizar la semana; se ve lo último que llegó.
+        </p>
+      )}
+
       <div className="mt-6 overflow-x-auto">
         {courtsLoading || bookingsQuery.isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : courtsError || bookingsQuery.isError ? (
+        ) : courtsError || bookingsQuery.isLoadingError ? (
           <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
             No se pudo cargar la semana. Vuelve a intentarlo.
           </p>
