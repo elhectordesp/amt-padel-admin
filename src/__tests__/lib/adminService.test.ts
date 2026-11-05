@@ -324,6 +324,22 @@ describe('adminService', () => {
     });
   });
 
+  describe('cuentas borradas: listar y anonimizar', () => {
+    it('lista las borradas con el nombre que busca y la página', async () => {
+      const page = { data: [{ id: 'p9', name: 'Ana', deletedAt: '2026-10-01T10:00:00.000Z', lastTournament: null }], total: 1, page: 2, pageSize: 25 };
+      mockGet.mockResolvedValueOnce({ data: page });
+      const result = await adminService.players.deleted({ page: 2, pageSize: 25, q: 'ana' });
+      expect(mockGet).toHaveBeenCalledWith('/admin/players/deleted', { params: { page: 2, pageSize: 25, q: 'ana' } });
+      expect(result).toEqual(page);
+    });
+
+    it('anonimiza con POST /admin/players/:id/anonymize', async () => {
+      mockPost.mockResolvedValueOnce({ data: { message: 'Cuenta anonimizada' } });
+      await adminService.players.anonymize('p9');
+      expect(mockPost).toHaveBeenCalledWith('/admin/players/p9/anonymize');
+    });
+  });
+
   // ── Rankings — lógica de transformación ────────────────────────────
 
   describe('rankings.list', () => {

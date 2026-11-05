@@ -12,7 +12,7 @@ import type {
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
-  DeletedTournament,
+  DeletedTournament, DeletedPlayer,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
@@ -594,6 +594,11 @@ export const adminService = {
     resendInvite: (id: string)                            => api.post(`/admin/players/${id}/resend-invite`).then((r) => r.data),
     getInviteLink: (id: string)                           => api.post<{ url: string; name: string }>(`/admin/players/${id}/invite-link`).then((r) => r.data),
     bulkInvite:   ()                                       => api.post<{ sent: number; skipped: number; total: number }>("/admin/players/bulk-invite").then((r) => r.data),
+    /** Las cuentas borradas que aún conservan el nombre, las últimas bajas primero (solo AMT). */
+    deleted: (params: { page: number; pageSize: number; q?: string }) =>
+      api.get<{ data: DeletedPlayer[]; total: number; page: number; pageSize: number }>("/admin/players/deleted", { params }).then((r) => r.data),
+    /** Quita el nombre de una cuenta ya borrada, a petición de la persona (solo AMT). */
+    anonymize:    (id: string)                            => api.post<{ message: string }>(`/admin/players/${id}/anonymize`).then((r) => r.data),
   },
 
   finance: {

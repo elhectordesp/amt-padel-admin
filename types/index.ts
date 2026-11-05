@@ -174,6 +174,18 @@ export interface DeletedTournament {
   club:      { id: string; name: string };
 }
 
+/**
+ * Una cuenta que borró un admin y aún conserva el nombre, para anonimizarla a
+ * petición de la persona (`GET /admin/players/deleted`). Sin email ni teléfono:
+ * al borrarla se quitaron. El último torneo sirve para distinguir homónimos.
+ */
+export interface DeletedPlayer {
+  id:             string;
+  name:           string;
+  deletedAt:      string;
+  lastTournament: { name: string; startDate: string } | null;
+}
+
 export interface SpaProfile {
   spaPoints:      number;
   spaLevel:       CategoryLevel;
