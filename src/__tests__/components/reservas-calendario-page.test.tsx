@@ -472,6 +472,19 @@ describe("Recepción — modo mostrador", () => {
     expect(document.fullscreenElement).toBeNull();
   });
 
+  it("con la Fullscreen API: al irse de la página en modo mostrador sale de la pantalla completa", async () => {
+    const api = installFullscreenApi();
+    const { unmount } = renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    await waitFor(() => expect(document.fullscreenElement).toBe(document.documentElement));
+
+    unmount();
+
+    expect(api.exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.fullscreenElement).toBeNull();
+  });
+
   it("sin la Fullscreen API: el modo funciona igual (tapa la barra lateral) y se sale con Esc o con el botón", async () => {
     expect(document.fullscreenEnabled).toBeFalsy();
     renderPage();
@@ -700,5 +713,33 @@ describe("Recepción — se actualiza sola", () => {
 
     const line = screen.getByRole("separator", { name: "Hora actual, 11:15" });
     expect(line).toHaveStyle({ top: "50%" });
+  });
+
+  it("«hoy» cambia solo al pasar las 00:00 de Madrid (en Canarias aún son las 23:00): fecha, reservas y línea", async () => {
+    // Abierto de 00:00 a 23:59, para que la línea se vea a los dos lados de la medianoche
+    svc.operatingHours.list.mockResolvedValue(
+      [1, 2, 3, 4, 5, 6, 7].map((d) => ({ id: `h${d}`, clubId: "c1", dayOfWeek: d, openTime: "00:00", closeTime: "23:59", active: true })),
+    );
+    vi.setSystemTime(new Date("2026-10-25T22:59:00.000Z")); // domingo, 23:59 en Madrid
+    renderPage();
+    expect(await screen.findByRole("separator", { name: "Hora actual, 23:59" })).toBeInTheDocument();
+    expect(screen.getByText("Domingo, 25 oct")).toBeInTheDocument();
+
+    // 23:59:30: sigue siendo domingo
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(screen.getByText("Domingo, 25 oct")).toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: "Hora actual, 23:59" })).toBeInTheDocument();
+
+    // 00:00 del lunes en Madrid
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(await screen.findByText("Lunes, 26 oct")).toBeInTheDocument();
+    expect(svc.bookings.listAll).toHaveBeenLastCalledWith({
+      clubId: "c1",
+      fromDate: "2026-10-25T23:00:00.000Z",
+      toDate: "2026-10-26T22:59:59.999Z",
+    });
+    expect(await screen.findByRole("separator", { name: "Hora actual, 00:00" })).toHaveStyle({ top: "0%" });
+    // Sigue siendo hoy: no hay «Hoy» para volver
+    expect(screen.queryByRole("button", { name: "Hoy" })).not.toBeInTheDocument();
   });
 });
