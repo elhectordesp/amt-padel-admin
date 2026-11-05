@@ -9,7 +9,10 @@ import {
   buildDayGrid,
   dayRangeIso,
   isoDayOfWeek,
+  nowMarker,
+  parseDayPeriod,
   resolveDayWindow,
+  sliceDayGrid,
   weekDayKeys,
   type DayGridCell,
 } from "@/lib/utils/booking-day-grid";
@@ -216,5 +219,70 @@ describe("buildDayGrid", () => {
       dayKey: DAY, courts: [court("p1")], bookings: [booking({ courtId: "otra" })], window, timeZone: MADRID,
     })!;
     expect(grid.cells.p1.every((c) => c.kind === "free")).toBe(true);
+  });
+});
+
+describe("parseDayPeriod", () => {
+  it("?franja=manana y ?franja=tarde; sin parámetro o con otro valor, el día entero", () => {
+    expect(parseDayPeriod("manana")).toBe("manana");
+    expect(parseDayPeriod("tarde")).toBe("tarde");
+    expect(parseDayPeriod(null)).toBe("todo");
+    expect(parseDayPeriod("noche")).toBe("todo");
+  });
+});
+
+describe("sliceDayGrid", () => {
+  const window = { openTime: "09:00", closeTime: "23:00" };
+  // De 14:00 a 15:30 en Madrid: cruza las 15:00
+  const crossing = booking({ startsAt: "2026-10-28T13:00:00.000Z", endsAt: "2026-10-28T14:30:00.000Z" });
+  const grid = buildDayGrid({
+    dayKey: DAY, courts: [court("p1"), court("p2")], bookings: [crossing], window, timeZone: MADRID,
+  })!;
+
+  it("todo: la rejilla tal cual", () => {
+    expect(sliceDayGrid(grid, "todo")).toBe(grid);
+  });
+
+  it("mañana: las franjas que empiezan antes de las 15:00, y la reserva que cruza se corta ahí", () => {
+    const morning = sliceDayGrid(grid, "manana");
+    expect(morning.rows[0]).toBe(9 * 60);
+    expect(morning.rows.at(-1)).toBe(14 * 60 + 30);
+    expect(morning.cells.p1).toHaveLength(morning.rows.length);
+    expect(morning.cells.p1.at(-2)).toMatchObject({ kind: "booking", booking: crossing, span: 2 });
+    expect(morning.cells.p1.at(-1)).toEqual({ kind: "covered" });
+  });
+
+  it("tarde: desde las 15:00, y la reserva que cruza sale desde la primera fila con lo que le queda", () => {
+    const afternoon = sliceDayGrid(grid, "tarde");
+    expect(afternoon.rows[0]).toBe(15 * 60);
+    expect(afternoon.rows.at(-1)).toBe(22 * 60 + 30);
+    // Antes esa fila habría sido «covered» sin reserva encima: la columna se descuadraba
+    expect(afternoon.cells.p1[0]).toEqual({ kind: "booking", booking: crossing, span: 1 });
+    expect(afternoon.cells.p1[1]).toEqual({ kind: "free", bookable: true });
+    expect(afternoon.cells.p2[0]).toEqual({ kind: "free", bookable: true });
+  });
+
+  it("un club que abre por la tarde no tiene franjas de mañana", () => {
+    const late = buildDayGrid({
+      dayKey: DAY, courts: [court("p1")], bookings: [], window: { openTime: "16:00", closeTime: "22:00" }, timeZone: MADRID,
+    })!;
+    expect(sliceDayGrid(late, "manana").rows).toEqual([]);
+    expect(sliceDayGrid(late, "tarde").rows).toEqual(late.rows);
+  });
+});
+
+describe("nowMarker", () => {
+  const rows = [9 * 60, 9 * 60 + 30, 10 * 60];
+
+  it("la franja en la que cae la hora y cuánto de ella ha pasado", () => {
+    expect(nowMarker(rows, 9 * 60)).toEqual({ row: 0, offset: 0 });
+    expect(nowMarker(rows, 9 * 60 + 45)).toEqual({ row: 1, offset: 0.5 });
+    expect(nowMarker(rows, 10 * 60 + 29)).toEqual({ row: 2, offset: 29 / 30 });
+  });
+
+  it("antes de la primera franja o desde el final de la última: sin línea", () => {
+    expect(nowMarker(rows, 8 * 60 + 59)).toBeNull();
+    expect(nowMarker(rows, 10 * 60 + 30)).toBeNull();
+    expect(nowMarker([], 10 * 60)).toBeNull();
   });
 });
