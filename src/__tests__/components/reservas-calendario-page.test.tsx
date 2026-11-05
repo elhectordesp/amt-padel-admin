@@ -519,6 +519,56 @@ describe("Recepción — modo mostrador", () => {
     expect(dayView()).toHaveClass("fixed", "inset-0", "z-50");
   });
 
+  it("es un diálogo modal con nombre: el foco entra en la vista y, al salir (Esc o botón), vuelve al botón", async () => {
+    renderPage();
+    await firstSlot();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    const view = screen.getByRole("dialog", { name: "Modo mostrador" });
+    expect(view).toBe(dayView());
+    expect(view).toHaveAttribute("aria-modal", "true");
+    expect(view).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Modo mostrador" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    expect(screen.getByRole("dialog", { name: "Modo mostrador" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Salir del modo mostrador" }));
+    expect(screen.getByRole("button", { name: "Modo mostrador" })).toHaveFocus();
+  });
+
+  it("el alta se abre dentro del diálogo: fuera, un lector de pantalla no la alcanzaría", async () => {
+    renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva en Pista 2 a las 18:00" }));
+
+    const view = screen.getByRole("dialog", { name: "Modo mostrador" });
+    expect(await within(view).findByText("Crear reserva", { selector: "h2" })).toBeInTheDocument();
+  });
+
+  it("con la Fullscreen API: si se sale escribiendo en el alta (Esc cierra la pantalla completa), el foco se queda en el alta", async () => {
+    installFullscreenApi();
+    renderPage();
+    await firstSlot();
+    fireEvent.click(screen.getByRole("button", { name: "Modo mostrador" }));
+    await waitFor(() => expect(document.fullscreenElement).toBe(document.documentElement));
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva en Pista 2 a las 18:00" }));
+    const field = await screen.findByLabelText("Fecha");
+    act(() => field.focus());
+
+    act(() => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(field).toHaveFocus();
+  });
+
   it("para el dedo: huecos y botones de 44 px, la columna de horas fija y la de pistas arriba", async () => {
     renderPage();
     const slot = await firstSlot();

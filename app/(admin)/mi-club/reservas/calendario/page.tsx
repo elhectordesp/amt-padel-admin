@@ -14,7 +14,7 @@
 
 "use client";
 
-import { Suspense, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -179,7 +179,10 @@ function DayView({
   // Abierto: con qué se abre el alta (null: cerrado)
   const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(null);
 
-  const counter = useCounterMode(createInitial !== null);
+  // La vista del día y el botón que abre y cierra el modo mostrador (el foco va y vuelve)
+  const viewRef = useRef<HTMLDivElement>(null);
+  const counterButtonRef = useRef<HTMLButtonElement>(null);
+  const counter = useCounterMode(viewRef, counterButtonRef, createInitial !== null);
   // Modo mostrador: botones de 44 px, lo mínimo para el dedo
   const tapIcon = counter.on ? "size-11" : undefined;
   const tapText = counter.on ? "h-11 px-4" : undefined;
@@ -233,122 +236,136 @@ function DayView({
     bookingsQuery.isRefetchError;
 
   return (
-    <>
-      {/* En modo mostrador, la vista del día tapa todo (también la barra lateral) */}
-      <div
-        className={
-          counter.on ? "fixed inset-0 z-50 flex flex-col gap-3 bg-background p-3 sm:p-4" : undefined
-        }
-      >
-        <div className={cn("flex flex-wrap items-center justify-between gap-3", !counter.on && "mt-4")}>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className={tapIcon}
-              onClick={() => goToDay(addDaysToKey(dateStr, -1))}
-              aria-label="Día anterior"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
+    // En modo mostrador, la vista del día tapa todo (también la barra
+    // lateral) y es un diálogo modal: el foco entra en ella al abrirlo
+    <div
+      ref={viewRef}
+      role={counter.on ? "dialog" : undefined}
+      aria-modal={counter.on ? true : undefined}
+      aria-label={counter.on ? "Modo mostrador" : undefined}
+      tabIndex={counter.on ? -1 : undefined}
+      className={
+        counter.on
+          ? "fixed inset-0 z-50 flex flex-col gap-3 bg-background p-3 outline-none sm:p-4"
+          : undefined
+      }
+    >
+      <div className={cn("flex flex-wrap items-center justify-between gap-3", !counter.on && "mt-4")}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className={tapIcon}
+            onClick={() => goToDay(addDaysToKey(dateStr, -1))}
+            aria-label="Día anterior"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <span className="min-w-[11rem] text-center text-sm font-medium">
+            {capitalizeFirst(formatDayKey(dateStr, { weekday: "long", day: "numeric", month: "short" }))}
+          </span>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className={tapIcon}
+            onClick={() => goToDay(addDaysToKey(dateStr, 1))}
+            aria-label="Día siguiente"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          {!isToday && (
+            <Button variant="ghost" size="sm" className={tapText} onClick={() => setPickedDay(null)}>
+              Hoy
             </Button>
-            <span className="min-w-[11rem] text-center text-sm font-medium">
-              {capitalizeFirst(formatDayKey(dateStr, { weekday: "long", day: "numeric", month: "short" }))}
-            </span>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className={tapIcon}
-              onClick={() => goToDay(addDaysToKey(dateStr, 1))}
-              aria-label="Día siguiente"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-            {!isToday && (
-              <Button variant="ghost" size="sm" className={tapText} onClick={() => setPickedDay(null)}>
-                Hoy
-              </Button>
-            )}
-            <input
-              type="date"
-              aria-label="Elegir fecha"
-              value={dateStr}
-              onChange={(e) => {
-                // Borrar la fecha no lleva a ningún día: se queda la que había
-                if (e.target.value) goToDay(e.target.value);
-              }}
-              className={cn(
-                "rounded-md border border-border bg-background px-2 text-sm text-foreground",
-                counter.on ? "h-11" : "h-7",
-              )}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div role="group" aria-label="Franja del día" className="inline-flex rounded-lg border border-border p-0.5">
-              {PERIODS.map((p) => (
-                <ViewTab
-                  key={p.value}
-                  active={period === p.value}
-                  onClick={() => choosePeriod(p.value)}
-                  title={p.title}
-                  className={counter.on ? "min-h-11 px-4" : undefined}
-                >
-                  {p.label}
-                </ViewTab>
-              ))}
-            </div>
-            <Button size="sm" className={tapText} onClick={() => setCreateInitial({ date: dateStr })}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
-            </Button>
-            <Button variant="outline" size="sm" className={tapText} onClick={counter.on ? counter.exit : counter.enter}>
-              {counter.on ? (
-                <>
-                  <Minimize2 className="mr-1.5 h-3.5 w-3.5" /> Salir del modo mostrador
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Modo mostrador
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        {refreshFailed && (
-          <p className={cn("text-xs text-amber-600 dark:text-amber-400", !counter.on && "mt-2")}>
-            No se pudo actualizar el día; se ve lo último que llegó y se vuelve a intentar solo.
-          </p>
-        )}
-
-        {/* En modo mostrador la rejilla se desplaza por dentro: la cabecera de
-            pistas queda arriba y la columna de horas, a la izquierda */}
-        <div className={counter.on ? "min-h-0 flex-1 overflow-auto" : "mt-4 overflow-x-auto"}>
-          {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          ) : failed ? (
-            <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
-              No se pudo cargar el día. Vuelve a intentarlo.
-            </p>
-          ) : courts.length === 0 ? (
-            <EmptyCourts />
-          ) : (
-            <ReservasDayGrid
-              date={dateStr}
-              timeZone={TZ}
-              courts={courts}
-              bookings={bookingsQuery.data ?? []}
-              window={dayWindow}
-              onSlotClick={({ courtId, startsAtISO }) =>
-                setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
-              }
-              period={period}
-              nowMinutes={isToday ? zonedMinutes(now, TZ) : null}
-              touch={counter.on}
-            />
           )}
+          <input
+            type="date"
+            aria-label="Elegir fecha"
+            value={dateStr}
+            onChange={(e) => {
+              // Borrar la fecha no lleva a ningún día: se queda la que había
+              if (e.target.value) goToDay(e.target.value);
+            }}
+            className={cn(
+              "rounded-md border border-border bg-background px-2 text-sm text-foreground",
+              counter.on ? "h-11" : "h-7",
+            )}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Franja del día" className="inline-flex rounded-lg border border-border p-0.5">
+            {PERIODS.map((p) => (
+              <ViewTab
+                key={p.value}
+                active={period === p.value}
+                onClick={() => choosePeriod(p.value)}
+                title={p.title}
+                className={counter.on ? "min-h-11 px-4" : undefined}
+              >
+                {p.label}
+              </ViewTab>
+            ))}
+          </div>
+          <Button size="sm" className={tapText} onClick={() => setCreateInitial({ date: dateStr })}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
+          </Button>
+          <Button
+            ref={counterButtonRef}
+            variant="outline"
+            size="sm"
+            className={tapText}
+            onClick={counter.on ? counter.exit : counter.enter}
+          >
+            {counter.on ? (
+              <>
+                <Minimize2 className="mr-1.5 h-3.5 w-3.5" /> Salir del modo mostrador
+              </>
+            ) : (
+              <>
+                <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Modo mostrador
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
-      {/* Se monta al abrir: cada alta empieza con lo elegido en la rejilla */}
+      {refreshFailed && (
+        <p className={cn("text-xs text-amber-600 dark:text-amber-400", !counter.on && "mt-2")}>
+          No se pudo actualizar el día; se ve lo último que llegó y se vuelve a intentar solo.
+        </p>
+      )}
+
+      {/* En modo mostrador la rejilla se desplaza por dentro: la cabecera de
+          pistas queda arriba y la columna de horas, a la izquierda */}
+      <div className={counter.on ? "min-h-0 flex-1 overflow-auto" : "mt-4 overflow-x-auto"}>
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        ) : failed ? (
+          <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
+            No se pudo cargar el día. Vuelve a intentarlo.
+          </p>
+        ) : courts.length === 0 ? (
+          <EmptyCourts />
+        ) : (
+          <ReservasDayGrid
+            date={dateStr}
+            timeZone={TZ}
+            courts={courts}
+            bookings={bookingsQuery.data ?? []}
+            window={dayWindow}
+            onSlotClick={({ courtId, startsAtISO }) =>
+              setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
+            }
+            period={period}
+            nowMinutes={isToday ? zonedMinutes(now, TZ) : null}
+            touch={counter.on}
+          />
+        )}
+      </div>
+
+      {/* Se monta al abrir: cada alta empieza con lo elegido en la rejilla.
+          Va dentro de la vista: en modo mostrador, lo que queda fuera del
+          diálogo modal no lo alcanza un lector de pantalla */}
       {createInitial && (
         <BookingCreateDialog
           open
@@ -357,7 +374,7 @@ function DayView({
           initial={createInitial}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -544,9 +561,17 @@ function useNow(everyMs: number): Date {
  * igual, con las barras del navegador a la vista. Se sale con el botón o con
  * Esc; también al irse de la página.
  *
+ * Es un diálogo modal: al entrar, el foco va a la vista (`viewRef`) y, al
+ * salir, vuelve al botón que lo abre y lo cierra (`buttonRef`). Los dos
+ * los monta quien llama al hook.
+ *
  * `dialogOpen`: el alta está abierta encima, y Esc es suyo.
  */
-function useCounterMode(dialogOpen: boolean) {
+function useCounterMode(
+  viewRef: React.RefObject<HTMLDivElement | null>,
+  buttonRef: React.RefObject<HTMLButtonElement | null>,
+  dialogOpen: boolean,
+) {
   const [on, setOn] = useState(false);
 
   // Sin pantalla completa, Esc saca del modo salvo que sea de otro: ya
@@ -557,9 +582,17 @@ function useCounterMode(dialogOpen: boolean) {
     if (dialogOpen || isEditableField(e.target)) return;
     setOn(false);
   });
+  // Si se sale con el alta abierta (Esc cierra la pantalla completa), el foco se queda en ella
+  const returnFocus = useEffectEvent((button: HTMLButtonElement) => {
+    if (!dialogOpen) button.focus();
+  });
 
   useEffect(() => {
     if (!on) return;
+    // Siempre montados con la vista del día. El botón se guarda ya: al irse
+    // de la página, su ref está vacía cuando se limpia el efecto
+    const button = buttonRef.current!;
+    viewRef.current!.focus();
     // En pantalla completa, Esc la cierra el navegador: el modo se va con ella
     const onFullscreenChange = () => {
       if (!document.fullscreenElement) setOn(false);
@@ -571,8 +604,9 @@ function useCounterMode(dialogOpen: boolean) {
       window.removeEventListener("keydown", onKeyDown);
       // Al salir del modo (con el botón o yéndose de la página), sin pantalla completa huérfana
       if (document.fullscreenElement) void document.exitFullscreen();
+      returnFocus(button);
     };
-  }, [on]);
+  }, [on, viewRef, buttonRef]);
 
   const enter = () => {
     setOn(true);
