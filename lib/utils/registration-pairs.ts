@@ -128,6 +128,22 @@ export function pairPlayers(reg: AdminRegistration): { player: PaymentPlayer; id
 }
 
 /**
+ * A quién invitó el titular a ser su pareja, mientras no acepta (la fila
+ * sigue sin pareja hasta entonces). null sin invitación pendiente o si el
+ * back no manda la invitación.
+ */
+export function pendingInviteeName(reg: Pick<AdminRegistration, "partnerId" | "invitedPartner">): string | null {
+  if (reg.partnerId) return null;
+  return reg.invitedPartner?.name ?? null;
+}
+
+/** La etiqueta de una fila sin pareja con la invitación pendiente: «invitada: B (pendiente)». */
+export function pendingInviteLabel(reg: Pick<AdminRegistration, "partnerId" | "invitedPartner">): string | null {
+  const name = pendingInviteeName(reg);
+  return name ? `invitada: ${name} (pendiente)` : null;
+}
+
+/**
  * El recuento de las parejas para un texto, como el resumen de la ficha: las
  * que ocupan plaza (pendientes y confirmadas) y, aparte, las que esperan y las
  * canceladas. Contarlas todas juntas daba 18 frente al «17 (+1 en espera)» de

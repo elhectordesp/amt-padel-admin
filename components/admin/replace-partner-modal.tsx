@@ -6,6 +6,7 @@ import { X, Search, UserCheck, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, registrationsQK } from "@/lib/services/admin";
 import { levelLabel } from "@/lib/constants";
+import { pendingInviteeName } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration, Player } from "@/types";
 
 interface Props {
@@ -23,6 +24,8 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const qc = useQueryClient();
 
   const categoryGender = registration.category.gender;
+  // Sin pareja, la pone; con ella, la sustituye (el mismo endpoint)
+  const isNew = !registration.partnerId;
 
   const search = useCallback((q: string) => {
     clearTimeout(debounceRef.current);
@@ -50,16 +53,21 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
       // Antes invalidaba una clave que no usaba ninguna página: la lista
       // seguía con el compañero viejo (y su pago, con el que ya no está)
       qc.invalidateQueries({ queryKey: registrationsQK.list(tournamentId) });
-      toast.success(`Pareja actualizada a ${selected!.name}`);
+      toast.success(isNew
+        ? `${selected!.name} es ahora la pareja de ${registration.user.name}`
+        : `Pareja actualizada a ${selected!.name}`);
       onClose();
     },
     // El interceptor de la API rechaza con Error(mensaje del back)
     onError: (err: Error) => {
-      toast.error(err.message || "Error al cambiar la pareja");
+      toast.error(err.message || (isNew ? "Error al poner la pareja" : "Error al cambiar la pareja"));
     },
   });
 
   const currentPartnerName = registration.partner?.name ?? "Sin pareja";
+  // La invitación pendiente se vacía al poner la pareja (salvo que sea la invitada)
+  const inviteeName = pendingInviteeName(registration);
+  const voidsInvitation = !!inviteeName && selected?.id !== registration.invitedPartnerId;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -68,7 +76,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="min-w-0">
-            <h2 className="font-heading text-lg text-foreground">Cambiar pareja</h2>
+            <h2 className="font-heading text-lg text-foreground">{isNew ? "Poner pareja" : "Cambiar pareja"}</h2>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">
               {registration.user.name} · Pareja actual: <span className="font-medium text-foreground">{currentPartnerName}</span>
             </p>
@@ -86,10 +94,16 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
               <span>La inscripción de <strong>{currentPartnerName}</strong> quedará cancelada.</span>
             </div>
           )}
+          {voidsInvitation && (
+            <div className="flex gap-2 p-3 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-xs text-yellow-400">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>La invitación a <strong>{inviteeName}</strong> quedará sin efecto.</span>
+            </div>
+          )}
 
           {/* Search */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Buscar nuevo compañero</label>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">{isNew ? "Buscar compañero" : "Buscar nuevo compañero"}</label>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
@@ -172,7 +186,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
             {replaceMut.isPending ? (
               <><Loader2 size={14} className="animate-spin" /> Guardando…</>
             ) : (
-              "Confirmar cambio"
+              isNew ? "Poner pareja" : "Confirmar cambio"
             )}
           </button>
         </div>

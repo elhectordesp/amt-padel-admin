@@ -49,7 +49,7 @@ import { adminService, invalidateRegistrations, registrationsQK, type ScheduleCo
 import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
-import { groupByPair, pairsSummary, paymentCsvColumns, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { groupByPair, pairsSummary, paymentCsvColumns, pendingInviteLabel, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { needsForce } from "@/lib/utils/registration-force";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
 import {
@@ -2953,6 +2953,7 @@ export default function TorneoDetailPage() {
                       const reg        = pair.primary;
                       const isSelected = selectedKeys.has(pair.pairKey);
                       const isUpdating = pair.ids.some((id) => updatingIds.has(id));
+                      const inviteLabel = pendingInviteLabel(reg);
                       return (
                         <tr
                           key={pair.pairKey}
@@ -2972,6 +2973,7 @@ export default function TorneoDetailPage() {
                               ? <p className="text-xs text-muted-foreground">{reg.partner.name}</p>
                               : <p className="text-xs text-muted-foreground italic">Sin pareja</p>
                             }
+                            {inviteLabel && <p className="text-[10px] text-yellow-400">{inviteLabel}</p>}
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="space-y-0.5">
@@ -3048,6 +3050,16 @@ export default function TorneoDetailPage() {
                                   className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-50"
                                 >
                                   <Users size={14} />
+                                </button>
+                              )}
+                              {!reg.partnerId && pair.status !== "CANCELLED" && (
+                                <button
+                                  onClick={() => setReplaceReg(reg)}
+                                  disabled={isUpdating}
+                                  title="Poner pareja"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-purple-400/10 text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-50"
+                                >
+                                  <UserPlus size={14} />
                                 </button>
                               )}
                               <button
