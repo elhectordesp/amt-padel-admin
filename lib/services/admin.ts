@@ -4,15 +4,15 @@ import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
-  SpaConfig, RankingType, GrowthStats, Sponsor, SponsorScope, Club,
-  CreatePlayerPayload, UpdatePlayerPayload,
+  SpaConfig, RankingType, RankingGender, GrowthStats, Sponsor, SponsorScope, Club,
+  CreatePlayerPayload, UpdatePlayerPayload, GenderConflict,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember, ClubAdmins,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
-  DeletedTournament, DeletedPlayer,
+  DeletedTournament, DeletedPlayer, CategoryGender,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
@@ -220,8 +220,8 @@ export const adminService = {
     delete:          (id: string, force?: boolean)  => api.delete(`/admin/tournaments/${id}`, force ? { params: { force: true } } : undefined).then((r) => r.data),
     /** Los torneos borrados, los más recientes primero (solo AMT). */
     deleted:         () => api.get<DeletedTournament[]>("/admin/deleted-tournaments").then((r) => r.data ?? []),
-    /** Deshace el borrado (solo AMT). */
-    restore:         (id: string) => api.post(`/admin/tournaments/${id}/restore`).then((r) => r.data),
+    /** Deshace el borrado (solo AMT). genderConflicts: sus inscripciones que ya no encajan por género (vacío si todas). */
+    restore:         (id: string) => api.post<{ success: true; genderConflicts: GenderConflict[] }>(`/admin/tournaments/${id}/restore`).then((r) => r.data),
     duplicate:       (id: string, body?: { name?: string; startDate?: string; endDate?: string }) => api.post<Tournament>(`/admin/tournaments/${id}/duplicate`, body ?? {}).then((r) => r.data),
     publish:         (id: string)                  => api.patch<Tournament>(`/admin/tournaments/${id}/publish`).then((r) => r.data),
     /** Pasos de la preparación del torneo, con su % y el detalle por categoría. */
@@ -483,7 +483,7 @@ export const adminService = {
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}/prizes`, prizes).then(r => r.data),
     add: (
       tournamentId: string,
-      data: { gender: "M" | "F"; level: string; totalSpots: number; price?: number; scoringFormat?: string },
+      data: { gender: CategoryGender; level: string; totalSpots: number; price?: number; scoringFormat?: string },
     ) =>
       api.post(`/admin/tournaments/${tournamentId}/categories`, data).then(r => r.data),
     update: (
@@ -587,7 +587,8 @@ export const adminService = {
     auditLog:          (id: string) => api.get<AuditLogEntry[]>(`/admin/players/${id}/audit`).then((r) => r.data ?? []).catch(() => [] as AuditLogEntry[]),
     // invitation: qué pasó con la invitación que sale sola (sin ella, no tocaba)
     create:       (data: CreatePlayerPayload)            => api.post<{ id: string; name: string; email: string | null; invitation?: AutomaticInvite }>("/admin/players", data).then((r) => r.data),
-    update:       (id: string, data: UpdatePlayerPayload) => api.patch<{ invitation?: AutomaticInvite }>(`/admin/players/${id}/profile`, data).then((r) => r.data),
+    // genderConflicts: dónde ya no encaja con el género nuevo (vacío si no se cambió o si encaja)
+    update:       (id: string, data: UpdatePlayerPayload) => api.patch<{ invitation?: AutomaticInvite; genderConflicts: GenderConflict[] }>(`/admin/players/${id}/profile`, data).then((r) => r.data),
     // erasure: la baja la pide el propio jugador (supresión completa)
     delete:       (id: string, { erasure = false }: { erasure?: boolean } = {}) =>
       api.delete(`/admin/players/${id}`, { params: erasure ? { erasure: true } : undefined }).then((r) => r.data),
@@ -706,7 +707,8 @@ export const adminService = {
   },
 
   rankings: {
-    list: (gender: string, type: RankingType = "circuit", season?: number, level?: string) =>
+    // gender MX: el ranking Mixto, solo con type circuit (lib/ranking-gender.ts)
+    list: (gender: RankingGender, type: RankingType = "circuit", season?: number, level?: string) =>
       fetchAllRankingPages({
         gender, type,
         ...(season ? { season } : {}),

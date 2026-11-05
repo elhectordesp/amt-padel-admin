@@ -1,8 +1,10 @@
-import type { CategoryLevel, UpdatePlayerPayload } from "@/types";
+import type { CategoryLevel, Gender, UpdatePlayerPayload } from "@/types";
 
 /** Lo que tiene ahora el jugador de lo que se edita en «Editar datos». */
 export interface PlayerEditCurrent {
   level:  CategoryLevel | null;
+  // null o sin él: no tiene el género en su ficha (playerGender)
+  gender?: Gender | null;
   email?: string | null;
   phone?: string | null;
   city?:  string | null;
@@ -25,7 +27,9 @@ function textChange(value: string | null | undefined, current: string | null | u
  * Lo que manda «Editar datos» de la ficha del jugador. La categoría, solo si
  * se cambia aquí: «Sin asignar» se la quita (null) a quien tenía una, y si no
  * se toca no se manda. Antes se reenviaba siempre, y a quien no tenía
- * categoría se le grababa 4ª (D6).
+ * categoría se le grababa 4ª (D6). El género, igual: solo si se cambia (a
+ * quien no lo tenía, si se le elige uno). Antes salía siempre, y guardar
+ * cualquier dato de un jugador sin género le ponía Masculino.
  */
 export function playerUpdatePayload(
   form: UpdatePlayerPayload,
@@ -34,6 +38,7 @@ export function playerUpdatePayload(
   const level = form.categoryLevel ?? null;
   return {
     ...form,
+    gender: form.gender && form.gender !== current.gender ? form.gender : undefined,
     categoryLevel: level !== current.level ? level : undefined,
     email: textChange(form.email, current.email),
     phone: textChange(form.phone, current.phone),
@@ -51,3 +56,4 @@ export function playerEditProblem(form: UpdatePlayerPayload, current: PlayerEdit
     return "Este jugador ya usa la app y entra con su email: no se le puede dejar sin email.";
   return null;
 }
+

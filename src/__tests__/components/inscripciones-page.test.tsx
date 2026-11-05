@@ -1,11 +1,14 @@
 /**
  * Inscripciones abre el torneo que viene en la URL (`?torneo=`): así enlazan
  * las alertas y la actividad del dashboard (P3-2). Antes la página no leía
- * ningún parámetro y siempre salía «Selecciona un torneo...».
+ * ningún parámetro y siempre salía «Selecciona un torneo...». Y reactivar una
+ * cancelada que ya no encaja por género (D2) enseña el 400 del back sin
+ * cambiar la fila.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
@@ -16,8 +19,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/admin/header", () => ({
   Header: ({ title }: { title: string }) => <div data-testid="header">{title}</div>,
 }));
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toastMock }));
 
 const listRegistrations = vi.fn().mockResolvedValue([]);
+const bulkStatus = vi.fn();
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
     tournaments: {
@@ -27,12 +33,16 @@ vi.mock("@/lib/services/admin", () => ({
       ]),
       adminDetail: vi.fn().mockResolvedValue({ schedule: [], categories: [] }),
     },
-    registrations: { list: (...args: unknown[]) => listRegistrations(...args) },
+    registrations: {
+      list:       (...args: unknown[]) => listRegistrations(...args),
+      bulkStatus: (...args: unknown[]) => bulkStatus(...args),
+    },
   },
   invalidateRegistrations: vi.fn(),
   registrationsQK: { list: (id: string) => ["registrations", id] },
 }));
 
+import { invalidateRegistrations } from "@/lib/services/admin";
 import InscripcionesPage from "../../../app/(admin)/inscripciones/page";
 
 const SELECT_A_TOURNAMENT = "Selecciona un torneo para gestionar sus inscripciones";
@@ -197,5 +207,93 @@ describe("InscripcionesPage — invitación a la pareja pendiente", () => {
 
     expect(await screen.findByRole("heading", { name: "Poner pareja" })).toBeInTheDocument();
     expect(screen.getByText(/quedará sin efecto/).textContent).toBe("La invitación a Bea Ruiz quedará sin efecto.");
+  });
+});
+
+describe("InscripcionesPage — la categoría por su género (D2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParams = new URLSearchParams("torneo=t1");
+  });
+
+  const pair = (id: string, name: string, categoryId: string, gender: string) => ({
+    id,
+    tournamentId: "t1",
+    categoryId,
+    userId:       `u-${id}`,
+    user:         { name },
+    partnerId:    null,
+    partner:      null,
+    category:     { gender, level: "4a", price: 30 },
+    status:       "PENDING",
+    paid:         false,
+    createdAt:    "2026-11-01T10:00:00.000Z",
+  });
+
+  it("cada fila nombra su categoría (la mixta ya no sale «Fem.») y el buscador la encuentra por su nombre", async () => {
+    listRegistrations.mockResolvedValueOnce([
+      pair("ana", "Ana López", "c-mx", "MX"),
+      pair("fani", "Fani Martín", "c-f", "F"),
+      pair("gema", "Gema Ruiz", "c-g", "G"),
+    ]);
+
+    renderPage();
+    await screen.findAllByText("Ana López");
+    // En el filtro, en la tarjeta y en la tabla
+    expect(screen.getAllByText("Mixta 4ª").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("General 4ª").length).toBeGreaterThanOrEqual(3);
+
+    fireEvent.change(screen.getByPlaceholderText("Buscar jugador o pareja..."), { target: { value: "mixta" } });
+    await waitFor(() => expect(screen.queryByText("Fani Martín")).not.toBeInTheDocument());
+    expect(screen.queryByText("Gema Ruiz")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Ana López").length).toBeGreaterThan(0);
+
+    // El nivel también se busca como se escribe («4a»)
+    fireEvent.change(screen.getByPlaceholderText("Buscar jugador o pareja..."), { target: { value: "4a" } });
+    expect(await screen.findAllByText("Fani Martín")).not.toHaveLength(0);
+  });
+});
+
+describe("InscripcionesPage — reactivar una cancelada que no encaja por género (D2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParams = new URLSearchParams("torneo=t1");
+  });
+
+  it("el 400 del back sale tal cual, sin «Forzar», y la fila sigue cancelada y sin cargar", async () => {
+    // El texto real del back (categoryGenderError, por su nombre)
+    const message = '"Dani Sanz" no puede jugarla: la categoría femenina es solo de jugadoras.';
+    bulkStatus.mockRejectedValueOnce(new ApiError(message, 400, "CATEGORY_GENDER_MISMATCH"));
+    listRegistrations.mockResolvedValueOnce([{
+      id:           "reg-elena",
+      tournamentId: "t1",
+      categoryId:   "c-1",
+      userId:       "u-elena",
+      user:         { name: "Elena Pons" },
+      partnerId:    "u-dani",
+      partner:      { name: "Dani Sanz", categoryLevel: "4a", spaPoints: null },
+      category:     { gender: "F", level: "4a", price: 30 },
+      status:       "CANCELLED",
+      paid:         false,
+      createdAt:    "2026-11-01T10:00:00.000Z",
+    }]);
+
+    renderPage();
+    await screen.findAllByText("Elena Pons");
+    const tableRow = () =>
+      screen.getAllByText("Elena Pons").map((el) => el.closest("tr")).find((tr) => tr !== null) as HTMLElement;
+
+    fireEvent.click(within(tableRow()).getByTitle("Confirmar"));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(message));
+    expect(bulkStatus).toHaveBeenCalledWith(["reg-elena"], "CONFIRMED", undefined);
+    // No es de aforo: no pregunta si se fuerza
+    expect(screen.queryByText("¿Forzar el cambio?")).not.toBeInTheDocument();
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(invalidateRegistrations).not.toHaveBeenCalled();
+    // El back no cambió nada: la fila sigue «Cancelado» y se puede volver a intentar
+    expect(within(tableRow()).getByText("Cancelado")).toBeInTheDocument();
+    expect(within(tableRow()).getByTitle("Confirmar")).toBeEnabled();
+    expect(within(tableRow()).getByTitle("Mover a espera")).toBeEnabled();
   });
 });

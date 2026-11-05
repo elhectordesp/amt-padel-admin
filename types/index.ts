@@ -1,10 +1,16 @@
 export type Gender             = "M" | "F";
+// El de una CATEGORÍA, no el de una persona: Masculina, Femenina, Mixta,
+// General y Junior (lib/category-gender.ts)
+export type CategoryGender     = "M" | "F" | "MX" | "G" | "J";
 export type SponsorScope       = "CIRCUIT" | "TOURNAMENT" | "REGIONAL";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
 export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
 export type RankingType        = "spa" | "circuit";
+// El de un ranking: el de una persona o, solo en el de circuito, el Mixto
+// (lib/ranking-gender.ts)
+export type RankingGender      = Gender | "MX";
 
 export interface AdminStats {
   activeTournaments: number;
@@ -18,7 +24,7 @@ export interface AdminStats {
 
 export interface TournamentCategory {
   id:               string;
-  gender:           Gender;
+  gender:           CategoryGender;
   level:            CategoryLevel;
   currentPhase:     string;
   currentPhaseLabel?: string;
@@ -236,6 +242,8 @@ export interface AdminRegistrationUser {
   name:          string;
   email:         string;
   phone?:        string | null;
+  /** Tal cual: null si no lo tiene en su ficha. Solo en el listado. */
+  gender?:       Gender | null;
   categoryLevel?: string | null;
   spaPoints?:    number | null;
 }
@@ -294,6 +302,12 @@ export interface Player {
   bio?:           string | null;
   photoUrl?:      string | null;
   gender:         Gender;
+  /**
+   * false: no tiene el género en su ficha (`gender` sale 'M' igualmente) y no
+   * juega masculina, femenina ni mixta. Lo mandan la lista y la ficha de
+   * /admin/players: el género se lee con playerGender (lib/constants.ts).
+   */
+  hasGender?:     boolean;
   // null: sin categoría asignada (nunca se toma una por defecto)
   level:          CategoryLevel | null;
   played:         number;
@@ -361,6 +375,24 @@ export interface UpdatePlayerPayload {
   playsMasc?:    boolean;
   playsFem?:     boolean;
   bio?:          string | null;
+}
+
+/**
+ * Dónde ya no encaja un jugador tras cambiarle el género desde su ficha: una
+ * inscripción viva suya (titular o pareja) en una masculina, femenina o mixta
+ * de un torneo sin terminar, o una invitación pendiente. La devuelve el back
+ * en `genderConflicts` al guardar «Editar datos» y, con las del torneo (el
+ * titular o la pareja que no encajan, también sin género), al restaurar un
+ * torneo borrado.
+ */
+export interface GenderConflict {
+  registrationId: string;
+  tournamentId:   string;
+  tournamentName: string;
+  /** La categoría ya nombrada por el back («3ª Masculina»). */
+  categoryLabel:  string;
+  /** Lo que no encaja es una invitación pendiente (ya no se podrá aceptar), no la inscripción. */
+  invitation:     boolean;
 }
 
 export interface PlayerMatch {
@@ -561,7 +593,7 @@ export interface CreateTournamentPayload {
   maxMatchesPerPlayerPerDay?: number | null;
   maxUnavailableTotalHours?:  number;
   categories:  {
-    gender:          Gender;
+    gender:          CategoryGender;
     level:           CategoryLevel;
     totalSpots:      number;
     price:           number;

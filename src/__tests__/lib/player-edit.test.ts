@@ -39,6 +39,17 @@ describe("playerUpdatePayload («Editar datos» de la ficha)", () => {
     );
     expect(payload).toMatchObject({ email: null, phone: null, city: null, bio: null });
   });
+
+  it("el género sin tocar no se manda (a quien no lo tenía se le grababa Masculino)", () => {
+    expect(playerUpdatePayload({ gender: "F" }, { level: null, gender: "F" }).gender).toBeUndefined();
+    // Sin género y sin elegirle uno
+    expect(playerUpdatePayload({ email: "ana@x.com" }, { level: null, gender: null }).gender).toBeUndefined();
+  });
+
+  it("si se le cambia el género, o se le elige uno a quien no lo tenía, manda el nuevo", () => {
+    expect(playerUpdatePayload({ gender: "M" }, { level: null, gender: "F" }).gender).toBe("M");
+    expect(playerUpdatePayload({ gender: "F" }, { level: null, gender: null }).gender).toBe("F");
+  });
 });
 
 describe("playerEditProblem", () => {

@@ -3,7 +3,7 @@
 // migrar a Turborepo con packages/shared-types y packages/design-tokens.
 // Bloqueante conocido: Metro bundler de React Native tiene soporte experimental de monorepos
 // — configurar watchFolders + extraNodeModules en metro.config.js antes de migrar.
-import type { CategoryLevel, Gender, RegistrationStatus, TournamentStatus, TournamentTier } from "@/types";
+import type { CategoryLevel, Gender, Player, RegistrationStatus, TournamentStatus, TournamentTier } from "@/types";
 
 export const CATEGORY_LABEL: Record<CategoryLevel, string> = {
   "1a":        "1ª",
@@ -40,6 +40,26 @@ export const GENDER_LABEL: Record<Gender, { full: string; short: string }> = {
   M: { full: "Masculino", short: "Masc." },
   F: { full: "Femenino",  short: "Fem."  },
 };
+
+/** Jugador sin el género en su ficha: así se enseña, nunca como uno por defecto. */
+export const NO_GENDER_LABEL = "Sin género";
+
+/**
+ * El género de un jugador de /admin/players; null si no lo tiene en su ficha
+ * (el back manda entonces `gender` 'M' con `hasGender` false).
+ */
+export function playerGender(player: Pick<Player, "gender" | "hasGender">): Gender | null {
+  return player.hasGender === false ? null : player.gender;
+}
+
+/** El género de un jugador para pantalla, en corto («Masc.») o en largo («Masculino»); sin él, «Sin género». */
+export function playerGenderLabel(
+  player: Pick<Player, "gender" | "hasGender">,
+  variant: "short" | "full" = "short",
+): string {
+  const gender = playerGender(player);
+  return gender ? GENDER_LABEL[gender][variant] : NO_GENDER_LABEL;
+}
 
 export const LEVELS: CategoryLevel[] = [
   "1a","2a","3a","4a","5a","6a","iniciacion",

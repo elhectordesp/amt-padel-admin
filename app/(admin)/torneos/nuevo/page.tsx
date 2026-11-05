@@ -7,6 +7,7 @@ import { TournamentImageUploader } from "@/components/admin/tournament-image-upl
 import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
+import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
 import { useRole, isClub } from "@/lib/use-role";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
@@ -19,7 +20,7 @@ import {
   tournamentTimeZone,
   zonedDateTimeToIso,
 } from "@/lib/utils/time-zone";
-import type { CategoryLevel, Gender } from "@/types";
+import type { CategoryGender, CategoryLevel } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
@@ -46,7 +47,7 @@ const infoSchema = z.object({
 
 const catSchema = z.object({
   categories: z.array(z.object({
-    gender:            z.enum(["M", "F"]),
+    gender:            z.enum(CATEGORY_GENDERS),
     level:             z.string().min(1),
     // Enteros: el back los guarda así y rechaza los decimales al crear
     totalSpots:        z.number({ error: "Pon el número de plazas" }).int("Las plazas son un número entero").min(4, "Mínimo 4 plazas").max(128, "Máximo 128 plazas"),
@@ -310,7 +311,7 @@ export default function NuevoTorneoPage() {
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
       categories: catData!.categories.map((c) => ({
-        gender:          c.gender as Gender,
+        gender:          c.gender,
         level:           c.level  as CategoryLevel,
         totalSpots:      c.totalSpots,
         price:           c.price,
@@ -573,7 +574,7 @@ export default function NuevoTorneoPage() {
                       <div className="grid grid-cols-[1fr_1fr_36px] sm:grid-cols-[1fr_1fr_100px_100px_36px] gap-2 sm:gap-3 items-end sm:items-center">
                         <div>
                           <p className={MOBILE_LABEL}>Género</p>
-                          <CustomSelect compact options={[{ value: "M", label: "Masculino" }, { value: "F", label: "Femenino" }]} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as "M" | "F")} />
+                          <CustomSelect compact options={CATEGORY_GENDER_OPTIONS} value={genderVal} onChange={(v) => catForm.setValue(`categories.${index}.gender`, v as CategoryGender)} />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
                           <p className={MOBILE_LABEL}>Nivel</p>
@@ -947,7 +948,7 @@ export default function NuevoTorneoPage() {
                       <div key={i} className="space-y-0.5">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground font-medium">
-                            {c.gender === "M" ? "Masc." : "Fem."} {LEVELS.find((l) => l.value === c.level)?.label}
+                            {categoryLabel(c)}
                           </span>
                           <span className="text-foreground">{c.totalSpots} plazas · {c.price} €/pareja</span>
                         </div>

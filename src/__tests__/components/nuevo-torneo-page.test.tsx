@@ -80,6 +80,42 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
   }, 30_000);
 });
 
+describe("Crear torneo — género de la categoría (D2)", () => {
+  it("ofrece los cinco y manda el elegido (antes solo masculina y femenina)", async () => {
+    create.mockClear();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    fireEvent.change(input("name"), { target: { value: "Open Junior" } });
+    fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
+    fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
+    next();
+    // Paso 2: la categoría de por defecto es masculina; se cambia a junior
+    await screen.findByLabelText("Plazas", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Masculina" }));
+    for (const name of ["Femenina", "Mixta", "General", "Junior"])
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Junior" }));
+    next();
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+    next();
+    // Paso 5: el resumen la nombra como junior (antes, «Fem.»)
+    await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
+    expect(screen.getByText("Junior 4ª")).toBeInTheDocument();
+    next();
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
+    expect(create.mock.calls[0][0].categories).toMatchObject([{ gender: "J", level: "4a" }]);
+  }, 30_000);
+});
+
 describe("Crear torneo — tramos del paso 4 (P2-10)", () => {
   /** Hasta el paso 4 de un torneo de un día, con su tramo de por defecto (16:00-21:00). */
   async function goToStep4() {

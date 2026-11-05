@@ -35,4 +35,23 @@ describe("Visor público", () => {
     renderViewer("open");
     expect(screen.getByText("Esta categoría aún no tiene cuadro ni partidos publicados.")).toBeInTheDocument();
   });
+
+  it("cada categoría con su género: la mixta, la general y la junior (antes salían «Femenino»)", () => {
+    render(
+      <TournamentViewer
+        tournamentId="t-1"
+        tournament={{ id: "t-1", name: "Open de otoño", tier: "BRONZE", status: "open", club: { name: "Club Madrid" }, timezone: "Europe/Madrid" }}
+        initialCats={[
+          { cat: { id: "c-1", gender: "MX", level: "3a" }, groups: [], bracket: null },
+          { cat: { id: "c-2", gender: "G",  level: "4a" }, groups: [], bracket: null },
+          { cat: { id: "c-3", gender: "J",  level: "iniciacion" }, groups: [], bracket: null },
+        ]}
+        initialMatches={[]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Mixta · 3ª" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "General · 4ª" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Junior · Iniciación" })).toBeInTheDocument();
+    expect(screen.queryByText(/Femenin/)).not.toBeInTheDocument();
+  });
 });

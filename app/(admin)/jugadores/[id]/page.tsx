@@ -19,8 +19,10 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
 import { CustomSelect } from "@/components/admin/form";
-import { CATEGORY_LABEL, LEVELS, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel, trendLabel } from "@/lib/constants";
+import { CATEGORY_LABEL, LEVELS, NO_GENDER_LABEL, REGISTRATION_STATUS_CONFIG, auditActionText, auditResourceLabel, levelLabel, playerGender, playerGenderLabel, trendLabel } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import { playerEditProblem, playerUpdatePayload } from "@/lib/player-edit";
+import { toastGenderConflicts } from "@/lib/gender-conflicts";
 import { invitationNotice } from "@/lib/player-invite";
 import { ApiError } from "@/lib/api";
 import { dateOnlyKey, formatDayKey, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
@@ -102,6 +104,8 @@ export default function JugadorDetailPage() {
       const text = `Datos del jugador actualizados.${notice ? ` ${notice.text}` : ""}`;
       if (notice?.kind === "warning") toast.warning(text);
       else toast.success(text);
+      // Con el género nuevo ya no encaja en alguna inscripción: cuáles y qué hacer
+      toastGenderConflicts(res.genderConflicts, "player");
       setShowEdit(false);
     },
     onError: (err: Error) => {
@@ -177,7 +181,8 @@ export default function JugadorDetailPage() {
     setEditForm({
       firstName,
       lastName:      rest.join(" "),
-      gender:        player.gender,
+      // Sin género: ninguno marcado (antes, Masculino, y se le grababa al guardar)
+      gender:        playerGender(player) ?? undefined,
       email:         player.email  ?? "",
       phone:         player.phone  ?? "",
       city:          player.city   ?? "",
@@ -243,6 +248,7 @@ export default function JugadorDetailPage() {
   // Lo que tiene ahora, para saber qué se ha vaciado en «Editar datos»
   const editCurrent = {
     level:   player.level,
+    gender:  playerGender(player),
     email:   player.email,
     phone:   player.phone,
     city:    player.city,
@@ -316,7 +322,7 @@ export default function JugadorDetailPage() {
                 <div className="flex items-center gap-3 flex-wrap">
                   <h2 className="font-heading text-xl text-foreground">{player.name}</h2>
                   <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
-                    {player.gender === "M" ? "Masc." : "Fem."} {levelLabel(player.level)}
+                    {playerGenderLabel(player)} {levelLabel(player.level)}
                   </span>
                   {player.managedByAdmin && (() => {
                     const cfg = {
@@ -439,7 +445,7 @@ export default function JugadorDetailPage() {
               <StatBox label="Puntos AMT"    value={player.points.toLocaleString()} />
               <StatBox label="Partidos"      value={player.played} />
               <StatBox label="% Victorias"   value={`${winRate}%`} sub={`${player.wins} ganados`} />
-              <StatBox label="Ranking global"   value={player.globalRank   ? `#${player.globalRank}`   : "—"} sub={player.gender === "M" ? "Masc." : "Fem."} />
+              <StatBox label="Ranking global"   value={player.globalRank   ? `#${player.globalRank}`   : "—"} sub={playerGenderLabel(player)} />
               <StatBox label="Ranking categoría" value={player.categoryRank ? `#${player.categoryRank}` : "—"} sub={levelLabel(player.level)} />
             </div>
           </div>
@@ -585,7 +591,7 @@ export default function JugadorDetailPage() {
                             {formatDayKey(dateOnlyKey(r.startDate), DATE_NUMERIC)}
                           </td>
                           <td className="px-3 sm:px-5 py-3 text-xs text-muted-foreground">
-                            {r.gender === "M" ? "Masc." : r.gender === "F" ? "Fem." : r.gender} {CATEGORY_LABEL[r.level as CategoryLevel] ?? r.level}
+                            {categoryLabel(r)}
                           </td>
                           <td className="px-3 sm:px-5 py-3">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${scfg.cls}`}>
@@ -774,6 +780,7 @@ export default function JugadorDetailPage() {
                   <div className="flex gap-2">
                     {([["M", "Masculino"], ["F", "Femenino"]] as [Gender, string][]).map(([val, label]) => (
                       <button key={val} type="button"
+                        aria-pressed={editForm.gender === val}
                         onClick={() => setEditForm((f) => ({ ...f, gender: val }))}
                         className={`flex-1 h-9 rounded-md text-xs font-medium border transition-colors ${
                           editForm.gender === val
@@ -783,6 +790,11 @@ export default function JugadorDetailPage() {
                       >{label}</button>
                     ))}
                   </div>
+                  {!editForm.gender && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {NO_GENDER_LABEL}: no juega masculina, femenina ni mixta hasta que se le ponga.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Categoría</label>
@@ -998,7 +1010,7 @@ export default function JugadorDetailPage() {
             <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-md border border-border">
               <span className="text-xs text-muted-foreground">Categoría actual</span>
               <span className="ml-auto font-semibold text-sm text-foreground">
-                {player.gender === "M" ? "Masc." : "Fem."} {levelLabel(player.level)}
+                {playerGenderLabel(player)} {levelLabel(player.level)}
               </span>
             </div>
 

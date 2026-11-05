@@ -378,6 +378,23 @@ describe('adminService', () => {
       });
     });
 
+    it('el Mixto (D3): pide gender=MX en el de circuito y cada fila trae el género de la persona y su pareja de Mixta', async () => {
+      mockGet.mockResolvedValueOnce({
+        data: [
+          { id: 'p1', name: 'Ana', gender: 'F', level: '3a', circuitPoints: 300, globalRank: 1, categoryRank: 1, partner: 'Luis', partnerId: 'p2' },
+          { id: 'p2', name: 'Luis', gender: 'M', level: '4a', circuitPoints: 300, globalRank: 2, categoryRank: 1, partner: 'Ana', partnerId: 'p1' },
+        ],
+      });
+      const result = await adminService.rankings.list('MX', 'circuit', 2026);
+      expect(mockGet).toHaveBeenCalledWith('/ranking', {
+        params: { gender: 'MX', type: 'circuit', season: 2026, page: 1, limit: 500 },
+      });
+      expect(result.map((p) => [p.name, p.gender, p.points, p.globalRank, p.partner])).toEqual([
+        ['Ana', 'F', 300, 1, 'Luis'],
+        ['Luis', 'M', 300, 2, 'Ana'],
+      ]);
+    });
+
     it('pide páginas hasta tener el ranking entero: con más de 500 no se corta', async () => {
       const row = (i: number) => ({ id: `p${i}`, name: `J${i}`, gender: 'M' });
       mockGet

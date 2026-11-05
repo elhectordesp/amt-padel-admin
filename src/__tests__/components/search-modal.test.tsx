@@ -34,7 +34,6 @@ vi.mock('@/lib/use-role', () => ({
 vi.mock('@/lib/constants', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/constants')>()),
   CATEGORY_LABEL_SHORT: { '4a': '4ª', '3a': '3ª' },
-  GENDER_LABEL:         { M: { short: 'Masc.' }, F: { short: 'Fem.' } },
 }));
 
 import { SearchModal } from '../../../components/admin/search-modal';
@@ -51,6 +50,8 @@ const fakeTournaments = [
 const fakePlayers = [
   { id: 'p-1', name: 'Carlos García', gender: 'M', level: '4a', points: 1200 },
   { id: 'p-2', name: 'Carlos Nuevo', gender: 'M', level: null, points: 0 },
+  // Sin el género en su ficha: el back lo manda con 'M' y hasGender false
+  { id: 'p-3', name: 'Leo Martín', gender: 'M', hasGender: false, level: '3a', points: 10 },
 ];
 
 function setupOpen() {
@@ -160,6 +161,14 @@ describe('SearchModal', () => {
     typeQuery('nuevo');
     expect(screen.getByText('Carlos Nuevo')).toBeInTheDocument();
     expect(screen.getByText('Masc. Sin categoría · 0 pts')).toBeInTheDocument();
+  });
+
+  it('un jugador sin el género en su ficha sale «Sin género», no «Masc.»', () => {
+    setupOpen();
+    render(<SearchModal />);
+    typeQuery('leo');
+    expect(screen.getByText('Leo Martín')).toBeInTheDocument();
+    expect(screen.getByText('Sin género 3ª · 10 pts')).toBeInTheDocument();
   });
 
   it('llama a router.push y close() al hacer clic en un resultado', () => {

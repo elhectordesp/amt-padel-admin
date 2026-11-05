@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, UserCheck, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, registrationsQK } from "@/lib/services/admin";
-import { levelLabel } from "@/lib/constants";
+import { levelLabel, playerGenderLabel } from "@/lib/constants";
+import { genderRejection, genderRejectionNotice, genderSearchHint, searchGendersFor } from "@/lib/category-gender";
+import { isClub, useRole } from "@/lib/use-role";
 import { pendingInviteeName } from "@/lib/utils/registration-pairs";
+import { searchPlayersForCategory } from "@/lib/utils/eligible-players";
 import type { AdminRegistration, Player } from "@/types";
 
 interface Props {
@@ -22,10 +25,24 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const [selected, setSelected] = useState<Player | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const qc = useQueryClient();
+  const { role } = useRole();
 
   const categoryGender = registration.category.gender;
   // Sin pareja, la pone; con ella, la sustituye (el mismo endpoint)
   const isNew = !registration.partnerId;
+  // Quien puede jugar la categoría con el titular: en la mixta, el género
+  // contrario al suyo
+  const titularGender = registration.user.gender ?? null;
+  const canEditPlayer = !isClub(role);
+  const genders = useMemo(() => searchGendersFor(categoryGender, titularGender), [categoryGender, titularGender]);
+  // El back comprueba antes al titular: sin su género en la ficha, o con uno
+  // que no encaja, rechaza cualquier pareja. No se le busca (el buscador,
+  // desactivado) y se dice por qué
+  const titularRejection = genderRejection(categoryGender, titularGender);
+  const titularNotice = titularRejection
+    ? genderRejectionNotice(titularRejection, categoryGender, registration.user.name, { canEditPlayer, goal: "partner" })
+    : null;
+  const genderHint = genderSearchHint(categoryGender, titularGender, { canEditPlayer });
 
   const search = useCallback((q: string) => {
     clearTimeout(debounceRef.current);
@@ -33,15 +50,14 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const data = await adminService.players.list({ q, gender: categoryGender !== "MX" ? categoryGender : undefined, pageSize: 8 });
-        setResults(data.data.slice(0, 8));
+        setResults(await searchPlayersForCategory(q, genders));
       } catch {
         setResults([]);
       } finally {
         setSearching(false);
       }
     }, 350);
-  }, [categoryGender]);
+  }, [genders]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { search(query); }, [query, search]);
@@ -111,13 +127,22 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
                 placeholder="Nombre o email…"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setSelected(null); }}
-                className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                disabled={!!titularNotice}
+                className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37] disabled:opacity-50 disabled:cursor-not-allowed"
                 autoFocus
               />
               {searching && (
                 <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
               )}
             </div>
+            {titularNotice ? (
+              <div className="flex gap-2 p-3 mt-2 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-xs text-yellow-400">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>{titularNotice}</span>
+              </div>
+            ) : genderHint && !selected && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">{genderHint}</p>
+            )}
           </div>
 
           {/* Results */}
@@ -141,7 +166,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
                         {p.email && <span className="text-muted-foreground ml-2 text-xs">{p.email}</span>}
                       </span>
                       <span className="text-[10px] text-muted-foreground shrink-0">
-                        {levelLabel(p.level)} · {p.gender === "M" ? "Masc" : "Fem"}
+                        {levelLabel(p.level)} · {playerGenderLabel(p)}
                         {isCurrentPartner && " · (pareja actual)"}
                         {isCurrentPlayer  && " · (jugador)"}
                       </span>
@@ -158,7 +183,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
               <UserCheck size={16} className="text-[#D4AF37] shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{selected.name}</p>
-                <p className="text-xs text-muted-foreground">{levelLabel(selected.level)} · {selected.gender === "M" ? "Masculino" : "Femenino"}</p>
+                <p className="text-xs text-muted-foreground">{levelLabel(selected.level)} · {playerGenderLabel(selected, "full")}</p>
               </div>
               <button
                 onClick={() => { setSelected(null); setQuery(""); }}

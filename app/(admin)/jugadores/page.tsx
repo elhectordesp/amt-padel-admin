@@ -20,7 +20,7 @@ import { Header } from "@/components/admin/header";
 import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
 import { DeletedAccounts } from "@/components/admin/deleted-accounts";
 import { adminService } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, levelLabel } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, levelLabel, playerGenderLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
 import { useRole } from "@/lib/use-role";
 import type { Player, Gender, CategoryLevel, CreatePlayerPayload } from "@/types";
@@ -206,8 +206,8 @@ export default function JugadoresPage() {
     {
       accessorKey: "gender",
       header: () => <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Género</span>,
-      cell:   ({ getValue }) => (
-        <span className="text-xs text-muted-foreground">{getValue() === "M" ? "Masc." : "Fem."}</span>
+      cell:   ({ row }) => (
+        <span className="text-xs text-muted-foreground">{playerGenderLabel(row.original)}</span>
       ),
     },
     {
@@ -389,7 +389,7 @@ export default function JugadoresPage() {
                   "#":          (page - 1) * pageSize + i + 1,
                   Jugador:      row.original.name,
                   Compañero:    row.original.partner ?? "",
-                  Género:       row.original.gender === "M" ? "Masculino" : "Femenino",
+                  Género:       playerGenderLabel(row.original, "full"),
                   Categoría:    levelLabel(row.original.level, CATEGORY_LABEL),
                   Puntos:       row.original.points,
                   "SPA Pts":    row.original.spa?.spaPoints?.toFixed(0) ?? "",
@@ -461,7 +461,7 @@ export default function JugadoresPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{p.gender === "M" ? "Masc." : "Fem."}</p>
+                        <p className="text-[10px] text-muted-foreground">{playerGenderLabel(p)}</p>
                       </div>
                       <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[rgba(212,175,55,0.1)] text-[#D4AF37] border border-[rgba(212,175,55,0.2)]">
                         {levelLabel(p.level, CATEGORY_LABEL)}

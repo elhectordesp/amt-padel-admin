@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { adminService } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
-import type { CategoryLevel, Gender } from "@/types";
+import { categoryLabel } from "@/lib/category-gender";
 import type { AvailabilityHeatmap as Heatmap, HeatLevel } from "@/types/preparation";
 
 /**
@@ -66,7 +65,7 @@ export function AvailabilityHeatmap({
             <option value="">Todas</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
-                {GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} {CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}
+                {categoryLabel(c)}
               </option>
             ))}
           </select>

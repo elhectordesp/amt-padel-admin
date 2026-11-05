@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { Loader2, X, ArrowRight } from "lucide-react";
-import { CATEGORY_LABEL_SHORT, GENDER_LABEL } from "@/lib/constants";
+import { categoryLabel } from "@/lib/category-gender";
 import type { PairRegistration } from "@/lib/utils/registration-pairs";
-import type { CategoryLevel, Gender } from "@/types";
 
 interface Category {
   id:     string;
@@ -61,7 +60,7 @@ export function MoveCategoryModal({
         {/* Current → destination */}
         <div className="flex items-center gap-3">
           <div className="flex-1 px-3 py-2 rounded-md bg-secondary/50 border border-border text-xs text-muted-foreground text-center">
-            {GENDER_LABEL[current.gender as Gender]?.short ?? current.gender} {CATEGORY_LABEL_SHORT[current.level as CategoryLevel] ?? current.level}
+            {categoryLabel(current)}
           </div>
           <ArrowRight size={14} className="text-muted-foreground shrink-0" />
           <div className="flex-1">
@@ -73,7 +72,7 @@ export function MoveCategoryModal({
               <option value="">Seleccionar...</option>
               {options.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {GENDER_LABEL[c.gender as Gender]?.short ?? c.gender} {CATEGORY_LABEL_SHORT[c.level as CategoryLevel] ?? c.level}
+                  {categoryLabel(c)}
                 </option>
               ))}
             </select>

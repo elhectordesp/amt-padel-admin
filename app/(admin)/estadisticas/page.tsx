@@ -5,11 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { TrendingUp, Users, CheckCircle, XCircle, Flame } from "lucide-react";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
-
-const GENDER_LABEL: Record<string, string> = { M: "Masc.", F: "Fem." };
-const LEVEL_SHORT: Record<string, string> = {
-  "1a": "1ª", "2a": "2ª", "3a": "3ª", "4a": "4ª", "5a": "5ª", "6a": "6ª", iniciacion: "Inic.",
-};
+import { categoryLabel } from "@/lib/category-gender";
 
 function StatCard({
   icon: Icon, label, value, sub, color = "text-[#D4AF37]",
@@ -151,7 +147,7 @@ export default function EstadisticasPage() {
                         <tr key={i} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                           <td className="px-5 py-3 text-sm text-foreground">{cat.tournamentName}</td>
                           <td className="px-5 py-3 text-sm text-muted-foreground">
-                            {GENDER_LABEL[cat.gender] ?? cat.gender} {LEVEL_SHORT[cat.level] ?? cat.level}
+                            {categoryLabel(cat)}
                           </td>
                           <td className="px-5 py-3 text-sm text-foreground">{cat.totalSpots}</td>
                           <td className="px-5 py-3 text-sm text-foreground">{cat.registered}</td>

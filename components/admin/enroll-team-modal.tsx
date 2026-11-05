@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Search, Plus, UserPlus, AlertTriangle, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { adminService, invalidateRegistrations } from "@/lib/services/admin";
-import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel } from "@/lib/constants";
+import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, levelLabel, playerGender, playerGenderLabel } from "@/lib/constants";
 import { invitationNotice } from "@/lib/player-invite";
+import { categoryLabel, genderRejection, genderRejectionNotice, genderSearchHint, searchGendersFor } from "@/lib/category-gender";
 import { isClub, useRole } from "@/lib/use-role";
-import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload } from "@/types";
+import { searchPlayersForCategory } from "@/lib/utils/eligible-players";
+import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload, Gender } from "@/types";
 
 interface Props {
   tournament: Tournament;
@@ -39,25 +41,27 @@ const emptyCreateForm = (): Partial<CreatePlayerPayload> => ({
 
 // ── Module-level utilities ────────────────────────────────────────────────────
 
-async function searchPlayers(q: string, setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void) {
-  if (q.length < 2) { setSlot((s) => ({ ...s, results: [], searching: false })); return; }
-  setSlot((s) => ({ ...s, searching: true }));
-  try {
-    const res = await adminService.players.list({ q, pageSize: 8 });
-    setSlot((s) => ({ ...s, results: res.data, searching: false }));
-  } catch {
-    setSlot((s) => ({ ...s, results: [], searching: false }));
-  }
+// La búsqueda la lanza PlayerSlotSection al cambiar lo escrito o los géneros que admite
+function handleQueryChange(val: string, setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void) {
+  setSlot((s) => ({ ...s, query: val, player: null }));
 }
 
-function handleQueryChange(
-  val: string,
-  setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void,
-  debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | undefined>,
-) {
-  setSlot((s) => ({ ...s, query: val, player: null }));
-  clearTimeout(debounceRef.current);
-  debounceRef.current = setTimeout(() => searchPlayers(val, setSlot), 300);
+/**
+ * El aviso del jugador elegido que no puede jugar la categoría por su género,
+ * solo o con el otro de la pareja (`otherGender`); null si puede o si aún no
+ * hay categoría.
+ */
+function selectedPlayerNotice(
+  player: Player | null,
+  categoryGender: string | undefined,
+  otherGender: Gender | null,
+  canEditPlayer: boolean,
+): string | null {
+  if (!player || !categoryGender) return null;
+  const rejection = genderRejection(categoryGender, playerGender(player), otherGender);
+  return rejection
+    ? genderRejectionNotice(rejection, categoryGender, player.name, { canEditPlayer, goal: "enroll" })
+    : null;
 }
 
 function selectPlayer(player: Player, setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void) {
@@ -78,14 +82,53 @@ interface PlayerSlotSectionProps {
   label: string;
   slot: PlayerSlot;
   setSlot: (fn: (s: PlayerSlot) => PlayerSlot) => void;
-  debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | undefined>;
-  otherPlayerId?: string | null;
+  otherPlayer?: Player | null;
+  /** El género de la categoría elegida: solo se buscan los que pueden jugarla. */
+  categoryGender?: string;
 }
 
-function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }: PlayerSlotSectionProps) {
+function PlayerSlotSection({ label, slot, setSlot, otherPlayer, categoryGender }: PlayerSlotSectionProps) {
   const qc = useQueryClient();
   const { role } = useRole();
+  const canEditPlayer = !isClub(role);
   const createMut = useMutation({ mutationFn: (d: CreatePlayerPayload) => adminService.players.create(d) });
+  const otherPlayerId = otherPlayer?.id;
+  // En la mixta, con el otro ya elegido, se busca el género contrario. El
+  // suyo de verdad: elegido en una general sin género en su ficha, sale 'M'
+  const otherGender = otherPlayer ? playerGender(otherPlayer) : null;
+  const genders = useMemo(
+    () => (categoryGender ? searchGendersFor(categoryGender, otherGender) : null),
+    [categoryGender, otherGender],
+  );
+  const genderHint = categoryGender
+    ? genderSearchHint(categoryGender, otherGender, { canEditPlayer })
+    : null;
+  // El elegido que ya no encaja (se cambió la categoría, o su pareja): se
+  // avisa antes de que lo rechace el back
+  const playerNotice = selectedPlayerNotice(slot.player, categoryGender, otherGender, canEditPlayer);
+
+  // Busca al escribir y otra vez si cambian los géneros que admite (otra
+  // categoría, o el otro jugador elegido): fuera los resultados de antes, y
+  // una respuesta que llegue tarde ya no cuenta
+  const { query, player } = slot;
+  useEffect(() => {
+    if (player) return;
+    if (query.length < 2) {
+      setSlot((s) => ({ ...s, results: [], searching: false }));
+      return;
+    }
+    let stale = false;
+    setSlot((s) => ({ ...s, results: [], searching: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchPlayersForCategory(query, genders);
+        if (!stale) setSlot((s) => ({ ...s, results, searching: false }));
+      } catch {
+        if (!stale) setSlot((s) => ({ ...s, results: [], searching: false }));
+      }
+    }, 300);
+    return () => { stale = true; clearTimeout(timer); };
+  }, [query, player, genders, setSlot]);
 
   const handleCreatePlayer = async () => {
     const errs = validateCreateForm(slot.createForm);
@@ -133,7 +176,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
             <input
               type="text"
               value={slot.query}
-              onChange={(e) => handleQueryChange(e.target.value, setSlot, debounceRef)}
+              onChange={(e) => handleQueryChange(e.target.value, setSlot)}
               placeholder="Buscar por nombre o email…"
               className="w-full h-9 pl-9 pr-9 rounded-md bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
@@ -169,7 +212,7 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
                     <div className="min-w-0">
                       <p className="text-sm text-foreground font-medium truncate">{p.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {p.gender} · {levelLabel(p.level, LEVEL_LABEL)}
+                        {playerGenderLabel(p)} · {levelLabel(p.level, LEVEL_LABEL)}
                         {p.email ? ` · ${p.email}` : ""}
                       </p>
                     </div>
@@ -188,12 +231,23 @@ function PlayerSlotSection({ label, slot, setSlot, debounceRef, otherPlayerId }:
               <div className="min-w-0">
                 <p className="text-sm text-foreground font-medium truncate">{slot.player.name}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {slot.player.gender} · {levelLabel(slot.player.level, LEVEL_LABEL)}
+                  {playerGenderLabel(slot.player)} · {levelLabel(slot.player.level, LEVEL_LABEL)}
                   {slot.player.email ? ` · ${slot.player.email}` : ""}
                   {slot.player.managedByAdmin && " · creado por admin"}
                 </p>
               </div>
             </div>
+          )}
+
+          {playerNotice && (
+            <div className="mt-2 flex items-start gap-2 bg-yellow-400/10 border border-yellow-400/30 rounded-md px-3 py-2.5">
+              <AlertTriangle size={14} className="text-yellow-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-yellow-400">{playerNotice}</p>
+            </div>
+          )}
+
+          {genderHint && !slot.player && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{genderHint}</p>
           )}
 
           {/* Create new player link */}
@@ -298,9 +352,6 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
   const [paid,        setPaid]        = useState(false);
   const [forceEnroll, setForceEnroll] = useState(false);
 
-  const searchDebounce1 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const searchDebounce2 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
   const selectedCategory = tournament.categories?.find((c) => c.id === categoryId);
   const isNotOpen = !["OPEN", "DRAW", "SCHEDULED"].includes(tournament.status ?? "");
 
@@ -384,7 +435,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               <option value="">Selecciona categoría…</option>
               {(tournament.categories ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.gender === "M" ? "Masculina" : c.gender === "F" ? "Femenina" : "Mixta"} · {LEVEL_LABEL[c.level] ?? c.level}
+                  {categoryLabel(c, "full")}
                   {" "}({c.occupiedCount}/{c.totalSpots} plazas{c.waitlistCount > 0 ? `, ${c.waitlistCount} en espera` : ""})
                 </option>
               ))}
@@ -396,8 +447,8 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
             label="Jugador 1"
             slot={slot1}
             setSlot={setSlot1}
-            debounceRef={searchDebounce1}
-            otherPlayerId={slot2.player?.id}
+            otherPlayer={slot2.player}
+            categoryGender={selectedCategory?.gender}
           />
 
           {/* No partner toggle */}
@@ -417,8 +468,8 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
               label="Jugador 2"
               slot={slot2}
               setSlot={setSlot2}
-              debounceRef={searchDebounce2}
-              otherPlayerId={slot1.player?.id}
+              otherPlayer={slot1.player}
+              categoryGender={selectedCategory?.gender}
             />
           )}
 
