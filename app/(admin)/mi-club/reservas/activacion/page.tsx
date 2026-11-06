@@ -24,16 +24,19 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
-import { DEFAULT_TIME_ZONE, formatInTimeZone, zonedDateTimeToIso } from "@/lib/utils/time-zone";
+import { formatInTimeZone, zonedDateTimeToIso } from "@/lib/utils/time-zone";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import type { Player } from "@/types";
 
 export default function ActivacionPage() {
   const { role, clubId } = useRole();
+  const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   if (role === null) {
     return (
@@ -60,17 +63,28 @@ export default function ActivacionPage() {
         módulo en modo prueba con tus testers, y luego abrir al público.
       </p>
 
-      <div className="mt-6 space-y-8">
-        <LifecycleSection clubId={clubId} />
-        <TestersSection clubId={clubId} />
-      </div>
+      {/* Las fechas (y la del tester, al mandarla) van en la zona del club:
+          sin ella no se pinta ninguna */}
+      {clubTimeZone.isError ? (
+        <ErrorState
+          message="No se pudieron cargar los datos del club."
+          onRetry={() => void clubTimeZone.refetch()}
+        />
+      ) : !clubTimeZone.timeZone ? (
+        <Loader2 className="mt-6 h-5 w-5 animate-spin text-muted-foreground" />
+      ) : (
+        <div className="mt-6 space-y-8">
+          <LifecycleSection clubId={clubId} timeZone={clubTimeZone.timeZone} />
+          <TestersSection clubId={clubId} timeZone={clubTimeZone.timeZone} />
+        </div>
+      )}
     </ReservasPage>
   );
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-function LifecycleSection({ clubId }: { clubId: string }) {
+function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: bookingsQK.activation(clubId),
@@ -159,7 +173,11 @@ function LifecycleSection({ clubId }: { clubId: string }) {
               Cualquier usuario AMT en la zona puede ver tu club y reservar
               pistas. Activo desde{" "}
               {state.bookingPublicAt
-                ? new Date(state.bookingPublicAt).toLocaleDateString("es-ES")
+                ? formatInTimeZone(state.bookingPublicAt, timeZone, {
+                    day: "numeric",
+                    month: "numeric",
+                    year: "numeric",
+                  })
                 : "—"}
               .
             </p>
@@ -172,7 +190,7 @@ function LifecycleSection({ clubId }: { clubId: string }) {
 
 // ── Testers ────────────────────────────────────────────────────────────────
 
-function TestersSection({ clubId }: { clubId: string }) {
+function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Player | null>(null);
@@ -187,9 +205,9 @@ function TestersSection({ clubId }: { clubId: string }) {
     mutationFn: () =>
       bookingsService.testers.add(clubId, {
         userId: selected!.id,
-        // Hora del club (las reservas van en hora de España): sin zona, el
-        // back la leía en la del servidor (UTC) y el tester duraba 1-2 h más
-        validUntil: zonedDateTimeToIso(validUntil, DEFAULT_TIME_ZONE),
+        // Hora del club (su zona, la de sus reservas): sin zona, el back la
+        // leía en la del servidor (UTC) y el tester duraba 1-2 h más
+        validUntil: zonedDateTimeToIso(validUntil, timeZone),
       }),
     onSuccess: () => {
       toast.success("Tester añadido");
@@ -296,7 +314,7 @@ function TestersSection({ clubId }: { clubId: string }) {
                 <p className="text-sm font-medium">{t.user?.name ?? "—"}</p>
                 <p className="text-xs text-muted-foreground">
                   {t.user?.email ? `${t.user.email} · ` : ""}Hasta{" "}
-                  {formatInTimeZone(t.validUntil, DEFAULT_TIME_ZONE, {
+                  {formatInTimeZone(t.validUntil, timeZone, {
                     dateStyle: "short",
                     timeStyle: "short",
                   })}

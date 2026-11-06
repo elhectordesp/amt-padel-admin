@@ -17,10 +17,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { zonedDayKey } from "@/lib/utils/time-zone";
 import type {
   ClubOperatingHours,
   ClubScheduleException,
@@ -48,6 +51,7 @@ const DEFAULT_DAY_ROWS: DayRow[] = [1, 2, 3, 4, 5, 6, 7].map((d) => ({
 
 export default function HorariosPage() {
   const { role, clubId } = useRole();
+  const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   if (role === null) {
     return (
@@ -75,7 +79,17 @@ export default function HorariosPage() {
 
       <div className="mt-8 space-y-10">
         <WeeklyHoursSection clubId={clubId} />
-        <ExceptionsSection clubId={clubId} />
+        {/* Las próximas excepciones, desde hoy en el club: sin su zona no hay «hoy» */}
+        {clubTimeZone.isError ? (
+          <ErrorState
+            message="No se pudieron cargar los datos del club."
+            onRetry={() => void clubTimeZone.refetch()}
+          />
+        ) : !clubTimeZone.timeZone ? (
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        ) : (
+          <ExceptionsSection clubId={clubId} timeZone={clubTimeZone.timeZone} />
+        )}
       </div>
     </ReservasPage>
   );
@@ -255,9 +269,10 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
 
 // ── Excepciones por fecha ───────────────────────────────────────────────────
 
-function ExceptionsSection({ clubId }: { clubId: string }) {
+function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
-  const today = new Date().toISOString().slice(0, 10);
+  // Hoy en el club (con el día UTC, de 00:00 a 02:00 en Madrid salía el de ayer)
+  const today = zonedDayKey(new Date(), timeZone);
 
   const query = useQuery({
     queryKey: bookingsQK.exceptions(clubId, today),

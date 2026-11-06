@@ -2,8 +2,10 @@
  * Horarios del club (R2-5): un club que cierra a medianoche lo marca con
  * «Medianoche» y se guarda «24:00» (un campo de hora no puede escribirlo, y
  * con 23:59 la última franja no se ofrecía).
+ *
+ * Zona del club (B1): las próximas excepciones son desde hoy en el club.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -15,6 +17,8 @@ vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "c1" }),
   isClub: (r: string) => r === "club",
 }));
+const clubsMock = vi.hoisted(() => ({ findOne: vi.fn() }));
+vi.mock("@/lib/services/admin", () => ({ adminService: { clubs: clubsMock } }));
 
 const svc = vi.hoisted(() => ({
   operatingHours: { list: vi.fn(), replace: vi.fn() },
@@ -46,6 +50,7 @@ describe("Horarios: cierre a medianoche", () => {
     svc.operatingHours.replace.mockResolvedValue([]);
     svc.exceptions.list.mockResolvedValue([]);
     svc.exceptions.create.mockResolvedValue({});
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
   });
 
   it("marcar «Medianoche» guarda el cierre como 24:00", async () => {
@@ -81,5 +86,36 @@ describe("Horarios: cierre a medianoche", () => {
     await waitFor(() =>
       expect(svc.exceptions.create).toHaveBeenCalledWith("c1", expect.objectContaining({ customClose: "24:00" })),
     );
+  });
+});
+
+describe("Horarios — zona del club (B1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Solo el reloj: los temporizadores siguen siendo los de verdad (findBy, React Query)
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 23:30 del 28/10 en Canarias; en Madrid, las 00:30 del 29, y en UTC aún el 28
+    vi.setSystemTime(new Date("2026-10-28T23:30:00.000Z"));
+    svc.operatingHours.list.mockResolvedValue([]);
+    svc.exceptions.list.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("las próximas excepciones son desde hoy en el club (Canarias), y la nueva abre en ese día", async () => {
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Atlántico", timezone: "Atlantic/Canary" });
+    renderPage();
+    await waitFor(() => expect(svc.exceptions.list).toHaveBeenCalledWith("c1", { fromDate: "2026-10-28" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    expect(screen.getByDisplayValue("2026-10-28")).toHaveAttribute("type", "date");
+  });
+
+  it("en un club de Madrid, ya es el 29 (antes salía el día UTC)", async () => {
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
+    renderPage();
+    await waitFor(() => expect(svc.exceptions.list).toHaveBeenCalledWith("c1", { fromDate: "2026-10-29" }));
   });
 });
