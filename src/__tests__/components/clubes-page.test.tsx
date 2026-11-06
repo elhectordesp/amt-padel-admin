@@ -228,6 +228,17 @@ describe("ClubesPage — reservas del club (R1-7)", () => {
     expect(await within(dialog).findByText(/Abierto al público desde el 1\/10\/26/)).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Aprobar activación" })).not.toBeInTheDocument();
   });
+
+  it("la fecha de apertura de un club de Canarias va en su zona, no en la de Madrid (B1)", async () => {
+    clubsMock.list.mockResolvedValue([{ ...ACTIVE, timezone: "Atlantic/Canary" }]);
+    // 23:30 del 1 de octubre en Canarias; en Madrid ya es el 2
+    activationMock.state.mockResolvedValue(state("PUBLIC", { bookingPublicAt: "2026-10-01T22:30:00.000Z" }));
+    renderPage();
+
+    fireEvent.click(within(await cardOf("Club Activo")).getByRole("button", { name: "Reservas del club" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText(/Abierto al público desde el 1\/10\/26/)).toBeInTheDocument();
+  });
 });
 
 describe("ClubesPage — administradores del club (L25)", () => {
