@@ -6,8 +6,9 @@
  * libre dentro del horario se pulsa para crear ahí la reserva (pista y hora
  * ya elegidas). Los bloqueos de pista (torneos) salen como «Bloqueada».
  *
- * Horas en la zona del club (Europe/Madrid, como el back de reservas), no en
- * la del navegador: la lógica está en `lib/utils/booking-day-grid.ts`.
+ * Horas en la zona del club (`timeZone`, la de `Club.timezone`, como el back
+ * de reservas), no en la del navegador: la lógica está en
+ * `lib/utils/booking-day-grid.ts`.
  *
  * Para recepción: enseña solo la mañana o la tarde si se pide, pinta la línea
  * de la hora actual (solo hoy) y, en el modo mostrador, franjas de 44 px

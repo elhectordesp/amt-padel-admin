@@ -2,9 +2,8 @@
  * La rejilla de un día del calendario de reservas (vista «Día»): franjas de
  * 30 min × pistas, como la ve recepción.
  *
- * Las horas van en la zona del club. El back de reservas trabaja en hora de
- * España fija (Europe/Madrid): se pasa `timeZone` para no depender de la
- * zona del navegador.
+ * Las horas van en la zona del club (`Club.timezone`), como en el back de
+ * reservas: se pasa `timeZone` para no depender de la zona del navegador.
  */
 
 import {

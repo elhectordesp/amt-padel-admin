@@ -17,16 +17,17 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
-  DEFAULT_TIME_ZONE,
   formatInTimeZone,
   zonedDayKey,
   zonedTime,
@@ -38,9 +39,6 @@ import type {
 } from "@/types/bookings";
 
 type Tab = "today" | "upcoming" | "history" | "all";
-
-// Las reservas van en hora de España: el back las calcula en Europe/Madrid
-const TZ = DEFAULT_TIME_ZONE;
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   PENDING_INVITES: "Esperando invitaciones",
@@ -66,13 +64,16 @@ export default function BookingsListPage() {
   const { role, clubId } = useRole();
   const [tab, setTab] = useState<Tab>("today");
   const [showCreate, setShowCreate] = useState(false);
+  const clubTimeZone = useClubTimeZone(clubId, isClub(role));
+  const timeZone = clubTimeZone.timeZone;
 
-  const filters = useMemo<BookingFiltersQuery>(() => {
-    if (!clubId) return {};
-    // «Hoy» es el día del club (Madrid, como el back y el calendario), no el
-    // del navegador
-    const todayKey = zonedDayKey(new Date(), TZ);
-    const today = dayRangeIso(todayKey, todayKey, TZ);
+  // null: aún sin la zona del club, no hay «hoy» con el que pedir
+  const filters = useMemo<BookingFiltersQuery | null>(() => {
+    if (!clubId || !timeZone) return null;
+    // «Hoy» es el día del club (su zona, como el back y el calendario), no
+    // el del navegador
+    const todayKey = zonedDayKey(new Date(), timeZone);
+    const today = dayRangeIso(todayKey, todayKey, timeZone);
     const base: BookingFiltersQuery = { clubId, limit: 50 };
     if (tab === "today") {
       return { ...base, ...today, order: "asc" };
@@ -85,12 +86,12 @@ export default function BookingsListPage() {
       return { ...base, toDate: today.fromDate };
     }
     return base;
-  }, [clubId, tab]);
+  }, [clubId, timeZone, tab]);
 
   const query = useQuery({
-    queryKey: bookingsQK.bookingsList(filters),
-    queryFn: () => bookingsService.bookings.list(filters),
-    enabled: !!clubId && isClub(role),
+    queryKey: bookingsQK.bookingsList(filters ?? {}),
+    queryFn: () => bookingsService.bookings.list(filters!),
+    enabled: !!filters && isClub(role),
   });
 
   if (role === null) {
@@ -106,6 +107,21 @@ export default function BookingsListPage() {
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
+      </ReservasPage>
+    );
+  }
+  // Sin la zona del club no se pinta ninguna hora (ni el alta, que abre en «hoy»)
+  if (!timeZone) {
+    return (
+      <ReservasPage title="Reservas">
+        {clubTimeZone.isError ? (
+          <ErrorState
+            message="No se pudieron cargar los datos del club."
+            onRetry={() => void clubTimeZone.refetch()}
+          />
+        ) : (
+          <Loader2 className="mt-6 h-5 w-5 animate-spin text-muted-foreground" />
+        )}
       </ReservasPage>
     );
   }
@@ -130,6 +146,7 @@ export default function BookingsListPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         clubId={clubId}
+        timeZone={timeZone}
       />
 
       <div className="mt-6">
@@ -167,7 +184,7 @@ export default function BookingsListPage() {
               Sin reservas en este filtro
             </div>
           ) : (
-            items.map((b) => <BookingRow key={b.id} booking={b} />)
+            items.map((b) => <BookingRow key={b.id} booking={b} timeZone={timeZone} />)
           )}
         </div>
       </div>
@@ -175,7 +192,7 @@ export default function BookingsListPage() {
   );
 }
 
-function BookingRow({ booking: b }: { booking: Booking }) {
+function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason] = useState("");
@@ -197,8 +214,8 @@ function BookingRow({ booking: b }: { booking: Booking }) {
   });
 
   // En hora del club, como el detalle y el calendario
-  const timeStr = `${zonedTime(b.startsAt, TZ)} - ${zonedTime(b.endsAt, TZ)}`;
-  const dateStr = formatInTimeZone(b.startsAt, TZ, {
+  const timeStr = `${zonedTime(b.startsAt, timeZone)} - ${zonedTime(b.endsAt, timeZone)}`;
+  const dateStr = formatInTimeZone(b.startsAt, timeZone, {
     weekday: "short",
     day: "numeric",
     month: "short",

@@ -4,12 +4,16 @@
  * ya elegidas; la reserva sale en su franja con los jugadores que siguen en
  * ella (R3-3); la vista «Semana» sigue disponible.
  *
- * Hoy es el domingo 25/10/2026 (cambio de hora) a las 11:00 de Madrid y el
- * navegador está en Canarias: lo esperado va en literales, así que volver a
- * la hora del navegador haría fallar los tests.
+ * Hoy es el domingo 25/10/2026 (cambio de hora) a las 11:00 de Madrid, el
+ * club está en Madrid y el navegador en Canarias: lo esperado va en
+ * literales, así que volver a la hora del navegador haría fallar los tests.
  *
  * Recepción (B2): se actualiza sola, marca la hora actual solo hoy, filtra
  * mañana/tarde con `?franja=`, navega por fechas y tiene modo mostrador.
+ *
+ * Zona del club (B1): con un club en Canarias (y el navegador en Madrid),
+ * «hoy», la semana, las horas, la línea de la hora y el alta van en la hora
+ * de Canarias; sin saber aún la zona, no se pinta ninguna hora.
  */
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
@@ -48,8 +52,9 @@ vi.mock("@/lib/use-role", () => ({
 }));
 
 const courtsMock = vi.hoisted(() => ({ list: vi.fn() }));
+const clubsMock = vi.hoisted(() => ({ findOne: vi.fn() }));
 vi.mock("@/lib/services/admin", () => ({
-  adminService: { courts: courtsMock, players: { search: vi.fn() } },
+  adminService: { courts: courtsMock, clubs: clubsMock, players: { search: vi.fn() } },
 }));
 
 const svc = vi.hoisted(() => ({
@@ -122,6 +127,7 @@ beforeEach(() => {
     url.set(window.location.search);
   });
   courtsMock.list.mockResolvedValue(COURTS);
+  clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
   // Abierto todos los días de 09:00 a 23:00
   svc.operatingHours.list.mockResolvedValue(
     [1, 2, 3, 4, 5, 6, 7].map((d) => ({ id: `h${d}`, clubId: "c1", dayOfWeek: d, openTime: "09:00", closeTime: "23:00", active: true })),
@@ -741,5 +747,89 @@ describe("Recepción — se actualiza sola", () => {
     expect(await screen.findByRole("separator", { name: "Hora actual, 00:00" })).toHaveStyle({ top: "0%" });
     // Sigue siendo hoy: no hay «Hoy» para volver
     expect(screen.queryByRole("button", { name: "Hoy" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Zona del club (B1): un club en Canarias", () => {
+  // El navegador, en Madrid: ni la zona fija de antes ni la del navegador dan lo esperado
+  beforeEach(() => {
+    process.env.TZ = "Europe/Madrid";
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Atlántico", timezone: "Atlantic/Canary" });
+  });
+
+  afterEach(() => {
+    process.env.TZ = "Atlantic/Canary";
+  });
+
+  it("«hoy» es el día de Canarias: de sus 00:00 a sus 23:59:59.999, y la línea a su hora (10:00)", async () => {
+    renderPage();
+    expect(await screen.findByRole("separator", { name: "Hora actual, 10:00" })).toBeInTheDocument();
+    expect(svc.bookings.listAll).toHaveBeenCalledWith({
+      clubId: "c1",
+      fromDate: "2026-10-24T23:00:00.000Z",
+      toDate: "2026-10-25T23:59:59.999Z",
+    });
+    expect(clubsMock.findOne).toHaveBeenCalledWith("c1");
+  });
+
+  it("a las 23:30 de Canarias (en Madrid ya es lunes) sigue siendo domingo", async () => {
+    svc.operatingHours.list.mockResolvedValue(
+      [1, 2, 3, 4, 5, 6, 7].map((d) => ({ id: `h${d}`, clubId: "c1", dayOfWeek: d, openTime: "00:00", closeTime: "23:59", active: true })),
+    );
+    vi.setSystemTime(new Date("2026-10-25T23:30:00.000Z"));
+    try {
+      renderPage();
+      expect(await screen.findByRole("separator", { name: "Hora actual, 23:30" })).toBeInTheDocument();
+      expect(screen.getByText("Domingo, 25 oct")).toBeInTheDocument();
+    } finally {
+      vi.setSystemTime(NOW);
+    }
+  });
+
+  it("la reserva sale a su hora de Canarias y el hueco pulsado se manda en esa hora", async () => {
+    svc.bookings.listAll.mockResolvedValue([booking({})]); // 17:00 UTC
+    renderPage();
+    expect(await screen.findByRole("link", { name: /17:00–18:30/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva en Pista 2 a las 22:30" }));
+    // 22:30 de Canarias son las 22:30 UTC: en el alta, la misma hora
+    expect(await screen.findByRole("status")).toHaveTextContent("A las 22:30 no hay hueco de 90 min en Pista 2.");
+  });
+
+  it("la semana va de lunes a domingo de Canarias y cada reserva en su día de allí", async () => {
+    // Domingo a las 23:30 de Canarias (lunes en Madrid)
+    svc.bookings.listAll.mockResolvedValue([
+      booking({ id: "tarde", startsAt: "2026-10-25T23:30:00.000Z", endsAt: "2026-10-26T00:30:00.000Z", durationMinutes: 60 }),
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
+
+    expect(await screen.findByRole("columnheader", { name: "Pista" })).toBeInTheDocument();
+    expect(svc.bookings.listAll).toHaveBeenLastCalledWith({
+      clubId: "c1",
+      fromDate: "2026-10-18T23:00:00.000Z",
+      toDate: "2026-10-25T23:59:59.999Z",
+    });
+    const sunday = within(screen.getByRole("row", { name: /^Pista 1/ })).getAllByRole("cell")[7];
+    expect(within(sunday).getByText("23:30")).toBeInTheDocument();
+  });
+
+  it("sin saber aún la zona del club no se pinta ninguna hora ni se piden reservas", async () => {
+    clubsMock.findOne.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await waitFor(() => expect(courtsMock.list).toHaveBeenCalled());
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+    expect(svc.bookings.listAll).not.toHaveBeenCalled();
+  });
+
+  it("si no llegan los datos del club, lo dice y se puede reintentar", async () => {
+    clubsMock.findOne.mockRejectedValueOnce(new Error("500"));
+    renderPage();
+    expect(await screen.findByText("No se pudieron cargar los datos del club.")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
+    expect(await screen.findByRole("separator", { name: "Hora actual, 10:00" })).toBeInTheDocument();
   });
 });
