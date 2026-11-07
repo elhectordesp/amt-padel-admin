@@ -9,6 +9,7 @@ const registration = (overrides: any = {}): any => ({
   partnerId: 'u-bea',
   user:      { name: 'Ana López' },
   partner:   { name: 'Bea Ruiz' },
+  category:  { gender: 'F', level: '3a', price: 30 },
   paid:      true,
   partnerPayment: { paid: false },
   ...overrides,
@@ -35,6 +36,14 @@ describe('PairPayment', () => {
   it('sin pareja, solo el titular', () => {
     render(<PairPayment registration={registration({ partnerId: null, partner: null })} onEdit={vi.fn()} />);
     expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('debajo, lo pagado de la pareja sobre su total: la mitad del precio por jugador que ha pagado', () => {
+    const { rerender } = render(<PairPayment registration={registration()} onEdit={vi.fn()} />);
+    expect(screen.getByTitle('Pagado / total de la pareja')).toHaveTextContent('15,00 € / 30,00 €');
+
+    rerender(<PairPayment registration={registration({ partnerPayment: { paid: true } })} onEdit={vi.fn()} />);
+    expect(screen.getByTitle('Pagado / total de la pareja')).toHaveTextContent('30,00 € / 30,00 €');
   });
 
   it('con withNames, cada uno con su nombre entero (dos compañeros pueden llamarse igual)', () => {

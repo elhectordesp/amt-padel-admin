@@ -1,12 +1,14 @@
 "use client";
 
+import { formatEuros, pairAmount } from "@/lib/utils/registration-amounts";
 import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
 
 /**
  * El pago de cada jugador de la pareja (se cobra por jugador): uno debajo
- * del otro, en el orden de la columna de la pareja. Con `withNames`, cada uno
- * con su nombre (para las tarjetas del móvil, sin esa columna al lado).
+ * del otro, en el orden de la columna de la pareja, y debajo lo pagado de la
+ * pareja sobre su total. Con `withNames`, cada uno con su nombre (para las
+ * tarjetas del móvil, sin esa columna al lado).
  */
 export function PairPayment({
   registration,
@@ -17,6 +19,7 @@ export function PairPayment({
   onEdit:       (player: PaymentPlayer) => void;
   withNames?:   boolean;
 }) {
+  const amount = pairAmount(registration);
   return (
     // min-w-0: dentro de una fila flex, sin él no se recorta el nombre y empuja lo de al lado
     <div className="flex flex-col items-start gap-0.5 min-w-0">
@@ -32,6 +35,9 @@ export function PairPayment({
           <span className="shrink-0">{payment.paid ? "Pagado" : "Pendiente"}</span>
         </button>
       ))}
+      <span className="text-[10px] text-muted-foreground whitespace-nowrap" title="Pagado / total de la pareja">
+        {formatEuros(amount.paid)} / {formatEuros(amount.total)}
+      </span>
     </div>
   );
 }
