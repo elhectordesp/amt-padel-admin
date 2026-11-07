@@ -15,10 +15,12 @@ import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
+import { PaymentTotals } from "@/components/admin/payment-totals";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
 import { compareWaitlist, groupByPair, paymentCsvColumns, pendingInviteLabel, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { isUnpaidPair } from "@/lib/utils/registration-amounts";
 import { needsForce } from "@/lib/utils/registration-force";
 import { matchesSearch } from "@/lib/utils/search";
 import { paginate } from "@/lib/utils/pagination";
@@ -33,7 +35,8 @@ function confirmTitle(status: RegistrationStatus): string {
   return "Confirmar";
 }
 
-type StatusFilter = "all" | RegistrationStatus;
+// UNPAID: «Sin pagar», las no canceladas a las que les falta pagar a alguno de sus jugadores
+type StatusFilter = "all" | RegistrationStatus | "UNPAID";
 
 /** La URL de Inscripciones con el torneo elegido (el dashboard enlaza así). */
 function inscripcionesHref(tournamentId: string): string {
@@ -205,7 +208,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
 
   const filtered = useMemo(() => {
     const list = pairs
-      .filter((p) => statusFilter === "all" || p.status === statusFilter)
+      .filter((p) => statusFilter === "all" || (statusFilter === "UNPAID" ? isUnpaidPair(p) : p.status === statusFilter))
       .filter((p) => catFilter === "all" || p.primary.categoryId === catFilter)
       // Sin mirar tildes: «inigo» encuentra a «Íñigo» (P3-6)
       .filter((p) => matchesSearch(
@@ -233,6 +236,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
     confirmed: pairs.filter((p) => p.status === "CONFIRMED").length,
     pending:   pairs.filter((p) => p.status === "PENDING").length,
     waitlist:  pairs.filter((p) => p.status === "WAITLIST").length,
+    unpaid:    pairs.filter(isUnpaidPair).length,
   };
 
   const selectedTournament    = tournaments.find((t: Tournament) => t.id === tournamentId);
@@ -382,12 +386,13 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
         ) : (
           <>
             {/* Stats row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {([
                 { key: "all",        label: "Total",       value: counts.all,       cls: "text-foreground"  },
                 { key: "CONFIRMED",  label: "Confirmadas", value: counts.confirmed, cls: "text-green-400"   },
                 { key: "PENDING",    label: "Pendientes",  value: counts.pending,   cls: "text-yellow-400"  },
                 { key: "WAITLIST",   label: "En espera",   value: counts.waitlist,  cls: "text-blue-400"    },
+                { key: "UNPAID",     label: "Sin pagar",   value: counts.unpaid,    cls: "text-orange-400"  },
               ] as { key: StatusFilter; label: string; value: number; cls: string }[]).map((s) => (
                 <button
                   key={s.key}
@@ -401,6 +406,8 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                 </button>
               ))}
             </div>
+
+            <PaymentTotals pairs={pairs} />
 
             {/* Controls */}
             <div className="flex items-center gap-3 flex-wrap">
