@@ -106,6 +106,7 @@ describe("Listado de reservas", () => {
     expect(svc.bookings.list).toHaveBeenCalledWith({
       clubId: "c1",
       limit: 50,
+      offset: 0,
       fromDate: "2026-10-27T23:00:00.000Z",
       toDate: "2026-10-28T22:59:59.999Z",
       order: "asc",
@@ -169,6 +170,108 @@ describe("Listado de reservas", () => {
     });
     wrap(<BookingsListPage />);
     expect(await screen.findByText("1 jugador · 20,00 €")).toBeInTheDocument();
+  });
+});
+
+describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
+  // 120 reservas en el back: tres páginas de 50
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    svc.bookings.list.mockResolvedValue({ items: [BOOKING], total: 120 });
+  });
+
+  async function goToSecondPage() {
+    await screen.findByText("Mostrando 1–50 de 120 reservas");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    await waitFor(() =>
+      expect(svc.bookings.list).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, offset: 50 })),
+    );
+  }
+
+  it("la segunda página pide las 50 siguientes y cuenta con el total del back", async () => {
+    wrap(<BookingsListPage />);
+    expect(await screen.findByText("120 reservas")).toBeInTheDocument();
+    await goToSecondPage();
+    expect(await screen.findByText("Mostrando 51–100 de 120 reservas")).toBeInTheDocument();
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+  });
+
+  it("con 100 por página (lo más que da el back) vuelve a la primera", async () => {
+    wrap(<BookingsListPage />);
+    await goToSecondPage();
+    fireEvent.change(screen.getByRole("combobox", { name: "Filas por página" }), { target: { value: "100" } });
+    await waitFor(() =>
+      expect(svc.bookings.list).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100, offset: 0 })),
+    );
+  });
+
+  it("al cambiar de pestaña vuelve a la primera página", async () => {
+    wrap(<BookingsListPage />);
+    await goToSecondPage();
+    fireEvent.click(screen.getByRole("button", { name: "Próximas" }));
+    await waitFor(() =>
+      expect(svc.bookings.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ fromDate: "2026-10-28T22:59:59.999Z", offset: 0 }),
+      ),
+    );
+  });
+
+  it("busca con q tras 300 ms sin teclear, sin los espacios de los lados, y vuelve a la primera página", async () => {
+    // Con la búsqueda quedan 60: la segunda página seguiría existiendo
+    svc.bookings.list.mockImplementation(async (filters: { q?: string }) =>
+      filters.q ? { items: [BOOKING], total: 60 } : { items: [BOOKING], total: 120 },
+    );
+    wrap(<BookingsListPage />);
+    await goToSecondPage();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar reservas" }), {
+      target: { value: "  ana@club.es " },
+    });
+    // Mientras se teclea (aquí, 150 ms después) no se pide nada
+    await act(() => new Promise((resolve) => setTimeout(resolve, 150)));
+    expect(svc.bookings.list).not.toHaveBeenCalledWith(expect.objectContaining({ q: expect.anything() }));
+
+    await waitFor(() =>
+      expect(svc.bookings.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: "ana@club.es", limit: 50, offset: 0 }),
+      ),
+    );
+    expect(await screen.findByText("Mostrando 1–50 de 60 reservas")).toBeInTheDocument();
+  });
+
+  it("si nadie coincide con la búsqueda, lo dice", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText("AMT-XP9W");
+    svc.bookings.list.mockResolvedValue({ items: [], total: 0 });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar reservas" }), { target: { value: "Zoe" } });
+    expect(await screen.findByText("Ninguna reserva coincide con la búsqueda")).toBeInTheDocument();
+  });
+
+  it("al abrir, la espera del buscador no devuelve a la primera página", async () => {
+    wrap(<BookingsListPage />);
+    await goToSecondPage();
+    // Más de los 300 ms de la espera
+    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    expect(svc.bookings.list).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 50 }));
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+  });
+
+  it("explica que un club busca por el nombre o por el email completo", async () => {
+    wrap(<BookingsListPage />);
+    expect(await screen.findByRole("searchbox", { name: "Buscar reservas" })).toHaveAccessibleDescription(
+      "Busca por el nombre o por el email completo de quien juega.",
+    );
+  });
+
+  it("si no llega el listado, lo dice (sin «0 reservas») y se puede reintentar", async () => {
+    svc.bookings.list.mockRejectedValueOnce(new Error("500"));
+    wrap(<BookingsListPage />);
+    expect(await screen.findByText("No se pudieron cargar las reservas.")).toBeInTheDocument();
+    expect(screen.queryByText("0 reservas")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
+    expect(await screen.findByText("AMT-XP9W")).toBeInTheDocument();
   });
 });
 

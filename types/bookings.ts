@@ -356,6 +356,8 @@ export interface BookingFiltersQuery {
   order?: "asc" | "desc";
   limit?: number;
   offset?: number;
+  /** Nombre o email de quien está en la reserva (titular, participantes e invitados). */
+  q?: string;
 }
 
 export interface PaginatedBookings {
