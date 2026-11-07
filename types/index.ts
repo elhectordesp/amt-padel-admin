@@ -140,6 +140,9 @@ export interface Tournament {
   maxUnavailableTotalHours?:  number;
   hasShirts?:                 boolean;
   useSeeding?: boolean;
+  // Ninguna inscripción pasa a confirmada sin que paguen sus jugadores (el
+  // cobro, a mano). No viene de un back anterior a B4
+  requirePaymentToConfirm?: boolean;
   imageUrl?:   string;
   format?:     string;
   scoringSystem?: string;
@@ -589,6 +592,7 @@ export interface CreateTournamentPayload {
   timezone?:   string;
   hasShirts?:  boolean;
   useSeeding?: boolean;
+  requirePaymentToConfirm?: boolean;
   matchDuration?: number;
   maxMatchesPerPlayerPerDay?: number | null;
   maxUnavailableTotalHours?:  number;

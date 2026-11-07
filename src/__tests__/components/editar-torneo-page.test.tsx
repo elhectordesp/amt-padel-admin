@@ -3,7 +3,7 @@
  * manda en la hora del torneo, no en la del navegador (los tests corren en
  * Europe/Madrid), y cambiar la zona con partidos con hora pide confirmación.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -55,6 +55,7 @@ vi.mock("@/lib/services/admin", () => ({
   },
 }));
 
+import { adminService } from "@/lib/services/admin";
 import EditarTorneoPage from "../../../app/(admin)/torneos/[id]/editar/page";
 
 function renderPage() {
@@ -137,5 +138,39 @@ describe("Editar torneo — Avanzado: el estado", { timeout: 30_000 }, () => {
     expect(screen.getByRole("button", { name: /Sorteo \(Generando cuadro\)$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /En curso · pide forzar/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Borrador · pide forzar/ })).toBeInTheDocument();
+  });
+});
+
+describe("Editar torneo — exigir el pago para confirmar (B4)", { timeout: 30_000 }, () => {
+  const detail = vi.mocked(adminService.tournaments.adminDetail);
+  beforeEach(() => update.mockClear());
+  afterEach(() => detail.mockImplementation(async () => CANARY_TOURNAMENT as never));
+
+  const toggle = () => screen.getByRole("checkbox", { name: "Exigir el pago para confirmar" });
+
+  it("lo trae activado del torneo, con su línea de ayuda, y apagarlo manda false", async () => {
+    detail.mockImplementation(async () => ({ ...CANARY_TOURNAMENT, requirePaymentToConfirm: true }) as never);
+    renderPage();
+    await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT);
+
+    expect(toggle()).toBeChecked();
+    expect(screen.getByText(/Activarlo no cambia las ya confirmadas/)).toBeInTheDocument();
+    fireEvent.click(toggle());
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
+    expect(update.mock.calls[0][1]).toMatchObject({ requirePaymentToConfirm: false });
+  });
+
+  it("un torneo sin la opción la enseña apagada y activarla manda true", async () => {
+    renderPage();
+    await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT);
+
+    expect(toggle()).not.toBeChecked();
+    fireEvent.click(toggle());
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
+    expect(update.mock.calls[0][1]).toMatchObject({ requirePaymentToConfirm: true });
   });
 });
