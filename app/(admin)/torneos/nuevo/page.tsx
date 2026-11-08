@@ -4,8 +4,9 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
+import { PlainTextField, TournamentVisibilityFields, type TournamentVisibility } from "@/components/admin/tournament-options-fields";
 import { ApiError } from "@/lib/api";
-import { adminService } from "@/lib/services/admin";
+import { adminService, clubTournamentConfigQK } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
 import { useRole, isClub } from "@/lib/use-role";
@@ -20,13 +21,28 @@ import {
   tournamentTimeZone,
   zonedDateTimeToIso,
 } from "@/lib/utils/time-zone";
+import {
+  DEFAULT_TOURNAMENT_DEFAULTS,
+  HIDE_FROM_APP_MAX_DAYS,
+  TOURNAMENT_DESCRIPTION_MAX,
+  TOURNAMENT_RULES_MAX,
+  WIZARD_FORMAT_OPTIONS,
+  hideFromAppLabel,
+  matchDurationOptions,
+  participantsVisibilityLabel,
+  plainText,
+  textTooLong,
+  tooLongMessage,
+  tournamentDefaultsFromConfig,
+  untouchedChanges,
+} from "@/lib/utils/tournament-options";
 import type { CategoryGender, CategoryLevel } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -40,6 +56,11 @@ const infoSchema = z.object({
   endDate:   z.string().min(1, "Fecha de fin requerida"),
   prize:       z.string().optional(),
   imageUrl:    z.string().nullable().optional(),
+  // Texto plano; se manda sin los espacios de los bordes
+  description: z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_DESCRIPTION_MAX), tooLongMessage(TOURNAMENT_DESCRIPTION_MAX)),
+  rules:       z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_RULES_MAX), tooLongMessage(TOURNAMENT_RULES_MAX)),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
@@ -59,6 +80,8 @@ const catSchema = z.object({
   })).min(1, "Añade al menos una categoría"),
 });
 
+const HIDE_DAYS_MESSAGE = `Entre 0 y ${HIDE_FROM_APP_MAX_DAYS} días`;
+
 const configSchema = z.object({
   tier:                z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:              z.string().min(1),
@@ -70,6 +93,10 @@ const configSchema = z.object({
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
   requirePaymentToConfirm: z.boolean(),
+  participantsVisibility: z.enum(["PUBLIC", "REGISTERED_ONLY", "HIDDEN_UNTIL_START"]),
+  showClubInsteadOfCourt: z.boolean(),
+  // null: no se quita nunca del listado de la app
+  hideFromAppAfterDays: z.number({ error: HIDE_DAYS_MESSAGE }).int(HIDE_DAYS_MESSAGE).min(0, HIDE_DAYS_MESSAGE).max(HIDE_FROM_APP_MAX_DAYS, HIDE_DAYS_MESSAGE).nullable(),
 });
 
 const DAY_TYPE_OPTIONS = [
@@ -207,6 +234,23 @@ export default function NuevoTorneoPage() {
     }
   }, [isClubUser, myClubId, infoForm]);
 
+  // Las opciones de torneo del club (el propio, o el elegido en el paso 1):
+  // los valores con los que empieza cada paso
+  const pickedClubId = useWatch({ control: infoForm.control, name: "clubId" });
+  const knownClubId  = isClubUser ? myClubId : pickedClubId;
+  const clubConfigQuery = useQuery({
+    queryKey: clubTournamentConfigQK(knownClubId ?? ""),
+    queryFn:  () => adminService.clubTournamentConfig.get(knownClubId!),
+    enabled:  !!knownClubId,
+  });
+  const clubDefaults = useMemo(
+    () => (clubConfigQuery.data ? tournamentDefaultsFromConfig(clubConfigQuery.data) : null),
+    [clubConfigQuery.data],
+  );
+  // Los valores puestos en cada campo (los de siempre hasta que llegan los del
+  // club): lo que sigue igual no lo ha tocado el admin y se puede cambiar
+  const applied = useRef({ ...DEFAULT_TOURNAMENT_DEFAULTS, timezone: tournamentTimeZone(null) });
+
   // Warn on accidental navigation away (must be after infoForm declaration)
   useEffect(() => {
     const dirty = step > 1 || infoForm.formState.isDirty;
@@ -229,7 +273,7 @@ export default function NuevoTorneoPage() {
     // válido se va al corregirlo (con trigger() solo se iba al volver a
     // pulsar "Siguiente")
     mode:          "onTouched",
-    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
+    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: DEFAULT_TOURNAMENT_DEFAULTS.categorySpots, price: DEFAULT_TOURNAMENT_DEFAULTS.categoryPrice, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
   });
   const { fields, append, remove } = useFieldArray({ control: catForm.control, name: "categories" });
 
@@ -244,18 +288,32 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, timezone: tournamentTimeZone(null), hasShirts: false, useSeeding: false, requirePaymentToConfirm: false },
+    defaultValues: configData ?? {
+      tier: "BRONZE",
+      scoringSystem: "AMT+ELO+SPA",
+      timezone: tournamentTimeZone(null),
+      format:                  DEFAULT_TOURNAMENT_DEFAULTS.format,
+      matchDuration:           DEFAULT_TOURNAMENT_DEFAULTS.matchDuration,
+      hasShirts:               DEFAULT_TOURNAMENT_DEFAULTS.hasShirts,
+      useSeeding:              DEFAULT_TOURNAMENT_DEFAULTS.useSeeding,
+      requirePaymentToConfirm: DEFAULT_TOURNAMENT_DEFAULTS.requirePaymentToConfirm,
+      participantsVisibility:  DEFAULT_TOURNAMENT_DEFAULTS.participantsVisibility,
+      showClubInsteadOfCourt:  DEFAULT_TOURNAMENT_DEFAULTS.showClubInsteadOfCourt,
+      hideFromAppAfterDays:    DEFAULT_TOURNAMENT_DEFAULTS.hideFromAppAfterDays,
+    },
   });
 
-  // La zona del torneo empieza siendo la de su club (la elegida en el paso 1),
-  // mientras no se cambie a mano
+  // La zona del torneo empieza siendo la de su club (la elegida en el paso 1)
   const selectedClub = isClubUser ? myClub : clubs.find((c) => c.id === infoData?.clubId);
   const clubTimeZone = tournamentTimeZone(selectedClub);
-  useEffect(() => {
-    if (step === 3 && !configForm.getFieldState("timezone").isDirty) {
-      configForm.setValue("timezone", clubTimeZone);
-    }
-  }, [step, clubTimeZone, configForm]);
+
+  /** Los campos de «Lo que ven los jugadores»; tras un «Siguiente» con errores, revalida. */
+  const setVisibility = (patch: Partial<TournamentVisibility>) => {
+    const options = { shouldDirty: true, shouldValidate: !!configForm.formState.errors.hideFromAppAfterDays };
+    if (patch.participantsVisibility !== undefined) configForm.setValue("participantsVisibility", patch.participantsVisibility, options);
+    if (patch.showClubInsteadOfCourt !== undefined) configForm.setValue("showClubInsteadOfCourt", patch.showClubInsteadOfCourt, options);
+    if ("hideFromAppAfterDays" in patch) configForm.setValue("hideFromAppAfterDays", patch.hideFromAppAfterDays ?? null, options);
+  };
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
   const scheduleForm = useForm<ScheduleData>({
@@ -287,12 +345,72 @@ export default function NuevoTorneoPage() {
           type:                "AMBOS" as const,
           isFinal:             false,
           maxUnavailableSlots: 0,
-          blocks:              [{ start: "16:00", end: "21:00" }],
+          // El tramo puesto; si llegan los del club, el efecto de abajo lo cambia
+          blocks:              [{ start: applied.current.dayStartTime, end: applied.current.dayEndTime }],
         });
       }
       scheduleForm.reset({ days });
     }
   }, [step, infoData, scheduleForm]);
+
+  // ── Valores de partida: los del club y la zona de su club ──────────────
+  // Al entrar en cada paso (y si llegan estando en él), en los campos de ese
+  // paso que siguen con el valor puesto. Se compara con el valor y no con el
+  // «tocado» del formulario: volver atrás lo reinicia (reset) y se perdía lo
+  // cambiado a mano (la zona elegida volvía a la del club)
+  useEffect(() => {
+    const next = { ...applied.current, ...(clubDefaults ?? {}), timezone: clubTimeZone };
+    const was  = applied.current;
+    const keep = (keys: readonly (keyof typeof next)[]) => {
+      applied.current = { ...applied.current, ...Object.fromEntries(keys.map((k) => [k, next[k]])) };
+    };
+
+    if (step === 1) {
+      const keys = ["description", "rules"] as const;
+      const changes = untouchedChanges(infoForm.getValues(), was, next, keys);
+      for (const key of keys) {
+        const value = changes[key];
+        if (value !== undefined) infoForm.setValue(key, value);
+      }
+      keep(keys);
+    } else if (step === 2) {
+      // Cada categoría que sigue con el precio y las plazas puestas
+      const keys = ["categorySpots", "categoryPrice"] as const;
+      catForm.getValues().categories.forEach((c, i) => {
+        const changes = untouchedChanges({ categorySpots: c.totalSpots, categoryPrice: c.price }, was, next, keys);
+        if (changes.categorySpots !== undefined) catForm.setValue(`categories.${i}.totalSpots`, changes.categorySpots);
+        if (changes.categoryPrice !== undefined) catForm.setValue(`categories.${i}.price`, changes.categoryPrice);
+      });
+      keep(keys);
+    } else if (step === 3) {
+      const keys = [
+        "format", "matchDuration", "hasShirts", "useSeeding", "requirePaymentToConfirm",
+        "participantsVisibility", "showClubInsteadOfCourt", "hideFromAppAfterDays", "timezone",
+      ] as const;
+      const changes = untouchedChanges(configForm.getValues(), was, next, keys);
+      for (const key of keys) {
+        // Con «in»: hideFromAppAfterDays puede pasar a null (nunca)
+        if (key in changes) configForm.setValue(key, changes[key] as ConfigData[typeof key]);
+      }
+      keep(keys);
+    } else if (step === 4) {
+      const { maxUnavailableTotalHours, days } = scheduleForm.getValues();
+      const changes = untouchedChanges({ maxUnavailableTotalHours }, was, next, ["maxUnavailableTotalHours"]);
+      if (changes.maxUnavailableTotalHours !== undefined) {
+        scheduleForm.setValue("maxUnavailableTotalHours", changes.maxUnavailableTotalHours);
+      }
+      // Las jornadas que siguen con un solo tramo, el puesto
+      if (was.dayStartTime !== next.dayStartTime || was.dayEndTime !== next.dayEndTime) {
+        days.forEach((d, i) => {
+          const [only] = d.blocks;
+          if (d.blocks.length === 1 && only.start === was.dayStartTime && only.end === was.dayEndTime) {
+            scheduleForm.setValue(`days.${i}.blocks`, [{ start: next.dayStartTime, end: next.dayEndTime }]);
+          }
+        });
+      }
+      keep(["maxUnavailableTotalHours", "dayStartTime", "dayEndTime"]);
+    }
+  }, [step, clubDefaults, clubTimeZone, infoForm, catForm, configForm, scheduleForm]);
 
   // ── Mutation ──────────────────────────────────────────────────────────
   const create = useMutation({
@@ -301,6 +419,9 @@ export default function NuevoTorneoPage() {
       // Sanitiza imageUrl: backend valida con @IsUrl() y "" lo rechaza.
       // Si no hay banner, omitimos el campo del payload.
       imageUrl: infoData!.imageUrl?.trim() ? infoData!.imageUrl : undefined,
+      // Sin texto, no se mandan (el torneo nace sin ellos)
+      description: plainText(infoData!.description) || undefined,
+      rules:       plainText(infoData!.rules) || undefined,
       tier:        configData!.tier,
       format:      configData!.format,
       scoringSystem: configData!.scoringSystem,
@@ -312,6 +433,9 @@ export default function NuevoTorneoPage() {
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
       requirePaymentToConfirm: configData!.requirePaymentToConfirm,
+      participantsVisibility:  configData!.participantsVisibility,
+      showClubInsteadOfCourt:  configData!.showClubInsteadOfCourt,
+      hideFromAppAfterDays:    configData!.hideFromAppAfterDays,
       categories: catData!.categories.map((c) => ({
         gender:          c.gender,
         level:           c.level  as CategoryLevel,
@@ -453,6 +577,20 @@ export default function NuevoTorneoPage() {
           })}
         </div>
 
+        {/* Sin las opciones del club se sigue con los de siempre, pero se dice */}
+        {clubConfigQuery.isError && step < 5 && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+            <span>No se pudieron cargar las opciones de torneo del club: los valores de partida son los de siempre.</span>
+            <button
+              type="button"
+              onClick={() => void clubConfigQuery.refetch()}
+              className="font-semibold text-[#D4AF37] hover:underline"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
         {/* Step content card */}
         <div className="bg-card border border-border rounded-lg p-6">
 
@@ -527,6 +665,25 @@ export default function NuevoTorneoPage() {
                   onChange={(url) => infoForm.setValue("imageUrl", url, { shouldDirty: true })}
                 />
               </Field>
+              <PlainTextField
+                label="Sobre el torneo"
+                value={infoForm.watch("description") ?? ""}
+                onChange={(v) => infoForm.setValue("description", v, { shouldDirty: true, shouldValidate: !!infoForm.formState.errors.description })}
+                max={TOURNAMENT_DESCRIPTION_MAX}
+                placeholder="Qué es el torneo, a quién va dirigido, qué incluye…"
+                help="Opcional. Texto plano: se enseña tal cual, con sus saltos de línea, en el visor público."
+                error={infoForm.formState.errors.description?.message}
+              />
+              <PlainTextField
+                label="Normas"
+                value={infoForm.watch("rules") ?? ""}
+                onChange={(v) => infoForm.setValue("rules", v, { shouldDirty: true, shouldValidate: !!infoForm.formState.errors.rules })}
+                max={TOURNAMENT_RULES_MAX}
+                rows={6}
+                placeholder="Puntualidad, bolas, material, qué pasa si no se presenta una pareja…"
+                help="Opcional. Texto plano, como la descripción."
+                error={infoForm.formState.errors.rules?.message}
+              />
             </div>
           )}
 
@@ -540,7 +697,8 @@ export default function NuevoTorneoPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => append({ gender: "M", level: "4a", totalSpots: 16, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false })}
+                  // Con el precio y las plazas de partida (las del club, si han llegado)
+                  onClick={() => append({ gender: "M", level: "4a", totalSpots: applied.current.categorySpots, price: applied.current.categoryPrice, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false })}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
                 >
                   <Plus size={13} /> Añadir categoría
@@ -666,12 +824,7 @@ export default function NuevoTorneoPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label="Formato" error={configForm.formState.errors.format?.message}>
                     <CustomSelect
-                      options={[
-                        { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
-                        { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
-                        { value: "round-robin",         label: "Round Robin" },
-                        { value: "cuadro",              label: "Cuadro" },
-                      ]}
+                      options={WIZARD_FORMAT_OPTIONS}
                       value={configForm.watch("format")}
                       onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
                     />
@@ -709,11 +862,7 @@ export default function NuevoTorneoPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label="Duración por partido" error={configForm.formState.errors.matchDuration?.message}>
                     <CustomSelect
-                      options={[
-                        { value: "60",  label: "60 minutos" },
-                        { value: "90",  label: "90 minutos" },
-                        { value: "120", label: "120 minutos" },
-                      ]}
+                      options={matchDurationOptions(configForm.watch("matchDuration"))}
                       value={String(configForm.watch("matchDuration"))}
                       onChange={(v) => configForm.setValue("matchDuration", Number(v), { shouldValidate: true })}
                     />
@@ -760,6 +909,22 @@ export default function NuevoTorneoPage() {
                     <p className="text-xs text-muted-foreground">Ninguna pareja pasa a confirmada hasta que se marque pagado a cada uno de sus jugadores (el cobro se apunta a mano en Inscripciones)</p>
                   </div>
                 </label>
+              </div>
+
+              {/* Grupo 3: Lo que ven los jugadores */}
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border pb-2">
+                  Lo que ven los jugadores
+                </p>
+                <TournamentVisibilityFields
+                  value={{
+                    participantsVisibility: configForm.watch("participantsVisibility"),
+                    showClubInsteadOfCourt: configForm.watch("showClubInsteadOfCourt"),
+                    hideFromAppAfterDays:   configForm.watch("hideFromAppAfterDays"),
+                  }}
+                  onChange={setVisibility}
+                  hideFromAppError={configForm.formState.errors.hideFromAppAfterDays?.message}
+                />
               </div>
             </div>
           )}
@@ -949,6 +1114,20 @@ export default function NuevoTorneoPage() {
                       <span className="text-foreground font-medium">{v}</span>
                     </div>
                   ))}
+                  {/* Los textos, como se mandan (sin los espacios de los bordes) */}
+                  {([["Sobre el torneo", infoData.description], ["Normas", infoData.rules]] as const).map(([k, v]) =>
+                    plainText(v) ? (
+                      <div key={k} className="text-sm space-y-0.5">
+                        <span className="text-muted-foreground">{k}</span>
+                        <p className="text-foreground whitespace-pre-line break-words line-clamp-4">{plainText(v)}</p>
+                      </div>
+                    ) : (
+                      <div key={k} className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">{k}</span>
+                        <span className="text-foreground font-medium">—</span>
+                      </div>
+                    ),
+                  )}
                 </div>
 
                 {/* Categories summary */}
@@ -996,6 +1175,9 @@ export default function NuevoTorneoPage() {
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
                     ["Exigir el pago para confirmar", configData.requirePaymentToConfirm ? "Sí" : "No"],
+                    ["Lista de inscritos", participantsVisibilityLabel(configData.participantsVisibility)],
+                    ["El club en vez de la pista", configData.showClubInsteadOfCourt ? "Sí" : "No"],
+                    ["Quitarlo del listado de la app", hideFromAppLabel(configData.hideFromAppAfterDays)],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>
