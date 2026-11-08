@@ -17,6 +17,7 @@ import { CustomSelect, Field, Input } from "@/components/admin/form";
 import { PlainTextField, TournamentVisibilityFields } from "@/components/admin/tournament-options-fields";
 import { Button } from "@/components/ui/button";
 import { adminService, clubTournamentConfigQK } from "@/lib/services/admin";
+import { SCORING_FORMAT_OPTIONS, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
 import {
   TOURNAMENT_DESCRIPTION_MAX,
@@ -28,6 +29,7 @@ import {
   tournamentDefaultsPayload,
   type TournamentDefaults,
 } from "@/lib/utils/tournament-options";
+import type { ScoringFormat } from "@/types";
 
 export default function MiClubTorneosPage() {
   const { role, clubId } = useRole();
@@ -181,6 +183,18 @@ export default function MiClubTorneosPage() {
                 onChange={(v) => set({ matchDuration: Number(v) })}
               />
             </Field>
+            <div className="sm:col-span-2">
+              <Field label="Formato de partido">
+                <CustomSelect
+                  options={SCORING_FORMAT_OPTIONS}
+                  value={form.scoringFormat}
+                  onChange={(v) => set({ scoringFormat: v as ScoringFormat })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {typicalDurationText(form.scoringFormat)}. Es el de las categorías de cada torneo nuevo; la «Duración por partido» no cambia sola con él.
+                </p>
+              </Field>
+            </div>
           </div>
           <CheckField
             label="Cabezas de serie (seeding por SPA)"

@@ -24,6 +24,7 @@ import {
   HIDE_FROM_APP_MAX_DAYS,
   TOURNAMENT_DESCRIPTION_MAX,
   TOURNAMENT_RULES_MAX,
+  matchDurationOptions,
   plainTextOrNull,
   textTooLong,
   tooLongMessage,
@@ -464,11 +465,7 @@ export default function EditarTorneoPage() {
               </Field>
               <Field label="Duración por partido (grupos)">
                 <CustomSelect
-                  options={[
-                    { value: "60", label: "60 minutos" },
-                    { value: "90", label: "90 minutos" },
-                    { value: "120", label: "120 minutos" },
-                  ]}
+                  options={matchDurationOptions(watch("matchDuration"))}
                   value={String(watch("matchDuration") ?? 60)}
                   onChange={(v) => setValue("matchDuration", Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
@@ -477,9 +474,7 @@ export default function EditarTorneoPage() {
                 <CustomSelect
                   options={[
                     { value: "", label: "Igual que grupos" },
-                    { value: "60", label: "60 minutos" },
-                    { value: "90", label: "90 minutos" },
-                    { value: "120", label: "120 minutos" },
+                    ...matchDurationOptions(watch("elimMatchDuration") ?? undefined),
                   ]}
                   value={String(watch("elimMatchDuration") ?? "")}
                   onChange={(v) => setValue("elimMatchDuration", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}

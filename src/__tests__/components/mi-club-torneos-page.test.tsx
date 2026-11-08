@@ -30,6 +30,7 @@ const CONFIG = {
   clubId: "c1",
   format: "eliminatoria",
   matchDuration: 60,
+  scoringFormat: "BEST_OF_3",
   hasShirts: false,
   useSeeding: false,
   requirePaymentToConfirm: false,
@@ -73,6 +74,11 @@ describe("Opciones de torneo del club", () => {
     fireEvent.change(screen.getByLabelText("Sobre el torneo"), { target: { value: "  Open de otoño\nCon cena  " } });
     fireEvent.change(screen.getByLabelText("Normas"), { target: { value: "   " } });
     fireEvent.change(screen.getByLabelText("Plazas"), { target: { value: "16" } });
+    // El formato de partido por defecto: con su duración típica a la vista
+    expect(screen.getByText(/Suele durar unos 75 min/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "3 sets" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 9 juegos" }));
+    expect(screen.getByText(/Suele durar unos 45 min/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Inicio de cada jornada"), { target: { value: "09:00" } });
     fireEvent.click(screen.getByRole("radio", { name: /Solo los inscritos/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Mostrar el club en vez de la pista/ }));
@@ -85,6 +91,7 @@ describe("Opciones de torneo del club", () => {
     expect(configMock.update.mock.calls[0][1]).toEqual({
       format: "eliminatoria",
       matchDuration: 60,
+      scoringFormat: "PRO_SET_9",
       hasShirts: false,
       useSeeding: false,
       requirePaymentToConfirm: false,

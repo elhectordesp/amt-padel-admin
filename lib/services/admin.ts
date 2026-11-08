@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from "@/lib/api";
+import { DEFAULT_SCORING_FORMAT } from "@/lib/scoring-format";
 import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
@@ -13,7 +14,7 @@ import type {
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
-  DeletedTournament, DeletedPlayer, CategoryGender,
+  DeletedTournament, DeletedPlayer, CategoryGender, ScoringFormat,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
@@ -487,13 +488,13 @@ export const adminService = {
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}/prizes`, prizes).then(r => r.data),
     add: (
       tournamentId: string,
-      data: { gender: CategoryGender; level: string; totalSpots: number; price?: number; scoringFormat?: string },
+      data: { gender: CategoryGender; level: string; totalSpots: number; price?: number; scoringFormat?: ScoringFormat },
     ) =>
       api.post(`/admin/tournaments/${tournamentId}/categories`, data).then(r => r.data),
     update: (
       tournamentId: string,
       categoryId:   string,
-      data: { totalSpots?: number; price?: number; scoringFormat?: string; force?: boolean },
+      data: { totalSpots?: number; price?: number; scoringFormat?: ScoringFormat; force?: boolean },
     ) =>
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}`, data).then(r => r.data),
     remove: (tournamentId: string, categoryId: string, force?: boolean) =>
@@ -536,7 +537,7 @@ export const adminService = {
           // Formato resuelto POR FASE por el backend (roundFormats override); cae al
           // formato base de la categoría si no viene. Así el hint de super-tiebreak
           // del modal respeta p.ej. "final a 3 sets" aunque la base sea super-tie.
-          scoringFormat: m.effectiveScoringFormat ?? m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
+          scoringFormat: m.effectiveScoringFormat ?? m.category?.scoringFormat ?? m.scoringFormat ?? DEFAULT_SCORING_FORMAT,
         }));
       });
     },

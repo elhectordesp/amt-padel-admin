@@ -25,6 +25,7 @@ const DEFAULT_CONFIG = {
   clubId: "club-1",
   format: "eliminatoria",
   matchDuration: 60,
+  scoringFormat: "BEST_OF_3",
   hasShirts: false,
   useSeeding: false,
   requirePaymentToConfirm: false,
@@ -104,6 +105,8 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
       clubId: "club-1",
       timezone: "Atlantic/Canary",
       registrationDeadline: "2099-11-10T20:00:00.000Z",
+      // Sin tocarlo, el del club (3 sets si no ha guardado otro) va en la categoría
+      categories: [{ scoringFormat: "BEST_OF_3" }],
     });
   }, 30_000);
 });
@@ -275,6 +278,7 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
       ...DEFAULT_CONFIG,
       format: "grupos+eliminatoria",
       matchDuration: 90,
+      scoringFormat: "ONE_SET",
       hasShirts: true,
       categoryPrice: 30,
       categorySpots: 16,
@@ -308,6 +312,9 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
     await screen.findByRole("button", { name: "Grupos + Eliminatoria" }, WAIT);
     expect(screen.getByRole("button", { name: "90 minutos" })).toBeInTheDocument();
+    // El formato de partido del club, con su duración típica como pista: la duración del partido sigue siendo la del club
+    expect(screen.getByRole("button", { name: "1 set (tie-break a 6-6)" })).toBeInTheDocument();
+    expect(screen.getByText(/Suele durar unos 30 min/)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Incluir camisetas/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Nadie hasta que empiece/ })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Mostrar el club en vez de la pista/ })).toBeChecked();
@@ -324,6 +331,7 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
 
     // Paso 5: el resumen enseña lo nuevo
     await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
+    expect(within(summary("Formato de partido")).getByText("1 set (tie-break a 6-6)")).toBeInTheDocument();
     expect(within(summary("Lista de inscritos")).getByText("Nadie hasta que empiece")).toBeInTheDocument();
     expect(within(summary("El club en vez de la pista")).getByText("Sí")).toBeInTheDocument();
     expect(within(summary("Quitarlo del listado de la app")).getByText("7 días después del último día")).toBeInTheDocument();
@@ -342,7 +350,11 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
       showClubInsteadOfCourt: true,
       hideFromAppAfterDays: 7,
       maxUnavailableTotalHours: 4,
-      categories: [{ totalSpots: 16, price: 30 }, { totalSpots: 16, price: 30 }],
+      // El formato de partido va en todas las categorías
+      categories: [
+        { totalSpots: 16, price: 30, scoringFormat: "ONE_SET" },
+        { totalSpots: 16, price: 30, scoringFormat: "ONE_SET" },
+      ],
       schedule: [
         { date: "2099-11-20", blocks: [{ start: "10:00", end: "14:00" }] },
         { date: "2099-11-21", blocks: [{ start: "10:00", end: "14:00" }] },
@@ -350,18 +362,23 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     });
   }, 60_000);
 
-  it("volver atrás no pisa lo cambiado a mano (la zona elegida volvía a la del club al volver del paso 4)", async () => {
-    getConfig.mockImplementation(async () => ({ ...DEFAULT_CONFIG, format: "grupos+eliminatoria" }));
+  it("volver atrás no pisa lo cambiado a mano (la zona elegida volvía a la del club al volver del paso 4), ni el formato de partido", async () => {
+    getConfig.mockImplementation(async () => ({ ...DEFAULT_CONFIG, format: "grupos+eliminatoria", scoringFormat: "ONE_SET" }));
     renderWizard();
     await fillStep1();
     next();
     await screen.findByLabelText("Plazas", {}, WAIT);
     next();
 
-    // Paso 3: el formato y la zona, a mano
+    // Paso 3: el formato, el formato de partido y la zona, a mano
     await screen.findByRole("button", { name: "Grupos + Eliminatoria" }, WAIT);
     fireEvent.click(screen.getByRole("button", { name: "Grupos + Eliminatoria" }));
     fireEvent.click(screen.getByRole("button", { name: "Round Robin" }));
+    fireEvent.click(screen.getByRole("button", { name: "1 set (tie-break a 6-6)" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 9 juegos" }));
+    // Solo la pista: la duración del partido no cambia sola con el formato
+    expect(screen.getByText(/Suele durar unos 45 min/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "60 minutos" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Canarias/ }));
     fireEvent.click(screen.getByRole("button", { name: /Península, Baleares/ }));
     fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
@@ -372,7 +389,17 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Anterior/ }));
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
     expect(screen.getByRole("button", { name: "Round Robin" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 9 juegos" })).toBeInTheDocument();
     expect(screen.getByText(/^Hora del torneo/).textContent).toBe("Hora del torneo (Península, Baleares, Ceuta y Melilla)");
+
+    // Y es el que se manda, con la duración que tenía
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+    next();
+    await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
+    next();
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
+    expect(create.mock.calls[0][0]).toMatchObject({ matchDuration: 60, categories: [{ scoringFormat: "PRO_SET_9" }] });
   }, 60_000);
 
   it("sin poder cargar las opciones del club, lo dice y empieza con los de siempre", async () => {

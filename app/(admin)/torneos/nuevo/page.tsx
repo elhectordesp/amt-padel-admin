@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api";
 import { adminService, clubTournamentConfigQK } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
+import { SCORING_FORMAT_OPTIONS, isScoringFormat, scoringFormatLabel, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
@@ -36,7 +37,7 @@ import {
   tournamentDefaultsFromConfig,
   untouchedChanges,
 } from "@/lib/utils/tournament-options";
-import type { CategoryGender, CategoryLevel } from "@/types";
+import type { CategoryGender, CategoryLevel, ScoringFormat } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
@@ -85,6 +86,8 @@ const HIDE_DAYS_MESSAGE = `Entre 0 y ${HIDE_FROM_APP_MAX_DAYS} días`;
 const configSchema = z.object({
   tier:                z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:              z.string().min(1),
+  // Cómo se juega cada partido: se manda en todas las categorías
+  scoringFormat:       z.custom<ScoringFormat>(isScoringFormat, "Elige el formato de partido"),
   scoringSystem:       z.string().min(1),
   matchDuration:       z.number().int().min(10).max(180),
   registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
@@ -293,6 +296,7 @@ export default function NuevoTorneoPage() {
       scoringSystem: "AMT+ELO+SPA",
       timezone: tournamentTimeZone(null),
       format:                  DEFAULT_TOURNAMENT_DEFAULTS.format,
+      scoringFormat:           DEFAULT_TOURNAMENT_DEFAULTS.scoringFormat,
       matchDuration:           DEFAULT_TOURNAMENT_DEFAULTS.matchDuration,
       hasShirts:               DEFAULT_TOURNAMENT_DEFAULTS.hasShirts,
       useSeeding:              DEFAULT_TOURNAMENT_DEFAULTS.useSeeding,
@@ -384,7 +388,7 @@ export default function NuevoTorneoPage() {
       keep(keys);
     } else if (step === 3) {
       const keys = [
-        "format", "matchDuration", "hasShirts", "useSeeding", "requirePaymentToConfirm",
+        "format", "scoringFormat", "matchDuration", "hasShirts", "useSeeding", "requirePaymentToConfirm",
         "participantsVisibility", "showClubInsteadOfCourt", "hideFromAppAfterDays", "timezone",
       ] as const;
       const changes = untouchedChanges(configForm.getValues(), was, next, keys);
@@ -441,6 +445,8 @@ export default function NuevoTorneoPage() {
         level:           c.level  as CategoryLevel,
         totalSpots:      c.totalSpots,
         price:           c.price,
+        // El del paso 3, para todas las categorías (cada una se puede cambiar después en la ficha)
+        scoringFormat:   configData!.scoringFormat,
         prizeChampion:   c.prizeChampion   || undefined,
         prizeRunnerUp:   c.prizeRunnerUp   || undefined,
         prizeConsolation:c.hasConsolation ? (c.prizeConsolation || undefined) : undefined,
@@ -841,6 +847,17 @@ export default function NuevoTorneoPage() {
                     />
                   </Field>
                 </div>
+                <Field label="Formato de partido" error={configForm.formState.errors.scoringFormat?.message}>
+                  <CustomSelect
+                    options={SCORING_FORMAT_OPTIONS}
+                    value={configForm.watch("scoringFormat")}
+                    onChange={(v) => configForm.setValue("scoringFormat", v as ScoringFormat, { shouldValidate: true })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {typicalDurationText(configForm.watch("scoringFormat"))}. La «Duración por partido» de más abajo no cambia sola: ajústala tú si hace falta.
+                    Vale para todas las categorías; luego se puede cambiar en cada una, o en cada fase, desde la ficha del torneo.
+                  </p>
+                </Field>
                 <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
                   <input
                     type="checkbox"
@@ -1162,6 +1179,7 @@ export default function NuevoTorneoPage() {
                   {[
                     ["Tier",         TIER_LABEL[configData.tier] ?? configData.tier],
                     ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
+                    ["Formato de partido", scoringFormatLabel(configData.scoringFormat)],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Duración part.", `${configData.matchDuration} mins`],
                     ["Cierre insc.", configData.registrationDeadline

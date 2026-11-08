@@ -55,13 +55,14 @@ import { isUnpaidPair } from "@/lib/utils/registration-amounts";
 import { needsForce } from "@/lib/utils/registration-force";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
 import { CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
+import { DEFAULT_SCORING_FORMAT, SCORING_FORMAT_OPTIONS, scoringFormatLabel } from "@/lib/scoring-format";
 import {
   CATEGORY_LABEL_SHORT, LEVELS,
   REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel, registrationStatusLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryGender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryGender, CategoryLevel, AuditLogEntry, Tournament, ScoringFormat } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import {
   formatDayKey,
@@ -1530,9 +1531,9 @@ export default function TorneoDetailPage() {
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
-  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ totalSpots: 0, price: 0, scoringFormat: "BEST_OF_3" });
+  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: ScoringFormat }>({ totalSpots: 0, price: 0, scoringFormat: DEFAULT_SCORING_FORMAT });
   const [addCatOpen,          setAddCatOpen]           = useState(false);
-  const [addCatForm,          setAddCatForm]           = useState<{ gender: CategoryGender; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
+  const [addCatForm,          setAddCatForm]           = useState<{ gender: CategoryGender; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: ScoringFormat }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: DEFAULT_SCORING_FORMAT });
   const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
   // Borrar una categoría con inscripciones o partidos: lo que dice el back que se borra con ella
   const [cascadeCat,          setCascadeCat]           = useState<{ catId: string; message: string } | null>(null);
@@ -2057,7 +2058,7 @@ export default function TorneoDetailPage() {
   });
 
   const updateCatMut = useMutation({
-    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number; scoringFormat?: string; force?: boolean } }) =>
+    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number; scoringFormat?: ScoringFormat; force?: boolean } }) =>
       adminService.categories.update(id, catId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -2085,7 +2086,7 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Categoría añadida");
       setAddCatOpen(false);
-      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
+      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: DEFAULT_SCORING_FORMAT });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2475,11 +2476,10 @@ export default function TorneoDetailPage() {
                     <select
                       title="Formato de puntuación base"
                       value={addCatForm.scoringFormat}
-                      onChange={(e) => setAddCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, scoringFormat: e.target.value as ScoringFormat }))}
                       className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                     >
-                      <option value="BEST_OF_3">3 sets</option>
-                      <option value="BEST_OF_2_SUPERTB">2 sets + super-TB</option>
+                      {SCORING_FORMAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <input
                       type="number" min={1} step={1} placeholder="Plazas"
@@ -2559,11 +2559,10 @@ export default function TorneoDetailPage() {
                               <select
                                 title="Formato base"
                                 value={editCatForm.scoringFormat}
-                                onChange={(e) => setEditCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                                onChange={(e) => setEditCatForm((f) => ({ ...f, scoringFormat: e.target.value as ScoringFormat }))}
                                 className="h-7 px-1 rounded bg-secondary border border-border text-[11px] text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                               >
-                                <option value="BEST_OF_3">3 sets</option>
-                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                                {SCORING_FORMAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                               </select>
                             </div>
                           ) : <span className="text-muted-foreground">{cat.price ?? 0}€</span>}
@@ -2614,7 +2613,7 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => {
                                     setEditCatId(cat.id);
-                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0, scoringFormat: (cat.scoringFormat as "BEST_OF_3" | "BEST_OF_2_SUPERTB") ?? "BEST_OF_3" });
+                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0, scoringFormat: cat.scoringFormat ?? DEFAULT_SCORING_FORMAT });
                                   }}
                                   className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                                   title="Editar plazas y precio"
@@ -3574,11 +3573,7 @@ export default function TorneoDetailPage() {
                   { key: "FINAL",       label: "Final"         },
                   { key: "CONSOLATION", label: "Consolación"   },
                 ] as const;
-                const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
-                const FORMAT_LABEL: Record<string, string> = {
-                  BEST_OF_3:        "3 sets",
-                  BEST_OF_2_SUPERTB:"2 sets + STB",
-                };
+                const baseFormat = cat.scoringFormat ?? DEFAULT_SCORING_FORMAT;
                 return (
                   <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 sm:px-5 border-b border-border">
@@ -3761,7 +3756,7 @@ export default function TorneoDetailPage() {
                     {roundFmtOpen && (
                       <div className="border-b border-border bg-secondary/20 px-5 py-4 space-y-3">
                         <p className="text-xs text-muted-foreground">
-                          Formato base de la categoría: <span className="text-foreground font-medium">{FORMAT_LABEL[baseFormat] ?? baseFormat}</span>. Configura un formato diferente por fase si lo necesitas.
+                          Formato base de la categoría: <span className="text-foreground font-medium">{scoringFormatLabel(baseFormat)}</span>. Configura un formato diferente por fase si lo necesitas.
                         </p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           {ROUND_PHASES.map(({ key, label }) => (
@@ -3777,9 +3772,8 @@ export default function TorneoDetailPage() {
                                 })}
                                 className="h-8 rounded-md border border-border bg-background text-foreground text-xs px-2 focus:outline-none focus:ring-1 focus:ring-purple-400"
                               >
-                                <option value="">Auto ({FORMAT_LABEL[baseFormat] ?? baseFormat})</option>
-                                <option value="BEST_OF_3">3 sets</option>
-                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                                <option value="">Auto ({scoringFormatLabel(baseFormat)})</option>
+                                {SCORING_FORMAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                               </select>
                             </div>
                           ))}

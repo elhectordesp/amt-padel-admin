@@ -22,6 +22,7 @@ const getConfig = vi.fn(async (clubId: string) => ({
   clubId,
   format: "eliminatoria",
   matchDuration: 60,
+  scoringFormat: "BEST_OF_3",
   hasShirts: false,
   useSeeding: false,
   requirePaymentToConfirm: false,
