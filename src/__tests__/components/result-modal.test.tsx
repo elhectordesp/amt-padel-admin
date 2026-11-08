@@ -215,6 +215,113 @@ describe('ResultModal', () => {
     expect(screen.getByRole('button', { name: /guardar corrección/i })).toBeInTheDocument();
   });
 
+  // ── B5-2 — Formatos cortos ─────────────────────────────────────────────
+
+  describe('Formatos de partido (B5-2)', () => {
+    const save = () => fireEvent.click(screen.getByRole('button', { name: /guardar resultado/i }));
+
+    it('3 sets y 2 sets + súper tie-break: tres casillas y el marcador válido a la vista', () => {
+      render(<ResultModal {...baseProps()} />);
+      expect(screen.getAllByRole('spinbutton')).toHaveLength(6);
+      expect(screen.getByText('3 sets')).toBeInTheDocument();
+      expect(screen.getByText(/Marcador válido: 3 sets: cada set 6-0 a 6-4, 7-5 o 7-6/)).toBeInTheDocument();
+    });
+
+    it('un partido sin formato conocido se trata como a 3 sets', () => {
+      render(<ResultModal {...baseProps({ match: makeMatch({ scoringFormat: undefined }) })} />);
+      expect(screen.getAllByRole('spinbutton')).toHaveLength(6);
+    });
+
+    it('a 3 sets, dos sets repartidos no cierran el partido', () => {
+      const onSave = vi.fn();
+      render(<ResultModal {...baseProps({ onSave })} />);
+      fillSet(0, '6', '3');
+      fillSet(1, '3', '6');
+      save();
+      expect(screen.getByText('Partido incompleto: el ganador debe ganar 2 sets')).toBeInTheDocument();
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('1 set (tie-break a 6-6): una casilla, se guarda con un set y 6-5 se rechaza', () => {
+      const onSave = vi.fn();
+      const match  = makeMatch({ scoringFormat: 'ONE_SET' });
+      render(<ResultModal {...baseProps({ match, onSave })} />);
+      expect(screen.getAllByRole('spinbutton')).toHaveLength(2);
+      expect(screen.getByText('1 set (tie-break a 6-6)')).toBeInTheDocument();
+      expect(screen.getByText(/Marcador válido: 1 set: 6-0 a 6-4, 7-5 o 7-6/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /guardar resultado/i })).toBeDisabled();
+
+      fillSet(0, '6', '5');
+      expect(screen.getByRole('button', { name: /guardar resultado/i })).not.toBeDisabled();
+      save();
+      expect(screen.getByText('Set 1: resultado inválido (6-5). Esperado: 6-0 a 6-4, 7-5 o 7-6')).toBeInTheDocument();
+      expect(onSave).not.toHaveBeenCalled();
+
+      fillSet(0, '7', '6');
+      save();
+      expect(onSave).toHaveBeenCalledWith([7], [6]);
+    });
+
+    it('1 set (juego decisivo a 5-5): 6-5 vale y 7-5 no', () => {
+      const onSave = vi.fn();
+      const match  = makeMatch({ scoringFormat: 'ONE_SET_GOLDEN_GAME' });
+      render(<ResultModal {...baseProps({ match, onSave })} />);
+      expect(screen.getByText(/Marcador válido: 1 set: 6-0 a 6-4 o 6-5/)).toBeInTheDocument();
+      fillSet(0, '7', '5');
+      save();
+      expect(screen.getByText('Set 1: resultado inválido (7-5). Esperado: 6-0 a 6-4 o 6-5')).toBeInTheDocument();
+      expect(onSave).not.toHaveBeenCalled();
+
+      fillSet(0, '5', '6');
+      save();
+      expect(onSave).toHaveBeenCalledWith([5], [6]);
+    });
+
+    it('a 9 juegos: 9-8 vale y 10-8 se rechaza con el marcador esperado', () => {
+      const onSave = vi.fn();
+      const match  = makeMatch({ scoringFormat: 'PRO_SET_9' });
+      render(<ResultModal {...baseProps({ match, onSave })} />);
+      expect(screen.getAllByRole('spinbutton')).toHaveLength(2);
+      expect(screen.getByText(/Marcador válido: a 9 juegos: 9-0 a 9-8/)).toBeInTheDocument();
+      fillSet(0, '10', '8');
+      save();
+      expect(screen.getByText('Set 1: resultado inválido (10-8). Esperado: 9-0 a 9-8')).toBeInTheDocument();
+      expect(onSave).not.toHaveBeenCalled();
+
+      fillSet(0, '9', '8');
+      save();
+      expect(onSave).toHaveBeenCalledWith([9], [8]);
+    });
+
+    it('2 sets (tie-break a 5-5) + súper tie-break: tres casillas, sets a 6-5 y súper tie-break como 3.º', () => {
+      const onSave = vi.fn();
+      const match  = makeMatch({ scoringFormat: 'SHORT_SETS_SUPERTB' });
+      render(<ResultModal {...baseProps({ match, onSave })} />);
+      expect(screen.getAllByRole('spinbutton')).toHaveLength(6);
+      expect(screen.getByText('supertb')).toBeInTheDocument();
+
+      fillSet(0, '7', '5');
+      fillSet(1, '6', '4');
+      save();
+      expect(screen.getByText('Set 1: resultado inválido (7-5). Esperado: 6-0 a 6-4 o 6-5')).toBeInTheDocument();
+
+      fillSet(0, '6', '5');
+      fillSet(1, '5', '6');
+      fillSet(2, '10', '8');
+      save();
+      expect(onSave).toHaveBeenCalledWith([6, 5, 10], [5, 6, 8]);
+    });
+
+    it('en una corrección de un set, la casilla sale con el marcador guardado', () => {
+      const match = makeMatch({ scoringFormat: 'PRO_SET_9', sets1: [9], sets2: [7] });
+      render(<ResultModal {...baseProps({ match, isCorrection: true })} />);
+      const inputs = screen.getAllByRole('spinbutton');
+      expect(inputs).toHaveLength(2);
+      expect(inputs[0]).toHaveValue(9);
+      expect(inputs[1]).toHaveValue(7);
+    });
+  });
+
   // ── A2 — Walkover ─────────────────────────────────────────────────────
 
   describe('Walkover (A2)', () => {

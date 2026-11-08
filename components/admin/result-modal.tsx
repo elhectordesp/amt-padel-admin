@@ -3,6 +3,16 @@
 import { useState } from "react";
 import { Loader2, X, AlertTriangle } from "lucide-react";
 import { phaseLabel } from "@/lib/constants";
+import {
+  DEFAULT_SCORING_FORMAT,
+  SET_KIND,
+  isScoringFormat,
+  minSets,
+  scoreHint,
+  scoringFormatLabel,
+  setKinds,
+} from "@/lib/scoring-format";
+import { matchScoreIssue } from "@/lib/utils/match-score";
 import type { MatchResult } from "@/types";
 
 type ResultMode = "score" | "walkover";
@@ -34,32 +44,24 @@ export function ResultModal({
     initialMode === "walkover" ? (initialWalkoverWinner ?? 1) : null,
   );
 
-  const initialSets: { a: string; b: string }[] = isCorrection && match.sets1 && match.sets2
-    ? [
-        { a: String(match.sets1[0] ?? ""), b: String(match.sets2[0] ?? "") },
-        { a: String(match.sets1[1] ?? ""), b: String(match.sets2[1] ?? "") },
-        { a: String(match.sets1[2] ?? ""), b: String(match.sets2[2] ?? "") },
-      ]
-    : [{ a: "", b: "" }, { a: "", b: "" }, { a: "", b: "" }];
+  // Las casillas de set que tiene el formato de este partido (el de su fase,
+  // si la categoría la juega distinta): 1 en los de un set, 3 en los demás
+  const format = isScoringFormat(match.scoringFormat) ? match.scoringFormat : DEFAULT_SCORING_FORMAT;
+  const kinds  = setKinds(format);
+
+  const initialSets: { a: string; b: string }[] = kinds.map((_, i) =>
+    isCorrection && match.sets1 && match.sets2
+      ? { a: String(match.sets1[i] ?? ""), b: String(match.sets2[i] ?? "") }
+      : { a: "", b: "" },
+  );
 
   const [sets, setSets] = useState<{ a: string; b: string }[]>(initialSets);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const validSets = sets.filter((s) => s.a !== "" && s.b !== "");
-  const canSaveScore = validSets.length >= 2;
+  const canSaveScore = validSets.length >= minSets(format);
   const canSaveWalkover = walkoverWinner === 1 || walkoverWinner === 2;
   const canSave = mode === "score" ? canSaveScore : canSaveWalkover;
-
-  function isValidNormalSet(a: number, b: number) {
-    const max = Math.max(a, b), min = Math.min(a, b);
-    return (max === 6 && min <= 4) || (max === 7 && min === 5) || (max === 7 && min === 6);
-  }
-  // La misma regla que el back: se acaba en cuanto alguien llega a 10 con 2
-  // de diferencia (10-8 o menos) o, desde 9-9, al sacar 2 (11-9, 12-10…)
-  function isValidSuperTiebreak(a: number, b: number) {
-    const max = Math.max(a, b), min = Math.min(a, b);
-    return (max === 10 && min <= 8) || (max > 10 && max - min === 2);
-  }
 
   const handleSave = () => {
     setValidationError(null);
@@ -72,21 +74,11 @@ export function ResultModal({
       onSave([], [], { walkover: true, walkoverWinnerTeam: walkoverWinner! });
       return;
     }
-    for (let i = 0; i < validSets.length; i++) {
-      const a = Number(validSets[i].a), b = Number(validSets[i].b);
-      const setNum = i + 1;
-      if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
-        setValidationError(`Set ${setNum}: los valores deben ser números enteros no negativos`);
-        return;
-      }
-      if (a === b) { setValidationError(`Set ${setNum}: no puede haber empate`); return; }
-      const isSuperTb = match.scoringFormat === "BEST_OF_2_SUPERTB" && setNum === 3;
-      const valid = isSuperTb ? isValidSuperTiebreak(a, b) : isValidNormalSet(a, b);
-      if (!valid) {
-        const hint = isSuperTb ? "supertiebreak: primero a 10 con dif. de 2 (ej: 10-8, 11-9)" : "set normal: 6-x, 7-5 o 7-6";
-        setValidationError(`Set ${setNum}: resultado inválido (${a}-${b}). Formato: ${hint}`);
-        return;
-      }
+    // Lo mismo que valida el back al guardar, con el marcador esperado del formato
+    const issue = matchScoreIssue(validSets.map((s) => ({ a: Number(s.a), b: Number(s.b) })), format);
+    if (issue) {
+      setValidationError(issue);
+      return;
     }
     onSave(validSets.map((s) => Number(s.a)), validSets.map((s) => Number(s.b)));
   };
@@ -145,14 +137,21 @@ export function ResultModal({
 
         {mode === "score" && (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sets</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{kinds.length === 1 ? "Set" : "Sets"}</p>
+            {/* Cómo se juega este partido y qué marcador vale: es lo que comprueba antes de guardar */}
+            <p className="text-xs text-muted-foreground">
+              Formato: <span className="text-foreground">{scoringFormatLabel(format)}</span>
+              <br />
+              Marcador válido: {scoreHint(format)}
+            </p>
             {sets.map((set, i) => {
-              const isSuperTb = match.scoringFormat === "BEST_OF_2_SUPERTB" && i === 2;
+              const isSuperTb = kinds[i] === "superTb";
+              const maxGames  = SET_KIND[kinds[i]].maxGames;
               return (
                 <div key={i} className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground w-12">Set {i + 1}</span>
                   <input
-                    type="number" min={0} max={isSuperTb ? 99 : 7}
+                    type="number" min={0} max={maxGames}
                     value={set.a}
                     onChange={(e) => { setValidationError(null); setSets((prev) => prev.map((s, idx) => idx === i ? { ...s, a: e.target.value } : s)); }}
                     placeholder="0"
@@ -161,7 +160,7 @@ export function ResultModal({
                   />
                   <span className="text-muted-foreground">–</span>
                   <input
-                    type="number" min={0} max={isSuperTb ? 99 : 7}
+                    type="number" min={0} max={maxGames}
                     value={set.b}
                     onChange={(e) => { setValidationError(null); setSets((prev) => prev.map((s, idx) => idx === i ? { ...s, b: e.target.value } : s)); }}
                     placeholder="0"
