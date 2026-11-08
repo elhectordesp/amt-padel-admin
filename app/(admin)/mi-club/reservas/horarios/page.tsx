@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
-import { zonedDayKey } from "@/lib/utils/time-zone";
+import { dateOnlyKey, formatDayKey, zonedDayKey } from "@/lib/utils/time-zone";
 import type {
   ClubOperatingHours,
   ClubScheduleException,
@@ -453,9 +453,11 @@ function ExceptionRow({
   exc: ClubScheduleException;
   onRemove: () => void;
 }) {
+  // Una fecha de calendario, sin zona: en la del navegador, al oeste de UTC
+  // salía el día anterior
   const dateStr = useMemo(
     () =>
-      new Date(exc.date).toLocaleDateString("es-ES", {
+      formatDayKey(dateOnlyKey(exc.date), {
         weekday: "short",
         day: "numeric",
         month: "short",
