@@ -21,13 +21,13 @@ import {
   teamNames,
   type ScoreDraft,
 } from "@/lib/utils/booking-result";
-import { DEFAULT_TIME_ZONE, formatInTimeZone } from "@/lib/utils/time-zone";
+import { formatInTimeZone } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
 
-const when = (iso: string) =>
-  formatInTimeZone(iso, DEFAULT_TIME_ZONE, { dateStyle: "short", timeStyle: "short" });
-
-export function BookingResultPanel({ booking: b }: { booking: Booking }) {
+/** `timeZone`: la del club (`Club.timezone`), en la que se enseñan los plazos. */
+export function BookingResultPanel({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
+  const when = (iso: string) =>
+    formatInTimeZone(iso, timeZone, { dateStyle: "short", timeStyle: "short" });
   const qc = useQueryClient();
   const [draft, setDraft] = useState<ScoreDraft | null>(null);
   const result = b.result ?? null;

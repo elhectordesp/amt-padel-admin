@@ -11,14 +11,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck, CheckCircle2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
-import { formatInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/utils/time-zone";
+import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 import type { Club } from "@/types";
 
 export function ClubBookingsActivationModal({
   club,
   onClose,
 }: {
-  club: Pick<Club, "id" | "name">;
+  /** Con su zona: las fechas de sus reservas van en ella, no en la de AMT. */
+  club: Pick<Club, "id" | "name" | "timezone">;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -100,7 +101,7 @@ export function ClubBookingsActivationModal({
           <p className="text-sm text-muted-foreground">
             Abierto al público
             {state.bookingPublicAt
-              ? ` desde el ${formatInTimeZone(state.bookingPublicAt, DEFAULT_TIME_ZONE, { dateStyle: "short" })}`
+              ? ` desde el ${formatInTimeZone(state.bookingPublicAt, tournamentTimeZone(club), { dateStyle: "short" })}`
               : ""}
             .
           </p>

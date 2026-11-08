@@ -16,16 +16,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
+import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
 import { bookingCapacity, cancellationNoticeCount } from "@/lib/utils/booking-participants";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
-  DEFAULT_TIME_ZONE,
   capitalizeFirst,
   formatInTimeZone,
   zonedTime,
@@ -63,6 +64,10 @@ const MODE_LABELS: Record<BookingMatchMode, string> = {
 
 const BACK_TO_LIST = { href: "/mi-club/reservas/bookings", label: "Volver al listado" };
 
+// Como toLocaleDateString y toLocaleString («27/10/2026», «27/10/2026, 9:05:00»), en la zona del club
+const DATE: Intl.DateTimeFormatOptions = { day: "numeric", month: "numeric", year: "numeric" };
+const DATE_TIME: Intl.DateTimeFormatOptions = { ...DATE, hour: "numeric", minute: "2-digit", second: "2-digit" };
+
 const PARTICIPANT_STATUS_LABELS: Record<BookingParticipantStatus, string> = {
   INVITED: "Invitado",
   ACCEPTED: "Confirmado",
@@ -90,6 +95,7 @@ export default function BookingDetailPage({
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason] = useState("");
+  const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   const query = useQuery({
     queryKey: bookingsQK.bookingDetail(id),
@@ -148,6 +154,25 @@ export default function BookingDetailPage({
       </ReservasPage>
     );
   }
+  if (clubTimeZone.isError) {
+    return (
+      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+        <ErrorState
+          message="No se pudieron cargar los datos del club."
+          onRetry={() => void clubTimeZone.refetch()}
+        />
+      </ReservasPage>
+    );
+  }
+  // Sin la zona del club no se pinta ninguna fecha ni hora
+  const tz = clubTimeZone.timeZone;
+  if (!tz) {
+    return (
+      <div className="flex h-full items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
   if (query.isError || !query.data) {
     return (
       <ReservasPage title="Reserva" back={BACK_TO_LIST}>
@@ -159,11 +184,12 @@ export default function BookingDetailPage({
   }
 
   const b = query.data;
-  // En hora del club (Madrid, como el back y el calendario), no del navegador
-  const dateStr = capitalizeFirst(formatInTimeZone(b.startsAt, DEFAULT_TIME_ZONE, {
+  // En hora del club (su zona, como el back y el calendario), no del navegador
+  const dateStr = capitalizeFirst(formatInTimeZone(b.startsAt, tz, {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   }));
-  const timeStr = `${zonedTime(b.startsAt, DEFAULT_TIME_ZONE)} – ${zonedTime(b.endsAt, DEFAULT_TIME_ZONE)}`;
+  const timeStr = `${zonedTime(b.startsAt, tz)} – ${zonedTime(b.endsAt, tz)}`;
+  const at = (iso: string) => formatInTimeZone(iso, tz, DATE_TIME);
   const isOpen = b.matchMode === "OPEN";
   const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
   // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien
@@ -224,7 +250,7 @@ export default function BookingDetailPage({
           </span>
           {b.paidAt && (
             <span className="ml-2 text-xs text-green-500">
-              · pagada {new Date(b.paidAt).toLocaleDateString("es-ES")}
+              · pagada {formatInTimeZone(b.paidAt, tz, DATE)}
             </span>
           )}
         </Row>
@@ -274,7 +300,7 @@ export default function BookingDetailPage({
       {/* Resultado: desde que empieza el partido */}
       {(b.result || ["IN_PROGRESS", "COMPLETED", "WITHOUT_RESULT"].includes(b.status)) && (
         <Section title="Resultado">
-          <BookingResultPanel booking={b} />
+          <BookingResultPanel booking={b} timeZone={tz} />
         </Section>
       )}
 
@@ -289,7 +315,7 @@ export default function BookingDetailPage({
       {b.status === "CANCELLED" && (
         <Section title="Cancelación">
           <Row icon={Clock} label="Cancelada el">
-            {b.cancelledAt ? new Date(b.cancelledAt).toLocaleString("es-ES") : "—"}
+            {b.cancelledAt ? at(b.cancelledAt) : "—"}
           </Row>
           {b.cancellationReason && (
             <Row icon={FileText} label="Motivo">
@@ -303,7 +329,7 @@ export default function BookingDetailPage({
       {b.rulesAcceptedAt && (
         <Section title="Normas">
           <p className="text-sm text-muted-foreground">
-            Aceptadas el {new Date(b.rulesAcceptedAt).toLocaleString("es-ES")}
+            Aceptadas el {at(b.rulesAcceptedAt)}
             {b.rulesVersion && ` (versión ${b.rulesVersion})`}
           </p>
         </Section>
@@ -312,19 +338,19 @@ export default function BookingDetailPage({
       {/* Metadata */}
       <Section title="Metadata">
         <Row icon={Clock} label="Creada">
-          {new Date(b.createdAt).toLocaleString("es-ES")}
+          {at(b.createdAt)}
         </Row>
         <Row icon={Clock} label="Actualizada">
-          {new Date(b.updatedAt).toLocaleString("es-ES")}
+          {at(b.updatedAt)}
         </Row>
         {b.reminder24hSentAt && (
           <p className="ml-7 text-xs text-muted-foreground">
-            Recordatorio 24h enviado: {new Date(b.reminder24hSentAt).toLocaleString("es-ES")}
+            Recordatorio 24h enviado: {at(b.reminder24hSentAt)}
           </p>
         )}
         {b.reminder2hSentAt && (
           <p className="ml-7 text-xs text-muted-foreground">
-            Recordatorio 2h enviado: {new Date(b.reminder2hSentAt).toLocaleString("es-ES")}
+            Recordatorio 2h enviado: {at(b.reminder2hSentAt)}
           </p>
         )}
       </Section>

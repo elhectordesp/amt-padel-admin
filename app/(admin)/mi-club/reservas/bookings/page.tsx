@@ -2,31 +2,36 @@
  * /mi-club/reservas/bookings — listado de reservas + acciones admin.
  *
  * Tabs: Hoy / Próximas / Histórico / Todas. Filtros adicionales por estado.
+ * Búsqueda por el nombre o el email de quien juega (`q`, en el back) y
+ * paginación del servidor (`limit` + `offset`).
  * Cada reserva: hora, pista, jugadores, estado, pago, acciones (cancelar).
  */
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Calendar,
   Loader2,
   Plus,
+  Search,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorState } from "@/components/admin/error-state";
+import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
-  DEFAULT_TIME_ZONE,
   formatInTimeZone,
   zonedDayKey,
   zonedTime,
@@ -38,9 +43,6 @@ import type {
 } from "@/types/bookings";
 
 type Tab = "today" | "upcoming" | "history" | "all";
-
-// Las reservas van en hora de España: el back las calcula en Europe/Madrid
-const TZ = DEFAULT_TIME_ZONE;
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   PENDING_INVITES: "Esperando invitaciones",
@@ -66,14 +68,43 @@ export default function BookingsListPage() {
   const { role, clubId } = useRole();
   const [tab, setTab] = useState<Tab>("today");
   const [showCreate, setShowCreate] = useState(false);
+  const clubTimeZone = useClubTimeZone(clubId, isClub(role));
+  const timeZone = clubTimeZone.timeZone;
+  const { page, setPage, pageSize, setPageSize } = usePagination();
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
 
-  const filters = useMemo<BookingFiltersQuery>(() => {
-    if (!clubId) return {};
-    // «Hoy» es el día del club (Madrid, como el back y el calendario), no el
-    // del navegador
-    const todayKey = zonedDayKey(new Date(), TZ);
-    const today = dayRangeIso(todayKey, todayKey, TZ);
-    const base: BookingFiltersQuery = { clubId, limit: 50 };
+  // La búsqueda espera 300 ms sin teclear y vuelve a la primera página. Solo
+  // si cambia el texto: al abrir, o con un espacio de más, no se pierde la
+  // página en la que se está
+  useEffect(() => {
+    const next = searchInput.trim();
+    if (next === search) return;
+    const t = setTimeout(() => {
+      setSearch(next);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput, search, setPage]);
+
+  const changeTab = (next: Tab) => {
+    setTab(next);
+    setPage(1);
+  };
+
+  // null: aún sin la zona del club, no hay «hoy» con el que pedir
+  const filters = useMemo<BookingFiltersQuery | null>(() => {
+    if (!clubId || !timeZone) return null;
+    // «Hoy» es el día del club (su zona, como el back y el calendario), no
+    // el del navegador
+    const todayKey = zonedDayKey(new Date(), timeZone);
+    const today = dayRangeIso(todayKey, todayKey, timeZone);
+    const base: BookingFiltersQuery = {
+      clubId,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      q: search || undefined,
+    };
     if (tab === "today") {
       return { ...base, ...today, order: "asc" };
     }
@@ -85,13 +116,20 @@ export default function BookingsListPage() {
       return { ...base, toDate: today.fromDate };
     }
     return base;
-  }, [clubId, tab]);
+  }, [clubId, timeZone, tab, page, pageSize, search]);
 
   const query = useQuery({
-    queryKey: bookingsQK.bookingsList(filters),
-    queryFn: () => bookingsService.bookings.list(filters),
-    enabled: !!clubId && isClub(role),
+    queryKey: bookingsQK.bookingsList(filters ?? {}),
+    queryFn: () => bookingsService.bookings.list(filters!),
+    enabled: !!filters && isClub(role),
+    // Al pasar de página o buscar se sigue viendo lo anterior hasta que llega;
+    // al cambiar de pestaña no: serían las de otra pestaña con esta marcada
+    meta: { tab },
+    placeholderData: (prev, prevQuery) => (prevQuery?.meta?.tab === tab ? prev : undefined),
   });
+  // Si baja el total (p. ej. al cancelar la única de la última página), a la
+  // última página que haya
+  useKeepPageInRange(page, setPage, pageSize, query.isPlaceholderData ? undefined : query.data?.total);
 
   if (role === null) {
     return (
@@ -106,6 +144,21 @@ export default function BookingsListPage() {
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
+      </ReservasPage>
+    );
+  }
+  // Sin la zona del club no se pinta ninguna hora (ni el alta, que abre en «hoy»)
+  if (!timeZone) {
+    return (
+      <ReservasPage title="Reservas">
+        {clubTimeZone.isError ? (
+          <ErrorState
+            message="No se pudieron cargar los datos del club."
+            onRetry={() => void clubTimeZone.refetch()}
+          />
+        ) : (
+          <Loader2 className="mt-6 h-5 w-5 animate-spin text-muted-foreground" />
+        )}
       </ReservasPage>
     );
   }
@@ -130,52 +183,91 @@ export default function BookingsListPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         clubId={clubId}
+        timeZone={timeZone}
       />
 
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">
-          <TabButton active={tab === "today"} onClick={() => setTab("today")}>
+          <TabButton active={tab === "today"} onClick={() => changeTab("today")}>
             Hoy
           </TabButton>
           <TabButton
             active={tab === "upcoming"}
-            onClick={() => setTab("upcoming")}
+            onClick={() => changeTab("upcoming")}
           >
             Próximas
           </TabButton>
           <TabButton
             active={tab === "history"}
-            onClick={() => setTab("history")}
+            onClick={() => changeTab("history")}
           >
             Histórico
           </TabButton>
-          <TabButton active={tab === "all"} onClick={() => setTab("all")}>
+          <TabButton active={tab === "all"} onClick={() => changeTab("all")}>
             Todas
           </TabButton>
         </div>
 
-        <div className="mt-4 text-sm text-muted-foreground">
-          {query.isLoading
-            ? "Cargando…"
-            : `${items.length} de ${total} reservas`}
+        <div className="mt-4 flex w-full items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 sm:max-w-xs">
+          <Search size={14} className="shrink-0 text-muted-foreground" />
+          <input
+            type="search"
+            aria-label="Buscar reservas"
+            aria-describedby="bookings-search-help"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Buscar por nombre o email del jugador..."
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+          {query.isFetching && <Loader2 size={12} className="shrink-0 animate-spin text-muted-foreground" />}
         </div>
+        {/* El back no enseña a un club los emails de los jugadores: por trozos
+            podría adivinarlos, así que solo encaja el email entero */}
+        <p id="bookings-search-help" className="mt-1.5 text-xs text-muted-foreground">
+          Busca por el nombre o por el email completo de quien juega.
+        </p>
+
+        {!query.isError && (
+          <div className="mt-4 text-sm text-muted-foreground">
+            {query.isLoading ? "Cargando…" : `${total} reservas`}
+          </div>
+        )}
 
         <div className="mt-3 space-y-2">
-          {items.length === 0 && !query.isLoading ? (
+          {query.isError ? (
+            <ErrorState
+              message="No se pudieron cargar las reservas."
+              onRetry={() => void query.refetch()}
+            />
+          ) : items.length === 0 && !query.isLoading ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
               <Calendar className="mx-auto mb-2 h-6 w-6 opacity-50" />
-              Sin reservas en este filtro
+              {search ? "Ninguna reserva coincide con la búsqueda" : "Sin reservas en este filtro"}
             </div>
           ) : (
-            items.map((b) => <BookingRow key={b.id} booking={b} />)
+            items.map((b) => <BookingRow key={b.id} booking={b} timeZone={timeZone} />)
           )}
         </div>
+
+        {!query.isLoading && !query.isError && (
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="reservas"
+              busy={query.isFetching}
+            />
+          </div>
+        )}
       </div>
     </ReservasPage>
   );
 }
 
-function BookingRow({ booking: b }: { booking: Booking }) {
+function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason] = useState("");
@@ -197,8 +289,8 @@ function BookingRow({ booking: b }: { booking: Booking }) {
   });
 
   // En hora del club, como el detalle y el calendario
-  const timeStr = `${zonedTime(b.startsAt, TZ)} - ${zonedTime(b.endsAt, TZ)}`;
-  const dateStr = formatInTimeZone(b.startsAt, TZ, {
+  const timeStr = `${zonedTime(b.startsAt, timeZone)} - ${zonedTime(b.endsAt, timeZone)}`;
+  const dateStr = formatInTimeZone(b.startsAt, timeZone, {
     weekday: "short",
     day: "numeric",
     month: "short",

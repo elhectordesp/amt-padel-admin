@@ -23,11 +23,13 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
+import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 
 export default function MiClubReservasPage() {
   const router = useRouter();
@@ -96,11 +98,21 @@ export default function MiClubReservasPage() {
 
       {/* Estado de activación */}
       <div className="mt-6">
-        <ActivationBanner
-          loading={activationQuery.isLoading}
-          state={activation}
-          onAction={() => router.push("/mi-club/reservas/activacion")}
-        />
+        {/* La fecha de apertura va en la zona del club: se espera a saberla
+            (y si no llega, se dice, en vez de «Desde —») */}
+        {myClubQuery.isLoadingError ? (
+          <ErrorState
+            message="No se pudieron cargar los datos del club."
+            onRetry={() => void myClubQuery.refetch()}
+          />
+        ) : (
+          <ActivationBanner
+            loading={activationQuery.isLoading || myClubQuery.isLoading}
+            state={activation}
+            timeZone={myClubQuery.data ? tournamentTimeZone(myClubQuery.data) : null}
+            onAction={() => router.push("/mi-club/reservas/activacion")}
+          />
+        )}
       </div>
 
       {/* Grid de secciones de configuración */}
@@ -169,12 +181,15 @@ export default function MiClubReservasPage() {
 function ActivationBanner({
   loading,
   state,
+  timeZone,
   onAction,
 }: {
   loading: boolean;
   state:
     | { status: "INACTIVE" | "TESTER_MODE" | "PUBLIC"; activeTesterCount: number; bookingPublicAt: string | null }
     | undefined;
+  /** La del club; null si no llegó (la fecha no se pinta con otra). */
+  timeZone: string | null;
   onAction: () => void;
 }) {
   if (loading) {
@@ -235,7 +250,11 @@ function ActivationBanner({
           <p className="text-sm font-medium">Visible públicamente</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Cualquier usuario AMT en la zona puede ver tu club y reservar pistas.
-            Desde {state.bookingPublicAt ? new Date(state.bookingPublicAt).toLocaleDateString("es-ES") : "—"}.
+            Desde{" "}
+            {state.bookingPublicAt && timeZone
+              ? formatInTimeZone(state.bookingPublicAt, timeZone, { day: "numeric", month: "numeric", year: "numeric" })
+              : "—"}
+            .
           </p>
         </div>
       </div>

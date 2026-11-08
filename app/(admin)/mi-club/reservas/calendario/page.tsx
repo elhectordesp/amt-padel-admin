@@ -8,8 +8,8 @@
  *    `?franja=`) y tiene un modo mostrador a pantalla completa para tablet.
  *  - SEMANA: rejilla pistas × días (resumen). Click en reserva → detalle.
  *
- * Días y horas en la zona del club: las reservas van en hora de España
- * (Europe/Madrid, como el back), no en la del navegador.
+ * Días y horas en la zona del club (`Club.timezone`, como el back), no en la
+ * del navegador. Mientras no se sabe, el calendario carga.
  */
 
 "use client";
@@ -28,12 +28,14 @@ import {
   Minimize2,
   Plus,
 } from "lucide-react";
+import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog, type BookingCreateInitial } from "@/components/admin/booking-create-dialog";
 import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { cn } from "@/lib/utils";
 import {
@@ -46,7 +48,6 @@ import {
 } from "@/lib/utils/booking-day-grid";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import {
-  DEFAULT_TIME_ZONE,
   addDaysToKey,
   capitalizeFirst,
   formatDayKey,
@@ -58,8 +59,6 @@ import type { Booking } from "@/types/bookings";
 import type { Court } from "@/types";
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-// Las reservas van en hora de España: el back las calcula en Europe/Madrid
-const TZ = DEFAULT_TIME_ZONE;
 type View = "day" | "week";
 
 const CALENDAR_PATH = "/mi-club/reservas/calendario";
@@ -81,6 +80,7 @@ function calendarHref(period: DayPeriod): string {
 export default function CalendarioPage() {
   const { role, clubId } = useRole();
   const [view, setView] = useState<View>("day");
+  const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
@@ -122,13 +122,22 @@ export default function CalendarioPage() {
         </ViewTab>
       </div>
 
-      {/* Si fallan las pistas es un fallo de carga, no un club «sin pistas»;
+      {/* Sin la zona del club no hay «hoy» ni horas que pintar: se carga.
+          Si fallan las pistas es un fallo de carga, no un club «sin pistas»;
           si falla un refresco, se siguen usando las que llegaron, con un aviso */}
-      {view === "day" ? (
+      {clubTimeZone.isError ? (
+        <ErrorState
+          message="No se pudieron cargar los datos del club."
+          onRetry={() => void clubTimeZone.refetch()}
+        />
+      ) : !clubTimeZone.timeZone ? (
+        <Loader2 className="mt-4 h-5 w-5 animate-spin text-muted-foreground" />
+      ) : view === "day" ? (
         // La franja sale de la URL (useSearchParams): sin Suspense, el build no prerenderiza la página
         <Suspense fallback={<Loader2 className="mt-4 h-5 w-5 animate-spin text-muted-foreground" />}>
           <DayView
             clubId={clubId}
+            timeZone={clubTimeZone.timeZone}
             courts={courts}
             courtsLoading={courtsQuery.isLoading}
             courtsError={courtsQuery.isLoadingError}
@@ -138,6 +147,7 @@ export default function CalendarioPage() {
       ) : (
         <WeekView
           clubId={clubId}
+          timeZone={clubTimeZone.timeZone}
           courts={courts}
           courtsLoading={courtsQuery.isLoading}
           courtsError={courtsQuery.isLoadingError}
@@ -152,19 +162,21 @@ export default function CalendarioPage() {
 
 function DayView({
   clubId,
+  timeZone,
   courts,
   courtsLoading,
   courtsError,
   courtsRefreshError,
 }: {
   clubId: string;
+  timeZone: string;
   courts: Court[];
   courtsLoading: boolean;
   courtsError: boolean;
   courtsRefreshError: boolean;
 }) {
   const now = useNow(CLOCK_TICK_MS);
-  const todayKey = zonedDayKey(now, TZ);
+  const todayKey = zonedDayKey(now, timeZone);
   // null: hoy, y lo sigue siendo pasada la medianoche (la tablet de recepción se queda abierta)
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const dateStr = pickedDay ?? todayKey;
@@ -187,7 +199,7 @@ function DayView({
   const tapIcon = counter.on ? "size-11" : undefined;
   const tapText = counter.on ? "h-11 px-4" : undefined;
 
-  const range = useMemo(() => dayRangeIso(dateStr, dateStr, TZ), [dateStr]);
+  const range = useMemo(() => dayRangeIso(dateStr, dateStr, timeZone), [dateStr, timeZone]);
 
   const hoursQuery = useQuery({
     queryKey: bookingsQK.operatingHours(clubId),
@@ -349,7 +361,7 @@ function DayView({
         ) : (
           <ReservasDayGrid
             date={dateStr}
-            timeZone={TZ}
+            timeZone={timeZone}
             courts={courts}
             bookings={bookingsQuery.data ?? []}
             window={dayWindow}
@@ -357,7 +369,7 @@ function DayView({
               setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
             }
             period={period}
-            nowMinutes={isToday ? zonedMinutes(now, TZ) : null}
+            nowMinutes={isToday ? zonedMinutes(now, timeZone) : null}
             touch={counter.on}
           />
         )}
@@ -371,6 +383,7 @@ function DayView({
           open
           onClose={() => setCreateInitial(null)}
           clubId={clubId}
+          timeZone={timeZone}
           initial={createInitial}
         />
       )}
@@ -382,12 +395,14 @@ function DayView({
 
 function WeekView({
   clubId,
+  timeZone,
   courts,
   courtsLoading,
   courtsError,
   courtsRefreshError,
 }: {
   clubId: string;
+  timeZone: string;
   courts: Court[];
   courtsLoading: boolean;
   courtsError: boolean;
@@ -397,10 +412,10 @@ function WeekView({
 
   // Lunes a domingo de la semana, en días del club
   const weekKeys = useMemo(
-    () => weekDayKeys(zonedDayKey(new Date(), TZ), weekOffset),
-    [weekOffset],
+    () => weekDayKeys(zonedDayKey(new Date(), timeZone), weekOffset),
+    [weekOffset, timeZone],
   );
-  const range = useMemo(() => dayRangeIso(weekKeys[0], weekKeys[6], TZ), [weekKeys]);
+  const range = useMemo(() => dayRangeIso(weekKeys[0], weekKeys[6], timeZone), [weekKeys, timeZone]);
 
   const bookingsFilters = { clubId, ...range };
   const bookingsQuery = useQuery({
@@ -413,7 +428,7 @@ function WeekView({
   const liveCount = bookings.filter((b) => b.status !== "CANCELLED").length;
 
   // Pista → día → reservas, por hora de inicio
-  const grid = useMemo(() => bookingsByCourtAndDay(bookings, TZ), [bookings]);
+  const grid = useMemo(() => bookingsByCourtAndDay(bookings, timeZone), [bookings, timeZone]);
 
   return (
     <>
@@ -486,7 +501,7 @@ function WeekView({
                       <td key={key} className="border-t border-l border-border align-top p-1.5">
                         <div className="space-y-1">
                           {dayBookings.map((b) => (
-                            <WeekBookingBlock key={b.id} booking={b} />
+                            <WeekBookingBlock key={b.id} booking={b} timeZone={timeZone} />
                           ))}
                           {dayBookings.length === 0 && (
                             <span className="block py-1 text-xs text-muted-foreground/40">—</span>
@@ -640,7 +655,7 @@ function EmptyCourts() {
   );
 }
 
-function WeekBookingBlock({ booking: b }: { booking: Booking }) {
+function WeekBookingBlock({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
   const isOpen = b.matchMode === "OPEN";
   const isCancelled = b.status === "CANCELLED";
   const players = activeParticipants(b).length;
@@ -655,7 +670,7 @@ function WeekBookingBlock({ booking: b }: { booking: Booking }) {
       className={`block rounded px-2 py-1 text-xs transition-opacity hover:opacity-80 ${bg}`}
       title={`${b.shortCode} · ${b.matchMode} · ${b.status}`}
     >
-      <div className="font-medium">{zonedTime(b.startsAt, TZ)}</div>
+      <div className="font-medium">{zonedTime(b.startsAt, timeZone)}</div>
       <div className="truncate opacity-70">
         {isOpen ? `${players}/${bookingCapacity(b)}` : `${players} jug.`}{" "}
         · {b.shortCode}

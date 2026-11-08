@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
-import { DEFAULT_TIME_ZONE, zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
+import { zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
 import type { CreateBookingPayload } from "@/types/bookings";
 
@@ -43,17 +43,14 @@ interface Props {
   open: boolean;
   onClose: () => void;
   clubId: string;
+  /** La zona del club (`Club.timezone`): en ella van el día y las horas. */
+  timeZone: string;
   /** Se lee al montar: quien lo pase, que monte el diálogo al abrirlo. */
   initial?: BookingCreateInitial;
 }
 
 // Lo que pide el back para el rango de un partido abierto (enteros, mín. 40)
 const MIN_LSPA = 40;
-
-/** "YYYY-MM-DD" de hoy en el club (las reservas van en hora de España). */
-function todayISODate() {
-  return zonedDayKey(new Date(), DEFAULT_TIME_ZONE);
-}
 
 /**
  * Si la reserva ya ha empezado (el club apunta una ya jugada o en juego). El
@@ -80,11 +77,12 @@ export function lspaRangeError(min: string, max: string): string | null {
   return null;
 }
 
-export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
+export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }: Props) {
   const qc = useQueryClient();
 
   const [courtId, setCourtId] = useState(initial?.courtId ?? "");
-  const [date, setDate] = useState(initial?.date ?? todayISODate());
+  // Sin día elegido, hoy en el club
+  const [date, setDate] = useState(() => initial?.date ?? zonedDayKey(new Date(), timeZone));
   const [duration, setDuration] = useState(90);
   // La hora pedida (ISO UTC): la del hueco del calendario o la elegida aquí.
   // Se conserva al cambiar de pista o de duración; vale si es un hueco libre
@@ -167,7 +165,7 @@ export function BookingCreateDialog({ open, onClose, clubId, initial }: Props) {
     availabilityQuery.isSuccess && !availabilityQuery.isFetching && durations.includes(duration);
   const unavailableNotice =
     wantedStartsAt && !startsAt && slotsSettled
-      ? `A las ${zonedTime(wantedStartsAt, DEFAULT_TIME_ZONE)} no hay hueco de ${duration} min en ${
+      ? `A las ${zonedTime(wantedStartsAt, timeZone)} no hay hueco de ${duration} min en ${
           courts.find((c) => c.id === courtId)?.name ?? "esta pista"
         }.`
       : null;

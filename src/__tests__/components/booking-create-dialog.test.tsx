@@ -55,11 +55,14 @@ afterAll(() => {
   vi.useRealTimers();
 });
 
-function renderDialog(initial = { courtId: "p1", date: "2026-11-02", startsAt: SLOT }) {
+function renderDialog(
+  initial: { courtId?: string; date?: string; startsAt?: string } = { courtId: "p1", date: "2026-11-02", startsAt: SLOT },
+  timeZone = "Europe/Madrid",
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <BookingCreateDialog open onClose={vi.fn()} clubId="c1" initial={initial} />
+      <BookingCreateDialog open onClose={vi.fn()} clubId="c1" timeZone={timeZone} initial={initial} />
     </QueryClientProvider>,
   );
 }
@@ -249,5 +252,34 @@ describe("BookingCreateDialog", () => {
     expect(await screen.findByDisplayValue("18:00")).toHaveValue(SLOT);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Crear reserva" })).toBeEnabled());
+  });
+});
+
+describe("BookingCreateDialog — club en Canarias (B1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    courtsList.mockResolvedValue([{ id: "p1", name: "Pista 1", active: true, type: "DOUBLES" }]);
+    svc.courtDurations.list.mockResolvedValue([{ id: "d", courtId: "p1", minutes: 90, isDefault: true }]);
+    svc.availability.mockResolvedValue([]);
+  });
+
+  it("sin día elegido, abre en el día de hoy del club, no en el de Madrid", async () => {
+    // 23:30 en Canarias del 28; en Madrid ya es el 29
+    vi.setSystemTime(new Date("2026-10-28T23:30:00.000Z"));
+    try {
+      renderDialog({}, "Atlantic/Canary");
+      expect(await screen.findByDisplayValue("2026-10-28")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(svc.availability).toHaveBeenCalledWith({ clubId: "c1", date: "2026-10-28", duration: 90 }),
+      );
+    } finally {
+      vi.setSystemTime(new Date("2026-10-28T10:00:00.000Z"));
+    }
+  });
+
+  it("la hora que no cabe se dice en la hora del club", async () => {
+    // 17:00 UTC son las 17:00 en Canarias (las 18:00 en Madrid)
+    renderDialog({ courtId: "p1", date: "2026-11-02", startsAt: SLOT }, "Atlantic/Canary");
+    expect(await screen.findByRole("status")).toHaveTextContent("A las 17:00 no hay hueco de 90 min en Pista 1.");
   });
 });
