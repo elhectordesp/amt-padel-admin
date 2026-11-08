@@ -297,3 +297,114 @@ describe("InscripcionesPage — reactivar una cancelada que no encaja por géner
     expect(within(tableRow()).getByTitle("Mover a espera")).toBeEnabled();
   });
 });
+
+describe("InscripcionesPage — cobros para la mesa (B4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParams = new URLSearchParams("torneo=t1");
+  });
+
+  const row = (id: string, name: string, extra: Record<string, unknown>) => ({
+    id,
+    tournamentId: "t1",
+    categoryId:   "c-1",
+    userId:       `u-${id}`,
+    user:         { name },
+    partnerId:    null,
+    partner:      null,
+    category:     { gender: "F", level: "4a", price: 30 },
+    status:       "CONFIRMED",
+    paid:         false,
+    createdAt:    "2026-11-01T10:00:00.000Z",
+    ...extra,
+  });
+  const withPartner = (name: string, partnerPaid: boolean) => ({
+    partnerId: `u-${name}`, partner: { name, categoryLevel: "4a", spaPoints: null }, partnerPayment: { paid: partnerPaid },
+  });
+  const REGISTRATIONS = [
+    // Pagada entera: 30 de 30
+    row("ana", "Ana López", { paid: true, ...withPartner("Bea Ruiz", true) }),
+    // Falta el compañero: 15 de 30
+    row("carla", "Carla Gil", { status: "PENDING", paid: true, ...withPartner("Dora Sanz", false) }),
+    // Sin pareja y sin pagar, en otra categoría más barata: 0 de 20
+    row("elena", "Elena Pons", { status: "WAITLIST", categoryId: "c-2", category: { gender: "F", level: "3a", price: 20 } }),
+    // Cancelada: ni cuenta en «Sin pagar» ni en los totales
+    row("fani", "Fani Martín", { status: "CANCELLED", ...withPartner("Gema Vidal", false) }),
+    // Sin pareja y con el titular pagado: no le falta nadie por pagar (15 de 30)
+    row("ines", "Inés Mora", { paid: true }),
+  ];
+  const tableRowOf = (name: string) =>
+    screen.getAllByText(name).map((el) => el.closest("tr")).find((tr) => tr !== null) as HTMLElement;
+  const unpaidCard = () => screen.getByRole("button", { name: /Sin pagar/ });
+
+  it("«Sin pagar» cuenta y filtra las que tienen plaza (ni canceladas ni en espera) a las que les falta pagar a alguno de sus jugadores", async () => {
+    listRegistrations.mockResolvedValueOnce(REGISTRATIONS);
+    renderPage();
+    await screen.findAllByText("Ana López");
+
+    expect(within(unpaidCard()).getByText("1")).toBeInTheDocument();
+    fireEvent.click(unpaidCard());
+
+    await waitFor(() => expect(screen.queryByText("Ana López")).not.toBeInTheDocument());
+    expect(screen.getAllByText("Carla Gil").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Elena Pons")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fani Martín")).not.toBeInTheDocument();
+    expect(screen.queryByText("Inés Mora")).not.toBeInTheDocument();
+  });
+
+  it("cada pareja lleva lo pagado sobre su total y arriba van los cobros del torneo sin las canceladas ni las de la espera", async () => {
+    listRegistrations.mockResolvedValueOnce(REGISTRATIONS);
+    renderPage();
+    await screen.findAllByText("Ana López");
+
+    const amountOf = (name: string) => within(tableRowOf(name)).getByTitle("Pagado / total de la pareja");
+    expect(amountOf("Ana López")).toHaveTextContent("30,00 € / 30,00 €");
+    expect(amountOf("Carla Gil")).toHaveTextContent("15,00 € / 30,00 €");
+    expect(amountOf("Elena Pons")).toHaveTextContent("0,00 € / 20,00 €");
+    expect(amountOf("Inés Mora")).toHaveTextContent("15,00 € / 30,00 €");
+
+    const totals = screen.getByRole("group", { name: "Cobros del torneo" });
+    expect(totals).toHaveTextContent("Cobrado 60,00 €");
+    expect(totals).toHaveTextContent("Pendiente 30,00 €");
+    expect(totals).toHaveTextContent("Total 90,00 €");
+  });
+
+  it("confirmar una que no ha pagado en un torneo que lo exige: el 400 del back tal cual, sin «Forzar»", async () => {
+    const message = "El torneo exige el pago para confirmar. Falta por pagar: Dora Sanz.";
+    bulkStatus.mockRejectedValueOnce(new ApiError(message, 400, "PAYMENT_REQUIRED_TO_CONFIRM"));
+    listRegistrations.mockResolvedValueOnce(REGISTRATIONS);
+    renderPage();
+    await screen.findAllByText("Carla Gil");
+
+    fireEvent.click(within(tableRowOf("Carla Gil")).getByTitle("Confirmar"));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(message));
+    expect(bulkStatus).toHaveBeenCalledWith(["carla"], "CONFIRMED", undefined);
+    // El aforo se puede forzar; el pago no
+    expect(screen.queryByText("¿Forzar el cambio?")).not.toBeInTheDocument();
+    expect(bulkStatus).toHaveBeenCalledTimes(1);
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(invalidateRegistrations).not.toHaveBeenCalled();
+  });
+
+  it("en lote: el 400 nombra a quién falta, no se confirma ninguna y no ofrece «Forzar»", async () => {
+    const message = "El torneo exige el pago para confirmar. Falta por pagar: Dora Sanz; Elena Pons. No se ha confirmado ninguna.";
+    bulkStatus.mockRejectedValueOnce(new ApiError(message, 400, "PAYMENT_REQUIRED_TO_CONFIRM"));
+    listRegistrations.mockResolvedValueOnce(REGISTRATIONS);
+    renderPage();
+    await screen.findAllByText("Carla Gil");
+
+    fireEvent.click(within(tableRowOf("Carla Gil")).getByRole("checkbox"));
+    fireEvent.click(within(tableRowOf("Elena Pons")).getByRole("checkbox"));
+    // El «Confirmar» de la barra de las seleccionadas (los de las filas también se llaman así)
+    const bulkBar = screen.getByText("2 pareja(s) seleccionada(s)").closest("div")!.parentElement!;
+    fireEvent.click(within(bulkBar).getByRole("button", { name: "Confirmar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sí, confirmar" }));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(message));
+    expect(bulkStatus).toHaveBeenCalledWith(["carla", "elena"], "CONFIRMED", undefined);
+    expect(bulkStatus).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("¿Forzar el cambio?")).not.toBeInTheDocument();
+    expect(invalidateRegistrations).not.toHaveBeenCalled();
+  });
+});

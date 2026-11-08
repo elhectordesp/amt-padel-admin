@@ -4,7 +4,7 @@
  * tests corren en Europe/Madrid).
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -38,8 +38,10 @@ import NuevoTorneoPage from "../../../app/(admin)/torneos/nuevo/page";
 
 const input = (name: string) => document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
 // Cada paso valida y vuelve a pintar el asistente: con toda la suite a la
-// vez puede tardar más del segundo por defecto de findBy
-const WAIT = { timeout: 5000 };
+// vez y la máquina cargada puede tardar varios segundos
+const WAIT = { timeout: 15000 };
+// Cada test recorre el asistente entero: más margen que los 5 s por defecto
+vi.setConfig({ testTimeout: 60_000 });
 const next = () => fireEvent.click(screen.getByRole("button", { name: /Siguiente|Crear torneo/ }));
 
 describe("Crear torneo — zona del club y cierre en ella", () => {
@@ -179,5 +181,41 @@ describe("Crear torneo — tramos del paso 4 (P2-10)", () => {
     next();
     expect(await screen.findByRole("button", { name: /Crear torneo/ }, WAIT)).toBeInTheDocument();
     expect(screen.getByText("16:00-21:00, 10:00-13:00")).toBeInTheDocument();
+  }, 30_000);
+});
+
+describe("Crear torneo — exigir el pago para confirmar (B4)", () => {
+  it("sale apagado, con su línea de ayuda; activado, el resumen lo dice y se manda", async () => {
+    create.mockClear();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    fireEvent.change(input("name"), { target: { value: "Open con cobro" } });
+    fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
+    fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
+    next();
+    await screen.findByLabelText("Plazas", {}, WAIT);
+    next();
+    // Paso 3: el interruptor, apagado por defecto y con su ayuda
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    const toggle = screen.getByRole("checkbox", { name: /Exigir el pago para confirmar/ });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText(/Ninguna pareja pasa a confirmada hasta que se marque pagado/)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+    next();
+    // Paso 5: el resumen lo enseña
+    await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
+    expect(within(screen.getByText("Exigir el pago para confirmar").parentElement as HTMLElement).getByText("Sí")).toBeInTheDocument();
+    next();
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
+    expect(create.mock.calls[0][0]).toMatchObject({ requirePaymentToConfirm: true });
   }, 30_000);
 });

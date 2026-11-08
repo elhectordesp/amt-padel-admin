@@ -26,6 +26,7 @@ import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
+import { PaymentTotals } from "@/components/admin/payment-totals";
 import { ResultModal } from "@/components/admin/result-modal";
 import { BracketEditor, type PreviewGroup } from "@/components/admin/bracket-editor";
 import { GenerateBracketDialog } from "@/components/admin/generate-bracket-dialog";
@@ -50,6 +51,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { printRegistrations, printSchedule, printTournamentReport } from "@/lib/utils/print";
 import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status";
 import { groupByPair, pairsSummary, paymentCsvColumns, pendingInviteLabel, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
+import { isUnpaidPair } from "@/lib/utils/registration-amounts";
 import { needsForce } from "@/lib/utils/registration-force";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
 import { CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
@@ -1462,6 +1464,9 @@ function PistasTab({
 // ── Main page ──────────────────────────────────────────────────────────────
 
 type Tab = "resumen" | "inscripciones" | "cuadro" | "horarios" | "mas";
+// El filtro de Inscripciones: por estado o «Sin pagar» (UNPAID: las no
+// canceladas a las que les falta pagar a alguno de sus jugadores)
+type RegFilter = "all" | RegistrationStatus | "UNPAID";
 
 export default function TorneoDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -1473,7 +1478,7 @@ export default function TorneoDetailPage() {
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero" | "disponibilidad">("lista");
   const [masView,         setMasView]       = useState<"estado" | "mensajes" | "historial">("estado");
   const [showShare,       setShowShare]     = useState(false);
-  const [regFilter,       setRegFilter]     = useState<"all" | RegistrationStatus>("all");
+  const [regFilter,       setRegFilter]     = useState<RegFilter>("all");
   const [regCatFilter,    setRegCatFilter]  = useState<string>("all");
   const [regSearch,       setRegSearch]     = useState("");
   const [regPage,         setRegPage]       = useState(0);
@@ -2114,7 +2119,7 @@ export default function TorneoDetailPage() {
 
   const filteredPairs = useMemo(() =>
     pairs
-      .filter((p) => regFilter === "all" || p.status === regFilter)
+      .filter((p) => regFilter === "all" || (regFilter === "UNPAID" ? isUnpaidPair(p) : p.status === regFilter))
       .filter((p) => regCatFilter === "all" || p.primary.categoryId === regCatFilter)
       .filter((p) => {
         if (!regSearch.trim()) return true;
@@ -2132,6 +2137,7 @@ export default function TorneoDetailPage() {
     confirmed: pairs.filter((p) => p.status === "CONFIRMED").length,
     pending:   pairs.filter((p) => p.status === "PENDING").length,
     waitlist:  pairs.filter((p) => p.status === "WAITLIST").length,
+    unpaid:    pairs.filter(isUnpaidPair).length,
   }), [pairs]);
 
   const allPageSelected = pagedPairs.length > 0 && pagedPairs.every((p) => selectedKeys.has(p.pairKey));
@@ -2167,7 +2173,7 @@ export default function TorneoDetailPage() {
   };
 
   // Reset page when filter/search changes
-  const handleFilterChange = (f: "all" | RegistrationStatus) => {
+  const handleFilterChange = (f: RegFilter) => {
     setRegFilter(f);
     setRegPage(0);
     setSelectedKeys(new Set());
@@ -2772,12 +2778,15 @@ export default function TorneoDetailPage() {
           <div className="space-y-4">
             {/* Section header */}
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                {/* Como el resumen de arriba: las que ocupan plaza, y aparte
-                    las que esperan (contaba todas juntas y salían 18 frente
-                    a «17 (+1 en espera)») y las canceladas */}
-                {pairsSummary(pairs)}
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {/* Como el resumen de arriba: las que ocupan plaza, y aparte
+                      las que esperan (contaba todas juntas y salían 18 frente
+                      a «17 (+1 en espera)») y las canceladas */}
+                  {pairsSummary(pairs)}
+                </p>
+                <PaymentTotals pairs={pairs} />
+              </div>
               {(tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
                 <button
                   onClick={() => setEnrollOpen(true)}
@@ -2791,13 +2800,15 @@ export default function TorneoDetailPage() {
 
             {/* Filters + search */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 bg-secondary rounded-lg p-1">
+              {/* flex-wrap: con «Sin pagar» son cinco y en el móvil no caben en una línea */}
+              <div className="flex items-center flex-wrap gap-1.5 bg-secondary rounded-lg p-1">
                 {([
                   { key: "all",        label: `Todos (${regCounts.all})`            },
                   { key: "CONFIRMED",  label: `Confirmados (${regCounts.confirmed})` },
                   { key: "PENDING",    label: `Pendientes (${regCounts.pending})`    },
                   { key: "WAITLIST",   label: `En espera (${regCounts.waitlist})`    },
-                ] as { key: "all" | RegistrationStatus; label: string }[]).map((f) => (
+                  { key: "UNPAID",     label: `Sin pagar (${regCounts.unpaid})`      },
+                ] as { key: RegFilter; label: string }[]).map((f) => (
                   <button
                     key={f.key}
                     onClick={() => handleFilterChange(f.key)}

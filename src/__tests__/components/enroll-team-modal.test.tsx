@@ -230,3 +230,29 @@ describe("EnrollTeamModal — cuando cambian los géneros que admite", () => {
     expect(screen.queryByText(/no puede jugarla/)).not.toBeInTheDocument();
   });
 });
+
+describe("EnrollTeamModal — alta confirmada en un torneo que exige el pago (B4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    list.mockImplementation(async () => ({ data: [CARLA] }) as any);
+  });
+
+  it("sin el pago, el 400 PAYMENT_REQUIRED_TO_CONFIRM se enseña tal cual, no cierra y no se reintenta forzando", async () => {
+    const message = "El torneo exige el pago para confirmar. Falta por pagar: Carla Gil.";
+    vi.mocked(adminService.registrations.enroll).mockRejectedValue(new ApiError(message, 400, "PAYMENT_REQUIRED_TO_CONFIRM"));
+    const { onClose } = renderModal();
+
+    fireEvent.change(searchBoxes()[0], { target: { value: "Car" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Carla Gil/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Sin pareja/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmada" }));
+    fireEvent.click(screen.getByRole("button", { name: /Inscribir pareja/ }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    expect(adminService.registrations.enroll).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(adminService.registrations.enroll).mock.calls[0][1]).toMatchObject({
+      status: "CONFIRMED", paid: false, forceEnroll: undefined,
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

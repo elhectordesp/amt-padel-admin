@@ -69,6 +69,7 @@ const configSchema = z.object({
   timezone:            z.string().min(1),
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
+  requirePaymentToConfirm: z.boolean(),
 });
 
 const DAY_TYPE_OPTIONS = [
@@ -243,7 +244,7 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, timezone: tournamentTimeZone(null), hasShirts: false, useSeeding: false },
+    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, timezone: tournamentTimeZone(null), hasShirts: false, useSeeding: false, requirePaymentToConfirm: false },
   });
 
   // La zona del torneo empieza siendo la de su club (la elegida en el paso 1),
@@ -310,6 +311,7 @@ export default function NuevoTorneoPage() {
       timezone:    configData!.timezone,
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
+      requirePaymentToConfirm: configData!.requirePaymentToConfirm,
       categories: catData!.categories.map((c) => ({
         gender:          c.gender,
         level:           c.level  as CategoryLevel,
@@ -747,6 +749,17 @@ export default function NuevoTorneoPage() {
                     <p className="text-xs text-muted-foreground">Los jugadores deberán indicar su talla al inscribirse</p>
                   </div>
                 </label>
+                <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
+                  <input
+                    type="checkbox"
+                    {...configForm.register("requirePaymentToConfirm")}
+                    className="w-4 h-4 accent-[#D4AF37]"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Exigir el pago para confirmar</p>
+                    <p className="text-xs text-muted-foreground">Ninguna pareja pasa a confirmada hasta que se marque pagado a cada uno de sus jugadores (el cobro se apunta a mano en Inscripciones)</p>
+                  </div>
+                </label>
               </div>
             </div>
           )}
@@ -982,6 +995,7 @@ export default function NuevoTorneoPage() {
                     ["Zona horaria", timeZoneLabel(configData.timezone)],
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
+                    ["Exigir el pago para confirmar", configData.requirePaymentToConfirm ? "Sí" : "No"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>

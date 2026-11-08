@@ -54,6 +54,7 @@ const makeSchema = (original: { current: Original | null }) => z.object({
   maxUnavailableTotalHours:  z.number().min(0).optional(),
   hasShirts:                 z.boolean().optional(),
   useSeeding:                z.boolean().optional(),
+  requirePaymentToConfirm:   z.boolean().optional(),
   registrationDeadline:      z.string().optional(),
   timezone:                  z.string().min(1),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
@@ -169,6 +170,7 @@ export default function EditarTorneoPage() {
       maxUnavailableTotalHours:  tournament.maxUnavailableTotalHours ?? 0,
       hasShirts:                 tournament.hasShirts ?? false,
       useSeeding:                tournament.useSeeding ?? false,
+      requirePaymentToConfirm:   tournament.requirePaymentToConfirm ?? false,
       registrationDeadline:      regDeadline,
       timezone:                  tz,
       status:               tournament.status as FormData["status"],
@@ -482,6 +484,20 @@ export default function EditarTorneoPage() {
                   />
                   Usar cabezas de serie en el cuadro
                 </label>
+              </Field>
+              <Field label="Pago para confirmar">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer h-10">
+                  <input
+                    type="checkbox"
+                    checked={watch("requirePaymentToConfirm") ?? false}
+                    onChange={(e) => setValue("requirePaymentToConfirm", e.target.checked, { shouldDirty: true })}
+                    className="accent-[#D4AF37] h-4 w-4"
+                  />
+                  Exigir el pago para confirmar
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Ninguna pareja pasa a confirmada hasta que se marque pagado a cada uno de sus jugadores. Activarlo no cambia las ya confirmadas.
+                </p>
               </Field>
             </div>
           </div>
