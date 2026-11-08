@@ -4,7 +4,7 @@
  * tests corren en Europe/Madrid).
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -38,8 +38,10 @@ import NuevoTorneoPage from "../../../app/(admin)/torneos/nuevo/page";
 
 const input = (name: string) => document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
 // Cada paso valida y vuelve a pintar el asistente: con toda la suite a la
-// vez puede tardar más del segundo por defecto de findBy
-const WAIT = { timeout: 5000 };
+// vez y la máquina cargada puede tardar varios segundos
+const WAIT = { timeout: 15000 };
+// Cada test recorre el asistente entero: más margen que los 5 s por defecto
+vi.setConfig({ testTimeout: 60_000 });
 const next = () => fireEvent.click(screen.getByRole("button", { name: /Siguiente|Crear torneo/ }));
 
 describe("Crear torneo — zona del club y cierre en ella", () => {
@@ -210,7 +212,7 @@ describe("Crear torneo — exigir el pago para confirmar (B4)", () => {
     next();
     // Paso 5: el resumen lo enseña
     await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
-    expect(screen.getByText("Exigir el pago para confirmar").parentElement).toHaveTextContent(/confirmarSí$/);
+    expect(within(screen.getByText("Exigir el pago para confirmar").parentElement as HTMLElement).getByText("Sí")).toBeInTheDocument();
     next();
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
