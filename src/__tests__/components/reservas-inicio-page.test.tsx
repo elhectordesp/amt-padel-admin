@@ -1,11 +1,12 @@
 /**
  * Portada de Reservas del club (B1): la fecha de apertura al público va en
- * la zona del club, no en la del navegador; mientras no se sabe, no se pinta.
+ * la zona del club, no en la del navegador; mientras no se sabe, no se pinta,
+ * y si no llega, lo dice.
  *
  * El navegador está en Madrid (vitest.config) y el club, en Canarias.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -57,5 +58,18 @@ describe("Portada de Reservas — zona del club (B1)", () => {
     await waitFor(() => expect(svc.activation.state).toHaveBeenCalled());
     expect(screen.queryByText(/Visible públicamente/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\/10\/2026/)).not.toBeInTheDocument();
+  });
+
+  it("si no llegan los datos del club, lo dice (sin «Desde —») y se puede reintentar", async () => {
+    clubsMock.findOne
+      .mockRejectedValueOnce(new Error("500"))
+      .mockResolvedValue({ id: "c1", name: "Club Atlántico", timezone: "Atlantic/Canary" });
+    renderPage();
+    expect(await screen.findByText("No se pudieron cargar los datos del club.")).toBeInTheDocument();
+    expect(screen.queryByText(/Desde/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
+    expect(await screen.findByText(/Desde 1\/10\/2026\./)).toBeInTheDocument();
+    expect(screen.queryByText("No se pudieron cargar los datos del club.")).not.toBeInTheDocument();
   });
 });

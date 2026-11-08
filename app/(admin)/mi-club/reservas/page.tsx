@@ -23,6 +23,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
@@ -97,13 +98,21 @@ export default function MiClubReservasPage() {
 
       {/* Estado de activación */}
       <div className="mt-6">
-        {/* La fecha de apertura va en la zona del club: se espera a saberla */}
-        <ActivationBanner
-          loading={activationQuery.isLoading || myClubQuery.isLoading}
-          state={activation}
-          timeZone={myClubQuery.data ? tournamentTimeZone(myClubQuery.data) : null}
-          onAction={() => router.push("/mi-club/reservas/activacion")}
-        />
+        {/* La fecha de apertura va en la zona del club: se espera a saberla
+            (y si no llega, se dice, en vez de «Desde —») */}
+        {myClubQuery.isLoadingError ? (
+          <ErrorState
+            message="No se pudieron cargar los datos del club."
+            onRetry={() => void myClubQuery.refetch()}
+          />
+        ) : (
+          <ActivationBanner
+            loading={activationQuery.isLoading || myClubQuery.isLoading}
+            state={activation}
+            timeZone={myClubQuery.data ? tournamentTimeZone(myClubQuery.data) : null}
+            onAction={() => router.push("/mi-club/reservas/activacion")}
+          />
+        )}
       </div>
 
       {/* Grid de secciones de configuración */}
