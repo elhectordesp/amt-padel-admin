@@ -8,7 +8,8 @@ import type {
   CreatePlayerPayload, UpdatePlayerPayload, GenderConflict,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
-  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember, ClubAdmins,
+  AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins,
+  ClubTournamentConfig, UpdateClubTournamentConfigPayload,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
@@ -31,6 +32,9 @@ export const registrationsQK = {
   all:  ["registrations"] as const,
   list: (tournamentId: string) => ["registrations", tournamentId] as const,
 };
+
+/** Las opciones de torneo de un club: las edita Opciones de torneo y las lee el asistente. */
+export const clubTournamentConfigQK = (clubId: string) => ["club-tournament-config", clubId] as const;
 
 /**
  * Tras dar de alta, cambiar de estado o mover inscripciones: la lista y las
@@ -686,6 +690,15 @@ export const adminService = {
     },
   },
 
+  // Opciones de torneo del club: los valores de partida del asistente. Sin
+  // guardar, el GET da los de siempre; el PUT cambia solo lo que se manda
+  clubTournamentConfig: {
+    get:    (clubId: string) =>
+      api.get<ClubTournamentConfig>(`/admin/clubs/${clubId}/tournament-config`).then((r) => r.data),
+    update: (clubId: string, data: UpdateClubTournamentConfigPayload) =>
+      api.put<ClubTournamentConfig>(`/admin/clubs/${clubId}/tournament-config`, data).then((r) => r.data),
+  },
+
   tournamentCourts: {
     list: (tournamentId: string) =>
       api.get<TournamentCourt[]>(`/admin/tournaments/${tournamentId}/courts`).then((r) => r.data ?? []),
@@ -744,7 +757,6 @@ export const adminService = {
     updateSeason:     (data: Partial<AppConfigSeason>)                    => api.put("/admin/config/season", data).then((r) => r.data),
     updateEmail:      (data: Partial<AppConfigEmail>)                     => api.put("/admin/config/email", data).then((r) => r.data),
     updatePush:       (data: Partial<AppConfigPush>)                      => api.put("/admin/config/push", data).then((r) => r.data),
-    updateTournamentDefaults: (data: Partial<AppConfigTournamentDefaults>) => api.put("/admin/config/tournamentDefaults", data).then((r) => r.data),
     updateFaqs:       (data: AppConfigFaqs)                               => api.put("/admin/config/faqs", data).then((r) => r.data),
     closeSeason:      ()                                                  => api.post<{ previousSeason: number; newSeason: number }>("/admin/config/season/close").then((r) => r.data),
     advanceSeason:    ()                                                  => api.post<{ newSeason: number }>("/admin/config/season/advance").then((r) => r.data),

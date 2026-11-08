@@ -594,4 +594,21 @@ describe('adminService', () => {
       expect(mockDelete).toHaveBeenLastCalledWith('/admin/clubs/c1/invitations/inv-1');
     });
   });
+
+  describe('opciones de torneo del club (B5-1)', () => {
+    const mockPut = api.put as ReturnType<typeof vi.fn>;
+
+    it('leer: GET /admin/clubs/:id/tournament-config', async () => {
+      const config = { id: 'cfg-1', clubId: 'c1', format: 'eliminatoria' };
+      mockGet.mockResolvedValueOnce({ data: config });
+      await expect(adminService.clubTournamentConfig.get('c1')).resolves.toEqual(config);
+      expect(mockGet).toHaveBeenCalledWith('/admin/clubs/c1/tournament-config');
+    });
+
+    it('guardar: PUT con solo lo que se manda', async () => {
+      mockPut.mockResolvedValueOnce({ data: { id: 'cfg-1', clubId: 'c1', categorySpots: 16 } });
+      await adminService.clubTournamentConfig.update('c1', { categorySpots: 16 });
+      expect(mockPut).toHaveBeenCalledWith('/admin/clubs/c1/tournament-config', { categorySpots: 16 });
+    });
+  });
 });

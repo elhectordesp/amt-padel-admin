@@ -8,6 +8,9 @@ export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGO
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
 export type RankingType        = "spa" | "circuit";
+// Quién ve la lista de inscritos de un torneo: todos, solo los inscritos, o
+// nadie (salvo lo suyo) hasta el día de inicio
+export type ParticipantsVisibility = "PUBLIC" | "REGISTERED_ONLY" | "HIDDEN_UNTIL_START";
 // El de un ranking: el de una persona o, solo en el de circuito, el Mixto
 // (lib/ranking-gender.ts)
 export type RankingGender      = Gender | "MX";
@@ -155,7 +158,45 @@ export interface Tournament {
   elimMatchDuration?: number | null;
   maxMatchesPerPlayerPerDay?: number | null;
   season?:     number;
+  // «Sobre el torneo» y normas, texto plano. Estos cinco no vienen de un back anterior a B5-1
+  description?: string | null;
+  rules?:       string | null;
+  participantsVisibility?: ParticipantsVisibility;
+  // El jugador y el público ven el club donde verían la pista
+  showClubInsteadOfCourt?: boolean;
+  // Días tras el último del torneo para quitarlo del listado de la app (null: nunca)
+  hideFromAppAfterDays?:   number | null;
 }
+
+/**
+ * Opciones de torneo de un club (`GET/PUT /admin/clubs/:clubId/tournament-config`):
+ * los valores con los que el asistente de «Nuevo torneo» empieza cada torneo
+ * del club. Un club sin guardar recibe los de siempre (los del asistente).
+ */
+export interface ClubTournamentConfig {
+  id:                       string;
+  clubId:                   string;
+  format:                   string;
+  matchDuration:            number;
+  hasShirts:                boolean;
+  useSeeding:               boolean;
+  requirePaymentToConfirm:  boolean;
+  // De cada categoría nueva: € por pareja y plazas
+  categoryPrice:            number;
+  categorySpots:            number;
+  // Tramo de las jornadas que se generan («HH:mm»)
+  dayStartTime:             string;
+  dayEndTime:               string;
+  maxUnavailableTotalHours: number;
+  description:              string | null;
+  rules:                    string | null;
+  participantsVisibility:   ParticipantsVisibility;
+  showClubInsteadOfCourt:   boolean;
+  hideFromAppAfterDays:     number | null;
+}
+
+/** El PUT es parcial: solo lo que se manda cambia. */
+export type UpdateClubTournamentConfigPayload = Partial<Omit<ClubTournamentConfig, "id" | "clubId">>;
 
 /**
  * Un jugador en la API pública (`GET /players/:id/profile`, sin sesión): solo
@@ -596,6 +637,11 @@ export interface CreateTournamentPayload {
   matchDuration?: number;
   maxMatchesPerPlayerPerDay?: number | null;
   maxUnavailableTotalHours?:  number;
+  description?: string;
+  rules?:       string;
+  participantsVisibility?: ParticipantsVisibility;
+  showClubInsteadOfCourt?: boolean;
+  hideFromAppAfterDays?:   number | null;
   categories:  {
     gender:          CategoryGender;
     level:           CategoryLevel;
@@ -662,16 +708,6 @@ export interface AppConfigPush {
   enableCategoryChange:        boolean;
 }
 
-export interface AppConfigTournamentDefaults {
-  matchDuration:            number;
-  scoringSystem:            string;
-  registrationDeadlineDays: number;
-  defaultFormat:            string;
-  hasShirtsDefault:         boolean;
-  useSeedingDefault:        boolean;
-  defaultCourts:            string[];
-}
-
 export interface FaqEntry {
   q: string;
   a: string;
@@ -692,7 +728,6 @@ export interface AppConfigAll {
   season:             AppConfigSeason;
   email:              AppConfigEmail;
   push:               AppConfigPush;
-  tournamentDefaults: AppConfigTournamentDefaults;
   faqs:               AppConfigFaqs;
 }
 
