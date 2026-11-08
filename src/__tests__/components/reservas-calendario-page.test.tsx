@@ -93,9 +93,15 @@ const booking = (over: object) => ({
   ...over,
 });
 
-// staleTime: el del panel (components/providers.tsx) cuando lo que se prueba es cuándo se vuelve a pedir
-function renderPage({ staleTime = 0 }: { staleTime?: number } = {}) {
+const CLUB_MADRID = { id: "c1", name: "Club Centro", timezone: "Europe/Madrid" };
+const CLUB_CANARIAS = { id: "c1", name: "Club Atlántico", timezone: "Atlantic/Canary" };
+
+// staleTime: el del panel (components/providers.tsx) cuando lo que se prueba es cuándo se vuelve a pedir.
+// club: ya en la caché (como al llegar desde Mi club), para que la rejilla se pinte en un solo paso;
+// null para probar lo que se ve mientras no llega o si falla
+function renderPage({ staleTime = 0, club = CLUB_MADRID }: { staleTime?: number; club?: typeof CLUB_MADRID | null } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime } } });
+  if (club) qc.setQueryData(["my-club", "c1"], club);
   return render(
     <QueryClientProvider client={qc}>
       <CalendarioPage />
@@ -127,7 +133,7 @@ beforeEach(() => {
     url.set(window.location.search);
   });
   courtsMock.list.mockResolvedValue(COURTS);
-  clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
+  clubsMock.findOne.mockResolvedValue(CLUB_MADRID);
   // Abierto todos los días de 09:00 a 23:00
   svc.operatingHours.list.mockResolvedValue(
     [1, 2, 3, 4, 5, 6, 7].map((d) => ({ id: `h${d}`, clubId: "c1", dayOfWeek: d, openTime: "09:00", closeTime: "23:00", active: true })),
@@ -145,7 +151,7 @@ afterEach(() => {
 describe("Calendario de reservas — vista Día", () => {
   it("pide las reservas del día del club: de las 00:00 a las 23:59:59.999 de Madrid", async () => {
     renderPage();
-    await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 09:00" });
+    await screen.findByLabelText("Crear reserva en Pista 1 a las 09:00");
     expect(svc.bookings.listAll).toHaveBeenCalledWith({
       clubId: "c1",
       fromDate: "2026-10-24T22:00:00.000Z",
@@ -156,7 +162,7 @@ describe("Calendario de reservas — vista Día", () => {
 
   it("pulsar un hueco libre abre el alta con esa pista y esa hora", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Crear reserva en Pista 2 a las 18:00" }));
+    fireEvent.click(await screen.findByLabelText("Crear reserva en Pista 2 a las 18:00"));
 
     expect(await screen.findByText("Crear reserva", { selector: "h2" })).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Pista 2")).toHaveValue("p2");
@@ -170,7 +176,7 @@ describe("Calendario de reservas — vista Día", () => {
 
   it("si a esa hora no cabe la duración, el alta lo dice en vez de dejar la hora en blanco", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Crear reserva en Pista 2 a las 22:30" }));
+    fireEvent.click(await screen.findByLabelText("Crear reserva en Pista 2 a las 22:30"));
 
     expect(await screen.findByRole("status")).toHaveTextContent("A las 22:30 no hay hueco de 90 min en Pista 2.");
     expect(screen.getByDisplayValue("— elige una hora —")).toBeInTheDocument();
@@ -213,7 +219,7 @@ describe("Calendario de reservas — vista Día", () => {
 
   it("el «+» de los huecos libres se ve siempre, no solo con el ratón encima", async () => {
     renderPage();
-    const slot = await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 09:00" });
+    const slot = await screen.findByLabelText("Crear reserva en Pista 1 a las 09:00");
     expect(within(slot).getByText("+")).not.toHaveClass("opacity-0");
   });
 
@@ -290,7 +296,8 @@ describe("Calendario de reservas — vista Semana", () => {
   });
 });
 
-const firstSlot = () => screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 09:00" });
+// Consulta barata: entre los ~56 huecos, findByRole tarda más que la espera por defecto con la máquina cargada
+const firstSlot = () => screen.findByLabelText("Crear reserva en Pista 1 a las 09:00");
 
 describe("Recepción — navegar por fechas", () => {
   it("día siguiente y anterior piden ese día del club; «Hoy» solo sale fuera de hoy y vuelve", async () => {
@@ -369,7 +376,7 @@ describe("Recepción — franja mañana / tarde", () => {
   it("con ?franja=tarde abre la tarde: desde las 15:00", async () => {
     url.set("franja=tarde");
     renderPage();
-    expect(await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 15:00" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Crear reserva en Pista 1 a las 15:00")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tarde", pressed: true })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 14:30" })).not.toBeInTheDocument();
   });
@@ -754,7 +761,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
   // El navegador, en Madrid: ni la zona fija de antes ni la del navegador dan lo esperado
   beforeEach(() => {
     process.env.TZ = "Europe/Madrid";
-    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Atlántico", timezone: "Atlantic/Canary" });
+    clubsMock.findOne.mockResolvedValue(CLUB_CANARIAS);
   });
 
   afterEach(() => {
@@ -762,7 +769,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
   });
 
   it("«hoy» es el día de Canarias: de sus 00:00 a sus 23:59:59.999, y la línea a su hora (10:00)", async () => {
-    renderPage();
+    renderPage({ club: CLUB_CANARIAS });
     expect(await screen.findByRole("separator", { name: "Hora actual, 10:00" })).toBeInTheDocument();
     expect(svc.bookings.listAll).toHaveBeenCalledWith({
       clubId: "c1",
@@ -778,7 +785,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
     );
     vi.setSystemTime(new Date("2026-10-25T23:30:00.000Z"));
     try {
-      renderPage();
+      renderPage({ club: CLUB_CANARIAS });
       expect(await screen.findByRole("separator", { name: "Hora actual, 23:30" })).toBeInTheDocument();
       expect(screen.getByText("Domingo, 25 oct")).toBeInTheDocument();
     } finally {
@@ -788,7 +795,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
   it("la reserva sale a su hora de Canarias y el hueco pulsado se manda en esa hora", async () => {
     svc.bookings.listAll.mockResolvedValue([booking({})]); // 17:00 UTC
-    renderPage();
+    renderPage({ club: CLUB_CANARIAS });
     expect(await screen.findByRole("link", { name: /17:00–18:30/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Crear reserva en Pista 2 a las 22:30" }));
@@ -801,7 +808,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
     svc.bookings.listAll.mockResolvedValue([
       booking({ id: "tarde", startsAt: "2026-10-25T23:30:00.000Z", endsAt: "2026-10-26T00:30:00.000Z", durationMinutes: 60 }),
     ]);
-    renderPage();
+    renderPage({ club: CLUB_CANARIAS });
     fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
 
     expect(await screen.findByRole("columnheader", { name: "Pista" })).toBeInTheDocument();
@@ -816,7 +823,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
   it("sin saber aún la zona del club no se pinta ninguna hora ni se piden reservas", async () => {
     clubsMock.findOne.mockReturnValue(new Promise(() => {}));
-    renderPage();
+    renderPage({ club: null });
     await waitFor(() => expect(courtsMock.list).toHaveBeenCalled());
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
@@ -825,7 +832,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
   it("si no llegan los datos del club, lo dice y se puede reintentar", async () => {
     clubsMock.findOne.mockRejectedValueOnce(new Error("500"));
-    renderPage();
+    renderPage({ club: null });
     expect(await screen.findByText("No se pudieron cargar los datos del club.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
 
