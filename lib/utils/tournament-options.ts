@@ -1,3 +1,4 @@
+import { DEFAULT_SCORING_FORMAT, SCORING_FORMATS, typicalMinutes } from "@/lib/scoring-format";
 import { charCount } from "./char-count";
 import type { ClubTournamentConfig, ParticipantsVisibility, UpdateClubTournamentConfigPayload } from "@/types";
 
@@ -14,7 +15,9 @@ export const WIZARD_FORMAT_OPTIONS = [
   { value: "cuadro",              label: "Cuadro" },
 ];
 
-const MATCH_DURATIONS = [60, 90, 120];
+// Las de siempre y la que suele durar cada formato de partido (B5-2): la pista
+// junto al formato solo ayuda si esa duración se puede elegir
+const MATCH_DURATIONS = [...new Set([60, 90, 120, ...SCORING_FORMATS.map(typicalMinutes)])].sort((a, b) => a - b);
 
 /**
  * Las duraciones del asistente. Si la que hay es otra (el back admite de 15 a
@@ -79,6 +82,7 @@ export type TournamentDefaults = Omit<ClubTournamentConfig, "id" | "clubId" | "d
 export const DEFAULT_TOURNAMENT_DEFAULTS: TournamentDefaults = {
   format:                   "eliminatoria",
   matchDuration:            60,
+  scoringFormat:            DEFAULT_SCORING_FORMAT,
   hasShirts:                false,
   useSeeding:               false,
   requirePaymentToConfirm:  false,

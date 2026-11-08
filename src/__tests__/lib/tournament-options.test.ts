@@ -7,7 +7,9 @@ import {
   tournamentDefaultsIssues,
   tournamentDefaultsPayload,
   untouchedChanges,
+  type TournamentDefaults,
 } from "../../../lib/utils/tournament-options";
+import { SCORING_FORMATS, typicalMinutes } from "../../../lib/scoring-format";
 import type { ClubTournamentConfig } from "../../../types";
 
 const CONFIG: ClubTournamentConfig = {
@@ -109,9 +111,42 @@ describe("tournamentDefaultsIssues (las reglas del back)", () => {
 });
 
 describe("matchDurationOptions", () => {
-  it("las del asistente; si la guardada es otra, también sale, en su orden", () => {
-    expect(matchDurationOptions(60).map((o) => o.value)).toEqual(["60", "90", "120"]);
-    expect(matchDurationOptions(45).map((o) => o.value)).toEqual(["45", "60", "90", "120"]);
+  it("las de siempre y lo que suele durar cada formato de partido; si la guardada es otra, también sale, en su orden", () => {
+    expect(matchDurationOptions(60).map((o) => o.value)).toEqual(["30", "45", "60", "75", "90", "120"]);
+    expect(matchDurationOptions(50).map((o) => o.value)).toEqual(["30", "45", "50", "60", "75", "90", "120"]);
+  });
+
+  it("la duración típica de cada formato se puede elegir (la pista junto al formato es accionable)", () => {
+    const offered = matchDurationOptions(60).map((o) => Number(o.value));
+    for (const format of SCORING_FORMATS) expect(offered).toContain(typicalMinutes(format));
+  });
+});
+
+describe("el formato de partido del club (B5-2)", () => {
+  it("sin guardar, 3 sets (el @default del back); el del club se lee tal cual y se manda al guardar", () => {
+    expect(DEFAULT_TOURNAMENT_DEFAULTS.scoringFormat).toBe("BEST_OF_3");
+    const values = tournamentDefaultsFromConfig({ ...CONFIG, scoringFormat: "PRO_SET_9" });
+    expect(values.scoringFormat).toBe("PRO_SET_9");
+    expect(tournamentDefaultsPayload(values).scoringFormat).toBe("PRO_SET_9");
+  });
+
+  type V = Pick<TournamentDefaults, "scoringFormat" | "matchDuration">;
+  const keys = ["scoringFormat", "matchDuration"] as const;
+  const applied: V = { scoringFormat: "BEST_OF_3", matchDuration: 60 };
+  const club: V = { scoringFormat: "ONE_SET", matchDuration: 60 };
+
+  it("se aplica a lo que no se ha tocado, y la duración del partido no cambia con él", () => {
+    expect(untouchedChanges<V, keyof V>(applied, applied, club, keys)).toEqual({ scoringFormat: "ONE_SET" });
+  });
+
+  it("si el admin lo ha cambiado a mano, se queda", () => {
+    expect(untouchedChanges<V, keyof V>({ ...applied, scoringFormat: "PRO_SET_9" }, applied, club, keys)).toEqual({});
+  });
+
+  it("con otro club, lo que seguía con el formato del primero pasa al del segundo", () => {
+    const other: V = { scoringFormat: "SHORT_SETS_SUPERTB", matchDuration: 60 };
+    expect(untouchedChanges<V, keyof V>(club, club, other, keys)).toEqual({ scoringFormat: "SHORT_SETS_SUPERTB" });
+    expect(untouchedChanges<V, keyof V>({ ...club, scoringFormat: "PRO_SET_9" }, club, other, keys)).toEqual({});
   });
 });
 

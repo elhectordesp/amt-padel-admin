@@ -11,6 +11,9 @@ export type RankingType        = "spa" | "circuit";
 // Quién ve la lista de inscritos de un torneo: todos, solo los inscritos, o
 // nadie (salvo lo suyo) hasta el día de inicio
 export type ParticipantsVisibility = "PUBLIC" | "REGISTERED_ONLY" | "HIDDEN_UNTIL_START";
+// Cómo se juega un partido y qué marcador vale (el enum `ScoringFormat` del
+// back; sus textos y reglas, en lib/scoring-format.ts)
+export type ScoringFormat = "BEST_OF_3" | "BEST_OF_2_SUPERTB" | "ONE_SET" | "ONE_SET_GOLDEN_GAME" | "PRO_SET_9" | "SHORT_SETS_SUPERTB";
 // El de un ranking: el de una persona o, solo en el de circuito, el Mixto
 // (lib/ranking-gender.ts)
 export type RankingGender      = Gender | "MX";
@@ -43,7 +46,7 @@ export interface TournamentCategory {
   price?:           number;
   minPairs?:        number;
   maxPairs?:        number;
-  scoringFormat?:   string;
+  scoringFormat?:   ScoringFormat;
   roundFormats?:        Record<string, string> | null;
   prizeChampion?:       string;
   prizeRunnerUp?:       string;
@@ -178,6 +181,8 @@ export interface ClubTournamentConfig {
   clubId:                   string;
   format:                   string;
   matchDuration:            number;
+  // Cómo se juega cada partido: el de las categorías de los torneos nuevos
+  scoringFormat:            ScoringFormat;
   hasShirts:                boolean;
   useSeeding:               boolean;
   requirePaymentToConfirm:  boolean;
@@ -471,7 +476,7 @@ export interface MatchResult {
   sets2?:        number[];
   winner?:       "team1" | "team2";
   referee?:      string;
-  scoringFormat?: "BEST_OF_3" | "BEST_OF_2_SUPERTB";
+  scoringFormat?: ScoringFormat;
   /** El del back, en mayúsculas (SCHEDULED, ONGOING, FINISHED…). Para saber si tiene resultado, isMatchFinished. */
   status:      string;
 }
@@ -647,6 +652,7 @@ export interface CreateTournamentPayload {
     level:           CategoryLevel;
     totalSpots:      number;
     price:           number;
+    scoringFormat?:  ScoringFormat;
     prizeChampion?:   string;
     prizeRunnerUp?:   string;
     prizeConsolation?:string;
