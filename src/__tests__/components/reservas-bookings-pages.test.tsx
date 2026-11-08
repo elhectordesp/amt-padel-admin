@@ -217,6 +217,44 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
     );
   });
 
+  it("mientras llega la página siguiente se siguen viendo las de antes", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText("Mostrando 1–50 de 120 reservas");
+    svc.bookings.list.mockReturnValue(new Promise(() => {}));
+    await goToSecondPage();
+    expect(screen.getByText("AMT-XP9W")).toBeInTheDocument();
+    expect(screen.getByText("120 reservas")).toBeInTheDocument();
+  });
+
+  it("mientras llegan las de otra pestaña no se ven las de la anterior", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText("AMT-XP9W");
+    svc.bookings.list.mockReturnValue(new Promise(() => {}));
+    fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
+    await waitFor(() =>
+      expect(svc.bookings.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ toDate: "2026-10-27T23:00:00.000Z" }),
+      ),
+    );
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText("AMT-XP9W")).not.toBeInTheDocument();
+  });
+
+  it("tampoco si se cambia de pestaña mientras llega otra página", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText("Mostrando 1–50 de 120 reservas");
+    svc.bookings.list.mockReturnValue(new Promise(() => {}));
+    await goToSecondPage();
+    fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
+    await waitFor(() =>
+      expect(svc.bookings.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ toDate: "2026-10-27T23:00:00.000Z" }),
+      ),
+    );
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText("AMT-XP9W")).not.toBeInTheDocument();
+  });
+
   it("busca con q tras 300 ms sin teclear, sin los espacios de los lados, y vuelve a la primera página", async () => {
     // Con la búsqueda quedan 60: la segunda página seguiría existiendo
     svc.bookings.list.mockImplementation(async (filters: { q?: string }) =>

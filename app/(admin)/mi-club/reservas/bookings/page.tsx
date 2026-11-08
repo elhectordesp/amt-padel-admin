@@ -122,8 +122,10 @@ export default function BookingsListPage() {
     queryKey: bookingsQK.bookingsList(filters ?? {}),
     queryFn: () => bookingsService.bookings.list(filters!),
     enabled: !!filters && isClub(role),
-    // Al pasar de página o buscar se sigue viendo lo anterior hasta que llega
-    placeholderData: (prev) => prev,
+    // Al pasar de página o buscar se sigue viendo lo anterior hasta que llega;
+    // al cambiar de pestaña no: serían las de otra pestaña con esta marcada
+    meta: { tab },
+    placeholderData: (prev, prevQuery) => (prevQuery?.meta?.tab === tab ? prev : undefined),
   });
   // Si baja el total (p. ej. al cancelar la única de la última página), a la
   // última página que haya
