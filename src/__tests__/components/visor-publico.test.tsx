@@ -54,4 +54,28 @@ describe("Visor público", () => {
     expect(screen.getByRole("button", { name: "Junior · Iniciación" })).toBeInTheDocument();
     expect(screen.queryByText(/Femenin/)).not.toBeInTheDocument();
   });
+
+  it("descripción y normas en texto plano, con sus saltos de línea y sin interpretar HTML ni markdown (B5-1)", () => {
+    const description = "Open de otoño\nCon <b>cena</b> y **trofeo**";
+    const rules = "1. Puntualidad\n2. Bolas nuevas";
+    render(
+      <TournamentViewer
+        tournamentId="t-1"
+        tournament={{ id: "t-1", name: "Open de otoño", tier: "BRONZE", status: "open", club: { name: "Club Madrid" }, timezone: "Europe/Madrid", description, rules }}
+        initialCats={[{ cat: { id: "c-1", gender: "M", level: "4a" }, groups: [], bracket: null }]}
+        initialMatches={[]}
+      />,
+    );
+    const desc = screen.getByText((_, el) => el?.tagName === "P" && el.textContent === description);
+    expect(desc).toHaveClass("whitespace-pre-line");
+    expect(desc.querySelector("b")).toBeNull();
+    expect(screen.getByText("Normas del torneo")).toBeInTheDocument();
+    const rulesText = screen.getByText((_, el) => el?.tagName === "P" && el.textContent === rules);
+    expect(rulesText).toHaveClass("whitespace-pre-line");
+  });
+
+  it("sin descripción ni normas, no sale nada de ellas", () => {
+    renderViewer("open");
+    expect(screen.queryByText("Normas del torneo")).not.toBeInTheDocument();
+  });
 });

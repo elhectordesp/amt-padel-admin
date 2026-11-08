@@ -3,6 +3,7 @@
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
+import { PlainTextField, TournamentVisibilityFields, type TournamentVisibility } from "@/components/admin/tournament-options-fields";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
@@ -19,6 +20,14 @@ import {
   toZonedDateTimeInput,
   tournamentTimeZone,
 } from "@/lib/utils/time-zone";
+import {
+  HIDE_FROM_APP_MAX_DAYS,
+  TOURNAMENT_DESCRIPTION_MAX,
+  TOURNAMENT_RULES_MAX,
+  plainTextOrNull,
+  textTooLong,
+  tooLongMessage,
+} from "@/lib/utils/tournament-options";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -38,6 +47,8 @@ interface Original {
 }
 
 // ── Schema ───────────────────────────────────────────────────────────────
+const HIDE_DAYS_MESSAGE = `Entre 0 y ${HIDE_FROM_APP_MAX_DAYS} días`;
+
 const makeSchema = (original: { current: Original | null }) => z.object({
   name:                 z.string().min(3, "Nombre requerido"),
   clubId:               z.string().min(1, "Club requerido"),
@@ -58,6 +69,15 @@ const makeSchema = (original: { current: Original | null }) => z.object({
   registrationDeadline:      z.string().optional(),
   timezone:                  z.string().min(1),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
+  // Texto plano; se manda sin los espacios de los bordes, y vacío lo quita
+  description:               z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_DESCRIPTION_MAX), tooLongMessage(TOURNAMENT_DESCRIPTION_MAX)),
+  rules:                     z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_RULES_MAX), tooLongMessage(TOURNAMENT_RULES_MAX)),
+  participantsVisibility:    z.enum(["PUBLIC", "REGISTERED_ONLY", "HIDDEN_UNTIL_START"]),
+  showClubInsteadOfCourt:    z.boolean(),
+  // null: no se quita nunca del listado de la app
+  hideFromAppAfterDays:      z.number({ error: HIDE_DAYS_MESSAGE }).int(HIDE_DAYS_MESSAGE).min(0, HIDE_DAYS_MESSAGE).max(HIDE_FROM_APP_MAX_DAYS, HIDE_DAYS_MESSAGE).nullable(),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
@@ -175,13 +195,25 @@ export default function EditarTorneoPage() {
       timezone:                  tz,
       status:               tournament.status as FormData["status"],
       tier:                 tournament.tier ?? "BRONZE",
+      // Textos null: sin texto. Los otros tres no vienen de un back anterior
+      // a B5-1: los valores por defecto de la base de datos
+      description:               tournament.description ?? "",
+      rules:                     tournament.rules ?? "",
+      participantsVisibility:    tournament.participantsVisibility ?? "PUBLIC",
+      showClubInsteadOfCourt:    tournament.showClubInsteadOfCourt ?? false,
+      hideFromAppAfterDays:      tournament.hideFromAppAfterDays ?? null,
     });
   }, [tournament, reset]);
 
   const save = useMutation({
     // El estado y el cierre de inscripciones, solo si se han tocado
+    // La descripción y las normas, sin los espacios de los bordes: vacías (null) se quitan
     mutationFn: (data: FormData & { force?: boolean }) =>
-      adminService.tournaments.update(id, tournamentUpdatePayload(data, dirtyFields)),
+      adminService.tournaments.update(id, tournamentUpdatePayload({
+        ...data,
+        description: plainTextOrNull(data.description),
+        rules:       plainTextOrNull(data.rules),
+      }, dirtyFields)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -235,6 +267,14 @@ export default function EditarTorneoPage() {
     } else {
       save.mutate(data);
     }
+  };
+
+  /** Los campos de «Lo que ven los jugadores»; tras guardar con errores, revalida. */
+  const setVisibility = (patch: Partial<TournamentVisibility>) => {
+    const options = { shouldDirty: true, shouldValidate: !!errors.hideFromAppAfterDays };
+    if (patch.participantsVisibility !== undefined) setValue("participantsVisibility", patch.participantsVisibility, options);
+    if (patch.showClubInsteadOfCourt !== undefined) setValue("showClubInsteadOfCourt", patch.showClubInsteadOfCourt, options);
+    if ("hideFromAppAfterDays" in patch) setValue("hideFromAppAfterDays", patch.hideFromAppAfterDays ?? null, options);
   };
 
   return (
@@ -360,6 +400,25 @@ export default function EditarTorneoPage() {
                 <Input {...register("endDate")} type="date" />
               </Field>
             </div>
+            <PlainTextField
+              label="Sobre el torneo"
+              value={watch("description") ?? ""}
+              onChange={(v) => setValue("description", v, { shouldDirty: true, shouldValidate: !!errors.description })}
+              max={TOURNAMENT_DESCRIPTION_MAX}
+              placeholder="Qué es el torneo, a quién va dirigido, qué incluye…"
+              help="Opcional. Texto plano: se enseña tal cual, con sus saltos de línea, en el visor público."
+              error={errors.description?.message}
+            />
+            <PlainTextField
+              label="Normas"
+              value={watch("rules") ?? ""}
+              onChange={(v) => setValue("rules", v, { shouldDirty: true, shouldValidate: !!errors.rules })}
+              max={TOURNAMENT_RULES_MAX}
+              rows={6}
+              placeholder="Puntualidad, bolas, material, qué pasa si no se presenta una pareja…"
+              help="Opcional. Texto plano, como la descripción."
+              error={errors.rules?.message}
+            />
           </div>
 
           {/* Config */}
@@ -500,6 +559,23 @@ export default function EditarTorneoPage() {
                 </p>
               </Field>
             </div>
+          </div>
+
+          {/* Lo que ven los jugadores */}
+          <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
+            <div>
+              <h3 className="font-heading text-lg text-foreground">Lo que ven los jugadores</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">La lista de inscritos, la pista y el listado de la app</p>
+            </div>
+            <TournamentVisibilityFields
+              value={{
+                participantsVisibility: watch("participantsVisibility") ?? "PUBLIC",
+                showClubInsteadOfCourt: watch("showClubInsteadOfCourt") ?? false,
+                hideFromAppAfterDays:   watch("hideFromAppAfterDays") ?? null,
+              }}
+              onChange={setVisibility}
+              hideFromAppError={errors.hideFromAppAfterDays?.message}
+            />
           </div>
 
           {/* Jornadas y horarios (editar = crear, solo durante el montaje) */}
