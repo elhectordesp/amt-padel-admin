@@ -337,22 +337,22 @@ describe("InscripcionesPage — cobros para la mesa (B4)", () => {
     screen.getAllByText(name).map((el) => el.closest("tr")).find((tr) => tr !== null) as HTMLElement;
   const unpaidCard = () => screen.getByRole("button", { name: /Sin pagar/ });
 
-  it("«Sin pagar» cuenta y filtra las no canceladas a las que les falta pagar a alguno de sus jugadores", async () => {
+  it("«Sin pagar» cuenta y filtra las que tienen plaza (ni canceladas ni en espera) a las que les falta pagar a alguno de sus jugadores", async () => {
     listRegistrations.mockResolvedValueOnce(REGISTRATIONS);
     renderPage();
     await screen.findAllByText("Ana López");
 
-    expect(within(unpaidCard()).getByText("2")).toBeInTheDocument();
+    expect(within(unpaidCard()).getByText("1")).toBeInTheDocument();
     fireEvent.click(unpaidCard());
 
     await waitFor(() => expect(screen.queryByText("Ana López")).not.toBeInTheDocument());
     expect(screen.getAllByText("Carla Gil").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Elena Pons").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Elena Pons")).not.toBeInTheDocument();
     expect(screen.queryByText("Fani Martín")).not.toBeInTheDocument();
     expect(screen.queryByText("Inés Mora")).not.toBeInTheDocument();
   });
 
-  it("cada pareja lleva lo pagado sobre su total y arriba van los cobros del torneo sin las canceladas", async () => {
+  it("cada pareja lleva lo pagado sobre su total y arriba van los cobros del torneo sin las canceladas ni las de la espera", async () => {
     listRegistrations.mockResolvedValueOnce(REGISTRATIONS);
     renderPage();
     await screen.findAllByText("Ana López");
@@ -365,8 +365,8 @@ describe("InscripcionesPage — cobros para la mesa (B4)", () => {
 
     const totals = screen.getByRole("group", { name: "Cobros del torneo" });
     expect(totals).toHaveTextContent("Cobrado 60,00 €");
-    expect(totals).toHaveTextContent("Pendiente 50,00 €");
-    expect(totals).toHaveTextContent("Total 110,00 €");
+    expect(totals).toHaveTextContent("Pendiente 30,00 €");
+    expect(totals).toHaveTextContent("Total 90,00 €");
   });
 
   it("confirmar una que no ha pagado en un torneo que lo exige: el 400 del back tal cual, sin «Forzar»", async () => {

@@ -107,19 +107,19 @@ const rowOf = (name: string) => screen.getByText(name).closest("tr") as HTMLElem
 describe("Inscripciones del torneo — cobros para la mesa (B4)", { timeout: 30_000 }, () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("«Sin pagar (2)»: las no canceladas a las que les falta pagar a alguno de sus jugadores", async () => {
+  it("«Sin pagar (1)»: las que tienen plaza (ni canceladas ni en espera) a las que les falta pagar a alguno de sus jugadores", async () => {
     await openRegistrations();
 
-    fireEvent.click(screen.getByRole("button", { name: "Sin pagar (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sin pagar (1)" }));
 
     await waitFor(() => expect(screen.queryByText("Ana López")).not.toBeInTheDocument(), WAIT);
     expect(screen.getByText("Carla Gil")).toBeInTheDocument();
-    expect(screen.getByText("Elena Pons")).toBeInTheDocument();
+    expect(screen.queryByText("Elena Pons")).not.toBeInTheDocument();
     expect(screen.queryByText("Fani Martín")).not.toBeInTheDocument();
     expect(screen.queryByText("Inés Mora")).not.toBeInTheDocument();
   });
 
-  it("cada pareja lleva lo pagado sobre su total y arriba van los cobros del torneo sin las canceladas", async () => {
+  it("cada pareja lleva lo pagado sobre su total y arriba van los cobros del torneo sin las canceladas ni las de la espera", async () => {
     await openRegistrations();
 
     const amountOf = (name: string) => within(rowOf(name)).getByTitle("Pagado / total de la pareja");
@@ -130,8 +130,8 @@ describe("Inscripciones del torneo — cobros para la mesa (B4)", { timeout: 30_
 
     const totals = screen.getByRole("group", { name: "Cobros del torneo" });
     expect(totals).toHaveTextContent("Cobrado 60,00 €");
-    expect(totals).toHaveTextContent("Pendiente 50,00 €");
-    expect(totals).toHaveTextContent("Total 110,00 €");
+    expect(totals).toHaveTextContent("Pendiente 30,00 €");
+    expect(totals).toHaveTextContent("Total 90,00 €");
   });
 
   it("confirmar una que no ha pagado: el 400 del back tal cual, sin «Forzar»", async () => {

@@ -30,20 +30,29 @@ export function pairAmount(reg: AdminRegistration): PairAmount {
 }
 
 /**
- * «Sin pagar»: una pareja no cancelada a la que le falta pagar a alguno de
- * sus jugadores (el titular y, si lo hay, el compañero). La misma regla que
+ * Las parejas que la mesa tiene que cobrar: las que tienen plaza (pendientes y
+ * confirmadas), como Finanzas. Ni las canceladas ni las de la lista de espera,
+ * que quizá nunca entren.
+ */
+function hasSpot(status: PairRegistration["status"]): boolean {
+  return status !== "CANCELLED" && status !== "WAITLIST";
+}
+
+/**
+ * «Sin pagar»: una pareja con plaza a la que le falta pagar a alguno de sus
+ * jugadores (el titular y, si lo hay, el compañero). La misma regla que
  * «exigir el pago para confirmar» del back.
  */
 export function isUnpaidPair(pair: Pick<PairRegistration, "status" | "primary">): boolean {
-  return pair.status !== "CANCELLED" && pairPlayers(pair.primary).some(({ payment }) => !payment.paid);
+  return hasSpot(pair.status) && pairPlayers(pair.primary).some(({ payment }) => !payment.paid);
 }
 
-/** Lo cobrado, lo pendiente y el total del torneo: las parejas no canceladas. */
+/** Lo cobrado, lo pendiente y el total del torneo: las parejas con plaza. */
 export function paymentTotals(pairs: Pick<PairRegistration, "status" | "primary">[]): PaymentTotals {
   let collected = 0;
   let total = 0;
   for (const pair of pairs) {
-    if (pair.status === "CANCELLED") continue;
+    if (!hasSpot(pair.status)) continue;
     const amount = pairAmount(pair.primary);
     collected += amount.paid;
     total += amount.total;

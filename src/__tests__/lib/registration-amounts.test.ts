@@ -48,7 +48,6 @@ describe('isUnpaidPair — el filtro «Sin pagar»', () => {
   it('una viva a la que le falta pagar a alguno de sus jugadores', () => {
     expect(isUnpaidPair(pairOf(reg({ paid: true })))).toBe(true);
     expect(isUnpaidPair(pairOf(reg({ partnerPayment: { paid: true } })))).toBe(true);
-    expect(isUnpaidPair(pairOf(reg({ status: 'WAITLIST' })))).toBe(true);
     expect(isUnpaidPair(pairOf(reg({ status: 'PENDING' })))).toBe(true);
   });
 
@@ -64,18 +63,22 @@ describe('isUnpaidPair — el filtro «Sin pagar»', () => {
   it('una cancelada nunca, aunque no haya pagado nadie', () => {
     expect(isUnpaidPair(pairOf(reg({ status: 'CANCELLED' })))).toBe(false);
   });
+
+  it('una en lista de espera tampoco: no tiene plaza y quizá nunca entre', () => {
+    expect(isUnpaidPair(pairOf(reg({ status: 'WAITLIST' })))).toBe(false);
+  });
 });
 
 describe('paymentTotals — el resumen de cobros del torneo', () => {
-  it('suma lo cobrado y el total de las parejas no canceladas; lo pendiente es la resta', () => {
+  it('suma lo cobrado y el total de las parejas con plaza (ni canceladas ni en espera); lo pendiente es la resta', () => {
     const pairs = groupByPair([
       reg({ paid: true, partnerPayment: { paid: true } }),                          // 30 de 30
       reg({ paid: true }),                                                           // 15 de 30
       reg({ status: 'PENDING', category: { gender: 'M', level: '4a', price: 25 } }), // 0 de 25
-      solo({ status: 'WAITLIST', paid: true }),                                      // 15 de 30
+      solo({ status: 'WAITLIST', paid: true }),                                      // no cuenta
       reg({ status: 'CANCELLED', paid: true, partnerPayment: { paid: true } }),      // no cuenta
     ]);
-    expect(paymentTotals(pairs)).toEqual({ collected: 60, pending: 55, total: 115 });
+    expect(paymentTotals(pairs)).toEqual({ collected: 45, pending: 40, total: 85 });
   });
 
   it('una pareja espejo antigua (dos filas) cuenta una vez', () => {
