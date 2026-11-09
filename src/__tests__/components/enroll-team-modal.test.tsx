@@ -111,8 +111,10 @@ describe("EnrollTeamModal — quién sale en los buscadores por su género", () 
 
     pickCategory("c-mx");
     expect(slot("Jugador 1").getByText(
-      "\"Leo Martín\" no tiene el género en su ficha: pónselo para que pueda jugar una categoría mixta.",
+      "\"Leo Martín\" no tiene el género en su ficha: indícalo aquí para que pueda jugar una categoría mixta.",
     )).toBeInTheDocument();
+    // Y lo puede poner allí mismo, sin pedírselo a AMT
+    expect(slot("Jugador 1").getByRole("button", { name: "Femenino" })).toBeInTheDocument();
 
     list.mockClear();
     expect(screen.getByText(/^Mixta, un jugador y una jugadora: solo salen jugadores y jugadoras con el género/)).toBeInTheDocument();

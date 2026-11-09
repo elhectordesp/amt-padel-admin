@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
-    players:       { list: vi.fn() },
+    players:       { list: vi.fn(), setMissingGender: vi.fn() },
     registrations: { replacePartner: vi.fn() },
   },
   registrationsQK: { list: (tournamentId: string) => ["registrations", tournamentId] },
@@ -193,7 +193,7 @@ describe("ReplacePartnerModal — quién puede ser la pareja por su género (D2)
   it("mixta: con el titular sin género en su ficha, no le busca pareja y dice que se lo pongan (el back lo rechazaría a él)", () => {
     renderModal({ ...withInvitation, user: { name: "Ana López", gender: null }, category: mixed });
 
-    expect(screen.getByText("\"Ana López\" no tiene el género en su ficha: pónselo para buscarle pareja.")).toBeInTheDocument();
+    expect(screen.getByText("\"Ana López\" no tiene el género en su ficha: indícalo aquí para buscarle pareja.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Nombre o email…")).toBeDisabled();
     // La pista del buscador ya no aplica: no culpa a la pareja
     expect(screen.queryByText(/solo salen/)).not.toBeInTheDocument();
@@ -201,14 +201,20 @@ describe("ReplacePartnerModal — quién puede ser la pareja por su género (D2)
     expect(screen.getByRole("button", { name: "Poner pareja" })).toBeDisabled();
   });
 
-  it("a un club, con el titular sin género, le dice que se lo pida a AMT (no ve la ficha)", () => {
+  it("a un club, con el titular sin género, le deja ponérselo allí mismo y seguir (no manda a AMT)", async () => {
     mockRole.role = "club";
     renderModal({ ...withInvitation, user: { name: "Ana López", gender: null } });
 
     expect(screen.getByText(
-      "\"Ana López\" no tiene el género en su ficha: pide a AMT que se lo ponga para buscarle pareja.",
+      "\"Ana López\" no tiene el género en su ficha: indícalo aquí para buscarle pareja.",
     )).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Nombre o email…")).toBeDisabled();
+
+    vi.mocked(adminService.players.setMissingGender).mockResolvedValue({ id: "u-ana", gender: "F" });
+    fireEvent.click(screen.getByRole("button", { name: "Femenino" }));
+    await waitFor(() => expect(adminService.players.setMissingGender).toHaveBeenCalledWith("u-ana", "F"));
+    // Ya tiene género: el aviso desaparece y el buscador se activa
+    await waitFor(() => expect(screen.getByPlaceholderText("Nombre o email…")).not.toBeDisabled());
   });
 
   it("femenina con un titular: no le busca pareja y dice por qué, con la regla del back", () => {

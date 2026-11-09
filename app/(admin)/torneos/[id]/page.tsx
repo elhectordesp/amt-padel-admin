@@ -11,7 +11,7 @@ import {
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
   Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
-  ArrowLeftRight, Users, Plus,
+  ArrowLeftRight, Users, Plus, CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,6 +25,7 @@ import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
+import PayPairModal from "@/components/admin/pay-pair-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { PaymentTotals } from "@/components/admin/payment-totals";
 import { ResultModal } from "@/components/admin/result-modal";
@@ -1509,6 +1510,7 @@ export default function TorneoDetailPage() {
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
   const [replaceReg,         setReplaceReg]         = useState<AdminRegistration | null>(null);
   const [paymentOf,          setPaymentOf]          = useState<{ reg: AdminRegistration; player: PaymentPlayer } | null>(null);
+  const [payPairOf,          setPayPairOf]          = useState<AdminRegistration | null>(null);
   const [confirmCancel,      setConfirmCancel]      = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,        setConfirmBulk]        = useState<{ ids: string[]; status: string; count: number } | null>(null);
   // Categoría llena o con cola: el aviso del back y el cambio a repetir con force
@@ -3016,7 +3018,16 @@ export default function TorneoDetailPage() {
                             />
                           </td>
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-1.5 sm:gap-1">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
+                              {pair.status !== "CANCELLED" && (
+                                <button
+                                  onClick={() => setPayPairOf(reg)}
+                                  disabled={isUpdating}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-2 sm:py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-50"
+                                >
+                                  <CreditCard size={13} /> Cobrar pareja
+                                </button>
+                              )}
                               <button
                                 onClick={() => setAvailRegId(pair.primary.id)}
                                 title="Ver disponibilidad"
@@ -3028,10 +3039,10 @@ export default function TorneoDetailPage() {
                                 <button
                                   onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                   disabled={isUpdating}
-                                  className="p-2 sm:p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-2 sm:py-1.5 rounded-md border border-green-400/40 text-green-400 text-xs font-semibold hover:bg-green-400/10 transition-colors disabled:opacity-50"
                                   title="Confirmar pareja"
                                 >
-                                  <Check size={14} />
+                                  <Check size={13} /> Confirmar
                                 </button>
                               )}
                               {pair.status !== "WAITLIST" && (
@@ -4525,6 +4536,14 @@ export default function TorneoDetailPage() {
         player={paymentOf.player}
         tournamentId={id}
         onClose={() => setPaymentOf(null)}
+      />
+    )}
+
+    {payPairOf && (
+      <PayPairModal
+        registration={payPairOf}
+        tournamentId={id}
+        onClose={() => setPayPairOf(null)}
       />
     )}
 

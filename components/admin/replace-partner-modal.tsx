@@ -8,9 +8,10 @@ import { adminService, registrationsQK } from "@/lib/services/admin";
 import { levelLabel, playerGenderLabel } from "@/lib/constants";
 import { genderRejection, genderRejectionNotice, genderSearchHint, searchGendersFor } from "@/lib/category-gender";
 import { isClub, useRole } from "@/lib/use-role";
+import MissingGenderPicker from "@/components/admin/missing-gender-picker";
 import { pendingInviteeName } from "@/lib/utils/registration-pairs";
 import { searchPlayersForCategory } from "@/lib/utils/eligible-players";
-import type { AdminRegistration, Player } from "@/types";
+import type { AdminRegistration, Gender, Player } from "@/types";
 
 interface Props {
   registration: AdminRegistration;
@@ -32,7 +33,8 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   const isNew = !registration.partnerId;
   // Quien puede jugar la categoría con el titular: en la mixta, el género
   // contrario al suyo
-  const titularGender = registration.user.gender ?? null;
+  const [titularGenderSet, setTitularGenderSet] = useState<Gender | null>(null);
+  const titularGender = registration.user.gender ?? titularGenderSet;
   const canEditPlayer = !isClub(role);
   const genders = useMemo(() => searchGendersFor(categoryGender, titularGender), [categoryGender, titularGender]);
   // El back comprueba antes al titular: sin su género en la ficha, o con uno
@@ -40,7 +42,7 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
   // desactivado) y se dice por qué
   const titularRejection = genderRejection(categoryGender, titularGender);
   const titularNotice = titularRejection
-    ? genderRejectionNotice(titularRejection, categoryGender, registration.user.name, { canEditPlayer, goal: "partner" })
+    ? genderRejectionNotice(titularRejection, categoryGender, registration.user.name, { goal: "partner" })
     : null;
   const genderHint = genderSearchHint(categoryGender, titularGender, { canEditPlayer });
 
@@ -136,10 +138,19 @@ export default function ReplacePartnerModal({ registration, tournamentId, onClos
               )}
             </div>
             {titularNotice ? (
-              <div className="flex gap-2 p-3 mt-2 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-xs text-yellow-400">
-                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                <span>{titularNotice}</span>
-              </div>
+              <>
+                <div className="flex gap-2 p-3 mt-2 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-xs text-yellow-400">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                  <span>{titularNotice}</span>
+                </div>
+                {titularRejection === "unknown" && (
+                  <MissingGenderPicker
+                    playerId={registration.userId}
+                    playerName={registration.user.name}
+                    onSet={setTitularGenderSet}
+                  />
+                )}
+              </>
             ) : genderHint && !selected && (
               <p className="text-[11px] text-muted-foreground mt-1.5">{genderHint}</p>
             )}
