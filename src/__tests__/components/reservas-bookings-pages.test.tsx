@@ -14,8 +14,9 @@
  */
 import { Suspense } from "react";
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/components/admin/header", () => ({
@@ -460,6 +461,111 @@ describe("Detalle de reserva — resultado (R2-7)", () => {
     await renderDetail({ ...PLAYED, resultAdminDeadlineAt: "2020-01-01T00:00:00.000Z" });
     expect(await screen.findByText("6-4 · 6-3")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Corregir resultado/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final de la página", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    meMock.data = { id: "club-admin", name: "Gestor" };
+    svc.bookings.detail.mockResolvedValue(BOOKING);
+    svc.bookings.list.mockResolvedValue({ items: [BOOKING], total: 1 });
+    svc.bookings.cancel.mockResolvedValue({});
+  });
+
+  const dialog = () => screen.getByRole("dialog", { name: "¿Cancelar esta reserva?" });
+
+  it("ficha: «Cancelar reserva» abre un diálogo con el foco dentro, el aviso, qué reserva es y el motivo", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+
+    expect(dialog()).toHaveFocus();
+    expect(within(dialog()).getByText("Se avisará por push y email a 2 jugadores.")).toBeInTheDocument();
+    expect(within(dialog()).getByText("Pista 1 · lun, 2 nov · 18:00 - 19:30")).toBeInTheDocument();
+    expect(within(dialog()).getByPlaceholderText("Motivo (opcional, visible al jugador)")).toBeInTheDocument();
+  });
+
+  it("ficha: Escape lo cierra sin cancelar y el foco vuelve al botón", async () => {
+    await renderDetail();
+    const trigger = await screen.findByRole("button", { name: /Cancelar reserva/ });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(dialog()).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("ficha: «No, volver» cierra sin cancelar, y al abrirla otra vez el motivo está vacío", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Lluvia" } });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "No, volver" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar reserva/ }));
+    expect(within(dialog()).getByPlaceholderText(/Motivo/)).toHaveValue("");
+  });
+
+  it("ficha: «Sí, cancelar reserva» manda el motivo, avisa y cierra", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Pista en obras" } });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", "Pista en obras"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith("Reserva cancelada — jugadores notificados");
+  });
+
+  it("ficha: sin motivo, no manda ninguno", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined));
+  });
+
+  it("si el back la rechaza, enseña su mensaje y el diálogo sigue abierto", async () => {
+    svc.bookings.cancel.mockRejectedValue({ response: { data: { message: "La reserva ya estaba cancelada" } } });
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("La reserva ya estaba cancelada"));
+    expect(dialog()).toBeInTheDocument();
+  });
+
+  it("listado: «Cancelar» de una reserva abre el mismo diálogo y, al confirmar, vuelve a pedir el listado", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText("AMT-XP9W");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(dialog()).toHaveFocus();
+    expect(within(dialog()).getByText("Se avisará por push y email a 2 jugadores.")).toBeInTheDocument();
+    const loads = svc.bookings.list.mock.calls.length;
+    fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Torneo" } });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", "Torneo"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(svc.bookings.list.mock.calls.length).toBeGreaterThan(loads));
+  });
+
+  it("listado: Escape cierra el diálogo sin cancelar", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText("AMT-XP9W");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.bookings.cancel).not.toHaveBeenCalled();
   });
 });
 

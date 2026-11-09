@@ -3,7 +3,8 @@
  *
  * Vista admin con todos los campos relevantes: pista, modo, participantes,
  * precio, pago, cancelación, normas aceptadas, metadata. Incluye acción de
- * cancelar (con motivo opcional) si la reserva aún es cancelable.
+ * cancelar (confirmada en un diálogo, con motivo opcional) si la reserva aún
+ * es cancelable.
  */
 
 "use client";
@@ -16,14 +17,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
+import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
-import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
-import { bookingCapacity, cancellationNoticeCount } from "@/lib/utils/booking-participants";
+import { bookingCapacity } from "@/lib/utils/booking-participants";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
@@ -91,34 +92,14 @@ export default function BookingDetailPage({
 }) {
   const { id } = use(params);
   const { role, clubId } = useRole();
-  const { data: me } = useMe();
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
-  const [reason, setReason] = useState("");
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   const query = useQuery({
     queryKey: bookingsQK.bookingDetail(id),
     queryFn: () => bookingsService.bookings.detail(id),
     enabled: !!id && !!clubId && isClub(role),
-  });
-
-  const cancelMut = useMutation({
-    mutationFn: () => bookingsService.bookings.cancel(id, reason || undefined),
-    onSuccess: () => {
-      toast.success("Reserva cancelada — jugadores notificados");
-      setShowCancel(false);
-      setReason("");
-      qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
-      qc.invalidateQueries({ queryKey: ["bookings", "list"] });
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (err as Error)?.message ??
-        "Error al cancelar";
-      toast.error(msg);
-    },
   });
 
   const markPaidMut = useMutation({
@@ -192,9 +173,6 @@ export default function BookingDetailPage({
   const at = (iso: string) => formatInTimeZone(iso, tz, DATE_TIME);
   const isOpen = b.matchMode === "OPEN";
   const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
-  // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien
-  // cancela. Sin saber aún quién es, no hay número (contaría al propio club)
-  const noticeCount = me ? cancellationNoticeCount(b, me.id) : null;
   const payment = paymentAction(b.paymentMethod);
 
   return (
@@ -355,33 +333,8 @@ export default function BookingDetailPage({
         )}
       </Section>
 
-      {/* Cancel dialog */}
       {showCancel && canCancel && (
-        <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
-          <p className="text-sm font-medium text-destructive">¿Cancelar esta reserva?</p>
-          <p className="text-xs text-muted-foreground">
-            {noticeCount === null
-              ? "Se avisará por push y email a los jugadores con cuenta."
-              : noticeCount === 0
-                ? "No hay jugadores con cuenta a los que avisar."
-                : `Se avisará por push y email a ${noticeCount === 1 ? "1 jugador" : `${noticeCount} jugadores`}.`}
-          </p>
-          <input
-            type="text"
-            placeholder="Motivo (opcional, visible al jugador)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowCancel(false)} disabled={cancelMut.isPending}>
-              No, volver
-            </Button>
-            <Button variant="destructive" size="sm" onClick={() => cancelMut.mutate()} disabled={cancelMut.isPending}>
-              {cancelMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Sí, cancelar
-            </Button>
-          </div>
-        </div>
+        <CancelBookingDialog booking={b} timeZone={tz} onClose={() => setShowCancel(false)} />
       )}
     </ReservasPage>
   );

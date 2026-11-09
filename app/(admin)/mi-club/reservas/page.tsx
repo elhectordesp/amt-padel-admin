@@ -186,7 +186,12 @@ function ActivationBanner({
 }: {
   loading: boolean;
   state:
-    | { status: "INACTIVE" | "TESTER_MODE" | "PUBLIC"; activeTesterCount: number; bookingPublicAt: string | null }
+    | {
+        status: "INACTIVE" | "TESTER_MODE" | "PUBLIC";
+        activeTesterCount: number;
+        bookingPublicAt: string | null;
+        bookingActivationRequestedAt: string | null;
+      }
     | undefined;
   /** La del club; null si no llegó (la fecha no se pinta con otra). */
   timeZone: string | null;
@@ -196,6 +201,27 @@ function ActivationBanner({
     return (
       <div className="rounded-lg border border-border bg-card p-6">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (state?.status === "INACTIVE" && state.bookingActivationRequestedAt) {
+    return (
+      <div className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Clock className="h-5 w-5 shrink-0 text-blue-500" />
+            <div>
+              <p className="text-sm font-medium">Solicitud enviada, pendiente de AMT</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ya has pedido la activación del módulo de Reservas. Cuando AMT
+                la apruebe, podrás probarlo con tus testers.
+              </p>
+            </div>
+          </div>
+          <Button onClick={onAction} size="sm" variant="outline">
+            Ver estado <ArrowRight className="ml-1 h-3 w-3" />
+          </Button>
+        </div>
       </div>
     );
   }

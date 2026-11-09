@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/admin/header", () => ({
@@ -87,6 +88,169 @@ describe("Activación + testers", () => {
     fireEvent.click(screen.getByTitle("Eliminar"));
 
     await waitFor(() => expect(screen.getByText(/Solo los 0 tester\(s\)/)).toBeInTheDocument());
+  });
+});
+
+describe("Activación — qué falta y solicitud pendiente (UX-21)", () => {
+  const check = (code: string, ok: boolean, missing: string[] = []) => ({ code, ok, missing });
+  const READY = {
+    ready: true,
+    checks: [
+      check("COURTS", true), check("OPERATING_HOURS", true), check("COURT_DURATIONS", true), check("COURT_PRICES", true),
+    ],
+  };
+  const INCOMPLETE = {
+    ready: false,
+    checks: [
+      check("COURTS", true),
+      check("OPERATING_HOURS", false),
+      check("COURT_DURATIONS", false, ["Pista 2"]),
+      check("COURT_PRICES", false, ["Pista 1 (90 min)", "Pista 2 (60 min)"]),
+    ],
+  };
+  const inactive = (readiness: unknown, requestedAt: string | null = null) => ({
+    bookingEnabled: false, bookingPublicAt: null, bookingActivationRequestedAt: requestedAt,
+    status: "INACTIVE", activeTesterCount: 0, readiness,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
+    svc.testers.list.mockResolvedValue([]);
+  });
+
+  it("lo que falta sale en una lista, cada cosa con su enlace, y no deja solicitar", async () => {
+    svc.activation.state.mockResolvedValue(inactive(INCOMPLETE));
+    renderPage();
+
+    expect(await screen.findByText("Lo que falta para que los jugadores vean huecos libres")).toBeInTheDocument();
+    expect(screen.getByText("El club tiene pistas dadas de alta")).toBeInTheDocument();
+    expect(screen.getByText(/Indica los días y las horas a las que abre el club/)).toBeInTheDocument();
+    expect(screen.getByText(/Faltan las duraciones de: Pista 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Falta el precio de: Pista 1 \(90 min\), Pista 2 \(60 min\)/)).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: "Ir a Horarios" })).toHaveAttribute("href", "/mi-club/reservas/horarios");
+    expect(screen.getByRole("link", { name: "Ir a Pistas" })).toHaveAttribute("href", "/mi-club/reservas/pistas");
+    expect(screen.getByRole("link", { name: "Ir a Precios" })).toHaveAttribute("href", "/mi-club/reservas/precios");
+    // Lo que ya está hecho no pide ir a ningún sitio
+    expect(screen.queryByRole("link", { name: "Ir a Mi club" })).not.toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: /Solicitar activación/ })).toBeDisabled();
+    expect(screen.getByText(/Completa los pasos pendientes/)).toBeInTheDocument();
+  });
+
+  it("sin pistas, el enlace lleva a Mi club", async () => {
+    svc.activation.state.mockResolvedValue(inactive({
+      ready: false,
+      checks: [check("COURTS", false), check("OPERATING_HOURS", true), check("COURT_DURATIONS", true), check("COURT_PRICES", true)],
+    }));
+    renderPage();
+    expect(await screen.findByText("Da de alta al menos una pista")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ir a Mi club" })).toHaveAttribute("href", "/mi-club");
+  });
+
+  it("con todo listo lo dice, y solicitar manda la petición y vuelve a pedir el estado", async () => {
+    svc.activation.state
+      .mockResolvedValueOnce(inactive(READY))
+      .mockResolvedValue(inactive(null, "2026-11-05T10:00:00.000Z"));
+    svc.activation.request.mockResolvedValue({ notifiedAdminCount: 1 });
+    renderPage();
+
+    expect(await screen.findByText("Todo listo para que los jugadores vean huecos libres")).toBeInTheDocument();
+    expect(screen.queryByText(/Completa los pasos pendientes/)).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: /Solicitar activación/ });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+
+    await waitFor(() => expect(svc.activation.request).toHaveBeenCalledWith("c1"));
+    // Y la página pasa a «pendiente»: ya no deja pedirla otra vez
+    expect(await screen.findByText("Solicitud enviada, pendiente de AMT")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Solicitar activación/ })).not.toBeInTheDocument();
+  });
+
+  it("con la solicitud ya enviada: «Solicitud enviada, pendiente de AMT» con su fecha, sin lista ni botón", async () => {
+    svc.activation.state.mockResolvedValue(inactive(READY, "2026-11-05T10:00:00.000Z"));
+    renderPage();
+
+    expect(await screen.findByText("Solicitud enviada, pendiente de AMT")).toBeInTheDocument();
+    expect(screen.getByText(/Enviada el 5\/11\/2026/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Solicitar activación/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/huecos libres/)).not.toBeInTheDocument();
+  });
+
+  it("si el back la rechaza (le falta algo), enseña su mensaje y refresca la lista", async () => {
+    svc.activation.state
+      .mockResolvedValueOnce(inactive(READY))
+      .mockResolvedValue(inactive(INCOMPLETE));
+    svc.activation.request.mockRejectedValue({
+      response: { data: { message: "No se puede solicitar la activación todavía: no hay ningún día con horario de apertura." } },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Solicitar activación/ }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("horario de apertura")));
+    expect(await screen.findByText(/Faltan las duraciones de: Pista 2/)).toBeInTheDocument();
+  });
+
+  it("un back sin lista (versión anterior): se puede solicitar y decide el back", async () => {
+    svc.activation.state.mockResolvedValue({
+      bookingEnabled: false, bookingPublicAt: null, status: "INACTIVE", activeTesterCount: 0,
+    });
+    renderPage();
+    expect(await screen.findByRole("button", { name: /Solicitar activación/ })).toBeEnabled();
+    expect(screen.queryByText(/huecos libres/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Activación — «Publicar al público» pide confirmación (UX-22)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
+    svc.testers.list.mockResolvedValue([]);
+    svc.activation.state.mockResolvedValue(state(2));
+    svc.activation.publish.mockResolvedValue({});
+  });
+
+  it("el botón solo abre el diálogo: no publica hasta confirmar", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Publicar al público/ }));
+
+    const dialog = screen.getByRole("dialog", { name: "¿Publicar el club al público?" });
+    expect(dialog).toHaveFocus();
+    expect(dialog).toHaveTextContent("Tu club aparecerá a todos los jugadores de la app; para retirarlo tendrás que pedírselo a AMT.");
+    expect(svc.activation.publish).not.toHaveBeenCalled();
+  });
+
+  it("Escape y «No, volver» lo cierran sin publicar", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Publicar al público/ }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Publicar al público/ }));
+    fireEvent.click(screen.getByRole("button", { name: "No, volver" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.activation.publish).not.toHaveBeenCalled();
+  });
+
+  it("«Sí, publicar» publica, cierra el diálogo y avisa", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Publicar al público/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Sí, publicar" }));
+
+    await waitFor(() => expect(svc.activation.publish).toHaveBeenCalledWith("c1"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith("Club publicado");
+  });
+
+  it("si el back lo rechaza, enseña su mensaje y cierra el diálogo", async () => {
+    svc.activation.publish.mockRejectedValue({ response: { data: { message: "El club ya es públicamente visible" } } });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Publicar al público/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Sí, publicar" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("El club ya es públicamente visible"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });
 

@@ -10,7 +10,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Calendar,
@@ -19,7 +19,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import { ErrorState } from "@/components/admin/error-state";
 import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -268,25 +268,7 @@ export default function BookingsListPage() {
 }
 
 function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
-  const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
-  const [reason, setReason] = useState("");
-
-  const cancel = useMutation({
-    mutationFn: () => bookingsService.bookings.cancel(b.id, reason || undefined),
-    onSuccess: () => {
-      toast.success("Reserva cancelada — jugadores notificados");
-      setShowCancel(false);
-      qc.invalidateQueries({ queryKey: ["bookings", "list"] });
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (err as Error)?.message ??
-        "Error";
-      toast.error(msg);
-    },
-  });
 
   // En hora del club, como el detalle y el calendario
   const timeStr = `${zonedTime(b.startsAt, timeZone)} - ${zonedTime(b.endsAt, timeZone)}`;
@@ -331,33 +313,7 @@ function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: stri
         )}
       </div>
       {showCancel && (
-        <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3">
-          <p className="text-sm font-medium">¿Cancelar esta reserva?</p>
-          <input
-            type="text"
-            placeholder="Motivo (opcional, visible al jugador)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowCancel(false)}>
-              Cerrar
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => cancel.mutate()}
-              disabled={cancel.isPending}
-            >
-              {cancel.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                "Confirmar cancelación"
-              )}
-            </Button>
-          </div>
-        </div>
+        <CancelBookingDialog booking={b} timeZone={timeZone} onClose={() => setShowCancel(false)} />
       )}
     </div>
   );
