@@ -387,3 +387,43 @@ export interface PaginatedBookings {
   items: Booking[];
   total: number;
 }
+
+/** Cambio de hora, pista o duración de una reserva (PATCH /bookings/:id). */
+export interface UpdateBookingPayload {
+  courtId: string;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+}
+
+export interface BookingPriceChange {
+  previousCents: number;
+  newCents: number;
+  /** newCents - previousCents (negativo: sale más barata). */
+  differenceCents: number;
+  /** Estaba pagada: el precio se mantiene. */
+  kept: boolean;
+}
+
+export interface RescheduleSlot {
+  courtId: string;
+  courtName: string;
+  startsAt: string;
+  endsAt: string;
+  startsAtLocal: string; // "HH:mm" del club
+  durationMinutes: number;
+  /** Lo que costaría la reserva en este hueco, con sus mismos extras. */
+  priceCents: number;
+  differenceCents: number;
+}
+
+export interface RescheduleOptions {
+  currentPriceCents: number;
+  priceKept: boolean;
+  durations: number[];
+  slots: RescheduleSlot[];
+}
+
+export interface CancelManyResult {
+  cancelled: string[];
+  failed: { id: string; code: string }[];
+}

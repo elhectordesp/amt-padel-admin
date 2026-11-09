@@ -15,6 +15,10 @@ import type {
   BookingExtra,
   BookingFiltersQuery,
   BookingPaymentMethod,
+  BookingPriceChange,
+  CancelManyResult,
+  RescheduleOptions,
+  UpdateBookingPayload,
   BookingResult,
   ClubBookingConfig,
   ClubOperatingHours,
@@ -44,6 +48,9 @@ const base = (clubId: string) => `/admin/clubs/${clubId}/booking-config`;
 
 /** Lo más que devuelve el back en una página de GET /bookings. */
 const BOOKINGS_PAGE_SIZE = 100;
+
+/** Lo más que cancela el back en una petición de «cancelar varias». */
+const CANCEL_MANY_MAX = 100;
 
 function listBookings(filters: BookingFiltersQuery = {}) {
   return api
@@ -273,6 +280,37 @@ export const bookingsService = {
       api
         .delete<Booking>(`/bookings/${id}`, { data: { reason } })
         .then((r) => r.data),
+
+    /** Cambia la reserva de hora, pista o duración; avisa a los jugadores. */
+    update: (id: string, payload: UpdateBookingPayload) =>
+      api
+        .patch<{ booking: Booking; price: BookingPriceChange }>(`/bookings/${id}`, payload)
+        .then((r) => r.data),
+
+    /** Huecos libres de un día para esta reserva (el suyo cuenta como libre), con su precio. */
+    rescheduleOptions: (id: string, params: { date: string; durationMinutes?: number }) =>
+      api
+        .get<RescheduleOptions>(`/bookings/${id}/reschedule-options`, { params })
+        .then((r) => r.data),
+
+    /**
+     * Cancela varias: el back admite 100 por petición, así que de 100 en 100.
+     * Cada una va por su cuenta; las que no se pueden vuelven con su código.
+     */
+    cancelMany: async (ids: string[], reason?: string): Promise<CancelManyResult> => {
+      const result: CancelManyResult = { cancelled: [], failed: [] };
+      for (let i = 0; i < ids.length; i += CANCEL_MANY_MAX) {
+        const part = await api
+          .post<CancelManyResult>(`/bookings/cancel-many`, {
+            ids: ids.slice(i, i + CANCEL_MANY_MAX),
+            reason,
+          })
+          .then((r) => r.data);
+        result.cancelled.push(...part.cancelled);
+        result.failed.push(...part.failed);
+      }
+      return result;
+    },
 
     /**
      * El club pone o corrige el resultado (hasta 30 días después del partido).

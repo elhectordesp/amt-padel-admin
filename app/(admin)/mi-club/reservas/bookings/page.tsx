@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Calendar,
   Loader2,
@@ -20,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
+import { CancelManyBookingsDialog } from "@/components/admin/cancel-many-bookings-dialog";
 import { ErrorState } from "@/components/admin/error-state";
 import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -28,6 +30,7 @@ import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { cancelFailureReason, cancelledSummary } from "@/lib/utils/booking-cancel-many";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -40,6 +43,7 @@ import type {
   Booking,
   BookingFiltersQuery,
   BookingStatus,
+  CancelManyResult,
 } from "@/types/bookings";
 
 type Tab = "today" | "upcoming" | "history" | "all";
@@ -55,6 +59,10 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
 
 const UPCOMING_STATUSES: BookingStatus[] = ["PENDING_INVITES", "CONFIRMED", "IN_PROGRESS"];
 
+// Las que aún se pueden cancelar (las mismas para las que el listado enseña «Cancelar»)
+const CANCELABLE_STATUSES: BookingStatus[] = ["PENDING_INVITES", "CONFIRMED", "IN_PROGRESS"];
+const isCancelable = (b: Booking) => CANCELABLE_STATUSES.includes(b.status);
+
 const STATUS_COLORS: Record<BookingStatus, string> = {
   PENDING_INVITES: "bg-amber-500/15 text-amber-500",
   CONFIRMED: "bg-blue-500/15 text-blue-500",
@@ -68,6 +76,16 @@ export default function BookingsListPage() {
   const { role, clubId } = useRole();
   const [tab, setTab] = useState<Tab>("today");
   const [showCreate, setShowCreate] = useState(false);
+  // Un día concreto (YYYY-MM-DD, el del club): manda sobre la pestaña
+  const [day, setDay] = useState("");
+  // Las marcadas para cancelar de golpe, con sus datos para el resumen
+  const [selected, setSelected] = useState<Map<string, Booking>>(new Map());
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [showCancelMany, setShowCancelMany] = useState(false);
+  const [cancelResult, setCancelResult] = useState<{
+    result: CancelManyResult;
+    byId: Map<string, Booking>;
+  } | null>(null);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
   const timeZone = clubTimeZone.timeZone;
   const { page, setPage, pageSize, setPageSize } = usePagination();
@@ -83,13 +101,22 @@ export default function BookingsListPage() {
     const t = setTimeout(() => {
       setSearch(next);
       setPage(1);
+      setSelected(new Map());
     }, 300);
     return () => clearTimeout(t);
   }, [searchInput, search, setPage]);
 
   const changeTab = (next: Tab) => {
     setTab(next);
+    setDay("");
     setPage(1);
+    setSelected(new Map());
+  };
+
+  const changeDay = (next: string) => {
+    setDay(next);
+    setPage(1);
+    setSelected(new Map());
   };
 
   // null: aún sin la zona del club, no hay «hoy» con el que pedir
@@ -105,6 +132,9 @@ export default function BookingsListPage() {
       offset: (page - 1) * pageSize,
       q: search || undefined,
     };
+    if (day) {
+      return { ...base, ...dayRangeIso(day, day, timeZone), order: "asc" };
+    }
     if (tab === "today") {
       return { ...base, ...today, order: "asc" };
     }
@@ -116,7 +146,7 @@ export default function BookingsListPage() {
       return { ...base, toDate: today.fromDate };
     }
     return base;
-  }, [clubId, timeZone, tab, page, pageSize, search]);
+  }, [clubId, timeZone, tab, day, page, pageSize, search]);
 
   const query = useQuery({
     queryKey: bookingsQK.bookingsList(filters ?? {}),
@@ -166,6 +196,28 @@ export default function BookingsListPage() {
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
 
+  const toggle = (b: Booking) =>
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (!next.delete(b.id)) next.set(b.id, b);
+      return next;
+    });
+
+  // Todas las cancelables del filtro (no solo las de esta página)
+  const selectAll = async () => {
+    if (!filters) return;
+    setSelectingAll(true);
+    try {
+      // listAll pide página a página: su límite y desplazamiento mandan sobre los del filtro
+      const all = await bookingsService.bookings.listAll({ ...filters, statuses: CANCELABLE_STATUSES });
+      setSelected(new Map(all.map((b) => [b.id, b])));
+    } catch {
+      toast.error("No se han podido seleccionar las reservas");
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
   return (
     <ReservasPage title="Reservas">
       {/* El botón va con el texto, no junto a la cabecera: en el móvil se cortaba */}
@@ -188,24 +240,41 @@ export default function BookingsListPage() {
 
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">
-          <TabButton active={tab === "today"} onClick={() => changeTab("today")}>
+          <TabButton active={!day && tab === "today"} onClick={() => changeTab("today")}>
             Hoy
           </TabButton>
           <TabButton
-            active={tab === "upcoming"}
+            active={!day && tab === "upcoming"}
             onClick={() => changeTab("upcoming")}
           >
             Próximas
           </TabButton>
           <TabButton
-            active={tab === "history"}
+            active={!day && tab === "history"}
             onClick={() => changeTab("history")}
           >
             Histórico
           </TabButton>
-          <TabButton active={tab === "all"} onClick={() => changeTab("all")}>
+          <TabButton active={!day && tab === "all"} onClick={() => changeTab("all")}>
             Todas
           </TabButton>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Día
+            <input
+              type="date"
+              aria-label="Ver un día concreto"
+              value={day}
+              onChange={(e) => changeDay(e.target.value)}
+              className={`rounded-md border bg-background px-2 py-1.5 text-sm text-foreground ${
+                day ? "border-primary" : "border-border"
+              }`}
+            />
+          </label>
+          {day && (
+            <Button variant="ghost" size="sm" onClick={() => changeDay("")}>
+              <X className="h-3.5 w-3.5" /> Quitar día
+            </Button>
+          )}
         </div>
 
         <div className="mt-4 flex w-full items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 sm:max-w-xs">
@@ -233,6 +302,33 @@ export default function BookingsListPage() {
           </div>
         )}
 
+        {cancelResult && (
+          <CancelResultCard
+            result={cancelResult.result}
+            byId={cancelResult.byId}
+            timeZone={timeZone}
+            onDismiss={() => setCancelResult(null)}
+          />
+        )}
+
+        {!query.isError && items.some(isCancelable) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void selectAll()} disabled={selectingAll}>
+              {selectingAll && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Seleccionar todas
+            </Button>
+            {selected.size > 0 && (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setSelected(new Map())}>
+                  Quitar selección
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setShowCancelMany(true)}>
+                  <X className="h-3.5 w-3.5" /> Cancelar seleccionadas ({selected.size})
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="mt-3 space-y-2">
           {query.isError ? (
             <ErrorState
@@ -245,7 +341,15 @@ export default function BookingsListPage() {
               {search ? "Ninguna reserva coincide con la búsqueda" : "Sin reservas en este filtro"}
             </div>
           ) : (
-            items.map((b) => <BookingRow key={b.id} booking={b} timeZone={timeZone} />)
+            items.map((b) => (
+              <BookingRow
+                key={b.id}
+                booking={b}
+                timeZone={timeZone}
+                selected={selected.has(b.id)}
+                onToggle={() => toggle(b)}
+              />
+            ))
           )}
         </div>
 
@@ -263,11 +367,79 @@ export default function BookingsListPage() {
           </div>
         )}
       </div>
+
+      {showCancelMany && (
+        <CancelManyBookingsDialog
+          ids={[...selected.keys()]}
+          onClose={() => setShowCancelMany(false)}
+          onDone={(result) => {
+            setCancelResult({ result, byId: selected });
+            setSelected(new Map());
+            setShowCancelMany(false);
+          }}
+        />
+      )}
     </ReservasPage>
   );
 }
 
-function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
+/** Qué pasó con cada reserva marcada: las canceladas y las que no se pudieron, con el motivo. */
+function CancelResultCard({
+  result,
+  byId,
+  timeZone,
+  onDismiss,
+}: {
+  result: CancelManyResult;
+  byId: Map<string, Booking>;
+  timeZone: string;
+  onDismiss: () => void;
+}) {
+  const failed = result.failed.length;
+  return (
+    <div role="status" className="mt-3 rounded-lg border border-border bg-card p-3 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-medium">
+          {cancelledSummary(result)}
+          {failed > 0 && `; ${failed === 1 ? "1 no se ha" : `${failed} no se han`} podido cancelar`}.
+        </p>
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
+          Cerrar
+        </Button>
+      </div>
+      {failed > 0 && (
+        <ul className="mt-2 space-y-1 text-muted-foreground">
+          {result.failed.map((f) => {
+            const b = byId.get(f.id);
+            return (
+              <li key={f.id}>
+                {b ? bookingLabel(b, timeZone) : f.id}: {cancelFailureReason(f.code)}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** «Pista 2 · lun, 9 nov · 18:00 - 19:00» */
+function bookingLabel(b: Booking, timeZone: string): string {
+  const dateStr = formatInTimeZone(b.startsAt, timeZone, { weekday: "short", day: "numeric", month: "short" });
+  return `${b.court?.name ?? "Pista?"} · ${dateStr} · ${zonedTime(b.startsAt, timeZone)} - ${zonedTime(b.endsAt, timeZone)}`;
+}
+
+function BookingRow({
+  booking: b,
+  timeZone,
+  selected,
+  onToggle,
+}: {
+  booking: Booking;
+  timeZone: string;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const [showCancel, setShowCancel] = useState(false);
 
   // En hora del club, como el detalle y el calendario
@@ -281,6 +453,15 @@ function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: stri
   return (
     <div className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-card/70">
       <div className="flex items-start justify-between gap-3">
+        {isCancelable(b) && (
+          <input
+            type="checkbox"
+            aria-label={`Seleccionar la reserva ${b.shortCode}`}
+            checked={selected}
+            onChange={onToggle}
+            className="mt-1 h-4 w-4 shrink-0 cursor-pointer"
+          />
+        )}
         <Link
           href={`/mi-club/reservas/bookings/${b.id}`}
           className="min-w-0 flex-1 cursor-pointer"
@@ -302,7 +483,7 @@ function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: stri
             {b.paidAt && <span> · pagada</span>}
           </div>
         </Link>
-        {b.status !== "CANCELLED" && b.status !== "COMPLETED" && b.status !== "WITHOUT_RESULT" && (
+        {isCancelable(b) && (
           <Button
             variant="ghost"
             size="sm"
