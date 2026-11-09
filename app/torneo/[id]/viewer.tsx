@@ -266,6 +266,23 @@ export default function TournamentViewer({
             {tournament.club?.name && <span className="flex items-center gap-1.5"><Trophy size={14} />{tournament.club.name}</span>}
             {tournament.prize && <span className="text-[#D4AF37] font-semibold">{tournament.prize}</span>}
           </div>
+          {/* Texto plano tal cual (React lo escapa: nada de HTML ni markdown),
+              con sus saltos de línea. Las normas, plegadas: pueden ser largas */}
+          {tournament.description && (
+            <p className="pt-2 text-sm text-zinc-300 leading-relaxed whitespace-pre-line break-words max-w-3xl">
+              {tournament.description}
+            </p>
+          )}
+          {tournament.rules && (
+            <details className="pt-2 max-w-3xl">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">
+                Normas del torneo
+              </summary>
+              <p className="mt-2 text-sm text-zinc-300 leading-relaxed whitespace-pre-line break-words">
+                {tournament.rules}
+              </p>
+            </details>
+          )}
         </div>
 
         {/* Tabs de categoría */}

@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History,
+  History, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -51,6 +51,11 @@ const CLUB_RESERVAS_ITEM = {
   icon: CalendarRange,
   label: "Reservas",
 };
+const CLUB_TORNEOS_ITEM = {
+  href: "/mi-club/torneos",
+  icon: SlidersHorizontal,
+  label: "Opciones de torneo",
+};
 
 export function Sidebar() {
   const pathname    = usePathname();
@@ -63,6 +68,7 @@ export function Sidebar() {
     ? [
         ...NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href)),
         CLUB_MY_CLUB_ITEM,
+        CLUB_TORNEOS_ITEM,
         CLUB_RESERVAS_ITEM,
       ]
     : NAV;
