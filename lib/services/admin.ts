@@ -6,7 +6,7 @@ import type {
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, RankingGender, GrowthStats, Sponsor, SponsorScope, Club,
-  CreatePlayerPayload, UpdatePlayerPayload, GenderConflict,
+  CreatePlayerPayload, UpdatePlayerPayload, GenderConflict, Gender, RegistrationStatus,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins,
@@ -475,6 +475,19 @@ export const adminService = {
       data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
     ) =>
       api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
+    /**
+     * «Cobrar pareja»: marca el pago de los jugadores indicados y, si la
+     * inscripción está pendiente, la confirma, todo en una llamada.
+     * `titularId`/`partnerId`: quiénes cree el panel que son (si cambió la
+     * pareja entretanto, el back da 409).
+     */
+    payPair: (
+      registrationId: string,
+      data: { players: PaymentPlayer[]; paymentMethod: string; titularId: string; partnerId?: string },
+    ) =>
+      api.post<{ registrationId: string; confirmed: boolean; status: RegistrationStatus }>(
+        `/admin/registrations/${registrationId}/pay-pair`, data,
+      ).then((r) => r.data),
   },
 
   categories: {
@@ -548,6 +561,9 @@ export const adminService = {
   },
 
   players: {
+    /** Pone el género a un jugador al que le falta (el back da 409 si ya lo tiene). */
+    setMissingGender: (playerId: string, gender: Gender) =>
+      api.patch<{ id: string; gender: Gender }>(`/admin/players/${playerId}/gender`, { gender }).then((r) => r.data),
     list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string; activationStatus?: string }) =>
       api.get<{ data: any[]; total: number; page: number; pageSize: number }>(
         "/admin/players",
