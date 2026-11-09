@@ -1,14 +1,18 @@
 /**
- * BookingCreateDialog — Crear una reserva A MANO (Reservas R1).
+ * BookingCreateDialog — Crear una reserva A MANO (Reservas R1), la del mostrador.
  *
- * El admin del club puede crear una reserva de pista para walk-in / teléfono /
- * partido abierto. Elige pista + fecha + duración, ve los huecos LIBRES
- * (GET /availability) y escoge una hora de inicio, luego el modo:
- *  - Abierta (OPEN) + min/max LSPA opcional
- *  - Con jugadores (PRIVATE_AMT / PRIVATE_WITH_GUESTS) — busca jugadores AMT
- *    y/o añade invitados por nombre (hasta 4 en dobles y 2 en individual: el
- *    club reserva para ellos y no figura como jugador)
- *  - Por teléfono / sin gente (ADMIN_MANUAL) — un contacto libre opcional
+ * El club crea una reserva de pista por teléfono, en el mostrador o de partido
+ * abierto. Elige pista + fecha + duración, ve los huecos LIBRES
+ * (GET /availability) y escoge una hora de inicio, con su precio a la vista.
+ * Luego el modo (por defecto «Por teléfono»):
+ *  - Abierta (OPEN) + nivel mín/máx opcional
+ *  - Con jugadores (PRIVATE_AMT / PRIVATE_WITH_GUESTS) — busca jugadores de la
+ *    app y/o añade invitados por nombre (hasta 4 en dobles y 2 en individual:
+ *    el club reserva para ellos y no figura como jugador)
+ *  - Por teléfono (ADMIN_MANUAL) — solo el cliente
+ * El cliente del club se busca o se da de alta ahí mismo (`clubCustomerId`) y,
+ * si paga ya, «Cobrada ahora» la crea cobrada (`payNow`, en la misma operación
+ * del back). El pie de botones queda fijo: el formulario se desplaza por dentro.
  *
  * Submit → bookingsService.bookings.create. Al éxito cierra + refresca la lista.
  */
@@ -22,6 +26,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import type { ClubCustomer } from "@/lib/services/club-customers";
+import { BookingCustomerPicker } from "@/components/admin/booking-customer-picker";
+import { CLUB_PAYMENT_METHODS, paymentMethodLabel, type ClubPaymentMethod } from "@/lib/utils/booking-payment";
+import { formatCents } from "@/lib/utils/booking-price";
 import { zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
 import type { CreateBookingPayload } from "@/types/bookings";
@@ -87,7 +95,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   // La hora pedida (ISO UTC): la del hueco del calendario o la elegida aquí.
   // Se conserva al cambiar de pista o de duración; vale si es un hueco libre
   const [wantedStartsAt, setWantedStartsAt] = useState(initial?.startsAt ?? "");
-  const [mode, setMode] = useState<Mode>("PLAYERS");
+  // Lo habitual en el mostrador: alguien llama y se le apunta
+  const [mode, setMode] = useState<Mode>("PHONE");
   const [isCompetitive, setIsCompetitive] = useState(false);
   const [notes, setNotes] = useState("");
 
@@ -100,8 +109,10 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   const [guests, setGuests] = useState<Guest[]>([]);
   const [guestDraft, setGuestDraft] = useState("");
 
-  // Modo PHONE
-  const [contact, setContact] = useState("");
+  // El cliente del club a quien se reserva (opcional) y si paga ya
+  const [customer, setCustomer] = useState<ClubCustomer | null>(null);
+  const [payNow, setPayNow] = useState(false);
+  const [payMethod, setPayMethod] = useState<ClubPaymentMethod>("CASH_AT_VENUE");
 
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
@@ -159,6 +170,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   const startsAt = slots.some((s) => s.startsAt === wantedStartsAt) ? wantedStartsAt : "";
   // Una reserva ya empezada se apunta como registro: ni competitiva ni abierta
   const started = hasStarted(startsAt);
+  // El hueco elegido: de él salen el precio y lo que incluye
+  const pickedSlot = slots.find((s) => s.startsAt === startsAt);
   // Si ya se sabe que no cabe (huecos cargados para una duración que admite
   // la pista), se dice por qué en vez de dejar la hora en blanco sin más
   const slotsSettled =
@@ -195,7 +208,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
 
   function resetAndClose() {
     setWantedStartsAt("");
-    setMode("PLAYERS");
+    setMode("PHONE");
     setIsCompetitive(false);
     setNotes("");
     setMinLspa("");
@@ -203,7 +216,9 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     setPlayers([]);
     setGuests([]);
     setGuestDraft("");
-    setContact("");
+    setCustomer(null);
+    setPayNow(false);
+    setPayMethod("CASH_AT_VENUE");
     onClose();
   }
 
@@ -234,6 +249,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
       durationMinutes: duration,
       isCompetitive: isCompetitive && !started,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
+      ...(customer ? { clubCustomerId: customer.id } : {}),
+      ...(payNow && (pickedSlot?.priceCents ?? 0) > 0 ? { payNow: { method: payMethod } } : {}),
     };
 
     if (mode === "OPEN") {
@@ -248,12 +265,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     }
 
     if (mode === "PHONE") {
-      const name = contact.trim();
-      return {
-        ...base,
-        matchMode: "ADMIN_MANUAL",
-        ...(name ? { participants: [{ guestName: name }] } : {}),
-      };
+      return { ...base, matchMode: "ADMIN_MANUAL" };
     }
 
     // PLAYERS
@@ -289,8 +301,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={resetAndClose}
       />
-      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-card border border-border rounded-xl shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="relative flex w-full max-w-md max-h-[90vh] flex-col bg-card border border-border rounded-xl shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <CalendarPlus className="h-5 w-5 text-[#D4AF37]" />
             <div>
@@ -298,7 +310,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 Crear reserva
               </h2>
               <p className="text-xs text-muted-foreground">
-                Alta manual (walk-in / teléfono / abierta)
+                Por teléfono, en el mostrador o abierta a otros jugadores
               </p>
             </div>
           </div>
@@ -311,7 +323,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           </button>
         </div>
 
-        <div className="p-5 space-y-3">
+        {/* Solo el formulario se desplaza: el pie con los botones siempre a la vista */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-3">
           {/* Pista */}
           <label className="block">
             <span className="text-xs text-muted-foreground">Pista</span>
@@ -398,6 +411,19 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             )}
           </label>
 
+          {/* Precio, antes de crear */}
+          {pickedSlot && (
+            <p className="text-sm">
+              <span className="font-semibold">{formatCents(pickedSlot.priceCents)}</span>
+              <span className="text-muted-foreground"> · {pickedSlot.durationMinutes} min</span>
+              {pickedSlot.priceBreakdown.extras.length > 0 && (
+                <span className="block text-xs text-muted-foreground">
+                  Incluye: {pickedSlot.priceBreakdown.extras.map((e) => e.name).join(", ")}
+                </span>
+              )}
+            </p>
+          )}
+
           {/* Modo */}
           <div className="pt-1">
             <span className="text-xs text-muted-foreground">Modo</span>
@@ -409,7 +435,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 hint={
                   started
                     ? "No se puede: el partido ya ha empezado"
-                    : "Partido abierto a jugadores AMT"
+                    : "Partido abierto a otros jugadores de la app"
                 }
                 disabled={started}
               />
@@ -417,13 +443,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 checked={mode === "PLAYERS"}
                 onChange={() => setMode("PLAYERS")}
                 label="Con jugadores"
-                hint="Busca jugadores AMT o añade invitados"
+                hint="Busca jugadores de la app o añade invitados"
               />
               <ModeRadio
                 checked={mode === "PHONE"}
                 onChange={() => setMode("PHONE")}
-                label="Por teléfono / sin gente"
-                hint="Reserva manual con un contacto opcional"
+                label="Por teléfono"
+                hint="Solo el cliente, sin lista de jugadores"
               />
             </div>
             {openButStarted && (
@@ -440,7 +466,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-3">
               <label className="block">
                 <span className="text-xs text-muted-foreground">
-                  LSPA mín. (opcional)
+                  Nivel mín. (opcional)
                 </span>
                 <input
                   type="number"
@@ -455,7 +481,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
               </label>
               <label className="block">
                 <span className="text-xs text-muted-foreground">
-                  LSPA máx. (opcional)
+                  Nivel máx. (opcional)
                 </span>
                 <input
                   type="number"
@@ -563,20 +589,36 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             </div>
           )}
 
-          {/* Modo PHONE */}
-          {mode === "PHONE" && (
-            <label className="block">
-              <span className="text-xs text-muted-foreground">
-                Nombre/teléfono de contacto (opcional)
-              </span>
-              <input
-                type="text"
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="Ej. Juan · 600 123 456"
-                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-              />
-            </label>
+          {/* Cliente del club: se busca, o se da de alta ahí mismo */}
+          <BookingCustomerPicker clubId={clubId} value={customer} onChange={setCustomer} />
+
+          {/* Cobrada ahora: solo si la reserva tiene importe */}
+          {pickedSlot && pickedSlot.priceCents > 0 && (
+            <div className="rounded-md border border-border bg-background p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={payNow}
+                  onChange={(e) => setPayNow(e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                Cobrada ahora ({formatCents(pickedSlot.priceCents)})
+              </label>
+              {payNow && (
+                <select
+                  aria-label="Cómo se ha cobrado"
+                  value={payMethod}
+                  onChange={(e) => setPayMethod(e.target.value as ClubPaymentMethod)}
+                  className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                >
+                  {CLUB_PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {paymentMethodLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           )}
 
           {/* Competitivo (no en una reserva ya empezada: fila 39) */}
@@ -589,7 +631,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 disabled={started}
                 className="h-4 w-4 accent-primary"
               />
-              Partido competitivo (cuenta para LSPA)
+              Partido competitivo (puntúa en el ranking)
             </label>
             {started && (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -613,7 +655,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           </label>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+        <div className="flex shrink-0 items-center justify-end gap-2 px-5 py-4 border-t border-border">
           <Button
             variant="outline"
             size="sm"
@@ -699,7 +741,7 @@ function PlayerSearch({ onPick }: { onPick: (p: Player) => void }) {
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Buscar jugador AMT por nombre o email…"
+          placeholder="Buscar jugador de la app por nombre o email…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="w-full rounded-md border border-border bg-background py-1.5 pl-7 pr-2 text-sm text-foreground"
