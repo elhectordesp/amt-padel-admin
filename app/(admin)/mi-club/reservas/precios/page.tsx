@@ -90,8 +90,7 @@ export default function PreciosPage() {
   return (
     <ReservasPage title="Precios">
       <p className="mt-2 text-sm text-muted-foreground">
-        Matriz de precios por (día × franja horaria × duración) para cada pista.
-        Sin un precio definido, ese slot NO se ofrecerá al jugador.
+        Precio de cada pista según el día, la franja horaria y la duración. Si una combinación no tiene precio, no se ofrecerá al jugador.
       </p>
 
       <div className="mt-6">

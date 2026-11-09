@@ -63,7 +63,7 @@ export default function ActivacionPage() {
   }
 
   return (
-    <ReservasPage title="Activación + Testers">
+    <ReservasPage title="Activación y pruebas">
       <p className="mt-2 text-sm text-muted-foreground">
         Solicita la activación al equipo AMT cuando hayas terminado de configurar
         horarios, pistas, precios y extras. Una vez aprobado, podrás usar el

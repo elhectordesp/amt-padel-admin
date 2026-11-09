@@ -138,7 +138,7 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
               </span>
             )}
             <span className="text-xs text-muted-foreground">
-              {court.isIndoor ? "Indoor" : "Outdoor"}
+              {court.isIndoor ? "Cubierta" : "Descubierta"}
             </span>
             {noneSaved && (
               <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-500">
@@ -175,8 +175,8 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
                   }
                   className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
                 >
-                  <option value="outdoor">Outdoor (al aire libre)</option>
-                  <option value="indoor">Indoor (cubierta)</option>
+                  <option value="outdoor">Descubierta (al aire libre)</option>
+                  <option value="indoor">Cubierta</option>
                 </select>
               </Field>
               <Field label="Tipo">
@@ -396,7 +396,7 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
             <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Duración</th>
-                <th className="px-3 py-2 text-left font-medium">Default</th>
+                <th className="px-3 py-2 text-left font-medium">Por defecto</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -435,7 +435,7 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
           type="number"
           min={30}
           max={240}
-          placeholder="Custom (ej. 75)"
+          placeholder="Otra (ej. 75 min)"
           value={customDuration}
           onChange={(e) => setCustomDuration(e.target.value)}
           className="w-32 rounded border border-border bg-background px-2 py-1 text-sm"

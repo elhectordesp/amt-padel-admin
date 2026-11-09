@@ -107,7 +107,7 @@ export default function NormasPage() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Eye className="h-3 w-3" /> Preview
+            <Eye className="h-3 w-3" /> Vista previa
           </button>
         </div>
         <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
@@ -122,15 +122,13 @@ export default function NormasPage() {
 
       <p className="mt-2 text-sm text-muted-foreground">
         Los jugadores deberán aceptar estas normas la primera vez que reserven
-        en tu club. Si actualizas el texto, el sistema genera una nueva versión
-        — los jugadores que ya aceptaron la anterior NO tienen que volver a
+        en tu club. Si actualizas el texto, los jugadores que ya aceptaron las anteriores NO tienen que volver a
         aceptar (el histórico queda guardado).
       </p>
 
       {query.data?.version && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Versión actual:{" "}
-          <code className="rounded bg-muted px-1 py-0.5">{query.data.version}</code>
+          Normas publicadas y en vigor.
         </p>
       )}
 
