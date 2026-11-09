@@ -12,13 +12,14 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Calendar, Clock, CreditCard, Crown, FileText, Flame,
+  Calendar, CalendarClock, Clock, CreditCard, Crown, FileText, Flame,
   Loader2, MapPin, Trophy, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import { ErrorState } from "@/components/admin/error-state";
+import { RescheduleBookingDialog } from "@/components/admin/reschedule-booking-dialog";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
@@ -94,6 +95,7 @@ export default function BookingDetailPage({
   const { role, clubId } = useRole();
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   const query = useQuery({
@@ -173,6 +175,9 @@ export default function BookingDetailPage({
   const at = (iso: string) => formatInTimeZone(iso, tz, DATE_TIME);
   const isOpen = b.matchMode === "OPEN";
   const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
+  // Solo una que aún no ha empezado: después ya no tiene sentido moverla
+  const canReschedule =
+    ["PENDING_INVITES", "CONFIRMED"].includes(b.status) && new Date(b.startsAt) > new Date();
   const payment = paymentAction(b.paymentMethod);
 
   return (
@@ -201,11 +206,18 @@ export default function BookingDetailPage({
             )}
           </div>
         </div>
-        {canCancel && (
-          <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
-            <X className="h-3.5 w-3.5" /> Cancelar reserva
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canReschedule && (
+            <Button variant="outline" size="sm" onClick={() => setShowReschedule(true)}>
+              <CalendarClock className="h-3.5 w-3.5" /> Cambiar hora o pista
+            </Button>
+          )}
+          {canCancel && (
+            <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
+              <X className="h-3.5 w-3.5" /> Cancelar reserva
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Resumen */}
@@ -333,6 +345,9 @@ export default function BookingDetailPage({
         )}
       </Section>
 
+      {showReschedule && canReschedule && (
+        <RescheduleBookingDialog booking={b} timeZone={tz} onClose={() => setShowReschedule(false)} />
+      )}
       {showCancel && canCancel && (
         <CancelBookingDialog booking={b} timeZone={tz} onClose={() => setShowCancel(false)} />
       )}
