@@ -73,3 +73,33 @@ describe("Portada de Reservas — zona del club (B1)", () => {
     expect(screen.queryByText("No se pudieron cargar los datos del club.")).not.toBeInTheDocument();
   });
 });
+
+describe("Portada de Reservas — solicitud de activación pendiente (UX-21)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue({ id: "c1", name: "Club Centro", timezone: "Europe/Madrid" });
+  });
+
+  it("con la solicitud enviada dice «pendiente de AMT» y no invita a solicitar otra vez", async () => {
+    svc.activation.state.mockResolvedValue({
+      bookingEnabled: false, bookingPublicAt: null, bookingActivationRequestedAt: "2026-11-05T10:00:00.000Z",
+      status: "INACTIVE", activeTesterCount: 0, readiness: null,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Solicitud enviada, pendiente de AMT")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver estado/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Solicitar activación/ })).not.toBeInTheDocument();
+  });
+
+  it("sin solicitud, invita a solicitarla", async () => {
+    svc.activation.state.mockResolvedValue({
+      bookingEnabled: false, bookingPublicAt: null, bookingActivationRequestedAt: null,
+      status: "INACTIVE", activeTesterCount: 0, readiness: null,
+    });
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: /Solicitar activación/ })).toBeInTheDocument();
+    expect(screen.queryByText("Solicitud enviada, pendiente de AMT")).not.toBeInTheDocument();
+  });
+});

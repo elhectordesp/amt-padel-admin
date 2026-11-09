@@ -117,11 +117,34 @@ export interface BookingExtra {
 
 // ── Activation + testers ───────────────────────────────────────────────────
 
+export type ActivationCheckCode =
+  | "COURTS"
+  | "OPERATING_HOURS"
+  | "COURT_DURATIONS"
+  | "COURT_PRICES";
+
+export interface ActivationCheck {
+  code: ActivationCheckCode;
+  ok: boolean;
+  /** Lo que falta, listo para enseñar: pistas sin duraciones o duraciones sin precio. */
+  missing: string[];
+}
+
+/** Lo que falta para que, al activarse, haya huecos que reservar. */
+export interface ActivationReadiness {
+  ready: boolean;
+  checks: ActivationCheck[];
+}
+
 export interface ActivationState {
   bookingEnabled: boolean;
   bookingPublicAt: string | null;
+  /** Cuándo pidió el club la activación; null si no hay solicitud pendiente. */
+  bookingActivationRequestedAt: string | null;
   status: ClubActivationStatus;
   activeTesterCount: number;
+  /** Solo con el módulo inactivo; null en los demás estados. */
+  readiness: ActivationReadiness | null;
 }
 
 export interface ClubTesterUser {

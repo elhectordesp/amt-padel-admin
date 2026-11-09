@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
+  AlertCircle,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -102,6 +103,14 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
     isIndoor: court.isIndoor ?? false,
   });
 
+  // La misma consulta que la del editor (se pide una vez): así la tarjeta
+  // cerrada ya avisa de que la pista no tiene duraciones guardadas
+  const durationsQuery = useQuery({
+    queryKey: bookingsQK.courtDurations(clubId, court.id),
+    queryFn: () => bookingsService.courtDurations.list(clubId, court.id),
+  });
+  const noneSaved = durationsQuery.isSuccess && durationsQuery.data.length === 0;
+
   const saveAttrs = useMutation({
     mutationFn: () =>
       adminService.courts.update(clubId, court.id, {
@@ -131,6 +140,11 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
             <span className="text-xs text-muted-foreground">
               {court.isIndoor ? "Indoor" : "Outdoor"}
             </span>
+            {noneSaved && (
+              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-500">
+                Sin duraciones guardadas
+              </span>
+            )}
           </div>
         </div>
         <Button
@@ -242,12 +256,14 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
     queryKey: bookingsQK.courtDurations(clubId, courtId),
     queryFn: () => bookingsService.courtDurations.list(clubId, courtId),
   });
+  const noneSaved = query.isSuccess && query.data.length === 0;
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!query.data || hydrated) return;
     if (query.data.length === 0) {
-      // Sin duraciones todavía → sugerimos 60 y 90 por defecto
+      // Sin duraciones guardadas (pistas de antes de que el alta las guardara)
+      // → sugerimos 60 y 90, y el aviso de abajo dice que aún no valen
       setRows([
         { minutes: 60, isDefault: false },
         { minutes: 90, isDefault: true },
@@ -323,6 +339,34 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
         <Clock className="mr-1 inline-block h-3.5 w-3.5" />
         Duraciones permitidas
       </h3>
+
+      {/* Lo que se ve en la lista sin guardar no cuenta: sin duraciones
+          guardadas el back no ofrece ningún hueco de esta pista */}
+      {noneSaved && (
+        <div className="mb-4 flex items-start gap-3 rounded-md bg-amber-500/10 p-3">
+          <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" />
+          <div className="text-sm">
+            <p className="font-medium">Esta pista no tiene duraciones guardadas</p>
+            <p className="text-muted-foreground">
+              Mientras tanto no ofrece huecos a los jugadores. Los 60 y 90 min
+              de abajo son solo una sugerencia: no valen hasta que los guardes.
+            </p>
+            <Button
+              size="sm"
+              className="mt-2"
+              onClick={() => save.mutate()}
+              disabled={save.isPending || rows.length === 0}
+            >
+              {save.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              Guardar ahora
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Toggles de duraciones comunes */}
       <div className="mb-4 flex flex-wrap gap-2">
