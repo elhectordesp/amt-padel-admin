@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History, SlidersHorizontal,
+  History, SlidersHorizontal, Contact,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -57,6 +57,12 @@ const CLUB_TORNEOS_ITEM = {
   label: "Opciones de torneo",
 };
 
+const CLUB_CLIENTES_ITEM = {
+  href: "/mi-club/clientes",
+  icon: Contact,
+  label: "Clientes",
+};
+
 export function Sidebar() {
   const pathname    = usePathname();
   const { role }    = useRole();
@@ -70,6 +76,7 @@ export function Sidebar() {
         CLUB_MY_CLUB_ITEM,
         CLUB_TORNEOS_ITEM,
         CLUB_RESERVAS_ITEM,
+        CLUB_CLIENTES_ITEM,
       ]
     : NAV;
 

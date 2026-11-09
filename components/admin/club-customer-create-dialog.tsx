@@ -1,0 +1,181 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
+import { Field, Input } from "@/components/admin/form";
+import { Button } from "@/components/ui/button";
+import { adminService } from "@/lib/services/admin";
+import { clubCustomersQK, clubCustomersService, type ClubCustomer } from "@/lib/services/club-customers";
+import type { Player } from "@/types";
+
+interface Props {
+  open:    boolean;
+  clubId:  string;
+  onClose: () => void;
+  onDone:  (customer: ClubCustomer) => void;
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * «Nuevo cliente»: quien no tiene la app (nombre y teléfono o email) o, si ya
+ * juega en AMT, se busca su cuenta y el contacto se lee de ella.
+ */
+export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Props) {
+  const qc = useQueryClient();
+  const [withAccount, setWithAccount] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [picked, setPicked] = useState<Player | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () =>
+      clubCustomersService.create(
+        clubId,
+        withAccount
+          ? { userId: picked!.id }
+          : { name: name.trim(), phone: phone.trim() || undefined, email: email.trim() || undefined },
+      ),
+    onSuccess: (customer) => {
+      void qc.invalidateQueries({ queryKey: clubCustomersQK.all(clubId) });
+      toast.success("Cliente añadido");
+      onDone(customer);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  if (!open) return null;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (withAccount) {
+      if (!picked) return setError("Elige a la persona de la lista");
+    } else {
+      if (!name.trim()) return setError("Escribe el nombre");
+      if (!phone.trim() && !email.trim()) return setError("Escribe un teléfono o un email para poder localizarlo");
+      if (email.trim() && !EMAIL.test(email.trim())) return setError("El email no es válido");
+    }
+    create.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div role="dialog" aria-label="Nuevo cliente" className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="font-heading text-lg">Nuevo cliente</h2>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div className="flex gap-2">
+            <ModeButton active={!withAccount} onClick={() => setWithAccount(false)}>No tiene la app</ModeButton>
+            <ModeButton active={withAccount} onClick={() => setWithAccount(true)}>Ya juega en AMT</ModeButton>
+          </div>
+
+          {withAccount ? (
+            <AccountPicker picked={picked} onPick={setPicked} />
+          ) : (
+            <>
+              <Field label="Nombre">
+                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
+              </Field>
+              <Field label="Teléfono">
+                <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} />
+              </Field>
+              <Field label="Email (opcional)">
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} />
+              </Field>
+            </>
+          )}
+
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" size="sm" disabled={create.isPending}>
+              {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Añadir cliente
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ModeButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+        active ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-muted"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Busca una cuenta de jugador por nombre o email. */
+function AccountPicker({ picked, onPick }: { picked: Player | null; onPick: (p: Player | null) => void }) {
+  const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(q.trim()), 250);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  const query = useQuery({
+    queryKey: ["players-search", debounced],
+    queryFn: () => adminService.players.search(debounced),
+    enabled: debounced.length >= 2 && !picked,
+    staleTime: 30_000,
+  });
+
+  if (picked) {
+    return (
+      <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+        <span className="font-medium">{picked.name}</span>
+        <button type="button" onClick={() => onPick(null)} className="text-xs text-muted-foreground hover:text-foreground">Cambiar</button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          aria-label="Buscar jugador"
+          placeholder="Buscar por nombre o email…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="w-full rounded-md border border-border bg-background py-1.5 pl-7 pr-2 text-sm text-foreground"
+        />
+      </div>
+      {debounced.length >= 2 && (
+        <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-background">
+          {query.isLoading ? (
+            <div className="flex items-center justify-center p-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+          ) : (query.data ?? []).length === 0 ? (
+            <p className="p-3 text-xs text-muted-foreground">Sin resultados.</p>
+          ) : (
+            <ul>
+              {(query.data ?? []).slice(0, 8).map((p) => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => onPick(p)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted">
+                    <span className="font-medium">{p.name}</span>
+                    {p.email && <span className="text-xs text-muted-foreground">{p.email}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
