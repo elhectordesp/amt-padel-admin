@@ -9,7 +9,8 @@
 
 "use client";
 
-import { use, useState } from "react";
+import { Suspense, use, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar, CalendarClock, Clock, CreditCard, Crown, FileText, Flame,
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { MODE_LABELS } from "@/lib/utils/booking-labels";
 import { bookingCapacity } from "@/lib/utils/booking-participants";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -34,7 +36,7 @@ import {
   zonedTime,
 } from "@/lib/utils/time-zone";
 import type {
-  BookingMatchMode, BookingParticipant, BookingParticipantStatus,
+  BookingParticipant, BookingParticipantStatus,
   BookingPaymentMethod, BookingStatus,
 } from "@/types/bookings";
 
@@ -56,24 +58,29 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
   WITHOUT_RESULT: "bg-muted text-muted-foreground border-border",
 };
 
-const MODE_LABELS: Record<BookingMatchMode, string> = {
-  INDIVIDUAL: "Individual",
-  PRIVATE_AMT: "Privado AMT",
-  PRIVATE_WITH_GUESTS: "Privado con invitados",
-  OPEN: "Abierto",
-  ADMIN_MANUAL: "Manual (admin)",
-};
 
 const BACK_TO_LIST = { href: "/mi-club/reservas/bookings", label: "Volver al listado" };
+const CALENDAR_PREFIX = "/mi-club/reservas/calendario";
 
-// Como toLocaleDateString y toLocaleString («27/10/2026», «27/10/2026, 9:05:00»), en la zona del club
+/**
+ * A dónde vuelve el enlace de arriba: al calendario, en el día y la franja de
+ * donde se venía (`?volver=`), si es una ruta del calendario; si no, al listado.
+ * Solo rutas del propio calendario: la URL llega del navegador.
+ */
+function backTarget(volver: string | null): { href: string; label: string } {
+  const isCalendar =
+    !!volver && (volver === CALENDAR_PREFIX || volver.startsWith(`${CALENDAR_PREFIX}?`));
+  return isCalendar ? { href: volver, label: "Volver al calendario" } : BACK_TO_LIST;
+}
+
+// Como toLocaleDateString y toLocaleString («27/10/2026», «27/10/2026, 9:05»), en la zona del club
 const DATE: Intl.DateTimeFormatOptions = { day: "numeric", month: "numeric", year: "numeric" };
-const DATE_TIME: Intl.DateTimeFormatOptions = { ...DATE, hour: "numeric", minute: "2-digit", second: "2-digit" };
+const DATE_TIME: Intl.DateTimeFormatOptions = { ...DATE, hour: "numeric", minute: "2-digit" };
 
 const PARTICIPANT_STATUS_LABELS: Record<BookingParticipantStatus, string> = {
   INVITED: "Invitado",
   ACCEPTED: "Confirmado",
-  AUTO_ACCEPTED: "Auto-confirmado",
+  AUTO_ACCEPTED: "Confirmado",
   DECLINED: "Rechazó",
   REMOVED: "Eliminado",
 };
@@ -91,7 +98,17 @@ export default function BookingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // La vuelta sale de la URL (useSearchParams): sin Suspense, el build no prerenderiza la página
+  return (
+    <Suspense fallback={<Loader2 className="m-6 h-5 w-5 animate-spin text-muted-foreground" />}>
+      <BookingDetail params={params} />
+    </Suspense>
+  );
+}
+
+function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const back = backTarget(useSearchParams().get("volver"));
   const { role, clubId } = useRole();
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
@@ -130,7 +147,7 @@ export default function BookingDetailPage({
   }
   if (!isClub(role) || !clubId) {
     return (
-      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+      <ReservasPage title="Reserva" back={back}>
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
@@ -139,7 +156,7 @@ export default function BookingDetailPage({
   }
   if (clubTimeZone.isError) {
     return (
-      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+      <ReservasPage title="Reserva" back={back}>
         <ErrorState
           message="No se pudieron cargar los datos del club."
           onRetry={() => void clubTimeZone.refetch()}
@@ -158,7 +175,7 @@ export default function BookingDetailPage({
   }
   if (query.isError || !query.data) {
     return (
-      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+      <ReservasPage title="Reserva" back={back}>
         <p className="mt-6 text-sm text-muted-foreground">
           Reserva no encontrada o sin permisos.
         </p>
@@ -181,13 +198,10 @@ export default function BookingDetailPage({
   const payment = paymentAction(b.paymentMethod);
 
   return (
-    <ReservasPage title="Reserva" back={BACK_TO_LIST} className="max-w-4xl">
+    <ReservasPage title={`Reserva ${b.shortCode}`} back={back} className="max-w-4xl">
       <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Reserva <span className="font-mono text-primary">{b.shortCode}</span>
-          </h1>
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[b.status]}`}>
               {STATUS_LABELS[b.status]}
             </span>
@@ -225,7 +239,11 @@ export default function BookingDetailPage({
         <Row icon={MapPin} label="Pista">
           {b.court?.name ?? "—"}
           {b.court?.isIndoor && <span className="ml-1 text-xs text-muted-foreground">(cubierta)</span>}
-          {b.court?.type && <span className="ml-1 text-xs text-muted-foreground">· {b.court.type}</span>}
+          {b.court?.type && (
+            <span className="ml-1 text-xs text-muted-foreground">
+              · {b.court.type === "SINGLES" ? "Individual" : "Dobles"}
+            </span>
+          )}
         </Row>
         <Row icon={Calendar} label="Fecha">
           {dateStr}
@@ -249,10 +267,10 @@ export default function BookingDetailPage({
             {payment === "markPaid" ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("CASH_AT_VENUE")} disabled={markPaidMut.isPending}>
-                  {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar pagado (efectivo)
+                  {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Cobrada en el club (efectivo o tarjeta)
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PAID_MANUAL")} disabled={markPaidMut.isPending}>
-                  Manual / Bizum
+                  Cobrada por transferencia u otro
                 </Button>
               </>
             ) : (
@@ -326,7 +344,7 @@ export default function BookingDetailPage({
       )}
 
       {/* Metadata */}
-      <Section title="Metadata">
+      <Section title="Datos de la reserva">
         <Row icon={Clock} label="Creada">
           {at(b.createdAt)}
         </Row>
@@ -391,7 +409,7 @@ function ParticipantItem({ p }: { p: BookingParticipant }) {
           </span>
         )}
         {!p.userId && (
-          <span className="text-xs text-muted-foreground">(invitado externo)</span>
+          <span className="text-xs text-muted-foreground">(sin cuenta)</span>
         )}
         {p.user?.email && (
           <span className="text-xs text-muted-foreground truncate">· {p.user.email}</span>

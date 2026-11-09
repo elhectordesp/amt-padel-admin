@@ -8,9 +8,9 @@ import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 describe("paymentMethodLabel", () => {
   it("cada método, con su nombre", () => {
     expect(paymentMethodLabel("PENDING")).toBe("Pendiente");
-    expect(paymentMethodLabel("CASH_AT_VENUE")).toBe("Efectivo en pista");
+    expect(paymentMethodLabel("CASH_AT_VENUE")).toBe("En el club (efectivo o tarjeta)");
     expect(paymentMethodLabel("ONLINE")).toBe("Online");
-    expect(paymentMethodLabel("PAID_MANUAL")).toBe("Cobrado manualmente");
+    expect(paymentMethodLabel("PAID_MANUAL")).toBe("Transferencia u otro");
   });
 
   it("sin método, que no consta (antes salía «()»)", () => {

@@ -13,11 +13,16 @@
  * Para recepción: enseña solo la mañana o la tarde si se pide, pinta la línea
  * de la hora actual (solo hoy) y, en el modo mostrador, franjas de 44 px
  * para el dedo.
+ *
+ * Cada bloque dice quién es el titular, si está cobrada o se debe, y las que
+ * esperan invitaciones van con el borde discontinuo (leyenda debajo). El
+ * enlace a la ficha lleva la vuelta a este día y esta franja.
  */
 
 "use client";
 
 import Link from "next/link";
+import { Check, CircleAlert } from "lucide-react";
 import {
   buildDayGrid,
   minutesToHhmm,
@@ -26,6 +31,7 @@ import {
   type DayPeriod,
   type DayWindow,
 } from "@/lib/utils/booking-day-grid";
+import { bookingHolder, isUnpaid } from "@/lib/utils/booking-labels";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import { zonedTime, zonedToDate } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
@@ -76,6 +82,7 @@ export function ReservasDayGrid({
     );
   }
 
+  const backHref = calendarDayHref(date, period);
   const now = nowMinutes === null ? null : nowMarker(grid.rows, nowMinutes);
   const nowLabel = nowMinutes === null ? "" : `Hora actual, ${minutesToHhmm(nowMinutes)}`;
   // Todas las franjas miden lo mismo, también las que solo tienen reservas
@@ -145,7 +152,7 @@ export function ReservasDayGrid({
                         rowSpan={cell.span}
                         className="relative border-t border-l border-border p-0 align-top"
                       >
-                        <BookingBlock booking={cell.booking} timeZone={timeZone} />
+                        <BookingBlock booking={cell.booking} timeZone={timeZone} backHref={backHref} />
                         {nowInBooking !== null && <NowLine at={nowInBooking} />}
                       </td>
                     );
@@ -199,7 +206,36 @@ export function ReservasDayGrid({
           })}
         </tbody>
       </table>
+      <Legend />
     </>
+  );
+}
+
+/** El calendario en este día y franja: a donde vuelve la ficha de una reserva. */
+export function calendarDayHref(date: string, period: DayPeriod): string {
+  const franja = period === "todo" ? "" : `&franja=${period}`;
+  return `/mi-club/reservas/calendario?fecha=${date}${franja}`;
+}
+
+function Legend() {
+  return (
+    <ul aria-label="Leyenda" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <li className="flex items-center gap-1.5">
+        <span className="h-3 w-5 rounded-sm border border-blue-500/40 bg-blue-500/15" /> Confirmada
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className="h-3 w-5 rounded-sm border border-amber-500/40 bg-amber-500/15" /> Abierta
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className="h-3 w-5 rounded-sm border border-dashed border-blue-500 bg-blue-500/15" /> Esperando invitaciones
+      </li>
+      <li className="flex items-center gap-1.5">
+        <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" aria-hidden /> Cobrada
+      </li>
+      <li className="flex items-center gap-1.5">
+        <CircleAlert className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden /> Sin cobrar
+      </li>
+    </ul>
   );
 }
 
@@ -222,32 +258,53 @@ function NowLine({ at, label }: { at: number; label?: string }) {
   );
 }
 
-function BookingBlock({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
+function BookingBlock({
+  booking: b,
+  timeZone,
+  backHref,
+}: {
+  booking: Booking;
+  timeZone: string;
+  backHref: string;
+}) {
   const players = activeParticipants(b);
   const isOpen = b.matchMode === "OPEN";
-  // Reserva por teléfono: el contacto va como invitado sin cuenta (en otro
-  // modo, un invitado es un jugador más, no quien reserva)
-  const contact =
-    b.matchMode === "ADMIN_MANUAL"
-      ? players.find((p) => !p.userId && p.guestName)?.guestName
-      : undefined;
-  const label = isOpen
-    ? `Abierta · ${players.length}/${bookingCapacity(b)}`
-    : contact ?? `${players.length} jug.`;
+  const holder = bookingHolder(b);
+  const unpaid = isUnpaid(b);
+  // Cobrada: con método de cobro y no pendiente (null: datos de cobro ya borrados)
+  const paid = b.paymentMethod !== null && b.paymentMethod !== "PENDING" && b.priceCents > 0;
+  const people = isOpen ? `Abierta · ${players.length}/${bookingCapacity(b)}` : `${players.length} jug.`;
   const bg = isOpen
     ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
     : "bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-500/25";
+  // Esperando invitaciones: aún no es firme
+  const border = b.status === "PENDING_INVITES" ? "border border-dashed border-current" : "";
 
   return (
     <Link
-      href={`/mi-club/reservas/bookings/${b.id}`}
-      className={`absolute inset-0.5 flex flex-col justify-start gap-0.5 overflow-hidden rounded px-2 py-1 transition-colors ${bg}`}
-      title={`${b.shortCode} · ${b.durationMinutes} min`}
+      href={`/mi-club/reservas/bookings/${b.id}?volver=${encodeURIComponent(backHref)}`}
+      className={`absolute inset-0.5 flex flex-col justify-start gap-0.5 overflow-hidden rounded px-2 py-1 transition-colors ${bg} ${border}`}
+      title={`${b.shortCode} · ${b.durationMinutes} min${holder ? ` · ${holder}` : ""}`}
     >
-      <span className="font-medium tabular-nums">
-        {zonedTime(b.startsAt, timeZone)}–{zonedTime(b.endsAt, timeZone)}
+      <span className="flex items-center justify-between gap-1 font-medium tabular-nums">
+        <span>
+          {zonedTime(b.startsAt, timeZone)}–{zonedTime(b.endsAt, timeZone)}
+        </span>
+        {unpaid && (
+          <span title="Sin cobrar" className="text-red-600 dark:text-red-400">
+            <CircleAlert className="h-3.5 w-3.5" aria-hidden />
+            <span className="sr-only">Sin cobrar</span>
+          </span>
+        )}
+        {paid && (
+          <span title="Cobrada" className="text-green-600 dark:text-green-400">
+            <Check className="h-3.5 w-3.5" aria-hidden />
+            <span className="sr-only">Cobrada</span>
+          </span>
+        )}
       </span>
-      <span className="truncate opacity-80">{label}</span>
+      <span className="truncate opacity-80">{holder ?? people}</span>
+      {holder && !isOpen && <span className="truncate text-[11px] opacity-60">{people}</span>}
     </Link>
   );
 }

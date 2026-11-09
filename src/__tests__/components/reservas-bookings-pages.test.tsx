@@ -23,6 +23,7 @@ vi.mock("@/components/admin/header", () => ({
   Header: ({ title }: { title: string }) => <div data-testid="header">{title}</div>,
 }));
 vi.mock("@/components/admin/booking-create-dialog", () => ({ BookingCreateDialog: () => null }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "c1" }),
   isClub: (r: string) => r === "club",
@@ -103,7 +104,7 @@ describe("Listado de reservas", () => {
 
   it("«Hoy» es el día del club: de las 00:00 a las 23:59:59.999 de Madrid", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     expect(svc.bookings.list).toHaveBeenCalledWith({
       clubId: "c1",
       limit: 50,
@@ -116,7 +117,7 @@ describe("Listado de reservas", () => {
 
   it("«Próximas» empieza al acabar el día del club e «Histórico» acaba al empezar", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     fireEvent.click(screen.getByRole("button", { name: "Próximas" }));
     await waitFor(() =>
       expect(svc.bookings.list).toHaveBeenLastCalledWith(
@@ -133,12 +134,13 @@ describe("Listado de reservas", () => {
 
   it("cada reserva con su día y su hora de Madrid", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText(/lun, 2 nov · 18:00 - 19:30/)).toBeInTheDocument();
+    expect(await screen.findByText("18:00 - 19:30")).toBeInTheDocument();
+    expect(screen.getByText(/lun, 2 nov/)).toBeInTheDocument();
   });
 
   it("«Próximas» pide solo las que siguen en pie, de la más cercana a la más lejana", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     fireEvent.click(screen.getByRole("button", { name: "Próximas" }));
 
     await waitFor(() =>
@@ -150,7 +152,7 @@ describe("Listado de reservas", () => {
 
   it("«Hoy» va por orden de hora; «Histórico», de la más reciente hacia atrás", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     expect(svc.bookings.list).toHaveBeenLastCalledWith(expect.objectContaining({ order: "asc" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
@@ -161,7 +163,8 @@ describe("Listado de reservas", () => {
 
   it("quien rechazó no cuenta como jugador; el precio, con coma", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText("4 jugadores · 20,00 €")).toBeInTheDocument();
+    expect(await screen.findByText("4 jugadores")).toBeInTheDocument();
+    expect(screen.getByText("20,00 €")).toBeInTheDocument();
   });
 
   it("con uno solo, «1 jugador» (antes «1 jugadores»)", async () => {
@@ -170,7 +173,7 @@ describe("Listado de reservas", () => {
       total: 1,
     });
     wrap(<BookingsListPage />);
-    expect(await screen.findByText("1 jugador · 20,00 €")).toBeInTheDocument();
+    expect(await screen.findByText("1 jugador")).toBeInTheDocument();
   });
 });
 
@@ -223,13 +226,13 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
     await screen.findByText("Mostrando 1–50 de 120 reservas");
     svc.bookings.list.mockReturnValue(new Promise(() => {}));
     await goToSecondPage();
-    expect(screen.getByText("AMT-XP9W")).toBeInTheDocument();
+    expect(screen.getByText(/AMT-XP9W/)).toBeInTheDocument();
     expect(screen.getByText("120 reservas")).toBeInTheDocument();
   });
 
   it("mientras llegan las de otra pestaña no se ven las de la anterior", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     svc.bookings.list.mockReturnValue(new Promise(() => {}));
     fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
     await waitFor(() =>
@@ -238,7 +241,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
       ),
     );
     expect(screen.getByText("Cargando…")).toBeInTheDocument();
-    expect(screen.queryByText("AMT-XP9W")).not.toBeInTheDocument();
+    expect(screen.queryByText(/AMT-XP9W/)).not.toBeInTheDocument();
   });
 
   it("tampoco si se cambia de pestaña mientras llega otra página", async () => {
@@ -253,7 +256,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
       ),
     );
     expect(screen.getByText("Cargando…")).toBeInTheDocument();
-    expect(screen.queryByText("AMT-XP9W")).not.toBeInTheDocument();
+    expect(screen.queryByText(/AMT-XP9W/)).not.toBeInTheDocument();
   });
 
   it("busca con q tras 300 ms sin teclear, sin los espacios de los lados, y vuelve a la primera página", async () => {
@@ -281,7 +284,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
 
   it("si nadie coincide con la búsqueda, lo dice", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     svc.bookings.list.mockResolvedValue({ items: [], total: 0 });
     fireEvent.change(screen.getByRole("searchbox", { name: "Buscar reservas" }), { target: { value: "Zoe" } });
     expect(await screen.findByText("Ninguna reserva coincide con la búsqueda")).toBeInTheDocument();
@@ -310,7 +313,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
     expect(screen.queryByText("0 reservas")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
-    expect(await screen.findByText("AMT-XP9W")).toBeInTheDocument();
+    expect(await screen.findByText(/AMT-XP9W/)).toBeInTheDocument();
   });
 });
 
@@ -363,7 +366,7 @@ describe("Detalle de reserva", () => {
       paidAt: "2026-10-27T10:00:00.000Z",
     });
     await renderDetail();
-    expect(await screen.findByText("(Efectivo en pista)")).toBeInTheDocument();
+    expect(await screen.findByText("(En el club (efectivo o tarjeta))")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Marcar como no pagada/ })).toBeInTheDocument();
   });
 
@@ -543,7 +546,7 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
 
   it("listado: «Cancelar» de una reserva abre el mismo diálogo y, al confirmar, vuelve a pedir el listado", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
@@ -560,7 +563,7 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
 
   it("listado: Escape cierra el diálogo sin cancelar", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     fireEvent.keyDown(document, { key: "Escape" });
 
@@ -585,7 +588,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
   it("listado: «hoy» es el día de Canarias y cada reserva va a su hora", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText(/lun, 2 nov · 17:00 - 18:30/)).toBeInTheDocument();
+    expect(await screen.findByText("17:00 - 18:30")).toBeInTheDocument();
     expect(clubsMock.findOne).toHaveBeenCalledWith("c1");
     expect(svc.bookings.list).toHaveBeenCalledWith(
       expect.objectContaining({ fromDate: "2026-10-28T00:00:00.000Z", toDate: "2026-10-28T23:59:59.999Z" }),
@@ -608,7 +611,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
     expect(svc.bookings.list).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
-    expect(await screen.findByText(/lun, 2 nov · 17:00 - 18:30/)).toBeInTheDocument();
+    expect(await screen.findByText("17:00 - 18:30")).toBeInTheDocument();
   });
 
   it("detalle: el día, las horas, el cobro, los plazos y las fechas de la reserva, en la hora de Canarias", async () => {
@@ -628,7 +631,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
     expect(screen.getByText(/17:00 – 18:30 · 90 min/)).toBeInTheDocument();
     expect(screen.getByText(/pagada 27\/10\/2026/)).toBeInTheDocument();
     // Creada y actualizada
-    expect(screen.getAllByText("28/10/2026, 10:00:00")).toHaveLength(2);
+    expect(screen.getAllByText("28/10/2026, 10:00")).toHaveLength(2);
     expect(screen.getByText("Hasta el 1/1/99, 0:30")).toBeInTheDocument();
   });
 

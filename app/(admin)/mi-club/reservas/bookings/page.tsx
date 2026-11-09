@@ -4,7 +4,9 @@
  * Tabs: Hoy / Próximas / Histórico / Todas. Filtros adicionales por estado.
  * Búsqueda por el nombre o el email de quien juega (`q`, en el back) y
  * paginación del servidor (`limit` + `offset`).
- * Cada reserva: hora, pista, jugadores, estado, pago, acciones (cancelar).
+ * Tabla compacta: hora, pista, titular, jugadores, importe, pago y estado, con
+ * «Sin pagar» para ver quién debe dinero. Cada fila, su casilla (cancelar
+ * varias) y «Cancelar».
  */
 
 "use client";
@@ -32,7 +34,9 @@ import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { cancelFailureReason, cancelledSummary } from "@/lib/utils/booking-cancel-many";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
+import { bookingHolder, isUnpaid, MODE_LABELS } from "@/lib/utils/booking-labels";
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
+import { paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
   formatInTimeZone,
@@ -78,6 +82,8 @@ export default function BookingsListPage() {
   const [showCreate, setShowCreate] = useState(false);
   // Un día concreto (YYYY-MM-DD, el del club): manda sobre la pestaña
   const [day, setDay] = useState("");
+  // Solo las que se deben (sin cobrar, con importe)
+  const [unpaid, setUnpaid] = useState(false);
   // Las marcadas para cancelar de golpe, con sus datos para el resumen
   const [selected, setSelected] = useState<Map<string, Booking>>(new Map());
   const [selectingAll, setSelectingAll] = useState(false);
@@ -113,6 +119,12 @@ export default function BookingsListPage() {
     setSelected(new Map());
   };
 
+  const changeUnpaid = (next: boolean) => {
+    setUnpaid(next);
+    setPage(1);
+    setSelected(new Map());
+  };
+
   const changeDay = (next: string) => {
     setDay(next);
     setPage(1);
@@ -131,6 +143,7 @@ export default function BookingsListPage() {
       limit: pageSize,
       offset: (page - 1) * pageSize,
       q: search || undefined,
+      unpaid: unpaid ? ("true" as const) : undefined,
     };
     if (day) {
       return { ...base, ...dayRangeIso(day, day, timeZone), order: "asc" };
@@ -146,7 +159,7 @@ export default function BookingsListPage() {
       return { ...base, toDate: today.fromDate };
     }
     return base;
-  }, [clubId, timeZone, tab, day, page, pageSize, search]);
+  }, [clubId, timeZone, tab, day, page, pageSize, search, unpaid]);
 
   const query = useQuery({
     queryKey: bookingsQK.bookingsList(filters ?? {}),
@@ -275,6 +288,21 @@ export default function BookingsListPage() {
               <X className="h-3.5 w-3.5" /> Quitar día
             </Button>
           )}
+          <label
+            className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors focus-within:ring-2 focus-within:ring-primary ${
+              unpaid
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={unpaid}
+              onChange={(e) => changeUnpaid(e.target.checked)}
+              className="sr-only"
+            />
+            Sin pagar
+          </label>
         </div>
 
         <div className="mt-4 flex w-full items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 sm:max-w-xs">
@@ -329,7 +357,7 @@ export default function BookingsListPage() {
           </div>
         )}
 
-        <div className="mt-3 space-y-2">
+        <div className="mt-3">
           {query.isError ? (
             <ErrorState
               message="No se pudieron cargar las reservas."
@@ -338,18 +366,41 @@ export default function BookingsListPage() {
           ) : items.length === 0 && !query.isLoading ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
               <Calendar className="mx-auto mb-2 h-6 w-6 opacity-50" />
-              {search ? "Ninguna reserva coincide con la búsqueda" : "Sin reservas en este filtro"}
+              {search
+                ? "Ninguna reserva coincide con la búsqueda"
+                : unpaid
+                  ? "Ninguna reserva sin pagar en este filtro"
+                  : "Sin reservas en este filtro"}
             </div>
           ) : (
-            items.map((b) => (
-              <BookingRow
-                key={b.id}
-                booking={b}
-                timeZone={timeZone}
-                selected={selected.has(b.id)}
-                onToggle={() => toggle(b)}
-              />
-            ))
+            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+              <table className="w-full min-w-[56rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="w-8 px-3 py-2" aria-label="Seleccionar" />
+                    <th className="px-3 py-2 font-medium">Hora</th>
+                    <th className="px-3 py-2 font-medium">Pista</th>
+                    <th className="px-3 py-2 font-medium">Titular</th>
+                    <th className="px-3 py-2 font-medium">Jugadores</th>
+                    <th className="px-3 py-2 text-right font-medium">Importe</th>
+                    <th className="px-3 py-2 font-medium">Pago</th>
+                    <th className="px-3 py-2 font-medium">Estado</th>
+                    <th className="px-3 py-2" aria-label="Acciones" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((b) => (
+                    <BookingRow
+                      key={b.id}
+                      booking={b}
+                      timeZone={timeZone}
+                      selected={selected.has(b.id)}
+                      onToggle={() => toggle(b)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -449,54 +500,73 @@ function BookingRow({
     day: "numeric",
     month: "short",
   });
+  const href = `/mi-club/reservas/bookings/${b.id}`;
+  const holder = bookingHolder(b);
+  const phone = b.clubCustomer?.phone;
+  const unpaid = isUnpaid(b);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-card/70">
-      <div className="flex items-start justify-between gap-3">
+    <tr className="border-b border-border last:border-0 transition-colors hover:bg-muted/40">
+      <td className="px-3 py-2 align-top">
         {isCancelable(b) && (
           <input
             type="checkbox"
             aria-label={`Seleccionar la reserva ${b.shortCode}`}
             checked={selected}
             onChange={onToggle}
-            className="mt-1 h-4 w-4 shrink-0 cursor-pointer"
+            className="mt-0.5 h-4 w-4 cursor-pointer"
           />
         )}
-        <Link
-          href={`/mi-club/reservas/bookings/${b.id}`}
-          className="min-w-0 flex-1 cursor-pointer"
-        >
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              {b.shortCode}
-            </span>
-            <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_COLORS[b.status]}`}>
-              {STATUS_LABELS[b.status]}
-            </span>
-            <span className="text-xs text-muted-foreground">{b.matchMode}</span>
-          </div>
-          <div className="mt-1.5 text-sm font-medium">
-            {b.court?.name ?? "Pista?"} · {dateStr} · {timeStr}
-          </div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
-            {playersLabel(activeParticipants(b).length)} · {formatCents(b.priceCents)}
-            {b.paidAt && <span> · pagada</span>}
-          </div>
+      </td>
+      <td className="px-3 py-2 align-top">
+        <Link href={href} className="block cursor-pointer">
+          <span className="font-medium tabular-nums">{timeStr}</span>
+          <span className="block text-xs text-muted-foreground">
+            {dateStr} · {b.shortCode}
+          </span>
         </Link>
-        {isCancelable(b) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCancel(true)}
+      </td>
+      <td className="px-3 py-2 align-top">{b.court?.name ?? "Pista?"}</td>
+      <td className="px-3 py-2 align-top">
+        <Link href={href} className="block cursor-pointer">
+          <span className="font-medium">{holder ?? "—"}</span>
+          <span className="block text-xs text-muted-foreground">
+            {[phone, MODE_LABELS[b.matchMode]].filter(Boolean).join(" · ")}
+          </span>
+        </Link>
+      </td>
+      <td className="px-3 py-2 align-top">{playersLabel(activeParticipants(b).length)}</td>
+      <td className="px-3 py-2 text-right align-top tabular-nums">{formatCents(b.priceCents)}</td>
+      <td className="px-3 py-2 align-top">
+        {unpaid ? (
+          <span className="font-medium text-red-600 dark:text-red-400">Sin cobrar</span>
+        ) : b.paymentMethod && b.paymentMethod !== "PENDING" && b.priceCents > 0 ? (
+          <span
+            className="text-green-600 dark:text-green-400"
+            title={paymentMethodLabel(b.paymentMethod)}
           >
+            Cobrada
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2 align-top">
+        <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_COLORS[b.status]}`}>
+          {STATUS_LABELS[b.status]}
+        </span>
+      </td>
+      <td className="px-3 py-2 text-right align-top">
+        {isCancelable(b) && (
+          <Button variant="ghost" size="sm" onClick={() => setShowCancel(true)}>
             <X className="h-3.5 w-3.5" /> Cancelar
           </Button>
         )}
-      </div>
-      {showCancel && (
-        <CancelBookingDialog booking={b} timeZone={timeZone} onClose={() => setShowCancel(false)} />
-      )}
-    </div>
+        {showCancel && (
+          <CancelBookingDialog booking={b} timeZone={timeZone} onClose={() => setShowCancel(false)} />
+        )}
+      </td>
+    </tr>
   );
 }
 

@@ -125,6 +125,8 @@ describe("BookingCreateDialog", () => {
   });
 
   async function addGuests(names: string[]) {
+    // «Por teléfono» es el modo por defecto: los invitados son de «Con jugadores»
+    fireEvent.click(screen.getByRole("radio", { name: /Con jugadores/ }));
     const input = screen.getByPlaceholderText("Invitado por nombre…");
     for (const name of names) {
       fireEvent.change(input, { target: { value: name } });
@@ -179,7 +181,7 @@ describe("BookingCreateDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
     await waitFor(() =>
       expect(svc.bookings.create).toHaveBeenCalledWith(
-        expect.objectContaining({ startsAt: PAST, isCompetitive: false, matchMode: "PRIVATE_AMT" }),
+        expect.objectContaining({ startsAt: PAST, isCompetitive: false, matchMode: "ADMIN_MANUAL" }),
       ),
     );
   });

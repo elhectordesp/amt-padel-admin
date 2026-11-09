@@ -7,10 +7,15 @@ import type { BookingPaymentMethod } from "@/types/bookings";
 
 const PAYMENT_LABELS: Record<BookingPaymentMethod, string> = {
   PENDING: "Pendiente",
-  CASH_AT_VENUE: "Efectivo en pista",
+  CASH_AT_VENUE: "En el club (efectivo o tarjeta)",
   ONLINE: "Online",
-  PAID_MANUAL: "Cobrado manualmente",
+  PAID_MANUAL: "Transferencia u otro",
 };
+
+// Los dos con los que el club cobra a mano (el enum del back no cambia).
+// Al crear: la reserva de pago pendiente nace cobrada con uno de ellos
+export const CLUB_PAYMENT_METHODS = ["CASH_AT_VENUE", "PAID_MANUAL"] as const;
+export type ClubPaymentMethod = (typeof CLUB_PAYMENT_METHODS)[number];
 
 /** Cómo se cobró, para leer; sin método, que no consta (antes salía «()»). */
 export function paymentMethodLabel(method: BookingPaymentMethod | null): string {
