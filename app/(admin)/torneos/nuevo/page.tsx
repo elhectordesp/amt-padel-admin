@@ -718,7 +718,7 @@ export default function NuevoTorneoPage() {
               <div className="space-y-3">
                 {/* Table header — desktop only */}
                 <div className="hidden sm:grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 px-1">
-                  {["Género", "Nivel", "Plazas", "Precio (€)", ""].map((h) => (
+                  {["Género", "Nivel", "Plazas (parejas)", "Precio por pareja (€)", ""].map((h) => (
                     <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
                   ))}
                 </div>
@@ -747,12 +747,12 @@ export default function NuevoTorneoPage() {
                           <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
                         </div>
                         <div>
-                          <p className={MOBILE_LABEL}>Plazas</p>
-                          <Input type="number" aria-label="Plazas" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
+                          <p className={MOBILE_LABEL}>Plazas (parejas)</p>
+                          <Input type="number" aria-label="Plazas (parejas)" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
                         </div>
                         <div>
-                          <p className={MOBILE_LABEL}>Precio (€)</p>
-                          <Input type="number" aria-label="Precio (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={1} />
+                          <p className={MOBILE_LABEL}>Precio por pareja (€)</p>
+                          <Input type="number" aria-label="Precio por pareja (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={1} />
                         </div>
                         <button type="button" aria-label="Quitar categoría" onClick={() => tryRemoveCategory(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
                       </div>

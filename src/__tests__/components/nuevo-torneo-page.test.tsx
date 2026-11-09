@@ -87,7 +87,7 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
     // Paso 2: categorías (la de por defecto vale)
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
     // Paso 3: configuración, con la zona del club
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
@@ -126,7 +126,7 @@ describe("Crear torneo — género de la categoría (D2)", () => {
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
     // Paso 2: la categoría de por defecto es masculina; se cambia a junior
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     fireEvent.click(screen.getByRole("button", { name: "Masculina" }));
     for (const name of ["Femenina", "Mixta", "General", "Junior"])
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe("Crear torneo — tramos del paso 4 (P2-10)", () => {
     fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
     fireEvent.change(input("endDate"), { target: { value: "2099-11-20" } });
     next();
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
     fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
@@ -227,7 +227,7 @@ describe("Crear torneo — exigir el pago para confirmar (B4)", () => {
     fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
     // Paso 3: el interruptor, apagado por defecto y con su ayuda
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
@@ -301,11 +301,11 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     next();
 
     // Paso 2: precio y plazas del club, también en la categoría que se añade
-    await screen.findByLabelText("Plazas", {}, WAIT);
-    await waitFor(() => expect(values("Plazas")).toEqual(["16"]), WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    await waitFor(() => expect(values("Plazas (parejas)")).toEqual(["16"]), WAIT);
     fireEvent.click(screen.getByRole("button", { name: /Añadir categoría/ }));
-    expect(values("Plazas")).toEqual(["16", "16"]);
-    expect(values("Precio (€)")).toEqual(["30", "30"]);
+    expect(values("Plazas (parejas)")).toEqual(["16", "16"]);
+    expect(values("Precio por pareja (€)")).toEqual(["30", "30"]);
     next();
 
     // Paso 3: formato, duración, camisetas y lo que ven los jugadores
@@ -367,7 +367,7 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     renderWizard();
     await fillStep1();
     next();
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
 
     // Paso 3: el formato, el formato de partido y la zona, a mano
@@ -412,8 +412,8 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     ).toBeInTheDocument();
     await fillStep1();
     next();
-    await screen.findByLabelText("Plazas", {}, WAIT);
-    expect(values("Plazas")).toEqual(["32"]);
-    expect(values("Precio (€)")).toEqual(["25"]);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    expect(values("Plazas (parejas)")).toEqual(["32"]);
+    expect(values("Precio por pareja (€)")).toEqual(["25"]);
   }, 60_000);
 });

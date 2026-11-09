@@ -127,25 +127,25 @@ export default function MiClubReservasPage() {
           href="/mi-club/reservas/pistas"
           icon={<Settings className="h-5 w-5" />}
           title="Pistas + duraciones"
-          description="Tipo (singles/dobles), indoor/outdoor, duraciones permitidas"
+          description="Dobles o individual, cubierta o descubierta, y cuánto pueden durar las reservas"
         />
         <NavCard
           href="/mi-club/reservas/precios"
           icon={<DollarSign className="h-5 w-5" />}
           title="Precios"
-          description="Matriz por pista × día × franja × duración"
+          description="Cuánto cuesta cada pista según el día, la hora y la duración"
         />
         <NavCard
           href="/mi-club/reservas/extras"
           icon={<Sparkles className="h-5 w-5" />}
           title="Extras"
-          description="Luz, palas, climatización — opcionales o obligatorios"
+          description="Luz, palas, climatización: opcionales u obligatorios"
         />
         <NavCard
           href="/mi-club/reservas/configuracion"
           icon={<Settings className="h-5 w-5" />}
           title="Configuración"
-          description="Política de cancelación, slots, open matches, social"
+          description="Cancelación, antelación, partidos abiertos y avisos"
         />
         <NavCard
           href="/mi-club/reservas/normas"
@@ -156,14 +156,14 @@ export default function MiClubReservasPage() {
         <NavCard
           href="/mi-club/reservas/activacion"
           icon={<Users className="h-5 w-5" />}
-          title="Activación + Testers"
-          description="Estado del módulo + usuarios que pueden probar antes de la apertura pública"
+          title="Activación y pruebas"
+          description="Estado de las reservas y jugadores de prueba que pueden reservar antes de abrirlas a todos"
         />
         <NavCard
           href="/mi-club/reservas/bookings"
           icon={<CalendarDays className="h-5 w-5" />}
           title="Reservas de hoy"
-          description="Listado en tiempo real + gestión de cancelaciones"
+          description="Reservas del día al instante y cancelaciones"
         />
         <NavCard
           href="/mi-club/reservas/calendario"

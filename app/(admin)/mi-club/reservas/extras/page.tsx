@@ -102,8 +102,7 @@ export default function ExtrasPage() {
     <ReservasPage title="Extras">
       <p className="mt-2 text-sm text-muted-foreground">
         Extras que el club ofrece con cada reserva (luz, alquiler de palas,
-        climatización). Pueden ser opcionales, obligatorios, o auto-aplicarse
-        si la pista es outdoor y el slot es post-sunset.
+        climatización). Pueden ser opcionales, obligatorios, o aplicarse solos en pistas descubiertas cuando ya ha anochecido.
       </p>
 
       <div className="mt-6 flex justify-between">
@@ -173,7 +172,7 @@ export default function ExtrasPage() {
                 }
                 className="h-4 w-4 accent-primary"
               />
-              Auto-aplicar tras sunset (solo pistas outdoor)
+              Añadir solo al anochecer (solo pistas descubiertas)
             </label>
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -267,7 +266,7 @@ function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
               )}
               {extra.autoApplyAfterSunset && (
                 <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-500">
-                  Auto-sunset
+                  Al anochecer
                 </span>
               )}
               {!extra.active && (
@@ -350,7 +349,7 @@ function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
             }
             className="h-4 w-4 accent-primary"
           />
-          Auto-sunset
+          Al anochecer
         </label>
         <label className="flex items-center gap-2">
           <input

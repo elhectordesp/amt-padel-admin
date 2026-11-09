@@ -370,7 +370,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
               className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
             >
               <UserPlus size={13} />
-              Inscribir equipo
+              Inscribir pareja
             </button>
           )}
 

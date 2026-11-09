@@ -143,14 +143,14 @@ export default function ConfiguracionPage() {
             value={form!.cancellationWindowHours}
             onChange={(v) => set("cancellationWindowHours", v)}
             min={1} max={48}
-            help="Si el jugador cancela con menos antelación, el club cobra la pista (offline)."
+            help="Si el jugador cancela con menos antelación, el club puede cobrarle la pista (el cobro se hace fuera de la app)."
           />
           <NumberField
             label="Antelación mínima para reservar (minutos)"
             value={form!.minBookingAheadMinutes}
             onChange={(v) => set("minBookingAheadMinutes", v)}
             min={0} max={240}
-            help="Buffer para que el club tenga tiempo de prepararse."
+            help="Margen para que el club prepare la pista. Ej.: con 60, no se puede reservar una pista que empiece en menos de 1 hora."
           />
           <NumberField
             label="Antelación máxima para reservar (días)"
@@ -166,7 +166,7 @@ export default function ConfiguracionPage() {
             label="Permitir partidos abiertos en el club"
             value={form!.openMatchEnabled}
             onChange={(v) => set("openMatchEnabled", v)}
-            help="Si desactivas, los partidos abiertos no se podrán crear ni unirse en ningún slot de tu club."
+            help="Si desactivas, los partidos abiertos no se podrán crear ni unirse en ninguna franja de tu club."
           />
           <NumberField
             label="Mínimo de jugadores para que el partido salga adelante"
@@ -175,13 +175,13 @@ export default function ConfiguracionPage() {
             min={2} max={4}
           />
           <NumberField
-            label="Horas antes para avisar al admin si no se llena"
+            label="Horas antes del partido para avisar al club si no se llena"
             value={form!.openMatchAdminWarnHoursBefore}
             onChange={(v) => set("openMatchAdminWarnHoursBefore", v)}
             min={1} max={72}
           />
           <NumberField
-            label="Horas antes para auto-cancelar si no se llena"
+            label="Horas antes del partido para cancelarlo solo si no se llena (0 = no cancelar)"
             value={form!.openMatchAutoCancelHoursBefore}
             onChange={(v) => set("openMatchAutoCancelHoursBefore", v)}
             min={0} max={48}
@@ -201,24 +201,24 @@ export default function ConfiguracionPage() {
             value={form!.resultMaxExtensions}
             onChange={(v) => set("resultMaxExtensions", v)}
             min={0} max={5}
-            help="Si alguien cambia el resultado cerca del deadline, se extiende +1 día (hasta este máximo)."
+            help="Si alguien cambia el resultado cerca del último día permitido, el plazo se alarga 1 día (hasta este máximo)."
           />
         </Section>
 
         {/* Social */}
         <Section title="Social">
           <NumberField
-            label="Partidos juntos para auto-aceptar invitaciones"
+            label="Partidos jugados juntos para aceptar invitaciones automáticamente"
             value={form!.autoAcceptThreshold}
             onChange={(v) => set("autoAcceptThreshold", v)}
             min={0} max={20}
-            help="Si dos jugadores ya han jugado N veces juntos, las invitaciones futuras se auto-aceptan."
+            help="Si dos jugadores ya han jugado N partidos juntos, sus invitaciones futuras se aceptan solas."
           />
           <BoolField
             label="Permitir invitados sin cuenta AMT"
             value={form!.allowGuestPlayers}
             onChange={(v) => set("allowGuestPlayers", v)}
-            help="Útil cuando vienen amigos de fuera. Los invitados no cuentan para stats LSPA."
+            help="Útil cuando vienen amigos de fuera. Los invitados no cuentan para las estadísticas del ranking."
           />
         </Section>
 
@@ -234,14 +234,14 @@ export default function ConfiguracionPage() {
         </Section>
 
         {/* Notificaciones admin */}
-        <Section title="Notificaciones admin">
+        <Section title="Avisos al club">
           <BoolField
-            label="Recibir push de eventos del módulo"
+            label="Recibir avisos en el móvil sobre las reservas"
             value={form!.notifyAdminViaPush}
             onChange={(v) => set("notifyAdminViaPush", v)}
           />
           <BoolField
-            label="Recibir email de eventos del módulo"
+            label="Recibir avisos por email sobre las reservas"
             value={form!.notifyAdminViaEmail}
             onChange={(v) => set("notifyAdminViaEmail", v)}
           />
