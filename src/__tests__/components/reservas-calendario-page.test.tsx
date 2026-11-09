@@ -197,7 +197,11 @@ describe("Calendario de reservas — vista Día", () => {
     renderPage();
 
     const block = await screen.findByRole("link", { name: /18:00–19:30/ });
-    expect(block).toHaveAttribute("href", "/mi-club/reservas/bookings/b1");
+    // La ficha vuelve al calendario, a este día
+    expect(block).toHaveAttribute(
+      "href",
+      `/mi-club/reservas/bookings/b1?volver=${encodeURIComponent("/mi-club/reservas/calendario?fecha=2026-10-25")}`,
+    );
     expect(within(block).getByText("2 jug.")).toBeInTheDocument();
     // Las franjas que ocupa ya no se ofrecen
     expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 18:30" })).not.toBeInTheDocument();
@@ -396,6 +400,28 @@ describe("Recepción — franja mañana / tarde", () => {
 
     expect(window.history.replaceState).toHaveBeenLastCalledWith(null, "", "/mi-club/reservas/calendario");
     expect(await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 15:00" })).toBeInTheDocument();
+  });
+
+  it("con ?fecha= abre ese día; cambiar de día lo deja en la URL, junto a la franja, y «Hoy» lo quita", async () => {
+    url.set("fecha=2026-10-28&franja=tarde");
+    renderPage();
+    await screen.findByLabelText("Crear reserva en Pista 1 a las 15:00");
+    expect(screen.getByLabelText("Elegir fecha")).toHaveValue("2026-10-28");
+
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    expect(window.history.replaceState).toHaveBeenLastCalledWith(
+      null, "", "/mi-club/reservas/calendario?fecha=2026-10-29&franja=tarde",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(window.history.replaceState).toHaveBeenLastCalledWith(null, "", "/mi-club/reservas/calendario?franja=tarde");
+  });
+
+  it("un ?fecha= que no es una fecha se ignora: hoy", async () => {
+    url.set("fecha=mañana");
+    renderPage();
+    await firstSlot();
+    expect(screen.getByLabelText("Elegir fecha")).toHaveValue("2026-10-25");
   });
 
   it("una reserva que cruza las 15:00 sale por la tarde desde la primera fila", async () => {

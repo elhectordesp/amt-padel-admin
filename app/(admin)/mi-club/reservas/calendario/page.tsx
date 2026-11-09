@@ -73,8 +73,16 @@ const PERIODS: { value: DayPeriod; label: string; title?: string }[] = [
   { value: "tarde", label: "Tarde", title: "Desde las 15:00" },
 ];
 
-function calendarHref(period: DayPeriod): string {
-  return period === "todo" ? CALENDAR_PATH : `${CALENDAR_PATH}?franja=${period}`;
+// La URL guarda la franja y, si no es hoy, el día: al volver de la ficha de una
+// reserva, el calendario está donde estaba
+function calendarHref(period: DayPeriod, day: string | null): string {
+  const params = [day && `fecha=${day}`, period !== "todo" && `franja=${period}`].filter(Boolean);
+  return params.length === 0 ? CALENDAR_PATH : `${CALENDAR_PATH}?${params.join("&")}`;
+}
+
+/** El día de `?fecha=` si es una fecha válida (AAAA-MM-DD). */
+function dayFromParam(value: string | null): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) ? value : null;
 }
 
 export default function CalendarioPage() {
@@ -178,15 +186,23 @@ function DayView({
   const now = useNow(CLOCK_TICK_MS);
   const todayKey = zonedDayKey(now, timeZone);
   // null: hoy, y lo sigue siendo pasada la medianoche (la tablet de recepción se queda abierta)
-  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  // La franja y el día (si no es hoy) van en la URL: recepción deja la franja
+  // fija, sobrevive a recargar y la ficha de una reserva vuelve a este día.
+  // Sin ir al servidor: Next sincroniza useSearchParams con replaceState
+  const searchParams = useSearchParams();
+  const period = parseDayPeriod(searchParams.get("franja"));
+  const [pickedDay, setPickedDay] = useState<string | null>(() => {
+    const fromUrl = dayFromParam(searchParams.get("fecha"));
+    return fromUrl === todayKey ? null : fromUrl;
+  });
   const dateStr = pickedDay ?? todayKey;
   const isToday = dateStr === todayKey;
-  const goToDay = (key: string) => setPickedDay(key === todayKey ? null : key);
-
-  // La franja va en la URL: recepción la deja fija y sobrevive a recargar.
-  // Sin ir al servidor: Next sincroniza useSearchParams con replaceState
-  const period = parseDayPeriod(useSearchParams().get("franja"));
-  const choosePeriod = (p: DayPeriod) => window.history.replaceState(null, "", calendarHref(p));
+  const showDay = (day: string | null) => {
+    setPickedDay(day);
+    window.history.replaceState(null, "", calendarHref(period, day));
+  };
+  const goToDay = (key: string) => showDay(key === todayKey ? null : key);
+  const choosePeriod = (p: DayPeriod) => window.history.replaceState(null, "", calendarHref(p, pickedDay));
 
   // Abierto: con qué se abre el alta (null: cerrado)
   const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(null);
@@ -286,7 +302,7 @@ function DayView({
             <ChevronRight className="h-3.5 w-3.5" />
           </Button>
           {!isToday && (
-            <Button variant="ghost" size="sm" className={tapText} onClick={() => setPickedDay(null)}>
+            <Button variant="ghost" size="sm" className={tapText} onClick={() => showDay(null)}>
               Hoy
             </Button>
           )}

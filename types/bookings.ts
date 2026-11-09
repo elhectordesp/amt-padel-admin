@@ -249,6 +249,10 @@ export interface Booking {
   court?: { id: string; name: string; type: CourtType; isIndoor: boolean };
   club?: { id: string; name: string; city: string };
   participants?: BookingParticipant[];
+  // Solo en el listado del personal del club: el titular (el cliente del club
+  // y quien la apuntó). No vienen con un back anterior
+  clubCustomer?: { id: string; name: string | null; phone: string | null } | null;
+  creator?: { id: string; name: string | null };
   // Solo en el detalle (GET /bookings/:id). No vienen con un back anterior
   result?: BookingResult | null;
   /** Hasta cuándo meten o cambian el resultado los jugadores. */
@@ -341,6 +345,10 @@ export interface CreateBookingPayload {
   openMatchMinLspa?: number;
   openMatchMaxLspa?: number;
   notes?: string;
+  /** Cliente del club a quien se reserva (solo el personal del club). */
+  clubCustomerId?: string;
+  /** Cobrada en el mostrador: nace cobrada, en la misma operación (solo el personal del club). */
+  payNow?: { method: Extract<BookingPaymentMethod, "CASH_AT_VENUE" | "PAID_MANUAL">; amountCents?: number };
 }
 
 export interface AvailabilityQuery {
@@ -373,6 +381,8 @@ export interface BookingFiltersQuery {
   userId?: string;
   statuses?: BookingStatus[];
   matchMode?: BookingMatchMode;
+  /** "true": solo las que se deben (sin cobrar, con importe, no canceladas). */
+  unpaid?: "true";
   fromDate?: string;
   toDate?: string;
   /** Por hora de inicio; el back, por defecto «desc» (las más lejanas primero). */
