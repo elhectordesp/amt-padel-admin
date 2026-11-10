@@ -108,6 +108,7 @@ export interface CourtPriceSlot {
   endTime: string;
   durationMinutes: number;
   priceCents: number;
+  label?: string | null;
 }
 
 export interface BookingExtra {
@@ -320,9 +321,16 @@ export interface PriceSlotInput {
   endTime: string;
   durationMinutes: number;
   priceCents: number;
+  /** Nombre de la franja («Valle», «Punta»), máx. 40 caracteres. */
+  label?: string;
 }
 
 export interface ReplaceCourtPricingPayload {
+  slots: PriceSlotInput[];
+}
+
+export interface ReplaceClubPriceSlotsPayload {
+  courtIds: string[];
   slots: PriceSlotInput[];
 }
 
