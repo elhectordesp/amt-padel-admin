@@ -28,7 +28,13 @@ import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import type { ClubCustomer } from "@/lib/services/club-customers";
 import { BookingCustomerPicker } from "@/components/admin/booking-customer-picker";
-import { CLUB_PAYMENT_METHODS, paymentMethodLabel, type ClubPaymentMethod } from "@/lib/utils/booking-payment";
+import { AmountField } from "@/components/admin/payment-fields";
+import {
+  PAYMENT_METHOD_OPTIONS,
+  centsToEurosInput,
+  eurosToCents,
+  type CounterPaymentMethod,
+} from "@/lib/utils/payment-methods";
 import { formatCents } from "@/lib/utils/booking-price";
 import { zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
@@ -112,7 +118,9 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   // El cliente del club a quien se reserva (opcional) y si paga ya
   const [customer, setCustomer] = useState<ClubCustomer | null>(null);
   const [payNow, setPayNow] = useState(false);
-  const [payMethod, setPayMethod] = useState<ClubPaymentMethod>("CASH_AT_VENUE");
+  const [payMethod, setPayMethod] = useState<CounterPaymentMethod>("CASH");
+  // El importe cobrado, en euros; sin tocar, el precio de la reserva
+  const [payAmount, setPayAmount] = useState<string | null>(null);
 
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
@@ -183,6 +191,11 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
         }.`
       : null;
 
+  // Lo cobrado ahora: lo escrito o, sin tocar, el precio del hueco
+  const payAmountText = payAmount ?? centsToEurosInput(pickedSlot?.priceCents ?? 0);
+  const payCents = eurosToCents(payAmountText);
+  const payInvalid = payNow && payCents === null;
+
   const create = useMutation({
     mutationFn: () => bookingsService.bookings.create(buildPayload()),
     onSuccess: () => {
@@ -218,7 +231,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     setGuestDraft("");
     setCustomer(null);
     setPayNow(false);
-    setPayMethod("CASH_AT_VENUE");
+    setPayMethod("CASH");
+    setPayAmount(null);
     onClose();
   }
 
@@ -250,7 +264,9 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
       isCompetitive: isCompetitive && !started,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(customer ? { clubCustomerId: customer.id } : {}),
-      ...(payNow && (pickedSlot?.priceCents ?? 0) > 0 ? { payNow: { method: payMethod } } : {}),
+      ...(payNow && (pickedSlot?.priceCents ?? 0) > 0
+        ? { payNow: { method: payMethod, ...(payCents !== null ? { amountCents: payCents } : {}) } }
+        : {}),
     };
 
     if (mode === "OPEN") {
@@ -293,6 +309,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     !lspaError &&
     !tooManyPlayers &&
     !openButStarted &&
+    !payInvalid &&
     !create.isPending;
 
   return (
@@ -605,18 +622,21 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 Cobrada ahora ({formatCents(pickedSlot.priceCents)})
               </label>
               {payNow && (
-                <select
-                  aria-label="Cómo se ha cobrado"
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value as ClubPaymentMethod)}
-                  className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                >
-                  {CLUB_PAYMENT_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {paymentMethodLabel(m)}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-2 space-y-2">
+                  <select
+                    aria-label="Cómo se ha cobrado"
+                    value={payMethod}
+                    onChange={(e) => setPayMethod(e.target.value as CounterPaymentMethod)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                  >
+                    {PAYMENT_METHOD_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <AmountField value={payAmountText} onChange={setPayAmount} invalid={payInvalid} />
+                </div>
               )}
             </div>
           )}

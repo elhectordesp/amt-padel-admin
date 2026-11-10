@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
+import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { RescheduleBookingDialog } from "@/components/admin/reschedule-booking-dialog";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -113,6 +114,7 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
+  const [showCollect, setShowCollect] = useState(false);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
 
   const query = useQuery({
@@ -265,14 +267,9 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
         {b.status !== "CANCELLED" && payment && (
           <div className="ml-7 flex flex-wrap items-center gap-2">
             {payment === "markPaid" ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("CASH_AT_VENUE")} disabled={markPaidMut.isPending}>
-                  {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Cobrada en el club (efectivo o tarjeta)
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PAID_MANUAL")} disabled={markPaidMut.isPending}>
-                  Cobrada por transferencia u otro
-                </Button>
-              </>
+              <Button variant="outline" size="sm" onClick={() => setShowCollect(true)}>
+                <CreditCard className="h-3.5 w-3.5" /> Cobrar
+              </Button>
             ) : (
               <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PENDING")} disabled={markPaidMut.isPending}>
                 {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar como no pagada
@@ -368,6 +365,20 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
       )}
       {showCancel && canCancel && (
         <CancelBookingDialog booking={b} timeZone={tz} onClose={() => setShowCancel(false)} />
+      )}
+      {showCollect && (
+        <CollectModal
+          title="Cobrar reserva"
+          subtitle={`${b.shortCode} · ${b.court?.name ?? "—"}`}
+          defaultCents={b.priceCents}
+          onSubmit={(method, amountCents) => bookingsService.bookings.markPaid(id, { method, amountCents })}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
+            qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+            qc.invalidateQueries({ queryKey: ["club-cash"] });
+          }}
+          onClose={() => setShowCollect(false)}
+        />
       )}
     </ReservasPage>
   );

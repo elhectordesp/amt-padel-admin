@@ -4,22 +4,15 @@
  * (null) y no consta.
  */
 import type { BookingPaymentMethod } from "@/types/bookings";
+import { methodLabel } from "@/lib/utils/payment-methods";
 
-const PAYMENT_LABELS: Record<BookingPaymentMethod, string> = {
-  PENDING: "Pendiente",
-  CASH_AT_VENUE: "En el club (efectivo o tarjeta)",
-  ONLINE: "Online",
-  PAID_MANUAL: "Transferencia u otro",
-};
-
-// Los dos con los que el club cobra a mano (el enum del back no cambia).
-// Al crear: la reserva de pago pendiente nace cobrada con uno de ellos
-export const CLUB_PAYMENT_METHODS = ["CASH_AT_VENUE", "PAID_MANUAL"] as const;
-export type ClubPaymentMethod = (typeof CLUB_PAYMENT_METHODS)[number];
-
-/** Cómo se cobró, para leer; sin método, que no consta (antes salía «()»). */
+/**
+ * Cómo se cobró, para leer; sin método, que no consta (antes salía «()»).
+ * Los métodos son los del catálogo único (lib/utils/payment-methods.ts); las
+ * reservas antiguas pueden llevar «En el club» o «Pagada».
+ */
 export function paymentMethodLabel(method: BookingPaymentMethod | null): string {
-  return method ? PAYMENT_LABELS[method] : "sin datos de cobro";
+  return method ? methodLabel(method) : "sin datos de cobro";
 }
 
 /**
