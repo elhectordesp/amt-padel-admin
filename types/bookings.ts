@@ -73,6 +73,13 @@ export interface ClubBookingConfig {
   cancellationWindowHours: number;
   minBookingAheadMinutes: number;
   maxBookingAheadDays: number;
+  strictModeEnabled: boolean;
+  strictFrom: string | null; // "HH:mm", hora local del club
+  strictTo: string | null;
+  advanceRuleEnabled: boolean;
+  advanceRuleFrom: string | null;
+  advanceRuleTo: string | null;
+  advanceRuleMinutes: number;
   openMatchEnabled: boolean;
   openMatchMinPlayers: number;
   openMatchAdminWarnHoursBefore: number;
