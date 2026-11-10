@@ -557,7 +557,9 @@ export const adminService = {
     setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
       // El back espera `winnerTeam`: con `walkoverWinnerTeam` lo descartaba
       // (whitelist) y todo walkover daba 400 «Debes indicar qué equipo gana»
-      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, winnerTeam: walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
+      // `spaRecalcScheduled`: corregía un resultado ya contado para el SPA, que
+      // se recalcula esa noche
+      api.patch<{ success: boolean; spaRecalcScheduled?: boolean }>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, winnerTeam: walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
   },
 
   players: {

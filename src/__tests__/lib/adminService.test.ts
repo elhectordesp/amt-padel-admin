@@ -114,6 +114,12 @@ describe('adminService', () => {
       });
     });
 
+    it('devuelve spaRecalcScheduled cuando el back avisa de que el SPA se recalcula esa noche', async () => {
+      mockPatch.mockResolvedValueOnce({ data: { success: true, spaRecalcScheduled: true } });
+      const res = await adminService.matches.setResult('m1', [6, 6], [3, 4]);
+      expect(res.spaRecalcScheduled).toBe(true);
+    });
+
     it('un resultado normal no manda walkover ni winnerTeam; force solo si se pide', async () => {
       mockPatch.mockResolvedValueOnce({ data: {} });
       await adminService.matches.setResult('m1', [6, 6], [3, 4], undefined, undefined, true);
