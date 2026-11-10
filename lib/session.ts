@@ -7,6 +7,17 @@
 /** Roles del token que entran al panel: AMT ('admin') y clubes ('club'). */
 const PANEL_ROLES = ["admin", "club"] as const;
 
+/**
+ * Páginas donde una sesión de jugador (rol 'user') es lo normal: elegir con
+ * qué club trabaja quien tiene varios, o quien acaba de aceptar una
+ * invitación al equipo. En el resto, un jugador no entra al panel.
+ */
+export const PLAYER_SESSION_PATHS = ["/elegir-club", "/invitacion-equipo"] as const;
+
+export function isPlayerSessionPath(pathname: string): boolean {
+  return PLAYER_SESSION_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 /** Motivo de /login?motivo=…: la cuenta no tiene (o ya no tiene) acceso al panel. */
 export const LOGIN_REASON_NO_ACCESS = "sin-acceso";
 

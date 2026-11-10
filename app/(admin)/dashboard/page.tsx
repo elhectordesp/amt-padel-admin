@@ -9,6 +9,7 @@ import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { activeAndUpcomingTournaments } from "@/lib/utils/dashboard-tournaments";
 import { useRole, isClub } from "@/lib/use-role";
 import { useMe } from "@/lib/use-me";
+import { useClubAccess } from "@/lib/use-club-access";
 import { ClubToday, LaunchChecklist, useLaunchSteps } from "@/components/admin/club-today";
 import { plainActivity } from "@/lib/utils/club-today";
 
@@ -84,19 +85,26 @@ export default function DashboardPage() {
   const { data: adminUser } = useMe();
   const { clubId } = useRole();
   // Un club a medio configurar no está «en orden» aunque el back no tenga alertas
-  const launch = useLaunchSteps(isClubUser ? clubId : null);
+  // Al equipo del club solo se le enseña lo que su rol puede leer
+  const access = useClubAccess();
+  const canSeeSettings = !isClubUser || access.can("settings");
+  const canSeeBookings = !isClubUser || access.can("bookings");
+  const showTournaments = !isClubUser || access.can("tournaments");
+  const launch = useLaunchSteps(isClubUser && canSeeSettings ? clubId : null);
 
   const { data: stats, isLoading, isError: statsError } = useQuery({
     queryKey:        ["admin-stats"],
     queryFn:         adminService.stats,
     staleTime:       30_000,
     refetchInterval: 60_000,
+    enabled:         showTournaments,
   });
 
   const { data: tournaments = [], isLoading: loadingTournaments, isError: tournamentsError } = useQuery({
     queryKey:  ["tournaments"],
     queryFn:   adminService.tournaments.list,
     staleTime: 60_000,
+    enabled:   showTournaments,
   });
 
   const { data: alerts = [], isError: alertsError } = useQuery({
@@ -104,6 +112,7 @@ export default function DashboardPage() {
     queryFn:         adminService.alerts,
     staleTime:       30_000,
     refetchInterval: 60_000,
+    enabled:         showTournaments,
   });
 
   const { data: activity = [], isError: activityError } = useQuery({
@@ -111,6 +120,7 @@ export default function DashboardPage() {
     queryFn:         adminService.activity,
     staleTime:       30_000,
     refetchInterval: 60_000,
+    enabled:         showTournaments,
   });
 
   const activeTournaments = activeAndUpcomingTournaments(tournaments);
@@ -134,12 +144,13 @@ export default function DashboardPage() {
 
         {isClubUser && clubId && (
           <>
-            <LaunchChecklist clubId={clubId} />
-            <ClubToday clubId={clubId} />
-            <h3 className="font-heading text-lg text-foreground pt-2">Torneos</h3>
+            {canSeeSettings && <LaunchChecklist clubId={clubId} />}
+            {canSeeBookings && <ClubToday clubId={clubId} />}
+            {showTournaments && <h3 className="font-heading text-lg text-foreground pt-2">Torneos</h3>}
           </>
         )}
 
+        {showTournaments && (<>
         {/* Stats */}
         {statsError ? (
           <ErrorCard message="No se pudieron cargar las estadísticas" />
@@ -294,6 +305,7 @@ export default function DashboardPage() {
             }
           </div>
         </div>
+        </>)}
       </div>
     </div>
   );

@@ -24,6 +24,8 @@ const clubsMock = vi.hoisted(() => ({
   deactivate:       vi.fn(),
   geocodeBatch:     vi.fn(),
   admins:           vi.fn(),
+  staff:            vi.fn(),
+  removeStaff:      vi.fn(),
   inviteAdmin:      vi.fn(),
   resendInvitation: vi.fn(),
   revokeInvitation: vi.fn(),
@@ -258,6 +260,10 @@ describe("ClubesPage — administradores del club (L25)", () => {
     vi.clearAllMocks();
     clubsMock.list.mockResolvedValue([ACTIVE]);
     clubsMock.admins.mockResolvedValue({ admins: [ADMIN], invitations: [PENDING, EXPIRED] });
+    clubsMock.staff.mockResolvedValue({
+      members: [{ userId: "u-1", name: "Admin Club", email: "admin@club.com", roles: ["OWNER", "RESULTS"], createdAt: ADMIN.createdAt }],
+      invitations: [],
+    });
   });
 
   async function openAdmins(name = "Club Activo") {
@@ -278,10 +284,25 @@ describe("ClubesPage — administradores del club (L25)", () => {
     expect(within(dialog).getByText("Caducada")).toBeInTheDocument();
     expect(within(dialog).getByText("Enviada el 1/10/26 · caducó el 8/10/26")).toBeInTheDocument();
     expect(clubsMock.admins).toHaveBeenCalledWith("c-activo");
+    expect(clubsMock.staff).toHaveBeenCalledWith("c-activo");
+    // El equipo, con sus roles
+    expect(within(dialog).getByText("Propietario")).toBeInTheDocument();
+    expect(within(dialog).getByText("Resultados")).toBeInTheDocument();
+  });
+
+  it("AMT puede quitar a un miembro del equipo, con confirmación", async () => {
+    clubsMock.removeStaff.mockResolvedValue(undefined);
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Quitar a Admin Club del equipo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Quitar del equipo" }));
+    await waitFor(() => expect(clubsMock.removeStaff).toHaveBeenCalledWith("c-activo", "u-1"));
   });
 
   it("sin admins ni invitaciones lo dice", async () => {
     clubsMock.admins.mockResolvedValue({ admins: [], invitations: [] });
+    clubsMock.staff.mockResolvedValue({ members: [], invitations: [] });
     renderPage();
     const dialog = await openAdmins();
 

@@ -47,10 +47,13 @@ export function LoginForm() {
   const onSubmit = async (data: FormData) => {
     setApiError(null);
     try {
-      await login(data.email, data.password);
+      // Quien viene de un enlace de invitación al equipo puede no tener aún club
+      const toInvitation = from.startsWith("/invitacion-equipo");
+      const user = await login(data.email, data.password, { keepPlayerSession: toInvitation });
       // Nada de la cuenta anterior (p. ej. su rol en ["admin-me"])
       queryClient.clear();
-      router.replace(from);
+      if (user?.needsClubChoice) router.replace("/elegir-club");
+      else router.replace(from);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al iniciar sesión";
       setApiError(msg);
