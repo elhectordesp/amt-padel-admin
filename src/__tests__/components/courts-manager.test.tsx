@@ -17,6 +17,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const listMock = vi.fn();
 const createMock = vi.fn();
 const updateMock = vi.fn();
+const blocksListMock = vi.fn();
+const blocksCreateMock = vi.fn();
 
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
@@ -26,8 +28,8 @@ vi.mock("@/lib/services/admin", () => ({
       update: (...a: unknown[]) => updateMock(...a),
       remove: vi.fn(),
       blocks: {
-        list: vi.fn().mockResolvedValue([]),
-        create: vi.fn(),
+        list: (...a: unknown[]) => blocksListMock(...a),
+        create: (...a: unknown[]) => blocksCreateMock(...a),
         remove: vi.fn(),
       },
     },
@@ -70,6 +72,8 @@ describe("CourtsManager", () => {
     listMock.mockResolvedValue([]);
     createMock.mockResolvedValue(makeCourt());
     updateMock.mockResolvedValue(makeCourt());
+    blocksListMock.mockResolvedValue([]);
+    blocksCreateMock.mockResolvedValue({});
   });
 
   it("muestra empty state cuando no hay pistas", async () => {
@@ -155,5 +159,28 @@ describe("CourtsManager", () => {
         expect.objectContaining({ name: "P Central", isCentral: true }),
       );
     });
+  });
+  it("el bloqueo se crea con el tipo elegido y el listado dice el tipo", async () => {
+    listMock.mockResolvedValue([makeCourt({ id: "c1", name: "Pista 1" })]);
+    blocksListMock.mockResolvedValue([
+      { id: "k1", courtId: "c1", kind: "CLASS", startDate: "2026-11-20", endDate: "2026-11-20", startTime: "10:00", endTime: "11:00", reason: "Iniciación", createdAt: "" },
+      { id: "k2", courtId: "c1", startDate: "2026-11-21", endDate: "2026-11-21", createdAt: "" },
+    ]);
+    renderWithClient(<CourtsManager clubId="club-1" />);
+    fireEvent.click(await screen.findByTitle("Gestionar bloqueos"));
+
+    // Un bloqueo de antes de que hubiera tipos es «Otro»
+    expect(await screen.findByText("Clase")).toBeInTheDocument();
+    expect(screen.getByText("Otro")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Añadir bloqueo/i }));
+    fireEvent.change(screen.getByLabelText("Motivo del bloqueo"), { target: { value: "EVENT" } });
+    const [from] = document.querySelectorAll('input[type="date"]');
+    fireEvent.change(from, { target: { value: "2026-12-01" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Añadir$/ }));
+
+    await waitFor(() =>
+      expect(blocksCreateMock).toHaveBeenCalledWith("club-1", "c1", expect.objectContaining({ kind: "EVENT", startDate: "2026-12-01" })),
+    );
   });
 });

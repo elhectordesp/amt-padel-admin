@@ -98,15 +98,31 @@ export interface Club {
   timezone?:            string;
 }
 
+/** Por qué está ocupada una pista (además de las reservas). */
+export type CourtBlockKind = "MAINTENANCE" | "CLASS" | "TOURNAMENT" | "LEAGUE" | "EVENT" | "OTHER";
+
 export interface CourtBlock {
   id:        string;
   courtId:   string;
+  kind?:     CourtBlockKind; // no viene con un back anterior: «Otro»
   startDate: string;       // "YYYY-MM-DD"
   endDate:   string;       // "YYYY-MM-DD"
   startTime?: string | null; // "HH:MM"
   endTime?:   string | null;
   reason?:    string | null;
   createdAt:  string;
+}
+
+/** Lo que ocupa una pista en un tramo: un bloqueo del club o un partido de torneo. */
+export interface CourtOccupation {
+  kind:         CourtBlockKind;
+  courtId:      string;
+  startsAt:     string; // ISO
+  endsAt:       string; // ISO
+  label:        string; // motivo del bloqueo, o «Torneo · ronda»
+  source:       "BLOCK" | "MATCH";
+  refId:        string;
+  tournamentId?: string; // solo en partidos
 }
 
 export interface Court {

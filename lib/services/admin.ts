@@ -12,7 +12,7 @@ import type {
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins,
   ClubTournamentConfig, UpdateClubTournamentConfigPayload,
   SupportMessage, SupportStatus,
-  Court, TournamentCourt, CourtBlock,
+  Court, TournamentCourt, CourtBlock, CourtBlockKind,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
   DeletedTournament, DeletedPlayer, CategoryGender, ScoringFormat,
 } from "@/types";
@@ -684,7 +684,7 @@ export const adminService = {
     blocks: {
       list:   (clubId: string, courtId: string) =>
         api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`).then((r) => r.data ?? []),
-      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string }) =>
+      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string; kind?: CourtBlockKind }) =>
         api.post<CourtBlock>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, data).then((r) => r.data),
       remove: (clubId: string, courtId: string, blockId: string) =>
         api.delete(`/admin/clubs/${clubId}/courts/${courtId}/blocks/${blockId}`).then((r) => r.data),
