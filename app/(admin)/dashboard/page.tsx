@@ -9,6 +9,8 @@ import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { activeAndUpcomingTournaments } from "@/lib/utils/dashboard-tournaments";
 import { useRole, isClub } from "@/lib/use-role";
 import { useMe } from "@/lib/use-me";
+import { ClubToday, LaunchChecklist, useLaunchSteps } from "@/components/admin/club-today";
+import { plainActivity } from "@/lib/utils/club-today";
 
 function StatCard({
   label, value, sub, icon: Icon, loading,
@@ -80,6 +82,9 @@ export default function DashboardPage() {
   const isClubUser = isClub(role);
 
   const { data: adminUser } = useMe();
+  const { clubId } = useRole();
+  // Un club a medio configurar no está «en orden» aunque el back no tenga alertas
+  const launch = useLaunchSteps(isClubUser ? clubId : null);
 
   const { data: stats, isLoading, isError: statsError } = useQuery({
     queryKey:        ["admin-stats"],
@@ -113,7 +118,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Dashboard" />
+      <Header title={isClubUser ? "Hoy" : "Dashboard"} />
 
       <div className="flex-1 p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div>
@@ -126,6 +131,14 @@ export default function DashboardPage() {
               : "Aquí tienes el resumen de la plataforma."}
           </p>
         </div>
+
+        {isClubUser && clubId && (
+          <>
+            <LaunchChecklist clubId={clubId} />
+            <ClubToday clubId={clubId} />
+            <h3 className="font-heading text-lg text-foreground pt-2">Torneos</h3>
+          </>
+        )}
 
         {/* Stats */}
         {statsError ? (
@@ -180,6 +193,11 @@ export default function DashboardPage() {
               </div>
               {alertsError ? (
                 <ErrorCard message="No se pudieron cargar las alertas" />
+              ) : alerts.length === 0 && launch.pending ? (
+                <div className="py-6 text-center">
+                  <AlertTriangle size={24} className="text-amber-500 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Falta configurar tu club: mira «Para arrancar las reservas»</p>
+                </div>
               ) : alerts.length === 0 ? (
                 <div className="py-6 text-center">
                   <TrendingUp size={24} className="text-green-400 mx-auto mb-2" />
@@ -215,7 +233,7 @@ export default function DashboardPage() {
                       <div className="flex items-start gap-3 py-2.5 border-b border-border last:border-0">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1.5 shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-foreground leading-snug">{item.message}</p>
+                          <p className="text-xs text-foreground leading-snug">{plainActivity(item.message)}</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">{item.time}</p>
                         </div>
                       </div>

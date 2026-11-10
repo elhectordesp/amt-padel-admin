@@ -112,6 +112,12 @@ export default function BookingsListPage() {
     return () => clearTimeout(t);
   }, [searchInput, search, setPage]);
 
+  // El enlace de la portada llega con ?sinpagar=1: el filtro «Sin pagar» ya puesto
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (new URLSearchParams(window.location.search).get("sinpagar") === "1") setUnpaid(true);
+  }, []);
+
   const changeTab = (next: Tab) => {
     setTab(next);
     setDay("");
