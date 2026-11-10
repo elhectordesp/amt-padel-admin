@@ -93,8 +93,8 @@ export function ReservasDayGrid({
   const nowLabel = nowMinutes === null ? "" : `Hora actual, ${minutesToHhmm(nowMinutes)}`;
   // Todas las franjas miden lo mismo, también las que solo tienen reservas
   // (que no empujan la altura de la fila)
-  const slotHeight = touch ? "h-11" : "h-7";
-  const slotLeading = touch ? "leading-11" : "leading-7";
+  const slotHeight = touch ? "h-11" : "h-7 max-[1024px]:h-11";
+  const slotLeading = touch ? "leading-11" : "leading-7 max-[1024px]:leading-11";
 
   return (
     <>

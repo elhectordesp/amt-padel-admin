@@ -2233,10 +2233,10 @@ export default function TorneoDetailPage() {
     <div className="flex flex-col min-h-full">
       <Header title={tournament.name} />
 
-      <div className="flex-1 p-6 space-y-5">
+      <div className="flex-1 p-6 space-y-5 max-[1024px]:p-4 max-[1024px]:space-y-3">
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        {/* Breadcrumb (en tablet sobra: el título y el menú ya dicen dónde estás) */}
+        <div className="flex items-center gap-2 text-sm max-[1024px]:hidden text-muted-foreground">
           <Link href="/torneos" className="hover:text-foreground transition-colors flex items-center gap-1">
             <ChevronLeft size={14} /> Torneos
           </Link>
@@ -2245,9 +2245,9 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Tournament header card */}
-        <div className="bg-card border border-border rounded-lg p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2 min-w-0">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-5 max-[1024px]:p-3">
+          <div className="flex flex-col gap-4 max-[1024px]:gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2 max-[1024px]:space-y-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${TOURNAMENT_STATUS_COLOR[tournament.status as TournamentStatus]}`}>
@@ -2332,7 +2332,7 @@ export default function TorneoDetailPage() {
           </div>
 
           {/* Quick stats */}
-          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4 max-[1024px]:mt-2 max-[1024px]:pt-2 max-[1024px]:gap-2 max-[1024px]:[&_p.font-heading]:text-lg max-[1024px]:[&_p.font-heading]:leading-tight max-[1024px]:[&_.h-1]:hidden">
             <div className="text-center">
               <p className="text-2xl font-heading text-[#D4AF37]">{totalRegistered}</p>
               <p className="text-xs text-muted-foreground mt-0.5">Parejas inscritas</p>

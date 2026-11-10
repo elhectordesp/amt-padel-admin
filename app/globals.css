@@ -93,3 +93,26 @@ html {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.6); }
+
+/* Tablet (1024 px o menos): todo lo pulsable mide 44 px, igual que el modo
+   mostrador, para manejar el panel con el dedo. Es una regla global para no
+   parchear página por página; los componentes base (Button) llevan la suya.
+   Quedan fuera las casillas, interruptores y radios (su caja es pequeña a
+   propósito) y lo que es solo texto para lectores de pantalla. */
+@media (max-width: 1024px) {
+  button:not([role="checkbox"], [role="radio"], [role="switch"], .sr-only),
+  [role="button"]:not(.sr-only),
+  [role="tab"],
+  a[data-slot="button"],
+  select,
+  textarea,
+  input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"]) {
+    min-height: 44px;
+  }
+  /* Solo icono: también 44 px de ancho */
+  button:has(> svg:only-child),
+  [role="button"]:has(> svg:only-child),
+  a[data-slot="button"]:has(> svg:only-child) {
+    min-width: 44px;
+  }
+}

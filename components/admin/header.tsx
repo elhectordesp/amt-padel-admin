@@ -56,7 +56,7 @@ export function Header({ title }: HeaderProps) {
 
   return (
     <>
-      <header className="flex items-center justify-between pl-14 pr-4 sm:px-6 py-4 border-b border-border bg-background sticky top-0 z-10">
+      <header className="flex items-center justify-between pl-16 pr-4 sm:pr-6 min-[1025px]:pl-6 py-4 border-b border-border bg-background sticky top-0 z-10">
         <h1 className="font-heading text-xl text-foreground">{title}</h1>
 
         <div className="flex items-center gap-2">
