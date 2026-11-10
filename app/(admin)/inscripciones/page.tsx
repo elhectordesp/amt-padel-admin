@@ -25,6 +25,7 @@ import { needsForce } from "@/lib/utils/registration-force";
 import { matchesSearch } from "@/lib/utils/search";
 import { paginate } from "@/lib/utils/pagination";
 import { Pagination, usePagination } from "@/components/admin/pagination";
+import { isActiveTournamentStatus } from "@/lib/utils/dashboard-tournaments";
 import type { AdminRegistration, CategoryLevel, RegistrationStatus, Tournament } from "@/types";
 
 // Tooltip del botón confirmar según el estado actual de la inscripción
@@ -83,7 +84,10 @@ function InscripcionesRoute() {
 
   // Sin la lista no se sabe si el torneo existe: no se piden sus inscripciones
   if (param && isPending) return <InscripcionesSkeleton />;
-  const tournamentId = unknown ? "" : param;
+  // Sin torneo en la URL y con uno solo activo, se abre ese directamente
+  const onlyActive = (tournaments ?? []).filter((t: Tournament) => isActiveTournamentStatus(t.status));
+  const fallback = !param && onlyActive.length === 1 ? onlyActive[0].id : "";
+  const tournamentId = unknown ? "" : param || fallback;
   return <InscripcionesContent key={tournamentId} tournamentId={tournamentId} />;
 }
 
