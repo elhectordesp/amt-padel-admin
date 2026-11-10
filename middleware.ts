@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { LOGIN_REASON_NO_ACCESS, isPanelRole } from "./lib/session";
+import { LOGIN_REASON_NO_ACCESS, isPanelRole, isPlayerSessionPath } from "./lib/session";
 
 const TOKEN_KEY = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
@@ -13,6 +13,9 @@ const PUBLIC_PATHS = [
   "/privacidad",
   "/ayuda",
   "/aceptar-invitacion",
+  // Invitación al equipo de un club: la página misma lleva a /login (con el
+  // enlace de vuelta, token incluido) si no hay sesión
+  "/invitacion-equipo",
   "/restablecer",
   "/torneo",
 ];
@@ -86,7 +89,9 @@ export function middleware(request: NextRequest) {
   // Token vigente de quien no entra al panel: un jugador, o un admin al que
   // le quitaron el rol y renovó la sesión. Antes solo se miraba la caducidad
   // y se pintaba el panel entero con todo a 0 (P2-16). Fuera, sin sus cookies.
-  if (!isPublic && !isPanelRole(payload?.role)) {
+  // Excepción: /elegir-club, donde quien tiene varios clubes (o ha perdido el
+  // suyo) elige con cuál trabaja; ahí la sesión es de jugador.
+  if (!isPublic && !isPanelRole(payload?.role) && !(payload?.role === "user" && isPlayerSessionPath(pathname))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";

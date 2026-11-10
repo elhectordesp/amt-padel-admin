@@ -9,7 +9,7 @@ import type {
   CreatePlayerPayload, UpdatePlayerPayload, GenderConflict, Gender, RegistrationStatus,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
-  AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins,
+  AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
   ClubTournamentConfig, UpdateClubTournamentConfigPayload,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
@@ -20,6 +20,7 @@ import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
   CategoryLevelSummary, GroupsLockOptions,
 } from "@/types/preparation";
+import type { ClubMembership, ClubStaffRole } from "@/lib/club-permissions";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AutomaticInvite } from "@/lib/player-invite";
@@ -81,6 +82,9 @@ export interface AdminUser {
   // Opcionales: una versión anterior del back no los devuelve
   email?: string | null;
   role?:  AccountRole;
+  // Los clubes en los que trabaja (equipo) y con cuál está trabajando ahora
+  clubs?:        ClubMembership[];
+  activeClubId?: string | null;
 }
 
 /**
@@ -682,6 +686,19 @@ export const adminService = {
       api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/invitations/${invitationId}/resend`).then((r) => r.data),
     revokeInvitation: (clubId: string, invitationId: string) =>
       api.delete(`/admin/clubs/${clubId}/invitations/${invitationId}`).then((r) => r.data),
+    // Equipo del club: miembros con sus roles e invitaciones sin aceptar
+    staff: (clubId: string) =>
+      api.get<ClubStaff>(`/admin/clubs/${clubId}/staff`).then((r) => r.data),
+    inviteStaff: (clubId: string, email: string, roles: ClubStaffRole[]) =>
+      api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/staff/invitations`, { email, roles }).then((r) => r.data),
+    resendStaffInvitation: (clubId: string, invitationId: string) =>
+      api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/staff/invitations/${invitationId}/resend`).then((r) => r.data),
+    revokeStaffInvitation: (clubId: string, invitationId: string) =>
+      api.delete(`/admin/clubs/${clubId}/staff/invitations/${invitationId}`).then((r) => r.data),
+    updateStaffRoles: (clubId: string, userId: string, roles: ClubStaffRole[]) =>
+      api.patch(`/admin/clubs/${clubId}/staff/${userId}`, { roles }).then((r) => r.data),
+    removeStaff: (clubId: string, userId: string) =>
+      api.delete(`/admin/clubs/${clubId}/staff/${userId}`).then((r) => r.data),
   },
 
   courts: {

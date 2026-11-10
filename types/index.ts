@@ -1,3 +1,4 @@
+import type { ClubStaffRole } from "@/lib/club-permissions";
 export type Gender             = "M" | "F";
 // El de una CATEGORÍA, no el de una persona: Masculina, Femenina, Mixta,
 // General y Junior (lib/category-gender.ts)
@@ -792,6 +793,29 @@ export interface ClubAdminInvitation {
 export interface ClubAdmins {
   admins:      ClubAdminAccount[];
   invitations: ClubAdminInvitation[];
+}
+
+/** Un miembro del equipo de un club (GET /admin/clubs/:clubId/staff). */
+export interface ClubStaffMember {
+  userId:    string;
+  name:      string;
+  email:     string | null;
+  roles:     ClubStaffRole[];
+  createdAt: string;
+}
+
+/** Invitación al equipo de un club sin aceptar. */
+export interface ClubStaffInvitation {
+  id:        string;
+  email:     string;
+  roles:     ClubStaffRole[];
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ClubStaff {
+  members:     ClubStaffMember[];
+  invitations: ClubStaffInvitation[];
 }
 
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";

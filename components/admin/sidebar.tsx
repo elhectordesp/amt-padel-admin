@@ -7,11 +7,17 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History, Contact, CalendarDays, Wallet,
+  History, Contact, CalendarDays, Wallet, UsersRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
 import { useRole, isClub, type Role } from "@/lib/use-role";
+import { useMe, ME_QUERY_KEY } from "@/lib/use-me";
+import { useClubAccess, type ClubAccess } from "@/lib/use-club-access";
+import { activateClub } from "@/lib/auth";
+import type { ClubArea } from "@/lib/club-permissions";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const NAV = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard"     },
@@ -32,20 +38,23 @@ const NAV = [
 // Menú del gestor del club, lo diario arriba. El backend ya enforce el
 // aislamiento — esto es UX para no enseñar botones que devolverían 403.
 // «Inscripciones» y «Resultados» siguen dentro de cada torneo.
-const CLUB_NAV = [
+const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubArea }[] = [
   { href: "/dashboard",                    icon: LayoutDashboard, label: "Hoy"            },
-  { href: "/mi-club/reservas/calendario",  icon: CalendarDays,    label: "Calendario"     },
-  { href: "/mi-club/reservas/bookings",    icon: CalendarRange,   label: "Reservas"       },
-  { href: "/caja",                         icon: Wallet,          label: "Caja"           },
-  { href: "/mi-club/clientes",             icon: Contact,         label: "Clientes"       },
-  { href: "/torneos",                      icon: Trophy,          label: "Torneos"        },
-  { href: "/mi-club",                      icon: Landmark,        label: "Mi club"        },
-  { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores" },
+  { href: "/mi-club/reservas/calendario",  icon: CalendarDays,    label: "Calendario",     area: "bookings"  },
+  { href: "/mi-club/reservas/bookings",    icon: CalendarRange,   label: "Reservas",       area: "bookings"  },
+  { href: "/caja",                         icon: Wallet,          label: "Caja",           area: "cash"      },
+  { href: "/mi-club/clientes",             icon: Contact,         label: "Clientes",       area: "customers" },
+  { href: "/torneos",                      icon: Trophy,          label: "Torneos",        area: "tournaments" },
+  { href: "/mi-club",                      icon: Landmark,        label: "Mi club",        area: "settings"  },
+  { href: "/mi-club/equipo",               icon: UsersRound,      label: "Equipo",         area: "staff"     },
+  { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores", area: "settings"  },
 ];
 
 /** El menú que ve cada rol: el del club, el suyo; el resto (AMT), el completo. */
-export function navForRole(role: Role) {
-  return isClub(role) ? CLUB_NAV : NAV;
+export function navForRole(role: Role, access?: Pick<ClubAccess, "can">) {
+  if (!isClub(role)) return NAV;
+  // Al equipo del club solo se le enseña lo que su rol puede leer
+  return access ? CLUB_NAV.filter((i) => !i.area || access.can(i.area, "read")) : CLUB_NAV;
 }
 
 export function Sidebar() {
@@ -59,7 +68,8 @@ export function Sidebar() {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef     = useRef(false);
 
-  const visibleNav = navForRole(role);
+  const access     = useClubAccess();
+  const visibleNav = navForRole(role, access);
 
   const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
 
@@ -115,6 +125,9 @@ export function Sidebar() {
           </>
         )}
       </div>
+
+      {/* Con qué club trabaja (solo quien lleva varios) */}
+      {(!collapsed || isMobile) && <ClubSwitcher />}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
@@ -243,4 +256,49 @@ export function computeActiveHref(
     if (best === null || href.length > best.length) return href;
     return best;
   }, null);
+}
+
+/** Selector de club de quien lleva varias sedes: cambia la sesión y recarga en la portada. */
+function ClubSwitcher() {
+  const { role } = useRole();
+  const { data: me } = useMe();
+  const qc = useQueryClient();
+  const [changing, setChanging] = useState(false);
+  const clubs = me?.clubs ?? [];
+  if (!isClub(role) || clubs.length < 2) return null;
+
+  const onChange = async (clubId: string) => {
+    if (clubId === me?.activeClubId) return;
+    setChanging(true);
+    try {
+      await activateClub(clubId);
+      // Nada del club anterior en la caché
+      qc.clear();
+      window.location.href = "/";
+    } catch (err) {
+      setChanging(false);
+      toast.error(err instanceof Error ? err.message : "No se pudo cambiar de club");
+      qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    }
+  };
+
+  return (
+    <div className="px-2 pt-3">
+      <label htmlFor="club-switcher" className="block px-1 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        Club
+      </label>
+      <select
+        id="club-switcher"
+        value={me?.activeClubId ?? ""}
+        disabled={changing}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-9 max-[1024px]:h-11 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] disabled:opacity-60"
+      >
+        {!me?.activeClubId && <option value="" disabled>Elige un club</option>}
+        {clubs.map((c) => (
+          <option key={c.clubId} value={c.clubId}>{c.clubName}</option>
+        ))}
+      </select>
+    </div>
+  );
 }

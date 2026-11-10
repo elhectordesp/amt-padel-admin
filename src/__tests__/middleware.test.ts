@@ -236,4 +236,24 @@ describe("middleware — solo entran admin y club (P2-16)", () => {
       expect(deleteCookieMock).not.toHaveBeenCalled();
     }
   });
+
+  it("un jugador entra en /elegir-club y en /invitacion-equipo (elegir club e invitación al equipo)", () => {
+    const playerToken = makeToken({ exp: futureExp, role: "user" });
+    for (const path of ["/elegir-club", "/invitacion-equipo"]) {
+      nextMock.mockClear();
+      redirectMock.mockClear();
+      middleware(makeRequest(path, playerToken));
+      expect(nextMock).toHaveBeenCalled();
+      expect(redirectMock).not.toHaveBeenCalled();
+      expect(deleteCookieMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("sin sesión, /elegir-club lleva a /login; /invitacion-equipo se abre (la página manda al login con el enlace)", () => {
+    middleware(makeRequest("/elegir-club"));
+    expect(redirectMock.mock.calls[0][0].pathname).toBe("/login");
+    nextMock.mockClear();
+    middleware(makeRequest("/invitacion-equipo"));
+    expect(nextMock).toHaveBeenCalled();
+  });
 });

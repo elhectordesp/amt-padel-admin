@@ -27,6 +27,8 @@ vi.mock('../../../lib/api', async (importOriginal) => ({
 
 import {
   acceptClubInvite,
+  acceptStaffInvitation,
+  activateClub,
   ACTIVATE_LINK_EXPIRED_MESSAGE,
   login,
   logout,
@@ -52,6 +54,51 @@ describe('auth helpers', () => {
 
       await expect(login('x@x.com', 'pass')).rejects.toThrow('No tienes permisos de administrador.');
       expect(removeTokens).toHaveBeenCalledTimes(1);
+    });
+
+    const CLUB_JWT = 'x.' + btoa('{"role":"club"}') + '.x';
+    const club = (id: string) => ({ clubId: id, clubName: id, roles: ['OWNER'] });
+
+    it('un jugador sin ningún club no entra', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        data: { token: USER_JWT, refreshToken: 'ref', user: { id: '1', name: 'X', email: 'x@x.com', clubs: [], activeClubId: null } },
+      });
+      await expect(login('x@x.com', 'pass')).rejects.toThrow('No tienes permisos de administrador.');
+      expect(removeTokens).toHaveBeenCalled();
+    });
+
+    it('un jugador con un club entra en él (active-club con el refresh token)', async () => {
+      (getRefreshToken as any).mockReturnValue('ref');
+      (api.post as any)
+        .mockResolvedValueOnce({
+          data: { token: USER_JWT, refreshToken: 'ref', user: { id: '1', name: 'X', email: 'x@x.com', clubs: [club('c1')] } },
+        })
+        .mockResolvedValueOnce({
+          data: { token: CLUB_JWT, refreshToken: 'ref2', user: { id: '1', name: 'X', email: 'x@x.com', clubs: [club('c1')], activeClubId: 'c1' } },
+        });
+      const user = await login('x@x.com', 'pass');
+      expect(api.post).toHaveBeenLastCalledWith('/auth/active-club', { clubId: 'c1', refreshToken: 'ref' });
+      expect(setToken).toHaveBeenLastCalledWith(CLUB_JWT);
+      expect(user.role).toBe('club');
+    });
+
+    it('un jugador con varios clubes debe elegir', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        data: { token: USER_JWT, refreshToken: 'ref', user: { id: '1', name: 'X', email: 'x@x.com', clubs: [club('c1'), club('c2')] } },
+      });
+      const user = await login('x@x.com', 'pass');
+      expect(user.needsClubChoice).toBe(true);
+      expect(api.post).toHaveBeenCalledTimes(1);
+      expect(removeTokens).not.toHaveBeenCalled();
+    });
+
+    it('con keepPlayerSession (invitación al equipo) conserva la sesión de jugador aunque no tenga club', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        data: { token: USER_JWT, refreshToken: 'ref', user: { id: '1', name: 'X', email: 'x@x.com', clubs: [] } },
+      });
+      const user = await login('x@x.com', 'pass', { keepPlayerSession: true });
+      expect(user.role).toBe('user');
+      expect(removeTokens).not.toHaveBeenCalled();
     });
 
     it('almacena tokens y devuelve el usuario si el rol es admin', async () => {
@@ -172,6 +219,32 @@ describe('auth helpers', () => {
       expect(removeTokens).toHaveBeenCalledTimes(1);
 
       Object.defineProperty(window, 'location', { value: originalLocation });
+    });
+  });
+
+  describe('equipo del club', () => {
+    const CLUB_JWT = 'x.' + btoa('{"role":"club"}') + '.x';
+
+    it('activateClub: CLUB_DEACTIVATED y CLUB_STAFF_NOT_MEMBER se explican', async () => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('x', 403, 'CLUB_DEACTIVATED'));
+      await expect(activateClub('c1')).rejects.toThrow('Tu club está desactivado');
+      (api.post as any).mockRejectedValueOnce(new ApiError('x', 403, 'CLUB_STAFF_NOT_MEMBER'));
+      await expect(activateClub('c1')).rejects.toThrow('Ya no formas parte del equipo');
+    });
+
+    it('acceptStaffInvitation guarda la sesión nueva', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        data: { token: CLUB_JWT, refreshToken: 'r', clubId: 'c1', clubName: 'Club Uno', roles: ['COACH'], user: {} },
+      });
+      await expect(acceptStaffInvitation('tk')).resolves.toEqual({ clubId: 'c1', clubName: 'Club Uno' });
+      expect(api.post).toHaveBeenCalledWith('/auth/club-staff-invitations/accept', { token: 'tk' });
+      expect(setToken).toHaveBeenCalledWith(CLUB_JWT);
+    });
+
+    it('acceptStaffInvitation: cuenta equivocada', async () => {
+      (api.post as any).mockRejectedValueOnce(new ApiError('x', 403, 'CLUB_INVITATION_WRONG_ACCOUNT'));
+      await expect(acceptStaffInvitation('tk')).rejects.toThrow('Esta invitación es para otro email: entra con esa cuenta.');
+      expect(setToken).not.toHaveBeenCalled();
     });
   });
 });
