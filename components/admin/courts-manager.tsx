@@ -17,12 +17,21 @@ import {
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
-import type { Court, CourtBlock } from "@/types";
+import { OCCUPATION_KINDS, occupationKindInfo } from "@/lib/utils/court-occupation";
+import type { Court, CourtBlock, CourtBlockKind } from "@/types";
 
 const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false };
 type CourtForm = typeof EMPTY_COURT;
 
-const EMPTY_BLOCK = {
+const EMPTY_BLOCK: {
+  kind: CourtBlockKind;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+} = {
+  kind: "MAINTENANCE",
   startDate: "",
   endDate: "",
   startTime: "",
@@ -93,6 +102,7 @@ function CourtRow({
   const addBlock = useMutation({
     mutationFn: () =>
       adminService.courts.blocks.create(clubId, court.id, {
+        kind: blockForm.kind,
         startDate: blockForm.startDate,
         endDate: blockForm.endDate || blockForm.startDate,
         startTime: blockForm.startTime || undefined,
@@ -268,6 +278,8 @@ function CourtRow({
                     className="text-muted-foreground shrink-0"
                   />
                   <span className="flex-1 min-w-0 truncate">
+                    <span className="font-medium">{occupationKindInfo(b.kind).label}</span>
+                    {" · "}
                     {b.startDate === b.endDate
                       ? b.startDate
                       : `${b.startDate} – ${b.endDate}`}
@@ -293,6 +305,25 @@ function CourtRow({
 
           {showAddBlock ? (
             <div className="space-y-1.5 pt-1 border-t border-border">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-0.5">
+                  Motivo del bloqueo *
+                </p>
+                <select
+                  aria-label="Motivo del bloqueo"
+                  value={blockForm.kind}
+                  onChange={(e) =>
+                    setBlockForm((f) => ({ ...f, kind: e.target.value as CourtBlockKind }))
+                  }
+                  className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                >
+                  {OCCUPATION_KINDS.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-1">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-0.5">
@@ -354,7 +385,7 @@ function CourtRow({
                 onChange={(e) =>
                   setBlockForm((f) => ({ ...f, reason: e.target.value }))
                 }
-                placeholder="Motivo (opcional)"
+                placeholder="Nota (opcional), p. ej. «Clase de iniciación»"
                 className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
               <div className="flex justify-end gap-2">

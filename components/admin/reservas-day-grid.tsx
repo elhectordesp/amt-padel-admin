@@ -4,7 +4,9 @@
  * Rejilla de recepción: filas = franjas de 30 min desde la apertura hasta el
  * cierre, columnas = pistas. Cada reserva ocupa las franjas que dura. Un hueco
  * libre dentro del horario se pulsa para crear ahí la reserva (pista y hora
- * ya elegidas). Los bloqueos de pista (torneos) salen como «Bloqueada».
+ * ya elegidas). Lo que ocupa una pista sin ser una reserva (mantenimiento,
+ * clase, partido de torneo, liga, evento, otro) sale con el color de su tipo;
+ * un partido de torneo lleva al torneo.
  *
  * Horas en la zona del club (`timeZone`, la de `Club.timezone`, como el back
  * de reservas), no en la del navegador: la lógica está en
@@ -23,6 +25,7 @@
 
 import Link from "next/link";
 import { Check, CircleAlert } from "lucide-react";
+import { OccupationLegendItems } from "@/components/admin/occupation-legend";
 import {
   buildDayGrid,
   minutesToHhmm,
@@ -32,16 +35,18 @@ import {
   type DayWindow,
 } from "@/lib/utils/booking-day-grid";
 import { bookingHolder, isUnpaid } from "@/lib/utils/booking-labels";
+import { occupationKindInfo } from "@/lib/utils/court-occupation";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import { zonedTime, zonedToDate } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
-import type { Court } from "@/types";
+import type { Court, CourtOccupation } from "@/types";
 
 interface Props {
   date: string; // "YYYY-MM-DD", día del club
   timeZone: string;
   courts: Court[]; // activas, en el orden del club
   bookings: Booking[]; // reservas de ese día
+  occupations?: CourtOccupation[]; // bloqueos y partidos de torneo de ese día
   window: DayWindow | null; // horario del día; null = cerrado
   onSlotClick: (args: { courtId: string; startsAtISO: string }) => void;
   /** Solo la mañana o la tarde (por defecto, el día entero). */
@@ -57,13 +62,14 @@ export function ReservasDayGrid({
   timeZone,
   courts,
   bookings,
+  occupations = [],
   window,
   onSlotClick,
   period = "todo",
   nowMinutes = null,
   touch = false,
 }: Props) {
-  const fullGrid = buildDayGrid({ dayKey: date, courts, bookings, window, timeZone });
+  const fullGrid = buildDayGrid({ dayKey: date, courts, bookings, occupations, window, timeZone });
 
   if (!fullGrid) {
     return (
@@ -158,13 +164,31 @@ export function ReservasDayGrid({
                     );
                   }
                   if (cell.kind === "blocked") {
+                    const o = cell.occupation;
+                    const info = occupationKindInfo(o.kind);
+                    // El texto solo en la primera franja del tramo
+                    const above = row > 0 ? grid.cells[c.id][row - 1] : null;
+                    const first = !(above?.kind === "blocked" && above.occupation === o);
+                    const text = first ? `${info.label} · ${o.label}` : "";
+                    const hours = `${zonedTime(o.startsAt, timeZone)}–${zonedTime(o.endsAt, timeZone)}`;
                     return (
                       <td
                         key={c.id}
-                        className={`${lineCell}border-t border-l border-border bg-muted/60 px-2 align-middle text-muted-foreground`}
-                        title={cell.reason ?? undefined}
+                        className={`${lineCell}border-l border-border px-0 align-middle ${info.className} ${
+                          first ? "border-t" : ""
+                        }`}
+                        title={`${info.label} · ${o.label} · ${hours}`}
                       >
-                        <span className={`block ${slotHeight} truncate ${slotLeading}`}>Bloqueada</span>
+                        {o.source === "MATCH" && o.tournamentId ? (
+                          <Link
+                            href={`/torneos/${o.tournamentId}`}
+                            className={`block ${slotHeight} truncate px-2 ${slotLeading} underline-offset-2 hover:underline`}
+                          >
+                            {text}
+                          </Link>
+                        ) : (
+                          <span className={`block ${slotHeight} truncate px-2 ${slotLeading}`}>{text}</span>
+                        )}
                         {nowHere !== null && <NowLine at={nowHere} />}
                       </td>
                     );
@@ -235,6 +259,7 @@ function Legend() {
       <li className="flex items-center gap-1.5">
         <CircleAlert className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden /> Sin cobrar
       </li>
+      <OccupationLegendItems />
     </ul>
   );
 }

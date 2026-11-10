@@ -43,6 +43,7 @@ import type {
   UpdateClubRulesPayload,
   UpdateScheduleExceptionPayload,
 } from "@/types/bookings";
+import type { CourtOccupation } from "@/types";
 
 const base = (clubId: string) => `/admin/clubs/${clubId}/booking-config`;
 
@@ -335,6 +336,16 @@ export const bookingsService = {
         .then((r) => r.data),
   },
 
+  // ── Ocupación de las pistas (calendario) ───────────────────────────────
+
+  /** Bloqueos y partidos de torneo que ocupan las pistas del club en `[from, to)` (ISO). */
+  occupations: {
+    list: (clubId: string, params: { from: string; to: string }) =>
+      api
+        .get<{ occupations: CourtOccupation[] }>(`/admin/clubs/${clubId}/occupations`, { params })
+        .then((r) => r.data?.occupations ?? []),
+  },
+
   // ── Availability (público) ─────────────────────────────────────────────
 
   availability: (params: AvailabilityQuery) =>
@@ -367,6 +378,8 @@ export const bookingsQK = {
   bookingsAll: (filters: BookingFiltersQuery) =>
     ["bookings", "list", "all", JSON.stringify(filters)] as const,
   bookingDetail: (id: string) => ["bookings", "detail", id] as const,
+  occupations: (clubId: string, from: string, to: string) =>
+    ["bookings", "occupations", clubId, from, to] as const,
   availability: (clubId: string, courtId: string, date: string, duration: number) =>
     ["bookings", "availability", clubId, courtId, date, duration] as const,
 };

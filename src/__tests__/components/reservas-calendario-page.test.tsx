@@ -61,6 +61,7 @@ const svc = vi.hoisted(() => ({
   operatingHours: { list: vi.fn() },
   exceptions: { list: vi.fn() },
   bookings: { listAll: vi.fn(), create: vi.fn() },
+  occupations: { list: vi.fn() },
   courtDurations: { list: vi.fn() },
   availability: vi.fn(),
 }));
@@ -140,6 +141,7 @@ beforeEach(() => {
   );
   svc.exceptions.list.mockResolvedValue([]);
   svc.bookings.listAll.mockResolvedValue([]);
+  svc.occupations.list.mockResolvedValue([]);
   svc.courtDurations.list.mockResolvedValue([{ id: "d1", courtId: "p2", minutes: 90, isDefault: true }]);
   svc.availability.mockResolvedValue(SLOTS);
 });
@@ -158,6 +160,36 @@ describe("Calendario de reservas — vista Día", () => {
       toDate: "2026-10-25T22:59:59.999Z",
     });
     expect(svc.exceptions.list).toHaveBeenCalledWith("c1", { fromDate: "2026-10-25", toDate: "2026-10-25" });
+  });
+
+  it("pinta lo que ocupa cada pista con su tipo, deja el partido de torneo como enlace al torneo y pone la leyenda", async () => {
+    // 15:00Z-16:30Z son las 16:00-17:30 de Madrid; 09:00Z-10:00Z, las 10:00-11:00
+    svc.occupations.list.mockResolvedValue([
+      {
+        kind: "TOURNAMENT", courtId: "p1", startsAt: "2026-10-25T15:00:00Z", endsAt: "2026-10-25T16:30:00Z",
+        label: "Open de Otoño · Cuartos", source: "MATCH", refId: "m1", tournamentId: "t1",
+      },
+      {
+        kind: "MAINTENANCE", courtId: "p2", startsAt: "2026-10-25T09:00:00Z", endsAt: "2026-10-25T10:00:00Z",
+        label: "Cambio de césped", source: "BLOCK", refId: "k1",
+      },
+    ]);
+    renderPage();
+
+    const match = await screen.findByRole("link", { name: /Torneo · Open de Otoño · Cuartos/ });
+    expect(match).toHaveAttribute("href", "/torneos/t1");
+    expect(screen.getByText("Mantenimiento · Cambio de césped")).toBeInTheDocument();
+    // Las franjas ocupadas no se ofrecen para reservar
+    expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 16:00" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Crear reserva en Pista 2 a las 10:00" })).not.toBeInTheDocument();
+    const legend = screen.getByRole("list", { name: "Leyenda" });
+    for (const name of ["Mantenimiento", "Clase", "Torneo", "Liga", "Evento", "Otro"]) {
+      expect(within(legend).getByText(name)).toBeInTheDocument();
+    }
+    expect(svc.occupations.list).toHaveBeenCalledWith("c1", {
+      from: "2026-10-24T22:00:00.000Z",
+      to: "2026-10-25T22:59:59.999Z",
+    });
   });
 
   it("pulsar un hueco libre abre el alta con esa pista y esa hora", async () => {

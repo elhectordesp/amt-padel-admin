@@ -8,6 +8,9 @@
  *    `?franja=`) y tiene un modo mostrador a pantalla completa para tablet.
  *  - SEMANA: rejilla pistas × días (resumen). Click en reserva → detalle.
  *
+ * Las dos pintan, además de las reservas, lo que ocupa cada pista (mantenimiento,
+ * clase, partido de torneo, liga, evento, otro) con su color y su leyenda.
+ *
  * Días y horas en la zona del club (`Club.timezone`, como el back), no en la
  * del navegador. Mientras no se sabe, el calendario carga.
  */
@@ -47,6 +50,8 @@ import {
   type DayPeriod,
 } from "@/lib/utils/booking-day-grid";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
+import { occupationKindInfo } from "@/lib/utils/court-occupation";
+import { OccupationLegendItems } from "@/components/admin/occupation-legend";
 import {
   addDaysToKey,
   capitalizeFirst,
@@ -56,7 +61,7 @@ import {
   zonedTime,
 } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
-import type { Court } from "@/types";
+import type { Court, CourtOccupation } from "@/types";
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 type View = "day" | "week";
@@ -239,6 +244,14 @@ function DayView({
     refetchOnWindowFocus: "always",
   });
 
+  // Bloqueos y partidos de torneo del día, para que se vea todo lo que ocupa cada pista
+  const occupationsQuery = useQuery({
+    queryKey: bookingsQK.occupations(clubId, range.fromDate, range.toDate),
+    queryFn: () => bookingsService.occupations.list(clubId, { from: range.fromDate, to: range.toDate }),
+    refetchInterval: REFRESH_MS,
+    refetchOnWindowFocus: "always",
+  });
+
   const dayWindow = useMemo(
     () => resolveDayWindow(dateStr, hoursQuery.data ?? [], exceptionsQuery.data ?? []),
     [dateStr, hoursQuery.data, exceptionsQuery.data],
@@ -248,7 +261,8 @@ function DayView({
     courtsLoading ||
     hoursQuery.isLoading ||
     exceptionsQuery.isLoading ||
-    bookingsQuery.isLoading;
+    bookingsQuery.isLoading ||
+    occupationsQuery.isLoading;
   // Si falla un refresco (la tablet vuelve del reposo sin red), se sigue
   // viendo lo último que llegó, con un aviso, en vez de cambiar la rejilla
   // por un error: el error es solo para lo que no llegó a cargar
@@ -256,12 +270,14 @@ function DayView({
     courtsError ||
     hoursQuery.isLoadingError ||
     exceptionsQuery.isLoadingError ||
-    bookingsQuery.isLoadingError;
+    bookingsQuery.isLoadingError ||
+    occupationsQuery.isLoadingError;
   const refreshFailed =
     courtsRefreshError ||
     hoursQuery.isRefetchError ||
     exceptionsQuery.isRefetchError ||
-    bookingsQuery.isRefetchError;
+    bookingsQuery.isRefetchError ||
+    occupationsQuery.isRefetchError;
 
   return (
     // En modo mostrador, la vista del día tapa todo (también la barra
@@ -380,6 +396,7 @@ function DayView({
             timeZone={timeZone}
             courts={courts}
             bookings={bookingsQuery.data ?? []}
+            occupations={occupationsQuery.data ?? []}
             window={dayWindow}
             onSlotClick={({ courtId, startsAtISO }) =>
               setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
@@ -439,7 +456,17 @@ function WeekView({
     queryFn: () => bookingsService.bookings.listAll(bookingsFilters),
   });
 
+  const occupationsQuery = useQuery({
+    queryKey: bookingsQK.occupations(clubId, range.fromDate, range.toDate),
+    queryFn: () => bookingsService.occupations.list(clubId, { from: range.fromDate, to: range.toDate }),
+  });
+
   const bookings = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
+  // Pista → día → lo que la ocupa sin ser una reserva, por hora de inicio
+  const occupationsGrid = useMemo(
+    () => occupationsByCourtAndDay(occupationsQuery.data ?? [], timeZone),
+    [occupationsQuery.data, timeZone],
+  );
   // Las canceladas se ven tachadas, pero no cuentan como reservas de la semana
   const liveCount = bookings.filter((b) => b.status !== "CANCELLED").length;
 
@@ -473,16 +500,16 @@ function WeekView({
       </div>
 
       {/* Como en el día: un refresco que falla (al volver a la pestaña) no quita la semana */}
-      {(courtsRefreshError || bookingsQuery.isRefetchError) && (
+      {(courtsRefreshError || bookingsQuery.isRefetchError || occupationsQuery.isRefetchError) && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
           No se pudo actualizar la semana; se ve lo último que llegó.
         </p>
       )}
 
       <div className="mt-6 overflow-x-auto">
-        {courtsLoading || bookingsQuery.isLoading ? (
+        {courtsLoading || bookingsQuery.isLoading || occupationsQuery.isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : courtsError || bookingsQuery.isLoadingError ? (
+        ) : courtsError || bookingsQuery.isLoadingError || occupationsQuery.isLoadingError ? (
           <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-destructive">
             No se pudo cargar la semana. Vuelve a intentarlo.
           </p>
@@ -513,13 +540,17 @@ function WeekView({
                   </td>
                   {weekKeys.map((key) => {
                     const dayBookings = grid[c.id]?.[key] ?? [];
+                    const dayOccupations = occupationsGrid[c.id]?.[key] ?? [];
                     return (
                       <td key={key} className="border-t border-l border-border align-top p-1.5">
                         <div className="space-y-1">
+                          {dayOccupations.map((o) => (
+                            <WeekOccupationBlock key={`${o.source}-${o.refId}-${o.startsAt}`} occupation={o} timeZone={timeZone} />
+                          ))}
                           {dayBookings.map((b) => (
                             <WeekBookingBlock key={b.id} booking={b} timeZone={timeZone} />
                           ))}
-                          {dayBookings.length === 0 && (
+                          {dayBookings.length === 0 && dayOccupations.length === 0 && (
                             <span className="block py-1 text-xs text-muted-foreground/40">—</span>
                           )}
                         </div>
@@ -532,6 +563,15 @@ function WeekView({
           </table>
         )}
       </div>
+      <ul aria-label="Leyenda" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <li className="flex items-center gap-1.5">
+          <span className="h-3 w-5 rounded-sm border border-blue-500/40 bg-blue-500/15" /> Reserva
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="h-3 w-5 rounded-sm border border-amber-500/40 bg-amber-500/15" /> Reserva abierta
+        </li>
+        <OccupationLegendItems />
+      </ul>
     </>
   );
 }
@@ -667,6 +707,42 @@ function EmptyCourts() {
         Mi club
       </Link>
       .
+    </div>
+  );
+}
+
+/** Las ocupaciones por pista y por día del club, cada día por hora de inicio. */
+function occupationsByCourtAndDay(
+  occupations: CourtOccupation[],
+  timeZone: string,
+): Record<string, Record<string, CourtOccupation[]>> {
+  const map: Record<string, Record<string, CourtOccupation[]>> = {};
+  for (const o of [...occupations].sort((x, y) => x.startsAt.localeCompare(y.startsAt))) {
+    ((map[o.courtId] ??= {})[zonedDayKey(o.startsAt, timeZone)] ??= []).push(o);
+  }
+  return map;
+}
+
+function WeekOccupationBlock({ occupation: o, timeZone }: { occupation: CourtOccupation; timeZone: string }) {
+  const info = occupationKindInfo(o.kind);
+  const hours = `${zonedTime(o.startsAt, timeZone)}–${zonedTime(o.endsAt, timeZone)}`;
+  const body = (
+    <>
+      <div className="font-medium tabular-nums">{hours}</div>
+      <div className="truncate opacity-80">
+        {info.label} · {o.label}
+      </div>
+    </>
+  );
+  const className = `block rounded px-2 py-1 text-xs ${info.className}`;
+  const title = `${info.label} · ${o.label} · ${hours}`;
+  return o.source === "MATCH" && o.tournamentId ? (
+    <Link href={`/torneos/${o.tournamentId}`} className={`${className} transition-opacity hover:opacity-80`} title={title}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className} title={title}>
+      {body}
     </div>
   );
 }
