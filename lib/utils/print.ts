@@ -8,7 +8,7 @@ import { categoryLabel } from "@/lib/category-gender";
 
 // Las ventanas de impresión comparten origen con el admin: cualquier dato que
 // venga del back (nombres, pistas, categorías, fases) pasa por esc().
-function esc(s: string | number | null | undefined): string {
+export function esc(s: string | number | null | undefined): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
