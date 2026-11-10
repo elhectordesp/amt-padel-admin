@@ -63,7 +63,7 @@ export default function ResultadosPage() {
   ): Promise<void> => {
     setSavingId(match.id);
     try {
-      await adminService.matches.setResult(match.id, sets1, sets2, opts?.walkover, opts?.walkoverWinnerTeam, force);
+      const saved = await adminService.matches.setResult(match.id, sets1, sets2, opts?.walkover, opts?.walkoverWinnerTeam, force);
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
@@ -71,7 +71,11 @@ export default function ResultadosPage() {
       // tienen que enterarse
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
-      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Resultado corregido. El SPA se actualizará esta noche."
+          : opts?.walkover ? "Walkover registrado" : "Resultado guardado",
+      );
       setSelectedMatch(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";

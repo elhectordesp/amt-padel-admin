@@ -1781,7 +1781,7 @@ export default function TorneoDetailPage() {
     if (!resultMatch) return;
     setSavingResultId(resultMatch.id);
     try {
-      await adminService.matches.setResult(
+      const saved = await adminService.matches.setResult(
         resultMatch.id,
         sets1,
         sets2,
@@ -1789,7 +1789,11 @@ export default function TorneoDetailPage() {
         opts?.walkoverWinnerTeam,
         force,
       );
-      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Resultado corregido. El SPA se actualizará esta noche."
+          : opts?.walkover ? "Walkover registrado" : "Resultado guardado",
+      );
       setResultMatch(null);
       setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
