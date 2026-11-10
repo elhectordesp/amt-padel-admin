@@ -27,6 +27,7 @@ import type {
   ClubTesterUser,
   CourtAvailableDuration,
   CourtPriceSlot,
+  ReplaceClubPriceSlotsPayload,
   CreateBookingExtraPayload,
   CreateScheduleExceptionPayload,
   PaginatedBookings,
@@ -172,6 +173,15 @@ export const bookingsService = {
       api
         .put<CourtPriceSlot[]>(
           `${base(clubId)}/courts/${courtId}/pricing`,
+          payload,
+        )
+        .then((r) => r.data),
+
+    /** Mismos precios para varias pistas, en una transacción. */
+    replaceMany: (clubId: string, payload: ReplaceClubPriceSlotsPayload) =>
+      api
+        .put<{ courtId: string; slots: CourtPriceSlot[] }[]>(
+          `/admin/clubs/${clubId}/price-slots`,
           payload,
         )
         .then((r) => r.data),
