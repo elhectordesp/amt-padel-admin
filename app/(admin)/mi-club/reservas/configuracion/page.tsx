@@ -12,9 +12,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { ReservasPage } from "@/components/admin/reservas-page";
+import { BookingRulesCard } from "@/components/admin/booking-rules-card";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { rulesError } from "@/lib/utils/booking-rules";
 import type { ClubBookingConfig } from "@/types/bookings";
 
 type FormState = Pick<
@@ -22,6 +24,13 @@ type FormState = Pick<
   | "cancellationWindowHours"
   | "minBookingAheadMinutes"
   | "maxBookingAheadDays"
+  | "strictModeEnabled"
+  | "strictFrom"
+  | "strictTo"
+  | "advanceRuleEnabled"
+  | "advanceRuleFrom"
+  | "advanceRuleTo"
+  | "advanceRuleMinutes"
   | "openMatchEnabled"
   | "openMatchMinPlayers"
   | "openMatchAdminWarnHoursBefore"
@@ -54,6 +63,13 @@ export default function ConfiguracionPage() {
         cancellationWindowHours,
         minBookingAheadMinutes,
         maxBookingAheadDays,
+        strictModeEnabled,
+        strictFrom,
+        strictTo,
+        advanceRuleEnabled,
+        advanceRuleFrom,
+        advanceRuleTo,
+        advanceRuleMinutes,
         openMatchEnabled,
         openMatchMinPlayers,
         openMatchAdminWarnHoursBefore,
@@ -70,6 +86,13 @@ export default function ConfiguracionPage() {
         cancellationWindowHours,
         minBookingAheadMinutes,
         maxBookingAheadDays,
+        strictModeEnabled,
+        strictFrom,
+        strictTo,
+        advanceRuleEnabled,
+        advanceRuleFrom,
+        advanceRuleTo,
+        advanceRuleMinutes,
         openMatchEnabled,
         openMatchMinPlayers,
         openMatchAdminWarnHoursBefore,
@@ -87,7 +110,11 @@ export default function ConfiguracionPage() {
   }, [query.data, hydrated]);
 
   const save = useMutation({
-    mutationFn: () => bookingsService.config.update(clubId!, form!),
+    mutationFn: () => {
+      const problem = rulesError(form!);
+      if (problem) throw new Error(problem);
+      return bookingsService.config.update(clubId!, form!);
+    },
     onSuccess: () => {
       toast.success("Configuración guardada");
       qc.invalidateQueries({ queryKey: bookingsQK.config(clubId!) });
@@ -159,6 +186,11 @@ export default function ConfiguracionPage() {
             min={1} max={60}
           />
         </Section>
+
+        <BookingRulesCard
+          value={form!}
+          onChange={(patch) => setForm((prev) => (prev ? { ...prev, ...patch } : prev))}
+        />
 
         {/* Open matches */}
         <Section title="Partidos abiertos">
