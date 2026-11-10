@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -55,6 +55,10 @@ export function Sidebar() {
   const [collapsed,   setCollapsed]   = useState(false); // desktop collapse
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
 
+  const menuButtonRef  = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef     = useRef(false);
+
   const visibleNav = navForRole(role);
 
   const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
@@ -69,6 +73,13 @@ export function Sidebar() {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileOpen(false); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+  }, [mobileOpen]);
+
+  // Foco accesible: al abrir va al botón de cerrar; al cerrar vuelve al de abrir
+  useEffect(() => {
+    if (mobileOpen) closeButtonRef.current?.focus();
+    else if (wasOpenRef.current) menuButtonRef.current?.focus();
+    wasOpenRef.current = mobileOpen;
   }, [mobileOpen]);
 
   const sidebarContent = (isMobile = false) => (
@@ -86,9 +97,10 @@ export function Sidebar() {
         {/* Botón cerrar — solo en el drawer móvil, siempre dentro del sidebar */}
         {isMobile && (
           <button
+            ref={closeButtonRef}
             onClick={() => setMobileOpen(false)}
             aria-label="Cerrar menú"
-            className="absolute top-3 right-3 flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="absolute top-2 right-2 flex items-center justify-center size-11 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
           >
             <X size={15} />
           </button>
@@ -115,7 +127,7 @@ export function Sidebar() {
               title={collapsed && !isMobile ? label : undefined}
               className={cn(
                 "flex items-center rounded-md text-sm transition-colors",
-                collapsed && !isMobile ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2",
+                collapsed && !isMobile ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2 max-[1024px]:min-h-11",
                 active
                   ? "bg-[rgba(212,175,55,0.12)] text-[#D4AF37] font-semibold"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary",
@@ -166,16 +178,17 @@ export function Sidebar() {
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────────────── */}
-      <div className="hidden lg:flex h-screen sticky top-0 shrink-0">
+      <div className="hidden min-[1025px]:flex h-screen sticky top-0 shrink-0">
         {sidebarContent(false)}
       </div>
 
       {/* ── Mobile: botón hamburguesa — solo cuando drawer cerrado ── */}
       {!mobileOpen && (
         <button
+          ref={menuButtonRef}
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menú"
-          className="lg:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-9 h-9 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
+          className="min-[1025px]:hidden fixed top-3 left-3 z-50 flex items-center justify-center size-11 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
         >
           <Menu size={18} />
         </button>
@@ -184,7 +197,7 @@ export function Sidebar() {
       {/* ── Mobile: backdrop ──────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          className="min-[1025px]:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -192,8 +205,12 @@ export function Sidebar() {
 
       {/* ── Mobile: drawer ───────────────────────────────────────── */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menú"
+        inert={!mobileOpen}
         className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 h-screen transition-transform duration-200",
+          "min-[1025px]:hidden fixed inset-y-0 left-0 z-50 h-screen transition-transform duration-200",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
