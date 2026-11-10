@@ -472,7 +472,7 @@ export const adminService = {
      */
     updatePayment: (
       registrationId: string,
-      data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
+      data: { paid: boolean; paymentMethod?: string; paidAmountCents?: number; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
     ) =>
       api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
     /**
@@ -483,7 +483,7 @@ export const adminService = {
      */
     payPair: (
       registrationId: string,
-      data: { players: PaymentPlayer[]; paymentMethod: string; titularId: string; partnerId?: string },
+      data: { players: PaymentPlayer[]; paymentMethod: string; paidAmountCents?: number; titularId: string; partnerId?: string },
     ) =>
       api.post<{ registrationId: string; confirmed: boolean; status: RegistrationStatus }>(
         `/admin/registrations/${registrationId}/pay-pair`, data,

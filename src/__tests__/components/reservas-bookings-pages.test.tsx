@@ -366,7 +366,7 @@ describe("Detalle de reserva", () => {
       paidAt: "2026-10-27T10:00:00.000Z",
     });
     await renderDetail();
-    expect(await screen.findByText("(En el club (efectivo o tarjeta))")).toBeInTheDocument();
+    expect(await screen.findByText("(En el club)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Marcar como no pagada/ })).toBeInTheDocument();
   });
 

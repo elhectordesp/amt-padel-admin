@@ -5,13 +5,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
+import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
 import { adminService, registrationsQK } from "@/lib/services/admin";
+import { centsToEurosInput, eurosToCents, playerShareCents } from "@/lib/utils/payment-methods";
 import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
-
-// Los mismos métodos que el pago por jugador (payment-modal.tsx)
-const PAYMENT_METHODS = ["Efectivo", "Transferencia", "TPV", "Online"] as const;
-type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /** Lo que dice la API cuando la inscripción cambió desde que se abrió el modal. */
 const CHANGED_MEANWHILE = new Set(["REGISTRATION_INVALID_TRANSITION", "PARTNER_NOT_FOUND", "REGISTRATION_NOT_FOUND"]);
@@ -35,17 +33,21 @@ export default function PayPairModal({ registration, tournamentId, onClose }: Pr
   const [selected, setSelected] = useState<Set<PaymentPlayer>>(
     () => new Set(players.filter((p) => !p.payment.paid).map((p) => p.player)),
   );
-  const [method, setMethod] = useState<PaymentMethod | "">("");
+  const [method, setMethod] = useState<string>("");
 
   const status = registration.status;
   const confirmsOnSave = status === "PENDING";
   const price = registration.category.price;
+  // Lo cobrado a cada jugador marcado; sin tocar, la mitad del precio de la pareja
+  const [amount, setAmount] = useState(centsToEurosInput(playerShareCents(price)));
+  const cents = eurosToCents(amount);
 
   const saveMut = useMutation({
     mutationFn: () =>
       adminService.registrations.payPair(registration.id, {
         players:       players.filter((p) => selected.has(p.player)).map((p) => p.player),
         paymentMethod: method,
+        ...(cents !== null ? { paidAmountCents: cents } : {}),
         titularId:     registration.userId,
         partnerId:     registration.partnerId ?? undefined,
       }),
@@ -77,7 +79,7 @@ export default function PayPairModal({ registration, tournamentId, onClose }: Pr
 
   // Mientras guarda no se cierra: la respuesta cerraría el modal que se abriera después
   const close = () => { if (!saveMut.isPending) onClose(); };
-  const canSave = selected.size > 0 && method !== "" && !saveMut.isPending;
+  const canSave = selected.size > 0 && method !== "" && cents !== null && !saveMut.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -119,26 +121,8 @@ export default function PayPairModal({ registration, tournamentId, onClose }: Pr
             ))}
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Método de pago</label>
-            <div className="grid grid-cols-2 gap-2">
-              {PAYMENT_METHODS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={method === m}
-                  onClick={() => setMethod(m)}
-                  className={`px-3 py-2 rounded-md text-sm border transition-colors ${
-                    method === m
-                      ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border-[rgba(212,175,55,0.4)]"
-                      : "bg-secondary text-muted-foreground border-border hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
+          <PaymentMethodPicker value={method} onChange={setMethod} disabled={saveMut.isPending} />
+          <AmountField label="Importe por jugador" value={amount} onChange={setAmount} invalid={cents === null} disabled={saveMut.isPending} />
 
           {confirmsOnSave && (
             <p className="text-xs text-muted-foreground">Al guardar, la pareja queda confirmada.</p>

@@ -318,6 +318,8 @@ export interface PlayerPayment {
   paid:           boolean;
   paymentMethod?: string | null;
   paidAt?:        string | null;
+  /** Lo cobrado a este jugador, en céntimos. */
+  paidAmountCents?: number | null;
   paymentNote?:   string | null;
 }
 
@@ -335,6 +337,7 @@ export interface AdminRegistration {
   paid:           boolean;
   paymentMethod?: string | null;
   paidAt?:        string | null;
+  paidAmountCents?: number | null;
   paymentNote?:   string | null;
   /** El del compañero, ya resuelto por el back (null sin pareja). Solo en el listado. */
   partnerPayment?: PlayerPayment | null;

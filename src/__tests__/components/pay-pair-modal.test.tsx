@@ -64,7 +64,7 @@ describe("PayPairModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /Cobrar y confirmar/ }));
 
     await waitFor(() => expect(adminService.registrations.payPair).toHaveBeenCalledWith("reg-1", {
-      players: ["titular", "partner"], paymentMethod: "Efectivo", titularId: "u-ana", partnerId: "u-bea",
+      players: ["titular", "partner"], paymentMethod: "CASH", paidAmountCents: 1500, titularId: "u-ana", partnerId: "u-bea",
     }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(toast.success).toHaveBeenCalledWith("Cobrado y pareja confirmada");
@@ -78,11 +78,32 @@ describe("PayPairModal", () => {
     expect(screen.getByRole("checkbox", { name: /Ana López/ })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: /Ana López/ })).not.toBeChecked();
 
-    fireEvent.click(screen.getByRole("button", { name: "TPV" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tarjeta" }));
     fireEvent.click(screen.getByRole("button", { name: /Cobrar y confirmar/ }));
     await waitFor(() => expect(adminService.registrations.payPair).toHaveBeenCalledWith("reg-1", expect.objectContaining({
-      players: ["partner"], paymentMethod: "TPV",
+      players: ["partner"], paymentMethod: "CARD",
     })));
+  });
+
+  it("el importe por jugador empieza en la mitad del precio y se puede cambiar", async () => {
+    vi.mocked(adminService.registrations.payPair).mockResolvedValue({ registrationId: "reg-1", confirmed: true, status: "CONFIRMED" });
+    renderModal(reg());
+
+    const amount = screen.getByLabelText("Importe por jugador");
+    expect(amount).toHaveValue("15,00");
+    fireEvent.click(screen.getByRole("button", { name: "Bizum" }));
+    fireEvent.change(amount, { target: { value: "12,50" } });
+    fireEvent.click(screen.getByRole("button", { name: /Cobrar y confirmar/ }));
+    await waitFor(() => expect(adminService.registrations.payPair).toHaveBeenCalledWith("reg-1", expect.objectContaining({
+      paymentMethod: "BIZUM", paidAmountCents: 1250,
+    })));
+  });
+
+  it("con un importe que no es un número, no se puede cobrar", () => {
+    renderModal(reg());
+    fireEvent.click(screen.getByRole("button", { name: "Efectivo" }));
+    fireEvent.change(screen.getByLabelText("Importe por jugador"), { target: { value: "abc" } });
+    expect(screen.getByRole("button", { name: /Cobrar y confirmar/ })).toBeDisabled();
   });
 
   it("en la lista de espera lo dice y no promete confirmar", () => {

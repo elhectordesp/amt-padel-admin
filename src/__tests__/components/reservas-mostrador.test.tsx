@@ -13,7 +13,7 @@
  */
 import { Suspense } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -37,7 +37,7 @@ vi.mock("@/lib/services/admin", () => ({ adminService: adminMock }));
 const svc = vi.hoisted(() => ({
   courtDurations: { list: vi.fn() },
   availability: vi.fn(),
-  bookings: { list: vi.fn(), detail: vi.fn(), create: vi.fn() },
+  bookings: { list: vi.fn(), detail: vi.fn(), create: vi.fn(), markPaid: vi.fn() },
 }));
 vi.mock("@/lib/services/bookings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/bookings")>("@/lib/services/bookings");
@@ -182,10 +182,20 @@ describe("Ficha — volver a donde venías", () => {
     expect(screen.queryByRole("heading", { name: /Reserva/ })).not.toBeInTheDocument();
   });
 
-  it("pago con los nombres nuevos", async () => {
+  it("una reserva sin pagar se cobra eligiendo método e importe, y guarda ambos", async () => {
     await renderDetail();
-    expect(await screen.findByRole("button", { name: "Cobrada en el club (efectivo o tarjeta)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cobrada por transferencia u otro" })).toBeInTheDocument();
+    svc.bookings.markPaid.mockResolvedValue({});
+    fireEvent.click(await screen.findByRole("button", { name: /Cobrar/ }));
+    // El importe propuesto es el precio de la reserva
+    const amount = screen.getByLabelText("Importe cobrado");
+    expect(amount).toHaveValue("20,00");
+    expect(screen.getByRole("dialog", { name: "Cobrar reserva" })).toBeInTheDocument();
+    const pay = within(screen.getByRole("dialog", { name: "Cobrar reserva" })).getByRole("button", { name: /^Cobrar$/ });
+    expect(pay).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Tarjeta" }));
+    fireEvent.change(amount, { target: { value: "18" } });
+    fireEvent.click(pay);
+    await waitFor(() => expect(svc.bookings.markPaid).toHaveBeenCalledWith(BOOKING.id, { method: "CARD", amountCents: 1800 }));
   });
 });
 
@@ -278,7 +288,8 @@ describe("Alta de reserva — mostrador", () => {
     fireEvent.change(screen.getByLabelText("Buscar cliente"), { target: { value: "Marta" } });
     fireEvent.click(await screen.findByRole("button", { name: /Marta Ruiz/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Cobrada ahora/ }));
-    fireEvent.change(screen.getByLabelText("Cómo se ha cobrado"), { target: { value: "PAID_MANUAL" } });
+    fireEvent.change(screen.getByLabelText("Cómo se ha cobrado"), { target: { value: "TRANSFER" } });
+    fireEvent.change(screen.getByLabelText("Importe cobrado"), { target: { value: "15,50" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
 
     await waitFor(() =>
@@ -286,7 +297,7 @@ describe("Alta de reserva — mostrador", () => {
         expect.objectContaining({
           matchMode: "ADMIN_MANUAL",
           clubCustomerId: "cc1",
-          payNow: { method: "PAID_MANUAL" },
+          payNow: { method: "TRANSFER", amountCents: 1550 },
         }),
       ),
     );

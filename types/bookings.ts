@@ -5,6 +5,8 @@
  * no las necesitamos en admin).
  */
 
+import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
+
 export type CourtType = "SINGLES" | "DOUBLES";
 export type WallType = "GLASS" | "WALL";
 
@@ -26,8 +28,14 @@ export type BookingStatus =
   | "WITHOUT_RESULT";
 export type BookingPaymentMethod =
   | "PENDING"
-  | "CASH_AT_VENUE"
+  | "CASH"
+  | "CARD"
+  | "BIZUM"
+  | "TRANSFER"
+  | "OTHER"
   | "ONLINE"
+  // Solo reservas antiguas
+  | "CASH_AT_VENUE"
   | "PAID_MANUAL";
 export type BookingParticipantStatus =
   | "INVITED"
@@ -348,7 +356,7 @@ export interface CreateBookingPayload {
   /** Cliente del club a quien se reserva (solo el personal del club). */
   clubCustomerId?: string;
   /** Cobrada en el mostrador: nace cobrada, en la misma operación (solo el personal del club). */
-  payNow?: { method: Extract<BookingPaymentMethod, "CASH_AT_VENUE" | "PAID_MANUAL">; amountCents?: number };
+  payNow?: { method: CounterPaymentMethod; amountCents?: number };
 }
 
 export interface AvailabilityQuery {

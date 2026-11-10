@@ -38,10 +38,11 @@ const registration: any = {
   category:      { gender: 'F', level: '3a', price: 30 },
   status:        'CONFIRMED',
   paid:          true,
-  paymentMethod: 'TPV',
+  paymentMethod: 'CARD',
+  paidAmountCents: 1500,
   paidAt:        '2026-05-02T00:00:00.000Z',
   paymentNote:   'nota de Ana',
-  partnerPayment: { paid: true, paymentMethod: 'Efectivo', paidAt: '2026-05-03T00:00:00.000Z', paymentNote: 'nota de Bea' },
+  partnerPayment: { paid: true, paymentMethod: 'CASH', paidAmountCents: 1200, paidAt: '2026-05-03T00:00:00.000Z', paymentNote: 'nota de Bea' },
   createdAt:     '2026-05-01T10:00:00Z',
 };
 
@@ -71,12 +72,35 @@ describe('PaymentModal (pago por jugador)', () => {
     await mutationOptions.mutationFn();
     expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', {
       paid:          true,
-      paymentMethod: 'Efectivo',
+      paymentMethod: 'CASH',
+      paidAmountCents: 1200,
       paidAt:        '2026-05-03',
       paymentNote:   'pagó en efectivo',
       player:        'partner',
       playerId:      'u-bea',
     });
+  });
+
+  it('al cobrar a quien no tenía pago, propone la mitad del precio y guarda método, importe y fecha de hoy', async () => {
+    render(
+      <PaymentModal
+        registration={{ ...registration, partnerPayment: { paid: false, paymentMethod: null, paidAt: null, paymentNote: null } }}
+        player="partner"
+        tournamentId="t1"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText('Pagado').parentElement!.querySelector('button')!);
+    expect(screen.getByLabelText('Importe cobrado')).toHaveValue('15,00');
+    // Hay que elegir el método para guardar
+    expect(screen.getByText('Guardar').closest('button')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Bizum' }));
+    fireEvent.change(screen.getByLabelText('Importe cobrado'), { target: { value: '14' } });
+    expect(screen.getByText('Guardar').closest('button')).not.toBeDisabled();
+    await mutationOptions.mutationFn();
+    expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', expect.objectContaining({
+      paid: true, paymentMethod: 'BIZUM', paidAmountCents: 1400, paidAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    }));
   });
 
   it('guarda el del titular con su id', async () => {
@@ -130,7 +154,7 @@ describe('PaymentModal (pago por jugador)', () => {
     expect(screen.getByDisplayValue('nota de Bea')).toBeInTheDocument();
     await mutationOptions.mutationFn();
     expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', expect.objectContaining({
-      paid: false, paymentMethod: undefined, paidAt: undefined, paymentNote: 'nota de Bea',
+      paid: false, paymentMethod: undefined, paidAmountCents: undefined, paidAt: undefined, paymentNote: 'nota de Bea',
     }));
   });
 

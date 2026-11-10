@@ -8,9 +8,17 @@ import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 describe("paymentMethodLabel", () => {
   it("cada método, con su nombre", () => {
     expect(paymentMethodLabel("PENDING")).toBe("Pendiente");
-    expect(paymentMethodLabel("CASH_AT_VENUE")).toBe("En el club (efectivo o tarjeta)");
+    expect(paymentMethodLabel("CASH")).toBe("Efectivo");
+    expect(paymentMethodLabel("CARD")).toBe("Tarjeta");
+    expect(paymentMethodLabel("BIZUM")).toBe("Bizum");
+    expect(paymentMethodLabel("TRANSFER")).toBe("Transferencia");
+    expect(paymentMethodLabel("OTHER")).toBe("Otro");
     expect(paymentMethodLabel("ONLINE")).toBe("Online");
-    expect(paymentMethodLabel("PAID_MANUAL")).toBe("Transferencia u otro");
+  });
+
+  it("los valores antiguos de las reservas conservan su etiqueta", () => {
+    expect(paymentMethodLabel("CASH_AT_VENUE")).toBe("En el club");
+    expect(paymentMethodLabel("PAID_MANUAL")).toBe("Pagada");
   });
 
   it("sin método, que no consta (antes salía «()»)", () => {
@@ -24,7 +32,7 @@ describe("paymentAction", () => {
   });
 
   it("con un cobro: marcarla como no pagada", () => {
-    for (const method of ["CASH_AT_VENUE", "ONLINE", "PAID_MANUAL"] as const) {
+    for (const method of ["CASH", "CARD", "BIZUM", "TRANSFER", "OTHER", "CASH_AT_VENUE", "ONLINE", "PAID_MANUAL"] as const) {
       expect(paymentAction(method)).toBe("markUnpaid");
     }
   });
