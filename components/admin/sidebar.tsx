@@ -7,11 +7,11 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History, SlidersHorizontal, Contact,
+  History, Contact, CalendarDays, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
-import { useRole, isClub } from "@/lib/use-role";
+import { useRole, isClub, type Role } from "@/lib/use-role";
 
 const NAV = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard"     },
@@ -29,39 +29,24 @@ const NAV = [
   { href: "/configuracion",   icon: Settings,         label: "Configuración"  },
 ];
 
-// Rutas que un user CLUB sí puede ver. El resto se ocultan del sidebar.
-// El backend ya enforce el aislamiento — esto es UX para no enseñar
-// botones que devolverían 403.
-const CLUB_ALLOWED_PATHS = new Set([
-  "/dashboard",
-  "/torneos",
-  "/inscripciones",
-  "/resultados",
-  "/patrocinadores",
-]);
+// Menú del gestor del club, lo diario arriba. El backend ya enforce el
+// aislamiento — esto es UX para no enseñar botones que devolverían 403.
+// «Inscripciones» y «Resultados» siguen dentro de cada torneo.
+const CLUB_NAV = [
+  { href: "/dashboard",                    icon: LayoutDashboard, label: "Hoy"            },
+  { href: "/mi-club/reservas/calendario",  icon: CalendarDays,    label: "Calendario"     },
+  { href: "/mi-club/reservas/bookings",    icon: CalendarRange,   label: "Reservas"       },
+  { href: "/caja",                         icon: Wallet,          label: "Caja"           },
+  { href: "/mi-club/clientes",             icon: Contact,         label: "Clientes"       },
+  { href: "/torneos",                      icon: Trophy,          label: "Torneos"        },
+  { href: "/mi-club",                      icon: Landmark,        label: "Mi club"        },
+  { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores" },
+];
 
-// Items que se insertan SOLO para CLUB users.
-const CLUB_MY_CLUB_ITEM = {
-  href: "/mi-club",
-  icon: Landmark,
-  label: "Mi club",
-};
-const CLUB_RESERVAS_ITEM = {
-  href: "/mi-club/reservas",
-  icon: CalendarRange,
-  label: "Reservas",
-};
-const CLUB_TORNEOS_ITEM = {
-  href: "/mi-club/torneos",
-  icon: SlidersHorizontal,
-  label: "Opciones de torneo",
-};
-
-const CLUB_CLIENTES_ITEM = {
-  href: "/mi-club/clientes",
-  icon: Contact,
-  label: "Clientes",
-};
+/** El menú que ve cada rol: el del club, el suyo; el resto (AMT), el completo. */
+export function navForRole(role: Role) {
+  return isClub(role) ? CLUB_NAV : NAV;
+}
 
 export function Sidebar() {
   const pathname    = usePathname();
@@ -70,15 +55,7 @@ export function Sidebar() {
   const [collapsed,   setCollapsed]   = useState(false); // desktop collapse
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
 
-  const visibleNav = isClub(role)
-    ? [
-        ...NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href)),
-        CLUB_MY_CLUB_ITEM,
-        CLUB_TORNEOS_ITEM,
-        CLUB_RESERVAS_ITEM,
-        CLUB_CLIENTES_ITEM,
-      ]
-    : NAV;
+  const visibleNav = navForRole(role);
 
   const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
 

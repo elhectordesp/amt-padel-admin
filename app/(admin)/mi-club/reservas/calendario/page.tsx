@@ -210,7 +210,10 @@ function DayView({
   const choosePeriod = (p: DayPeriod) => window.history.replaceState(null, "", calendarHref(p, pickedDay));
 
   // Abierto: con qué se abre el alta (null: cerrado)
-  const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(null);
+  // «Nueva reserva» de la portada llega con ?nueva=1: el alta se abre sola
+  const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(() =>
+    searchParams.get("nueva") === "1" ? {} : null,
+  );
 
   // La vista del día y el botón que abre y cierra el modo mostrador (el foco va y vuelve)
   const viewRef = useRef<HTMLDivElement>(null);
@@ -414,7 +417,11 @@ function DayView({
       {createInitial && (
         <BookingCreateDialog
           open
-          onClose={() => setCreateInitial(null)}
+          onClose={() => {
+            setCreateInitial(null);
+            // Sin ?nueva=1: recargar no vuelve a abrir el alta
+            if (searchParams.get("nueva") === "1") window.history.replaceState(null, "", calendarHref(period, pickedDay));
+          }}
           clubId={clubId}
           timeZone={timeZone}
           initial={createInitial}

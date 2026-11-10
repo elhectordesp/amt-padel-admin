@@ -29,7 +29,7 @@ export default function ResultadosPage() {
   const qc = useQueryClient();
   const [search,        setSearch]        = useState("");
   const { page, setPage, pageSize, setPageSize } = usePagination();
-  const [tournamentId,  setTournamentId]  = useState<string>("");
+  const [pickedId,      setPickedId]      = useState<string>("");
   const [selectedMatch,  setSelectedMatch]  = useState<MatchResult | null>(null);
   const [savingId,       setSavingId]       = useState<string | null>(null);
   const [confirmEdit,    setConfirmEdit]    = useState<MatchResult | null>(null);
@@ -40,6 +40,8 @@ export default function ResultadosPage() {
   });
 
   const ongoingTournaments = tournaments.filter((t: Tournament) => isActiveTournamentStatus(t.status));
+  // Con un solo torneo activo no hay nada que elegir: se abre directamente
+  const tournamentId = pickedId || (ongoingTournaments.length === 1 ? ongoingTournaments[0].id : "");
 
   const {
     data: matches = [], isLoading, isError, refetch,
@@ -96,7 +98,7 @@ export default function ResultadosPage() {
 
   const paged = paginate(filtered, page, pageSize);
 
-  const handleTournamentChange = (id: string) => { setTournamentId(id); setPage(1); setSearch(""); };
+  const handleTournamentChange = (id: string) => { setPickedId(id); setPage(1); setSearch(""); };
   const handleSearchChange     = (v: string)  => { setSearch(v);        setPage(1); };
 
   return (
