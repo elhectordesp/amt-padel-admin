@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/torneos/nuevo",
 }));
 vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "admin", clubId: null }),

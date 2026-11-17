@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History, Contact, CalendarDays, Wallet, UsersRound,
+  History, Contact, CalendarDays, Wallet, UsersRound, Medal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -22,6 +22,7 @@ import { toast } from "sonner";
 const NAV = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard"     },
   { href: "/torneos",       icon: Trophy,           label: "Torneos"       },
+  { href: "/ligas",         icon: Medal,            label: "Ligas"         },
   { href: "/jugadores",     icon: Users,            label: "Jugadores"     },
   { href: "/rankings",      icon: BarChart3,        label: "Rankings"      },
   { href: "/estadisticas",  icon: LineChart,        label: "Estadísticas"  },
@@ -45,6 +46,7 @@ const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubA
   { href: "/caja",                         icon: Wallet,          label: "Caja",           area: "cash"      },
   { href: "/mi-club/clientes",             icon: Contact,         label: "Clientes",       area: "customers" },
   { href: "/torneos",                      icon: Trophy,          label: "Torneos",        area: "tournaments" },
+  { href: "/ligas",                        icon: Medal,           label: "Ligas",          area: "tournaments" },
   { href: "/mi-club",                      icon: Landmark,        label: "Mi club",        area: "settings"  },
   { href: "/mi-club/equipo",               icon: UsersRound,      label: "Equipo",         area: "staff"     },
   { href: "/historial",                    icon: History,         label: "Historial",      area: "staff"     },

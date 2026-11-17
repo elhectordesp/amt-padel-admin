@@ -51,7 +51,10 @@ export function DeletedTournaments() {
             {data.map((t) => (
               <li key={t.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{t.name}</p>
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {t.name}
+                    {t.kind === "LEAGUE" && <span className="ml-2 text-[10px] font-semibold uppercase text-[#D4AF37]">Liga</span>}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {t.club.name} · {formatDateRange(t.startDate, t.endDate)} · {TOURNAMENT_STATUS_LABEL[t.status] ?? t.status}
                   </p>

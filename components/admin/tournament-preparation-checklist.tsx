@@ -9,6 +9,7 @@ import { adminService } from "@/lib/services/admin";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { categoryLabel } from "@/lib/category-gender";
 import { formatInTimeZone } from "@/lib/utils/time-zone";
+import { tournamentsBase } from "@/lib/league";
 import type {
   PreparationCategory,
   PreparationStepKey,
@@ -29,6 +30,13 @@ const STEP_LABEL: Record<PreparationStepKey, string> = {
   PUBLISH:             "Publicar y avisar",
 };
 
+/** Los tres pasos de una liga (los mismos que el torneo, con sus palabras). */
+const LEAGUE_STEP_LABEL: Partial<Record<PreparationStepKey, string>> = {
+  CATEGORIES: "Niveles creados",
+  DRAW:       "Grupos sorteados",
+  PUBLISH:    "Liga publicada",
+};
+
 /** Solo se prepara un torneo que aún no ha empezado. */
 const PREPARING = ["DRAFT", "OPEN", "DRAW", "SCHEDULED"];
 
@@ -42,6 +50,7 @@ const fmtDeadline = (iso: string, timeZone: string) =>
 
 /** El detalle de cada paso, en una línea. */
 function stepDetail(key: PreparationStepKey, done: boolean, p: TournamentPreparation, timeZone: string): string {
+  if (p.kind === "LEAGUE") return leagueStepDetail(key, done, p);
   const drawable = p.categories.filter((c) => c.hasDraw || c.canDraw);
   const drawn = p.categories.filter((c) => c.hasDraw);
   switch (key) {
@@ -72,6 +81,23 @@ function stepDetail(key: PreparationStepKey, done: boolean, p: TournamentPrepara
       return done
         ? "Publicado: los inscritos tienen su horario y los grupos están bloqueados."
         : "Publica el cuadro y los horarios y avisa a cada pareja con su primer partido.";
+  }
+}
+
+/** El detalle de cada paso de una liga. */
+function leagueStepDetail(key: PreparationStepKey, done: boolean, p: TournamentPreparation): string {
+  const drawable = p.categories.filter((c) => c.hasDraw || c.canDraw);
+  switch (key) {
+    case "CATEGORIES":
+      return done
+        ? `${p.categories.length} ${p.categories.length === 1 ? "nivel" : "niveles"}`
+        : "Añade al menos un nivel (una categoría por nivel) en «Categorías».";
+    case "DRAW":
+      return `${drawable.filter((c) => c.hasDraw).length} de ${drawable.length} niveles con grupos sorteados.`;
+    case "PUBLISH":
+      return done ? "La liga ya no es un borrador." : "Publícala cuando los niveles y los grupos estén listos.";
+    default:
+      return "";
   }
 }
 
@@ -107,8 +133,11 @@ export function TournamentPreparationChecklist({
   tournamentId,
   onNavigate,
   timeZone,
+  base = "/torneos",
 }: {
   tournamentId: string;
+  /** Raíz de las pantallas del tipo: `/torneos` o `/ligas`. */
+  base?: ReturnType<typeof tournamentsBase>;
   /** Zona del torneo: la del cierre de inscripciones. */
   timeZone: string;
   /** Ir a la pestaña donde se hace el paso. */
@@ -124,6 +153,7 @@ export function TournamentPreparationChecklist({
     // Al volver a Resumen tras programar o sortear, con los recuentos de ahora
     refetchOnMount: "always",
   });
+  const league = prep?.kind === "LEAGUE";
 
   // Todo lo del torneo (incluida esta lista), lo que cambia al publicar y el
   // torneo de la edición y del listado: con el de antes en caché, guardar la
@@ -140,7 +170,7 @@ export function TournamentPreparationChecklist({
   const openMut = useMutation({
     mutationFn: () => adminService.tournaments.publish(tournamentId),
     onSuccess: () => {
-      toast.success("Inscripciones abiertas: el torneo ya se ve en la app y se ha avisado a los jugadores");
+      toast.success(league ? "Liga publicada" : "Inscripciones abiertas: el torneo ya se ve en la app y se ha avisado a los jugadores");
       setConfirm(null);
       refresh();
     },
@@ -197,6 +227,7 @@ export function TournamentPreparationChecklist({
     (b) => b.conflicts.length > 0 && b.conflicts.every((c) => c.type !== "MISSING_ASSIGNMENT"),
   );
   const { status, categories } = prep;
+  const stepLabel = (key: PreparationStepKey) => (league ? LEAGUE_STEP_LABEL[key] : undefined) ?? STEP_LABEL[key];
   const hasCategories = prep.steps.find((s) => s.key === "CATEGORIES")?.done ?? false;
   // Lo mismo que exige el back para publicar: inscripciones cerradas (el paso,
   // con su criterio) y algún cuadro
@@ -227,6 +258,13 @@ export function TournamentPreparationChecklist({
       case "SCHEDULE":
         return <button className={secondary} onClick={() => onNavigate("horarios")}>Ir a horarios</button>;
       case "PUBLISH":
+        // Una liga se publica como un torneo se abre: sale del borrador
+        if (league)
+          return status === "DRAFT" ? (
+            <button className={primary} onClick={() => setConfirm("open")} disabled={!hasCategories}>
+              <Send size={12} /> Publicar liga
+            </button>
+          ) : null;
         return (
           <button
             className={primary}
@@ -248,11 +286,11 @@ export function TournamentPreparationChecklist({
       <div className="flex items-center gap-4 px-5 py-4 border-b border-border">
         <ProgressRing percent={prep.percent} />
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-foreground">Preparación del torneo</h3>
+          <h3 className="text-sm font-semibold text-foreground">{league ? "Preparación de la liga" : "Preparación del torneo"}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             {prep.nextStep
-              ? `Siguiente paso: ${STEP_LABEL[prep.nextStep]}. El estado del torneo avanza solo al completarlos.`
-              : "Todo listo: cuadro y horarios publicados."}
+              ? `Siguiente paso: ${stepLabel(prep.nextStep)}.${league ? "" : " El estado del torneo avanza solo al completarlos."}`
+              : league ? "Todo listo: la liga está publicada." : "Todo listo: cuadro y horarios publicados."}
           </p>
         </div>
       </div>
@@ -276,7 +314,7 @@ export function TournamentPreparationChecklist({
               </span>
               <div className="flex-1 min-w-[12rem]">
                 <p className={`text-sm ${s.done ? "text-muted-foreground" : "text-foreground font-medium"}`}>
-                  {STEP_LABEL[s.key]}
+                  {stepLabel(s.key)}
                   <span className="sr-only">{s.done ? " (hecho)" : " (pendiente)"}</span>
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">{stepDetail(s.key, s.done, prep, timeZone)}</p>
@@ -326,16 +364,18 @@ export function TournamentPreparationChecklist({
 
       <div className="px-5 py-2.5 border-t border-border text-[11px] text-muted-foreground">
         ¿Hace falta corregir el estado a mano?{" "}
-        <Link href={`/torneos/${tournamentId}/editar#avanzado`} className="underline hover:text-foreground">
+        <Link href={`${base}/${tournamentId}/editar#avanzado`} className="underline hover:text-foreground">
           Editar → Avanzado
         </Link>
       </div>
 
       <ConfirmModal
         open={confirm === "open"}
-        title="Abrir inscripciones"
-        description="El torneo se verá en la app y se avisará a los jugadores de sus categorías para que se inscriban."
-        confirmLabel="Abrir y avisar"
+        title={league ? "Publicar liga" : "Abrir inscripciones"}
+        description={league
+          ? "La liga deja de ser un borrador y pasa a «Abierto». La app aún no muestra las ligas: no se avisa a los jugadores."
+          : "El torneo se verá en la app y se avisará a los jugadores de sus categorías para que se inscriban."}
+        confirmLabel={league ? "Publicar" : "Abrir y avisar"}
         loading={openMut.isPending}
         onClose={() => setConfirm(null)}
         onConfirm={() => openMut.mutate()}

@@ -14,8 +14,9 @@ import {
   ArrowLeftRight, Users, Plus, CreditCard,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { kindWord, tournamentsBase } from "@/lib/league";
 import { ShareViewerModal } from "@/components/admin/share-viewer-modal";
 import { PublicViewerActions } from "@/components/admin/public-viewer-actions";
 import { Header } from "@/components/admin/header";
@@ -66,6 +67,7 @@ import {
 import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryGender, CategoryLevel, AuditLogEntry, Tournament, ScoringFormat } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import {
+  dateOnlyKey,
   formatDayKey,
   formatInTimeZone,
   toZonedDateTimeInput,
@@ -1555,6 +1557,21 @@ export default function TorneoDetailPage() {
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
 
+  // Torneo y liga comparten esta ficha: el tipo lo da el propio torneo y la
+  // ruta lo sigue (una liga abierta por /torneos/:id pasa a /ligas/:id)
+  const pathname = usePathname();
+  const league   = tournament?.kind === "LEAGUE";
+  const base     = tournamentsBase(tournament?.kind);
+  const word     = kindWord(tournament?.kind);
+  useEffect(() => {
+    if (!tournament) return;
+    const expected = `${tournamentsBase(tournament.kind)}/${id}`;
+    const other    = tournamentsBase(tournament.kind) === "/ligas" ? `/torneos/${id}` : `/ligas/${id}`;
+    if (pathname === other || pathname.startsWith(`${other}/`)) {
+      router.replace(pathname.replace(other, expected));
+    }
+  }, [tournament, pathname, id, router]);
+
   // Auto-seleccionar categoría si el torneo tiene solo una (UX: evita
   // un click innecesario al admin)
   useEffect(() => {
@@ -1664,8 +1681,8 @@ export default function TorneoDetailPage() {
     mutationFn: () => adminService.tournaments.duplicate(id),
     onSuccess:  (t) => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo duplicado");
-      router.push(`/torneos/${t.id}`);
+      toast.success(league ? "Liga duplicada" : "Torneo duplicado");
+      router.push(`${base}/${t.id}`);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -1679,10 +1696,10 @@ export default function TorneoDetailPage() {
     mutationFn: (force?: boolean) => adminService.tournaments.delete(id, force),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo eliminado", canRestore
+      toast.success(league ? "Liga eliminada" : "Torneo eliminado", canRestore
         ? { action: { label: "Deshacer", onClick: () => restoreTournament.mutate(id) }, duration: 10_000 }
         : undefined);
-      router.push("/torneos");
+      router.push(base);
     },
     onError: (err: Error, force) => {
       const msg: string = err?.message ?? "";
@@ -2195,7 +2212,7 @@ export default function TorneoDetailPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col min-h-full">
-        <Header title="Torneo" />
+        <Header title={pathname.startsWith("/ligas") ? "Liga" : "Torneo"} />
         <div className="flex-1 p-6 space-y-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-16 rounded-lg bg-card animate-pulse border border-border" />
@@ -2208,9 +2225,9 @@ export default function TorneoDetailPage() {
   if (isErrorTournament || !tournament) {
     return (
       <div className="flex flex-col min-h-full">
-        <Header title="Torneo" />
+        <Header title={pathname.startsWith("/ligas") ? "Liga" : "Torneo"} />
         <ErrorState
-          message="No se pudo cargar el torneo."
+          message={pathname.startsWith("/ligas") ? "No se pudo cargar la liga." : "No se pudo cargar el torneo."}
           onRetry={refetchTournament}
         />
       </div>
@@ -2241,8 +2258,8 @@ export default function TorneoDetailPage() {
 
         {/* Breadcrumb (en tablet sobra: el título y el menú ya dicen dónde estás) */}
         <div className="flex items-center gap-2 text-sm max-[1024px]:hidden text-muted-foreground">
-          <Link href="/torneos" className="hover:text-foreground transition-colors flex items-center gap-1">
-            <ChevronLeft size={14} /> Torneos
+          <Link href={base} className="hover:text-foreground transition-colors flex items-center gap-1">
+            <ChevronLeft size={14} /> {league ? "Ligas" : "Torneos"}
           </Link>
           <span>/</span>
           <span className="text-foreground">{tournament.name}</span>
@@ -2254,6 +2271,11 @@ export default function TorneoDetailPage() {
             <div className="space-y-2 max-[1024px]:space-y-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
+                {league && (
+                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/40">
+                    LIGA
+                  </span>
+                )}
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${TOURNAMENT_STATUS_COLOR[tournament.status as TournamentStatus]}`}>
                   {TOURNAMENT_STATUS_LABEL[tournament.status as TournamentStatus]}
                 </span>
@@ -2287,6 +2309,11 @@ export default function TorneoDetailPage() {
                   <Calendar size={14} className="text-[#D4AF37]" />
                   {formatDateRange(tournament.startDate, tournament.endDate)}
                 </span>
+                {league && tournament.groupsEndDate && (
+                  <span className="flex items-center gap-1.5">
+                    Grupos hasta el {formatDayKey(dateOnlyKey(tournament.groupsEndDate), { day: "numeric", month: "short" })}
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5 min-w-0">
                   <MapPin size={14} className="text-[#D4AF37] shrink-0" />
                   <span className="truncate">{tournament.club?.name ?? ""}</span>
@@ -2305,16 +2332,16 @@ export default function TorneoDetailPage() {
               <button
                 onClick={() => duplicate.mutate()}
                 disabled={duplicate.isPending}
-                title="Duplicar torneo"
-                aria-label="Duplicar torneo"
+                title={`Duplicar ${word}`}
+                aria-label={`Duplicar ${word}`}
                 className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
               >
                 {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
               </button>
               <button
                 onClick={() => setShowDeleteModal(true)}
-                title="Eliminar torneo"
-                aria-label="Eliminar torneo"
+                title={`Eliminar ${word}`}
+                aria-label={`Eliminar ${word}`}
                 className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
               >
                 <Trash2 size={15} />
@@ -2325,8 +2352,8 @@ export default function TorneoDetailPage() {
                 onShare={() => setShowShare(true)}
               />
               <Link
-                href={`/torneos/${id}/editar`}
-                aria-label="Editar torneo"
+                href={`${base}/${id}/editar`}
+                aria-label={`Editar ${word}`}
                 className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
               >
                 <Pencil size={14} className="sm:hidden" />
@@ -2446,7 +2473,7 @@ export default function TorneoDetailPage() {
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="lg:col-span-2 empty:hidden">
-              <TournamentPreparationChecklist tournamentId={id} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} />
+              <TournamentPreparationChecklist tournamentId={id} base={base} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} />
             </div>
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -4490,7 +4517,7 @@ export default function TorneoDetailPage() {
 
     <ConfirmModal
       open={showDeleteModal}
-      title="Eliminar torneo"
+      title={`Eliminar ${word}`}
       // Decía «no se puede deshacer» y luego «se puede restaurar» (D12)
       description={canRestore
         ? `¿Eliminar «${tournament?.name}»? Dejará de verse en el panel y en la app. Podrás restaurarlo desde Torneos → Eliminados.`
