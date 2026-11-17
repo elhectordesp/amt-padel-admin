@@ -9,6 +9,7 @@ import { useSearch } from "@/components/admin/search-context";
 import { LogoutModal } from "@/components/admin/logout-modal";
 import { roleLabel, useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 
 interface HeaderProps { title: string }
 
@@ -39,16 +40,19 @@ export function Header({ title }: HeaderProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [menuOpen, bellOpen]);
 
+  const { data: me } = useMe();
+  const { role } = useRole();
+  const isClubRole = isClub(role);
+  const access = useClubAccess();
+
+  // Las cifras son de torneos: quien no los lee (el entrenador) recibiría un 403 en cada pantalla
   const { data: stats } = useQuery({
     queryKey:       ["admin-stats"],
     queryFn:        adminService.stats,
     refetchInterval: 60_000,
     staleTime:       30_000,
+    enabled:         !isClubRole || access.can("tournaments"),
   });
-
-  const { data: me } = useMe();
-  const { role } = useRole();
-  const isClubRole = isClub(role);
 
   const initials = me?.name
     ? me.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
