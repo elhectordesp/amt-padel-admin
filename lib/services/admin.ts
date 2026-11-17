@@ -11,6 +11,7 @@ import type {
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
   ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan,
+  ClubAmtPlanInternal, UpdateClubAmtPlanPayload,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
@@ -695,6 +696,12 @@ export const adminService = {
     // Plan con AMT (solo propietario, gestor y AMT); sin notas internas
     amtPlan: (id: string) =>
       api.get<ClubAmtPlan>(`/admin/clubs/${id}/amt-plan`).then((r) => r.data),
+    // Solo AMT: el plan con las notas internas, para su formulario
+    amtPlanInternal: (id: string) =>
+      api.get<ClubAmtPlanInternal>(`/admin/clubs/${id}/amt-plan/internal`).then((r) => r.data),
+    // Solo AMT: fija plan, cuota, comisión y notas (reemplaza los cuatro)
+    updateAmtPlan: (id: string, data: UpdateClubAmtPlanPayload) =>
+      api.put<UpdateClubAmtPlanPayload>(`/admin/clubs/${id}/amt-plan`, data).then((r) => r.data),
     // Solo AMT: último día con la cuota pagada (null la borra)
     setFeePaidUntil: (id: string, feePaidUntil: string | null) =>
       api.put<{ feePaidUntil: string | null }>(`/admin/clubs/${id}/amt-plan/paid-until`, { feePaidUntil }).then((r) => r.data),

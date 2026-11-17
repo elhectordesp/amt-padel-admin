@@ -124,6 +124,19 @@ export interface ClubAmtPlan {
   overdue:                boolean;
 }
 
+/** El plan con las notas internas de AMT: solo lo lee AMT, para su formulario. */
+export interface ClubAmtPlanInternal extends ClubAmtPlan {
+  bookingBillingNotes: string | null;
+}
+
+/** Lo que guarda AMT: los cuatro campos del plan (cuota en céntimos, comisión de 0 a 1). */
+export interface UpdateClubAmtPlanPayload {
+  bookingPlan:            ClubAmtPlan["bookingPlan"];
+  bookingMonthlyFeeCents: number | null;
+  bookingCommissionRate:  number | null;
+  bookingBillingNotes:    string | null;
+}
+
 /** Por qué está ocupada una pista (además de las reservas). */
 export type CourtBlockKind = "MAINTENANCE" | "CLASS" | "TOURNAMENT" | "LEAGUE" | "EVENT" | "OTHER";
 
