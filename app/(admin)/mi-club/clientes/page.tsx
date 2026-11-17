@@ -10,8 +10,9 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Search, Users } from "lucide-react";
+import { Loader2, Plus, Search, Upload, Users } from "lucide-react";
 import { ClubCustomerCreateDialog } from "@/components/admin/club-customer-create-dialog";
+import { ClubCustomerImportDialog } from "@/components/admin/club-customer-import-dialog";
 import { ErrorState } from "@/components/admin/error-state";
 import { CustomSelect } from "@/components/admin/form";
 import { Header } from "@/components/admin/header";
@@ -41,6 +42,7 @@ export default function ClientesPage() {
   const [tag, setTag] = useState("");
   const [archived, setArchived] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   // La búsqueda espera 300 ms sin teclear y vuelve a la primera página
   useEffect(() => {
@@ -105,9 +107,14 @@ export default function ClientesPage() {
             Las personas que reservan o juegan en tu club, tengan o no la app. Aquí apuntas sus notas y etiquetas
             (solo las ve tu club) y quién es socio.
           </p>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="h-3.5 w-3.5" /> Nuevo cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setShowImport(true)}>
+              <Upload className="h-3.5 w-3.5" /> Importar
+            </Button>
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="h-3.5 w-3.5" /> Nuevo cliente
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -212,6 +219,7 @@ export default function ClientesPage() {
         )}
       </div>
 
+      <ClubCustomerImportDialog open={showImport} clubId={clubId!} onClose={() => setShowImport(false)} />
       <ClubCustomerCreateDialog
         open={showCreate}
         clubId={clubId!}
