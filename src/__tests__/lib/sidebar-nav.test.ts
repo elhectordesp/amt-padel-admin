@@ -5,7 +5,7 @@ import { canAccess, type ClubArea, type ClubStaffRole } from "@/lib/club-permiss
 describe("navForRole", () => {
   it("el gestor del club: lo diario arriba, sin Inscripciones ni Resultados", () => {
     expect(navForRole("club").map((i) => i.label)).toEqual([
-      "Hoy", "Calendario", "Reservas", "Caja", "Clientes", "Torneos", "Mi club", "Equipo", "Patrocinadores",
+      "Hoy", "Calendario", "Reservas", "Caja", "Clientes", "Torneos", "Mi club", "Equipo", "Historial", "Patrocinadores",
     ]);
     const hrefs = navForRole("club").map((i) => i.href);
     expect(hrefs).toContain("/caja");
@@ -18,6 +18,12 @@ describe("navForRole", () => {
     expect(navForRole("club", can(["COACH"])).map((i) => i.label)).toEqual(["Hoy", "Calendario", "Reservas"]);
     expect(navForRole("club", can(["RESULTS"])).map((i) => i.label)).toEqual(["Hoy", "Torneos"]);
     expect(navForRole("club", can(["MANAGER"])).map((i) => i.label)).toContain("Equipo");
+    // El historial del club lo lee quien lee el equipo: propietario y gestor
+    expect(navForRole("club", can(["OWNER"])).map((i) => i.label)).toContain("Historial");
+    expect(navForRole("club", can(["MANAGER"])).map((i) => i.label)).toContain("Historial");
+    for (const role of ["TOURNAMENTS", "RESULTS", "RECEPTION", "COACH"] as ClubStaffRole[]) {
+      expect(navForRole("club", can([role])).map((i) => i.label)).not.toContain("Historial");
+    }
     expect(navForRole("club", can(["OWNER"])).length).toBe(navForRole("club").length);
   });
 

@@ -97,7 +97,23 @@ const AUDIT_RESOURCE_LABEL: Record<string, string> = {
   config:       "Configuración",
   spa:          "Ranking SPA",
   support:      "Soporte",
+  booking:        "Reserva",
+  court:          "Pista",
+  court_block:    "Bloqueo de pista",
+  club_settings:  "Configuración del club",
+  customer:       "Cliente",
 };
+
+/** Las áreas del filtro del historial del club (el back las traduce a recurso y acción). */
+export const AUDIT_AREAS = [
+  { value: "tournaments", label: "Torneos" },
+  { value: "bookings",    label: "Reservas" },
+  { value: "settings",    label: "Configuración" },
+  { value: "customers",   label: "Clientes" },
+  { value: "cash",        label: "Cobros" },
+  { value: "staff",       label: "Equipo" },
+] as const;
+export type AuditArea = (typeof AUDIT_AREAS)[number]["value"];
 
 /** El recurso de una entrada del historial para un texto («Patrocinador», no «sponsor»). */
 export function auditResourceLabel(resource: string): string {
