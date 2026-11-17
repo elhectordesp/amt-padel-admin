@@ -12,6 +12,7 @@ import { matchesSearch } from "@/lib/utils/search";
 import { ErrorState } from "@/components/admin/error-state";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ResultModal } from "@/components/admin/result-modal";
+import { TournamentSelectOptions } from "@/components/admin/tournament-select-options";
 import { adminService } from "@/lib/services/admin";
 import { phaseLabel } from "@/lib/constants";
 import { hasBothPairs } from "@/lib/utils/match-status";
@@ -34,14 +35,20 @@ export default function ResultadosPage() {
   const [savingId,       setSavingId]       = useState<string | null>(null);
   const [confirmEdit,    setConfirmEdit]    = useState<MatchResult | null>(null);
 
+  // Torneos y ligas: los resultados se meten igual en los dos
   const { data: tournaments = [] } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey: ["tournaments", "all"],
+    queryFn:  adminService.tournaments.listAll,
   });
 
+  /** La fase de un partido; en una liga, también su jornada («Grupos · Jornada 3»). */
+  const phaseText = (m: MatchResult, isLeague: boolean) =>
+    isLeague && m.phase === "GROUPS" && m.round ? `${phaseLabel(m.phase)} · Jornada ${m.round}` : phaseLabel(m.phase);
+
   const ongoingTournaments = tournaments.filter((t: Tournament) => isActiveTournamentStatus(t.status));
-  // Con un solo torneo activo no hay nada que elegir: se abre directamente
+  // Con un solo torneo (o liga) activo no hay nada que elegir: se abre directamente
   const tournamentId = pickedId || (ongoingTournaments.length === 1 ? ongoingTournaments[0].id : "");
+  const isLeague = tournaments.find((t: Tournament) => t.id === tournamentId)?.kind === "LEAGUE";
 
   const {
     data: matches = [], isLoading, isError, refetch,
@@ -119,13 +126,11 @@ export default function ResultadosPage() {
               onChange={(e) => handleTournamentChange(e.target.value)}
               className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] min-w-[260px]"
             >
-              <option value="">Selecciona un torneo...</option>
+              <option value="">Selecciona un torneo o una liga...</option>
               {ongoingTournaments.length === 0 && (
-                <option disabled>— No hay torneos en curso o abiertos —</option>
+                <option disabled>— No hay torneos ni ligas en curso o abiertos —</option>
               )}
-              {ongoingTournaments.map((t: Tournament) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
+              <TournamentSelectOptions tournaments={ongoingTournaments} />
             </select>
 
             {tournamentId && (
@@ -211,7 +216,7 @@ export default function ResultadosPage() {
                         {/* Header: fase + court + status */}
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span className="font-semibold text-foreground">{phaseLabel(match.phase)}</span>
+                            <span className="font-semibold text-foreground">{phaseText(match, isLeague)}</span>
                             {match.court && <span>· {match.court}</span>}
                           </div>
                           {match.isResult && match.sets1 && match.sets2 ? (
@@ -277,7 +282,7 @@ export default function ResultadosPage() {
                         {paged.map((match: MatchResult) => (
                           <tr key={match.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                             <td className="px-5 py-3.5">
-                              <span className="text-xs text-muted-foreground">{phaseLabel(match.phase)}</span>
+                              <span className="text-xs text-muted-foreground">{phaseText(match, isLeague)}</span>
                             </td>
                             <td className="px-5 py-3.5">
                               <span className="text-sm font-medium text-foreground">{match.team1.join(" / ")}</span>

@@ -3,6 +3,7 @@
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
+import { LeagueDaysEditor } from "@/components/admin/league-days-editor";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { PlainTextField, TournamentVisibilityFields, type TournamentVisibility } from "@/components/admin/tournament-options-fields";
 import { ApiError } from "@/lib/api";
@@ -12,6 +13,7 @@ import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/
 import { SCORING_FORMAT_OPTIONS, isScoringFormat, scoringFormatLabel, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
 import { tournamentsBase, useRouteKind } from "@/lib/league";
+import { leagueDaysIssue, leagueDaysPayload, weekdayLabel, type LeagueDayForm } from "@/lib/utils/league-days";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
 import {
@@ -220,6 +222,11 @@ export default function NuevoTorneoPage() {
   const [catData,      setCatData]      = useState<CatData      | null>(null);
   const [configData,   setConfigData]   = useState<ConfigData   | null>(null);
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null);
+  // Una liga no tiene un día por fecha: sus días de juego son los de la semana
+  // (paso 4). Un torneo los lleva en scheduleData
+  const [leagueDays, setLeagueDays] = useState<LeagueDayForm[]>([]);
+  // Lo que impide seguir en «Días de juego», tras pulsar «Siguiente»
+  const [leagueDaysError, setLeagueDaysError] = useState<string | null>(null);
 
   // ── Clubs list for selector ───────────────────────────────────────────
   // ADMIN ve el listado completo de clubes y elige; CLUB solo puede crear
@@ -350,9 +357,10 @@ export default function NuevoTorneoPage() {
       shouldValidate: !!scheduleForm.formState.errors.days,
     });
 
-  // Auto-generate days when reaching step 4
+  // Auto-generate days when reaching step 4 (solo un torneo: una liga no
+  // tiene un día por fecha, elige los días de la semana)
   useEffect(() => {
-    if (step === 4 && infoData && (scheduleForm.getValues().days.length === 0)) {
+    if (!league && step === 4 && infoData && (scheduleForm.getValues().days.length === 0)) {
       const days: ScheduleData["days"] = [];
       // Día a día sobre «YYYY-MM-DD», sin hora: con setDate en hora local, el
       // cambio de hora de marzo repetía una jornada
@@ -372,7 +380,7 @@ export default function NuevoTorneoPage() {
       }
       scheduleForm.reset({ days });
     }
-  }, [step, infoData, scheduleForm]);
+  }, [league, step, infoData, scheduleForm]);
 
   // ── Valores de partida: los del club y la zona de su club ──────────────
   // Al entrar en cada paso (y si llegan estando en él), en los campos de ese
@@ -473,13 +481,16 @@ export default function NuevoTorneoPage() {
         hasConsolation:  c.hasConsolation  ?? false,
       })),
       maxUnavailableTotalHours: scheduleData?.maxUnavailableTotalHours ?? 0,
-      schedule: scheduleData?.days.map(d => ({
-        date:                d.date,
-        type:                d.type,
-        isFinal:             d.isFinal,
-        maxUnavailableSlots: d.maxUnavailableSlots,
-        blocks:              d.blocks,
-      })),
+      // Una liga, un día por día de la semana (sin fecha); un torneo, uno por fecha
+      schedule: league
+        ? leagueDaysPayload(leagueDays)
+        : scheduleData?.days.map(d => ({
+            date:                d.date,
+            type:                d.type,
+            isFinal:             d.isFinal,
+            maxUnavailableSlots: d.maxUnavailableSlots,
+            blocks:              d.blocks,
+          })),
     }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
@@ -548,6 +559,15 @@ export default function NuevoTorneoPage() {
       setConfigData(cfg);
       setStep(4);
     } else if (step === 4) {
+      if (league) {
+        // Sin fechas que validar: los días de la semana y sus franjas
+        const issue = leagueDaysIssue(leagueDays);
+        setLeagueDaysError(issue);
+        if (issue) return;
+        setScheduleData(scheduleForm.getValues());
+        setStep(5);
+        return;
+      }
       const ok = await scheduleForm.trigger();
       if (!ok) return;
       setScheduleData(scheduleForm.getValues());
@@ -592,7 +612,7 @@ export default function NuevoTorneoPage() {
                     {done ? <Check size={14} /> : s.num}
                   </div>
                   <span className={`text-[10px] font-medium ${current ? "text-[#D4AF37]" : "text-muted-foreground"}`}>
-                    {s.label}
+                    {league && s.num === 4 ? "Días de juego" : s.label}
                   </span>
                 </div>
                 {i < STEPS.length - 1 && (
@@ -977,8 +997,50 @@ export default function NuevoTorneoPage() {
             </div>
           )}
 
+          {/* ── STEP 4 (liga): DÍAS DE JUEGO ── */}
+          {step === 4 && league && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="font-heading text-lg text-foreground">Días de juego</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Elige los días de la semana en que se juega la liga y a qué horas. Cada jornada del calendario cae en una semana.
+                </p>
+              </div>
+
+              <LeagueDaysEditor
+                days={leagueDays}
+                onChange={(next) => {
+                  setLeagueDays(next);
+                  // Tras un «Siguiente» con error, se revalida para que se vaya al corregirlo
+                  if (leagueDaysError) setLeagueDaysError(leagueDaysIssue(next));
+                }}
+                newDayBlock={() => ({ start: applied.current.dayStartTime, end: applied.current.dayEndTime })}
+              />
+
+              {/* Límite total de disponibilidad */}
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-xs text-muted-foreground shrink-0">Máx. franjas bloqueables en total:</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="0"
+                  aria-label="Máx. franjas bloqueables en total"
+                  value={scheduleForm.watch("maxUnavailableTotalHours") || ""}
+                  onChange={(e) => scheduleForm.setValue("maxUnavailableTotalHours", Number(e.target.value), { shouldDirty: true })}
+                  className="w-16 h-7 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                />
+                <span className="text-[10px] text-muted-foreground">(0 = sin límite · suma de todos los días)</span>
+              </div>
+
+              {leagueDaysError && (
+                <p role="alert" className="text-xs text-destructive">{leagueDaysError}</p>
+              )}
+            </div>
+          )}
+
           {/* ── STEP 4: SCHEDULE ── */}
-          {step === 4 && (
+          {step === 4 && !league && (
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Horarios por jornada</h3>
@@ -1238,17 +1300,26 @@ export default function NuevoTorneoPage() {
 
                 {/* Schedule summary */}
                 <div className="bg-secondary/50 rounded-lg border border-border p-4 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Horarios</p>
-                  {scheduleData?.days.map((d) => (
-                    <div key={d.date} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground capitalize">
-                        {formatDayKey(d.date, { weekday: 'short', day: 'numeric' })}
-                      </span>
-                      <span className="text-foreground">
-                        {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
-                      </span>
-                    </div>
-                  ))}
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">{league ? "Días de juego" : "Horarios"}</p>
+                  {league
+                    ? leagueDays.map((d) => (
+                        <div key={d.weekday} className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">{weekdayLabel(d.weekday)}</span>
+                          <span className="text-foreground">
+                            {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
+                          </span>
+                        </div>
+                      ))
+                    : scheduleData?.days.map((d) => (
+                        <div key={d.date} className="flex justify-between text-xs">
+                          <span className="text-muted-foreground capitalize">
+                            {formatDayKey(d.date, { weekday: 'short', day: 'numeric' })}
+                          </span>
+                          <span className="text-foreground">
+                            {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
+                          </span>
+                        </div>
+                      ))}
                 </div>
               </div>
             </div>

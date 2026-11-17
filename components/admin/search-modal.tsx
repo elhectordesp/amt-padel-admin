@@ -7,6 +7,7 @@ import { Search, Trophy, Users, X } from "lucide-react";
 import { adminService } from "@/lib/services/admin";
 import { CATEGORY_LABEL_SHORT, levelLabel, playerGenderLabel } from "@/lib/constants";
 import { useSearch } from "@/components/admin/search-context";
+import { tournamentsBase } from "@/lib/league";
 import type { Tournament, Player } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { matchesSearch } from "@/lib/utils/search";
@@ -51,8 +52,8 @@ export function SearchModal() {
   // Los torneos solo los lee quien tiene el área (el entrenador de un club no)
   const access = useClubAccess();
   const { data: tournaments = [] } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey: ["tournaments", "all"],
+    queryFn:  adminService.tournaments.listAll,
     enabled:  open && (!isClub(role) || access.can("tournaments")),
   });
 
@@ -76,8 +77,9 @@ export function SearchModal() {
       .map((t) => ({
         type: "tournament", id: t.id,
         title: t.name,
-        sub:   `${formatDateRange(t.startDate, t.endDate)} · ${t.club?.name ?? ""}`,
-        href:  `/torneos/${t.id}`,
+        // Las ligas, con su etiqueta y su propia ficha
+        sub:   `${t.kind === "LEAGUE" ? "Liga · " : ""}${formatDateRange(t.startDate, t.endDate)} · ${t.club?.name ?? ""}`,
+        href:  `${tournamentsBase(t.kind)}/${t.id}`,
       }));
 
     // Solo si responden a lo que hay escrito ahora (no a una búsqueda anterior)
@@ -107,7 +109,7 @@ export function SearchModal() {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar torneos, jugadores..."
+            placeholder="Buscar torneos, ligas, jugadores..."
             className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
           {query && (
@@ -120,7 +122,7 @@ export function SearchModal() {
 
         <div className="max-h-80 overflow-y-auto">
           {!query.trim() ? (
-            <div className="px-4 py-8 text-center text-xs text-muted-foreground">Escribe para buscar torneos y jugadores</div>
+            <div className="px-4 py-8 text-center text-xs text-muted-foreground">Escribe para buscar torneos, ligas y jugadores</div>
           ) : results.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-muted-foreground">Sin resultados para &quot;{query}&quot;</div>
           ) : (

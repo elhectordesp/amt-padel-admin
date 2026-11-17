@@ -27,9 +27,10 @@ const bulkStatus = vi.fn();
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
     tournaments: {
-      list: vi.fn().mockResolvedValue([
+      listAll: vi.fn().mockResolvedValue([
         { id: "t1", name: "Open Valencia", categories: [] },
         { id: "t2", name: "Open Málaga", categories: [] },
+        { id: "l1", name: "Liga de invierno", kind: "LEAGUE", categories: [] },
       ]),
       adminDetail: vi.fn().mockResolvedValue({ schedule: [], categories: [] }),
     },
@@ -82,6 +83,24 @@ describe("InscripcionesPage — torneo elegido en la URL", () => {
     expect(await screen.findByRole("option", { name: "Open Valencia" })).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveValue("t1");
     expect(screen.queryByText(SELECT_A_TOURNAMENT)).not.toBeInTheDocument();
+  });
+
+  it("las ligas salen en el selector, en su grupo, y se abren con ?torneo= como los torneos", async () => {
+    searchParams = new URLSearchParams("torneo=l1");
+
+    renderPage();
+
+    await waitFor(() => expect(listRegistrations).toHaveBeenCalledWith("l1"));
+    expect(await screen.findByRole("option", { name: "Liga de invierno" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Ligas" })).toContainElement(
+      screen.getByRole("option", { name: "Liga de invierno" }),
+    );
+    expect(screen.getByRole("group", { name: "Torneos" })).toContainElement(
+      screen.getByRole("option", { name: "Open Valencia" }),
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("l1");
+    // Su ficha cuelga de /ligas
+    expect(screen.getByRole("link", { name: /Ver liga/ })).toHaveAttribute("href", "/ligas/l1");
   });
 
   it("sin parámetro, pide elegir un torneo y no carga inscripciones", async () => {

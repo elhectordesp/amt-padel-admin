@@ -108,7 +108,8 @@ describe("Nueva liga", () => {
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
     fireEvent.change(input("registrationDeadline")!, { target: { value: "2099-11-20T20:00" } });
     next();
-    await screen.findByText("Horarios por jornada", {}, WAIT);
+    await screen.findByRole("group", { name: "Días de la semana" }, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     next();
     await screen.findByRole("button", { name: /Crear liga/ }, WAIT);
     next();
@@ -121,6 +122,71 @@ describe("Nueva liga", () => {
       endDate: "2100-03-01",
     });
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/ligas/l-new"), WAIT);
+  }, 60_000);
+
+  it("el paso «Días de juego» pide días de la semana y franjas, no un día por fecha", async () => {
+    renderPage();
+    await screen.findByDisplayValue("Club Madrid — Madrid", {}, WAIT);
+    fireEvent.change(input("name")!, { target: { value: "Liga de invierno" } });
+    fireEvent.change(input("startDate")!, { target: { value: "2099-12-01" } });
+    fireEvent.change(input("groupsEndDate")!, { target: { value: "2100-02-01" } });
+    fireEvent.change(input("endDate")!, { target: { value: "2100-03-01" } });
+    next();
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    next();
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    fireEvent.change(input("registrationDeadline")!, { target: { value: "2099-11-20T20:00" } });
+    next();
+
+    // Ni «Horarios por jornada» ni una jornada por cada fecha de la liga
+    await screen.findByRole("group", { name: "Días de la semana" }, WAIT);
+    expect(screen.queryByText("Horarios por jornada")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Inicio de la franja/)).not.toBeInTheDocument();
+
+    // Sin ningún día no se avanza
+    next();
+    expect(await screen.findByText("Elige al menos un día de juego.", {}, WAIT)).toBeInTheDocument();
+
+    // Lunes y jueves, con la franja del club por defecto; el jueves, otra franja
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Jueves" }));
+    expect(screen.getByLabelText("Inicio de la franja del lunes")).toHaveValue("16:00");
+    expect(screen.getByLabelText("Fin de la franja del lunes")).toHaveValue("21:00");
+    fireEvent.change(screen.getByLabelText("Inicio de la franja del jueves"), { target: { value: "18:00" } });
+    next();
+
+    await screen.findByRole("button", { name: /Crear liga/ }, WAIT);
+    next();
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
+    const payload = create.mock.calls[0][0];
+    expect(payload.schedule).toEqual([
+      { weekday: 1, maxUnavailableSlots: 0, blocks: [{ start: "16:00", end: "21:00" }] },
+      { weekday: 4, maxUnavailableSlots: 0, blocks: [{ start: "18:00", end: "21:00" }] },
+    ]);
+    expect(payload.schedule.every((d: { date?: string }) => !("date" in d))).toBe(true);
+  }, 60_000);
+
+  it("una franja con la hora de fin antes que la de inicio no deja pasar", async () => {
+    renderPage();
+    await screen.findByDisplayValue("Club Madrid — Madrid", {}, WAIT);
+    fireEvent.change(input("name")!, { target: { value: "Liga de invierno" } });
+    fireEvent.change(input("startDate")!, { target: { value: "2099-12-01" } });
+    fireEvent.change(input("groupsEndDate")!, { target: { value: "2100-02-01" } });
+    fireEvent.change(input("endDate")!, { target: { value: "2100-03-01" } });
+    next();
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    next();
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    fireEvent.change(input("registrationDeadline")!, { target: { value: "2099-11-20T20:00" } });
+    next();
+    await screen.findByRole("group", { name: "Días de la semana" }, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Martes" }));
+    fireEvent.change(screen.getByLabelText("Fin de la franja del martes"), { target: { value: "15:00" } });
+    next();
+    expect(
+      await screen.findByText("El martes: en cada franja, la hora de inicio debe ser anterior a la de fin.", {}, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Crear liga/ })).not.toBeInTheDocument();
   }, 60_000);
 
   it("en /torneos/nuevo no pide fin de grupos ni manda tipo", async () => {

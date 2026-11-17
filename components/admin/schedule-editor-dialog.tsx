@@ -61,7 +61,7 @@ const toLabel = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
 /** Reconstruye bloques (de–a) a partir de los slots de 30 min guardados. */
-function slotsToBlocks(slots?: string[]): Block[] {
+export function slotsToBlocks(slots?: string[]): Block[] {
   if (!slots || slots.length === 0) return [{ start: "09:00", end: "11:00" }];
   const sorted = [...slots].sort();
   const blocks: Block[] = [];

@@ -72,6 +72,23 @@ describe('adminService', () => {
     });
   });
 
+  describe('tournaments.listAll', () => {
+    it('junta los torneos y las ligas: dos peticiones, la de ligas con kind=LEAGUE', async () => {
+      mockGet.mockImplementation(async (_url: string, config?: { params?: { kind?: string } }) =>
+        config?.params?.kind === 'LEAGUE'
+          ? { data: [{ id: 'l1', status: 'open', name: 'Liga', kind: 'LEAGUE' }] }
+          : { data: [{ id: 't1', status: 'open', name: 'Torneo' }] },
+      );
+      const result = await adminService.tournaments.listAll();
+      expect(mockGet).toHaveBeenCalledWith('/admin/tournaments');
+      expect(mockGet).toHaveBeenCalledWith('/admin/tournaments', { params: { kind: 'LEAGUE' } });
+      expect(result.map((t) => [t.id, t.kind, t.status])).toEqual([
+        ['t1', 'TOURNAMENT', 'OPEN'],
+        ['l1', 'LEAGUE', 'OPEN'],
+      ]);
+    });
+  });
+
   describe('tournaments.detail', () => {
     it('normaliza status a mayúsculas', async () => {
       mockGet.mockResolvedValueOnce({ data: { id: 't1', status: 'scheduled' } });

@@ -5,6 +5,7 @@ import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form"
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
 import { PlainTextField, TournamentVisibilityFields, type TournamentVisibility } from "@/components/admin/tournament-options-fields";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { LeagueDaysDialog } from "@/components/admin/league-days-dialog";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
@@ -598,11 +599,11 @@ export default function EditarTorneoPage() {
           <div className="rounded-lg border border-border bg-card/40 p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="text-sm font-semibold text-foreground">Jornadas y horarios</h3>
+                <h3 className="text-sm font-semibold text-foreground">{league ? "Días de juego" : "Jornadas y horarios"}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {tournament?.status === "ONGOING" || tournament?.status === "FINISHED"
-                    ? "El torneo ya ha empezado: las jornadas no se pueden editar."
-                    : "Edita los días y tramos horarios del torneo."}
+                    ? (league ? "La liga ya ha empezado: los días de juego no se pueden editar." : "El torneo ya ha empezado: las jornadas no se pueden editar.")
+                    : (league ? "Edita los días de la semana en que se juega y sus franjas horarias." : "Edita los días y tramos horarios del torneo.")}
                 </p>
               </div>
               <button
@@ -611,7 +612,7 @@ export default function EditarTorneoPage() {
                 disabled={tournament?.status === "ONGOING" || tournament?.status === "FINISHED"}
                 className="px-3 py-1.5 rounded-md border border-border text-sm text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
               >
-                Editar jornadas
+                {league ? "Editar días de juego" : "Editar jornadas"}
               </button>
             </div>
           </div>
@@ -679,7 +680,20 @@ export default function EditarTorneoPage() {
         </form>
       </div>
 
-      {showSchedule && tournament && (
+      {showSchedule && tournament && league && (
+        <LeagueDaysDialog
+          open={showSchedule}
+          onClose={() => setShowSchedule(false)}
+          tournamentId={id}
+          initialDays={tournament.schedule ?? []}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
+            qc.invalidateQueries({ queryKey: ["tournament", id] });
+          }}
+        />
+      )}
+
+      {showSchedule && tournament && !league && (
         <ScheduleEditorDialog
           open={showSchedule}
           onClose={() => setShowSchedule(false)}

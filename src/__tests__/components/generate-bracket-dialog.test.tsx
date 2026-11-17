@@ -81,6 +81,51 @@ describe("GenerateBracketDialog", () => {
     expect(screen.getByText("Ronda inicial eliminatoria")).toBeInTheDocument();
   });
 
+  describe("en una liga", () => {
+    it("sortea grupos: sin formato, clasificados ni ronda inicial; sí la distribución de grupos", () => {
+      wrap(<GenerateBracketDialog {...baseProps({ league: true })} />);
+      expect(screen.getByText(/Sortear grupos — Mixto 3ª/)).toBeInTheDocument();
+      expect(screen.queryByText("Solo eliminatoria")).not.toBeInTheDocument();
+      expect(screen.queryByText("Pasan de cada grupo")).not.toBeInTheDocument();
+      expect(screen.queryByText("Comodines (mejores siguientes)")).not.toBeInTheDocument();
+      expect(screen.queryByText("Ronda inicial eliminatoria")).not.toBeInTheDocument();
+      expect(screen.getByText("Distribución de grupos")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Sortear grupos/ })).toBeInTheDocument();
+    });
+
+    it("la vista previa cuenta jornadas, no clasificados ni eliminatoria", async () => {
+      // 6 grupos de 4: 3 jornadas cada uno
+      wrap(<GenerateBracketDialog {...baseProps({ league: true })} />);
+      expect(await screen.findByText(/36 partidos en 3 jornadas/)).toBeInTheDocument();
+      expect(screen.queryByText(/clasificados/)).not.toBeInTheDocument();
+    });
+
+    it("con grupos de 3 parejas son 3 jornadas (una pareja descansa en cada una)", async () => {
+      (adminService.tournaments.previewBracket as ReturnType<typeof vi.fn>).mockResolvedValue({
+        isGroups: true,
+        groups: [
+          { name: "Grupo A", pairs: Array.from({ length: 3 }) },
+          { name: "Grupo B", pairs: Array.from({ length: 3 }) },
+        ],
+        totalPairs: 6,
+        totalMatches: 6,
+      });
+      wrap(<GenerateBracketDialog {...baseProps({ league: true, totalConfirmedPairs: 6 })} />);
+      expect(await screen.findByText(/6 partidos en 3 jornadas/)).toBeInTheDocument();
+    });
+
+    it("manda el formato de grupos aunque el guardado fuera de eliminatoria", async () => {
+      (adminService.tournaments.generateBracket as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+      wrap(<GenerateBracketDialog {...baseProps({ league: true, currentFormat: "eliminatoria" })} />);
+      await screen.findByText(/36 partidos en 3 jornadas/);
+      fireEvent.click(screen.getByRole("button", { name: /Sortear grupos/ }));
+      await waitFor(() => expect(adminService.tournaments.generateBracket).toHaveBeenCalledTimes(1));
+      expect((adminService.tournaments.generateBracket as ReturnType<typeof vi.fn>).mock.calls[0][3]).toBe(
+        "grupos+eliminatoria",
+      );
+    });
+  });
+
   it("al cambiar a 'Solo eliminatoria' oculta opciones de grupos", () => {
     wrap(<GenerateBracketDialog {...baseProps()} />);
     fireEvent.click(screen.getByText("Solo eliminatoria"));
