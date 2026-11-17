@@ -18,6 +18,7 @@ import { CourtsManager } from "@/components/admin/courts-manager";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ClubBookingsActivationModal } from "@/components/admin/club-bookings-activation-modal";
 import { ClubAdminsModal } from "@/components/admin/club-admins-modal";
+import { EnterSupportButton } from "@/components/admin/support-mode";
 import { adminService } from "@/lib/services/admin";
 import {
   clubStatus, toggleConfirm, type ClubStatus, type ClubToggle, type ToggleConfirm,
@@ -602,6 +603,7 @@ function ClubCard({
           >
             <Users size={13} />
           </button>
+          <EnterSupportButton clubId={club.id} clubName={club.name} />
           <button
             onClick={() => onEdit(club)}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
