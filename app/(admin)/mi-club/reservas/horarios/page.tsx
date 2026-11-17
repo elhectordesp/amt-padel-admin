@@ -287,6 +287,8 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
     customOpen: "10:00",
     customClose: "20:00",
     reason: "",
+    // "" = se cobra como el día que es; 1-7 = como ese día de la semana
+    priceAsDayOfWeek: "",
   });
 
   const create = useMutation({
@@ -297,6 +299,8 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
         customOpen: form.isClosed ? undefined : form.customOpen,
         customClose: form.isClosed ? undefined : form.customClose,
         reason: form.reason || undefined,
+        priceAsDayOfWeek:
+          form.isClosed || !form.priceAsDayOfWeek ? undefined : Number(form.priceAsDayOfWeek),
       }),
     onSuccess: () => {
       toast.success("Excepción añadida");
@@ -369,6 +373,25 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
             />
             Club cerrado todo el día
           </label>
+          {!form.isClosed && (
+            <Field label="Se cobra como (opcional)">
+              <select
+                value={form.priceAsDayOfWeek}
+                onChange={(e) => setForm({ ...form, priceAsDayOfWeek: e.target.value })}
+                className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+              >
+                <option value="">El día que es</option>
+                {DAY_NAMES.slice(1).map((name, i) => (
+                  <option key={name} value={i + 1}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Un festivo puede cobrarse con las tarifas de un domingo, por ejemplo.
+              </span>
+            </Field>
+          )}
           {!form.isClosed && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Apertura">
@@ -479,6 +502,11 @@ function ExceptionRow({
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
+        )}
+        {exc.priceAsDayOfWeek && !exc.isClosed && (
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Se cobra como {DAY_NAMES[exc.priceAsDayOfWeek].toLowerCase()}
+          </span>
         )}
       </td>
       <td className="px-4 py-3 text-muted-foreground">{exc.reason ?? "—"}</td>

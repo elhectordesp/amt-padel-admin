@@ -1,7 +1,9 @@
 /**
  * Precios de las pistas (R1-8, R2-12): el precio se teclea tal cual (antes,
  * al escribir «25» quedaba «2.01»), se guarda en céntimos, un precio mal
- * escrito no se manda, y en el móvil la tabla se desplaza de lado.
+ * escrito no se manda, y en el móvil la tabla se desplaza de lado. Con
+ * temporadas: el selector «Precios base / temporada» decide qué franjas se
+ * cargan y se guardan; borrar una temporada avisa de que se borran sus precios.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -20,10 +22,17 @@ vi.mock("@/lib/services/admin", () => ({
   adminService: { courts: { list: vi.fn().mockResolvedValue([{ id: "p1", name: "Pista 1", active: true }]) } },
 }));
 
-const pricing = vi.hoisted(() => ({ list: vi.fn(), replace: vi.fn() }));
+const svc = vi.hoisted(() => ({
+  courtPricing: { list: vi.fn(), replace: vi.fn(), replaceMany: vi.fn() },
+  courtDurations: { list: vi.fn() },
+  operatingHours: { list: vi.fn() },
+  seasons: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+  priceOffers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+}));
+const pricing = svc.courtPricing;
 vi.mock("@/lib/services/bookings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/bookings")>("@/lib/services/bookings");
-  return { ...actual, bookingsService: { courtPricing: pricing } };
+  return { ...actual, bookingsService: svc };
 });
 
 import PreciosPage from "../../../app/(admin)/mi-club/reservas/precios/page";
@@ -44,11 +53,16 @@ describe("Precios de las pistas", () => {
     vi.clearAllMocks();
     pricing.list.mockResolvedValue([{ ...SLOT, priceCents: 1250 }]);
     pricing.replace.mockResolvedValue([]);
+    svc.courtDurations.list.mockResolvedValue([{ id: "d1", courtId: "p1", minutes: 90, isDefault: true }]);
+    svc.operatingHours.list.mockResolvedValue([]);
+    svc.seasons.list.mockResolvedValue([]);
+    svc.seasons.remove.mockResolvedValue(undefined);
+    svc.priceOffers.list.mockResolvedValue([]);
   });
 
   it("se teclea «25» y se guarda 2500 céntimos", async () => {
     renderPage();
-    const input = await screen.findByLabelText("Precio de la fila 1 (€)");
+    const input = await screen.findByLabelText("Precio 90 min, franja 1 (€)");
     expect(input).toHaveValue("12.5");
 
     // Tecla a tecla, como en el navegador: cada cambio se queda como está
@@ -68,12 +82,12 @@ describe("Precios de las pistas", () => {
 
   it("con coma también vale; un precio mal escrito no se manda", async () => {
     renderPage();
-    const input = await screen.findByLabelText("Precio de la fila 1 (€)");
+    const input = await screen.findByLabelText("Precio 90 min, franja 1 (€)");
 
     fireEvent.change(input, { target: { value: "abc" } });
     expect(input).toHaveAttribute("aria-invalid", "true");
     fireEvent.click(screen.getByRole("button", { name: /Guardar/ }));
-    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining("Fila 1"));
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining("Franja 1"));
     expect(pricing.replace).not.toHaveBeenCalled();
 
     fireEvent.change(input, { target: { value: "12,50" } });
@@ -87,9 +101,95 @@ describe("Precios de las pistas", () => {
 
   it("la tabla se desplaza de lado si no cabe (móvil)", async () => {
     renderPage();
-    await screen.findByLabelText("Precio de la fila 1 (€)");
+    await screen.findByLabelText("Precio 90 min, franja 1 (€)");
     const wrapper = screen.getByRole("table").parentElement!;
     expect(wrapper).toHaveClass("overflow-x-auto");
     expect(wrapper).not.toHaveClass("overflow-hidden");
+  });
+
+  it("sin temporada elegida, carga y guarda los precios base (sin seasonId)", async () => {
+    renderPage();
+    await screen.findByLabelText("Precio 90 min, franja 1 (€)");
+    expect(pricing.list).toHaveBeenCalledWith("c1", "p1", null);
+    fireEvent.click(screen.getByRole("button", { name: /Guardar$/ }));
+    await waitFor(() => expect(pricing.replace).toHaveBeenCalled());
+    expect(pricing.replace.mock.calls[0][2]).not.toHaveProperty("seasonId");
+  });
+
+  it("al elegir una temporada, carga y guarda solo las franjas de esa temporada", async () => {
+    svc.seasons.list.mockResolvedValue([
+      { id: "s1", clubId: "c1", name: "Verano", startDate: "2027-06-21T00:00:00.000Z", endDate: "2027-09-20T00:00:00.000Z" },
+    ]);
+    pricing.list.mockImplementation((_c: string, _p: string, seasonId: string | null) =>
+      Promise.resolve(seasonId ? [{ ...SLOT, id: "s2", seasonId, priceCents: 3000 }] : [{ ...SLOT, priceCents: 1250 }]),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Verano" }));
+    const input = await screen.findByDisplayValue("30");
+    expect(pricing.list).toHaveBeenCalledWith("c1", "p1", "s1");
+
+    fireEvent.change(input, { target: { value: "32" } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar$/ }));
+    await waitFor(() =>
+      expect(pricing.replace).toHaveBeenCalledWith("c1", "p1", {
+        seasonId: "s1",
+        slots: [expect.objectContaining({ priceCents: 3200 })],
+      }),
+    );
+  });
+
+  it("borrar una temporada pide confirmar y avisa de que se borran sus precios", async () => {
+    svc.seasons.list.mockResolvedValue([
+      { id: "s1", clubId: "c1", name: "Verano", startDate: "2027-06-21T00:00:00.000Z", endDate: "2027-09-20T00:00:00.000Z" },
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Borrar Verano" }));
+    expect(svc.seasons.remove).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/se borrarán también todos los precios de esa temporada/i);
+    fireEvent.click(screen.getByRole("button", { name: "Borrar temporada" }));
+    await waitFor(() => expect(svc.seasons.remove).toHaveBeenCalledWith("c1", "s1"));
+  });
+
+  it("crea una oferta con los datos del diálogo", async () => {
+    svc.priceOffers.create.mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Nueva oferta/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Nueva oferta" });
+    const inputs = dialog.querySelectorAll("input");
+    fireEvent.change(dialog.querySelector('input[placeholder="Mañanas de agosto"]')!, { target: { value: "Mañanas de agosto" } });
+    const dates = dialog.querySelectorAll('input[type="date"]');
+    fireEvent.change(dates[0], { target: { value: "2027-08-01" } });
+    fireEvent.change(dates[1], { target: { value: "2027-08-31" } });
+    fireEvent.change(dialog.querySelector('input[type="number"]')!, { target: { value: "20" } });
+    expect(inputs.length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar oferta" }));
+    await waitFor(() =>
+      expect(svc.priceOffers.create).toHaveBeenCalledWith("c1", {
+        name: "Mañanas de agosto",
+        startDate: "2027-08-01",
+        endDate: "2027-08-31",
+        daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
+        startTime: "09:00",
+        endTime: "14:00",
+        courtIds: [],
+        discountPercent: 20,
+        membersOnly: false,
+      }),
+    );
+  });
+
+  it("una oferta sin descuento válido no se manda", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Nueva oferta/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Nueva oferta" });
+    fireEvent.change(dialog.querySelector('input[placeholder="Mañanas de agosto"]')!, { target: { value: "X" } });
+    const dates = dialog.querySelectorAll('input[type="date"]');
+    fireEvent.change(dates[0], { target: { value: "2027-08-01" } });
+    fireEvent.change(dates[1], { target: { value: "2027-08-31" } });
+    fireEvent.change(dialog.querySelector('input[type="number"]')!, { target: { value: "150" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar oferta" }));
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining("entre 1 y 100"));
+    expect(svc.priceOffers.create).not.toHaveBeenCalled();
   });
 });

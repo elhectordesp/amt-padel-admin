@@ -27,7 +27,7 @@ const hours = (dayOfWeek: number, openTime: string, closeTime: string, active = 
 
 const exception = (p: Partial<ClubScheduleException>): ClubScheduleException => ({
   id: "e1", clubId: "c1", date: "2026-10-28T00:00:00.000Z", isClosed: false,
-  customOpen: null, customClose: null, reason: null, ...p,
+  customOpen: null, customClose: null, reason: null, priceAsDayOfWeek: null, ...p,
 });
 
 const court = (id: string, extra: Partial<Court> = {}): Court =>

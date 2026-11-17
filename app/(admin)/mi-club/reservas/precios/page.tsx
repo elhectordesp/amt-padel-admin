@@ -5,6 +5,9 @@
  * la pista; celdas = precio de TODA la pista en esa franja y duración. Al
  * guardar se expande a CourtPriceSlot (uno por día × duración) y "Aplicar a
  * todas las pistas" sustituye los precios de todas con la misma cuadrícula.
+ *
+ * Encima, el selector «Precios base / <temporada>»: la cuadrícula edita los
+ * precios de lo elegido (cada temporada tiene los suyos). Debajo, las ofertas.
  */
 
 "use client";
@@ -14,11 +17,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Copy, Loader2, Plus, Save, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { PriceOffersSection } from "@/components/admin/price-offers-section";
+import { PriceSeasonsPanel } from "@/components/admin/price-seasons-panel";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useRole, isClub } from "@/lib/use-role";
+import { eurosToCents } from "@/lib/utils/booking-price";
 import {
   ALL_DAYS,
   DAY_SHORT,
@@ -46,6 +52,14 @@ export default function PreciosPage() {
   });
 
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
+  // null = precios base; un id = los de esa temporada
+  const [seasonId, setSeasonId] = useState<string | null>(null);
+
+  const seasonsQuery = useQuery({
+    queryKey: bookingsQK.seasons(clubId ?? ""),
+    queryFn: () => bookingsService.seasons.list(clubId!),
+    enabled: !!clubId && isClub(role),
+  });
 
   useEffect(() => {
     if (!selectedCourtId && courtsQuery.data && courtsQuery.data.length > 0) {
@@ -79,6 +93,15 @@ export default function PreciosPage() {
       </p>
 
       <div className="mt-6">
+        <PriceSeasonsPanel
+          clubId={clubId}
+          seasons={seasonsQuery.data ?? []}
+          selectedId={seasonId}
+          onSelect={setSeasonId}
+        />
+      </div>
+
+      <div className="mt-6">
         <CourtSelector
           courts={courts}
           loading={courtsQuery.isLoading}
@@ -90,13 +113,19 @@ export default function PreciosPage() {
       {selectedCourtId && (
         <div className="mt-6">
           <PricingGrid
-            key={selectedCourtId}
+            key={`${selectedCourtId}:${seasonId ?? "base"}`}
             clubId={clubId}
             courtId={selectedCourtId}
+            seasonId={seasonId}
+            seasonName={seasonsQuery.data?.find((s) => s.id === seasonId)?.name}
             allCourts={courts}
           />
         </div>
       )}
+
+      <div className="mt-10">
+        <PriceOffersSection clubId={clubId} courts={courts} />
+      </div>
     </ReservasPage>
   );
 }
@@ -157,15 +186,19 @@ function errorMessage(err: unknown): string {
 function PricingGrid({
   clubId,
   courtId,
+  seasonId,
+  seasonName,
   allCourts,
 }: {
   clubId: string;
   courtId: string;
+  seasonId: string | null;
+  seasonName: string | undefined;
   allCourts: Court[];
 }) {
   const pricing = useQuery({
-    queryKey: bookingsQK.courtPricing(clubId, courtId),
-    queryFn: () => bookingsService.courtPricing.list(clubId, courtId),
+    queryKey: bookingsQK.courtPricing(clubId, courtId, seasonId),
+    queryFn: () => bookingsService.courtPricing.list(clubId, courtId, seasonId),
   });
   const durations = useQuery({
     queryKey: bookingsQK.courtDurations(clubId, courtId),
@@ -191,6 +224,8 @@ function PricingGrid({
       clubId={clubId}
       court={allCourts.find((c) => c.id === courtId)}
       courtId={courtId}
+      seasonId={seasonId}
+      seasonName={seasonName}
       allCourts={allCourts}
       initialSlots={pricing.data}
       offered={durations.data.map((d) => d.minutes)}
@@ -203,6 +238,8 @@ function GridEditor({
   clubId,
   court,
   courtId,
+  seasonId,
+  seasonName,
   allCourts,
   initialSlots,
   offered,
@@ -211,6 +248,8 @@ function GridEditor({
   clubId: string;
   court: Court | undefined;
   courtId: string;
+  seasonId: string | null;
+  seasonName: string | undefined;
   allCourts: Court[];
   initialSlots: CourtPriceSlot[];
   offered: number[];
@@ -232,10 +271,14 @@ function GridEditor({
   const gaps = useMemo(() => findGaps(slots, offered, hours), [slots, offered, hours]);
 
   const save = useMutation({
-    mutationFn: () => bookingsService.courtPricing.replace(clubId, courtId, { slots }),
+    mutationFn: () =>
+      bookingsService.courtPricing.replace(clubId, courtId, {
+        ...(seasonId ? { seasonId } : {}),
+        slots,
+      }),
     onSuccess: () => {
       toast.success("Precios guardados");
-      qc.invalidateQueries({ queryKey: bookingsQK.courtPricing(clubId, courtId) });
+      qc.invalidateQueries({ queryKey: bookingsQK.courtPricing(clubId, courtId, seasonId) });
     },
     onError: (err: unknown) => toast.error(errorMessage(err)),
   });
@@ -244,6 +287,7 @@ function GridEditor({
     mutationFn: () =>
       bookingsService.courtPricing.replaceMany(clubId, {
         courtIds: allCourts.map((c) => c.id),
+        ...(seasonId ? { seasonId } : {}),
         slots,
       }),
     onSuccess: () => {
@@ -273,7 +317,7 @@ function GridEditor({
     if (hasErrors()) return;
     if (
       window.confirm(
-        `Sustituye los precios de ${allCourts.length} pistas por los de esta cuadrícula.\n\n¿Continuar?`,
+        `Sustituye los precios ${seasonId ? `de ${seasonName ?? "la temporada"}` : "base"} de ${allCourts.length} pistas por los de esta cuadrícula.\n\n¿Continuar?`,
       )
     ) {
       applyAll.mutate();
@@ -314,7 +358,8 @@ function GridEditor({
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">
-          Precios de {court?.name ?? "la pista"} (por pista, toda la reserva)
+          Precios {seasonId ? `de ${seasonName ?? "la temporada"}` : "base"} de{" "}
+          {court?.name ?? "la pista"} (por pista, toda la reserva)
         </h3>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={addRow}>
@@ -346,7 +391,9 @@ function GridEditor({
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Sin precios definidos. Añade una franja (p. ej. «Valle» y «Punta») con el botón de arriba.
+          {seasonId
+            ? "Esta pista no tiene precios en esta temporada: en sus fechas se cobran los precios base. Añade una franja para darle precios propios."
+            : "Sin precios definidos. Añade una franja (p. ej. «Valle» y «Punta») con el botón de arriba."}
         </div>
       ) : (
         // En el móvil la tabla no cabe: se desplaza de lado en vez de cortarse
@@ -454,6 +501,7 @@ function GridEditor({
                               updateRow(r.id, { prices: { ...r.prices, [m]: e.target.value } })
                             }
                             aria-label={`Precio ${m} min, franja ${i + 1} (€)`}
+                            aria-invalid={text.trim() !== "" && eurosToCents(text) === null}
                             className={`${inputCls} w-20`}
                           />
                           <span className="text-muted-foreground">€</span>
