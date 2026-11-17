@@ -109,6 +109,17 @@ export interface ClubFiscal {
   fiscalAddress: string | null;
 }
 
+/** Plan del club con AMT (sin las notas internas de AMT). */
+export interface ClubAmtPlan {
+  bookingPlan:            "FREE" | "SUBSCRIPTION" | "COMMISSION" | "CUSTOM";
+  bookingMonthlyFeeCents: number | null;
+  /** Fracción de 0 a 1 (0,05 = 5 %) */
+  bookingCommissionRate:  number | null;
+  /** Último día pagado, «YYYY-MM-DD» */
+  feePaidUntil:           string | null;
+  overdue:                boolean;
+}
+
 /** Por qué está ocupada una pista (además de las reservas). */
 export type CourtBlockKind = "MAINTENANCE" | "CLASS" | "TOURNAMENT" | "LEAGUE" | "EVENT" | "OTHER";
 
