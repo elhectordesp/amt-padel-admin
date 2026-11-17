@@ -13,6 +13,9 @@ import { dayRangeIso, resolveDayWindow } from "@/lib/utils/booking-day-grid";
 import {
   launchPending, launchSteps, liveBookings, todayOccupancy, upcomingBookings,
 } from "@/lib/utils/club-today";
+import { useClubAccess } from "@/lib/use-club-access";
+import { AmtFeeOverdueNotice, useAmtPlan } from "@/components/admin/club-amt-plan-card";
+import { overdueNotice } from "@/lib/utils/amt-plan";
 import { formatInTimeZone, tournamentTimeZone, zonedDayKey } from "@/lib/utils/time-zone";
 
 const REFRESH_MS = 60_000;
@@ -99,6 +102,10 @@ const hours1 = (minutes: number) => Math.round((minutes / 60) * 10) / 10;
 
 /** «Hoy en el club»: reservas de hoy, sin pagar, ocupación y las próximas. */
 export function ClubToday({ clubId }: { clubId: string }) {
+  // La cuota con AMT solo se avisa al propietario
+  const { roles } = useClubAccess();
+  const isOwner = !!roles?.includes("OWNER");
+  const amtPlan = useAmtPlan(clubId, isOwner);
   const club = useQuery({
     queryKey: ["my-club", clubId],
     queryFn: () => adminService.clubs.findOne(clubId),
@@ -173,6 +180,7 @@ export function ClubToday({ clubId }: { clubId: string }) {
 
   return (
     <section className="space-y-3">
+      {isOwner && <AmtFeeOverdueNotice notice={overdueNotice(amtPlan.data)} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-heading text-lg text-foreground">Hoy en el club</h3>
         <div className="flex flex-wrap gap-2">

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { CourtsManager } from "@/components/admin/courts-manager";
 import { ClubFiscalCard } from "@/components/admin/club-fiscal-card";
+import { ClubAmtPlanCard } from "@/components/admin/club-amt-plan-card";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
 import { useClubAccess } from "@/lib/use-club-access";
@@ -451,6 +452,9 @@ export default function MiClubPage() {
 
         {/* Datos fiscales: solo propietario y gestor (el back los niega al resto) */}
         {clubId && canSeeFiscal && <ClubFiscalCard clubId={clubId} />}
+
+        {/* Plan con AMT: propietario y gestor (el back lo niega al resto) */}
+        {clubId && canSeeFiscal && <ClubAmtPlanCard clubId={clubId} />}
 
         {/* Pistas del club. Solo aparece cuando el club ya tiene id cargado;
             la sección se gestiona inline igual que en /clubes para AMT. */}

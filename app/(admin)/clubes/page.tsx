@@ -15,6 +15,7 @@ import { paginate } from "@/lib/utils/pagination";
 import { matchesSearch } from "@/lib/utils/search";
 import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
+import { ClubFeePaidUntilField } from "@/components/admin/club-fee-paid-until";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ClubBookingsActivationModal } from "@/components/admin/club-bookings-activation-modal";
 import { ClubAdminsModal } from "@/components/admin/club-admins-modal";
@@ -486,6 +487,9 @@ function ClubModal({
             </div>
             <span className="text-sm text-foreground">Club asociado AMT</span>
           </label>
+
+          {/* Solo AMT, y con el club ya creado: se guarda aparte con su botón */}
+          {club && <ClubFeePaidUntilField clubId={club.id} />}
 
           </div>
 

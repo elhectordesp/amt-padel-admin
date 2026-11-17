@@ -10,7 +10,7 @@ import type {
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
-  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal,
+  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
@@ -687,6 +687,12 @@ export const adminService = {
       api.get<ClubFiscal>(`/admin/clubs/${id}/fiscal`).then((r) => r.data),
     updateFiscal: (id: string, data: ClubFiscal) =>
       api.put<ClubFiscal>(`/admin/clubs/${id}/fiscal`, data).then((r) => r.data),
+    // Plan con AMT (solo propietario, gestor y AMT); sin notas internas
+    amtPlan: (id: string) =>
+      api.get<ClubAmtPlan>(`/admin/clubs/${id}/amt-plan`).then((r) => r.data),
+    // Solo AMT: último día con la cuota pagada (null la borra)
+    setFeePaidUntil: (id: string, feePaidUntil: string | null) =>
+      api.put<{ feePaidUntil: string | null }>(`/admin/clubs/${id}/amt-plan/paid-until`, { feePaidUntil }).then((r) => r.data),
     geocodeBatch: () =>
       api.post<{ updated: number; skipped: number; errors: string[] }>('/admin/clubs/geocode-batch').then((r) => r.data),
     // Crea un club stub + invita a su admin en un solo paso. El propio
