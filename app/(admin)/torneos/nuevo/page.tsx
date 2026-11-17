@@ -11,6 +11,7 @@ import { TIER_LABEL } from "@/lib/constants";
 import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
 import { SCORING_FORMAT_OPTIONS, isScoringFormat, scoringFormatLabel, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
+import { tournamentsBase, useRouteKind } from "@/lib/league";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
 import {
@@ -55,6 +56,8 @@ const infoSchema = z.object({
   clubId:    z.string({ error: "Club requerido" }).min(1, "Club requerido"),
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
+  // Fin de la fase de grupos: solo se pide en una liga (infoSchemaFor)
+  groupsEndDate: z.string().optional(),
   prize:       z.string().optional(),
   imageUrl:    z.string().nullable().optional(),
   // Texto plano; se manda sin los espacios de los bordes
@@ -66,6 +69,15 @@ const infoSchema = z.object({
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
 );
+
+// En una liga, el fin de la fase de grupos es obligatorio, posterior al inicio y
+// no posterior al fin (la regla del back)
+const infoSchemaFor = (league: boolean) => infoSchema
+  .refine((d) => !league || !!d.groupsEndDate, { message: "Indica el fin de la fase de grupos", path: ["groupsEndDate"] })
+  .refine(
+    (d) => !league || !d.groupsEndDate || !d.startDate || !d.endDate || (d.groupsEndDate > d.startDate && d.groupsEndDate <= d.endDate),
+    { message: "Debe ser posterior al inicio y no posterior al fin de la liga", path: ["groupsEndDate"] },
+  );
 
 const catSchema = z.object({
   categories: z.array(z.object({
@@ -186,8 +198,13 @@ const STEPS = [
 ];
 
 // ── Main ──────────────────────────────────────────────────────────────────
+// También es el asistente de Nueva liga (`/ligas/nuevo`, que lo reexporta): la
+// ruta decide el tipo
 export default function NuevoTorneoPage() {
   const router = useRouter();
+  const kind   = useRouteKind();
+  const league = kind === "LEAGUE";
+  const base   = tournamentsBase(kind);
   const qc     = useQueryClient();
   const [step, setStep] = useState(1);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -225,7 +242,7 @@ export default function NuevoTorneoPage() {
 
   // ── Step 1: Info ───────────────────────────────────────────────────────
   const infoForm = useForm<InfoData>({
-    resolver:      zodResolver(infoSchema),
+    resolver:      zodResolver(infoSchemaFor(league)),
     defaultValues: infoData ?? undefined,
   });
 
@@ -266,7 +283,7 @@ export default function NuevoTorneoPage() {
   const handleCancel = () => {
     const dirty = step > 1 || infoForm.formState.isDirty;
     if (dirty) setShowLeaveModal(true);
-    else router.push("/torneos");
+    else router.push(base);
   };
 
   // ── Step 2: Categories ────────────────────────────────────────────────
@@ -420,6 +437,9 @@ export default function NuevoTorneoPage() {
   const create = useMutation({
     mutationFn: () => adminService.tournaments.create({
       ...infoData!,
+      // Una liga lleva su tipo y el fin de los grupos; un torneo, ninguno de los dos
+      kind:          league ? "LEAGUE" : undefined,
+      groupsEndDate: league ? infoData!.groupsEndDate : undefined,
       // Sanitiza imageUrl: backend valida con @IsUrl() y "" lo rechaza.
       // Si no hay banner, omitimos el campo del payload.
       imageUrl: infoData!.imageUrl?.trim() ? infoData!.imageUrl : undefined,
@@ -463,8 +483,8 @@ export default function NuevoTorneoPage() {
     }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo creado correctamente");
-      router.push(`/torneos/${t.id}`);
+      toast.success(league ? "Liga creada correctamente" : "Torneo creado correctamente");
+      router.push(`${base}/${t.id}`);
     },
     onError: (err: Error) => {
       // El botón se vuelve a habilitar siempre (antes había que recargar y
@@ -479,7 +499,7 @@ export default function NuevoTorneoPage() {
       } else {
         setMaybeCreated(true);
         qc.invalidateQueries({ queryKey: ["tournaments"] });
-        toast.error(`${status ? `${err.message}. ` : ""}No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo`);
+        toast.error(`${status ? `${err.message}. ` : ""}No se sabe si ${league ? "la liga se ha creado: revisa la lista de ligas" : "el torneo se ha creado: revisa la lista de torneos"} antes de volver a intentarlo`);
       }
     },
   });
@@ -552,7 +572,7 @@ export default function NuevoTorneoPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Nuevo torneo" />
+      <Header title={league ? "Nueva liga" : "Nuevo torneo"} />
 
       <div className="flex-1 p-6 max-w-3xl mx-auto w-full space-y-6">
 
@@ -605,13 +625,13 @@ export default function NuevoTorneoPage() {
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Información básica</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">Datos generales del torneo</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Datos generales de{league ? " la liga" : "l torneo"}</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Nombre del torneo" error={infoForm.formState.errors.name?.message}>
+                <Field label={league ? "Nombre de la liga" : "Nombre del torneo"} error={infoForm.formState.errors.name?.message}>
                   <Input
                     {...infoForm.register("name")}
-                    placeholder="AMT GOLD MADRID"
+                    placeholder={league ? "LIGA DE INVIERNO" : "AMT GOLD MADRID"}
                   />
                 </Field>
                 {isClubUser ? (
@@ -658,12 +678,23 @@ export default function NuevoTorneoPage() {
                     ) : null;
                   })()}
                 </Field>
-                <Field label="Fecha de fin" error={infoForm.formState.errors.endDate?.message}>
+                <Field label={league ? "Fin de la liga (último partido del cuadro final)" : "Fecha de fin"} error={infoForm.formState.errors.endDate?.message}>
                   <Input
                     {...infoForm.register("endDate")}
                     type="date"
                   />
                 </Field>
+                {league && (
+                  <Field label="Fin de la fase de grupos" error={infoForm.formState.errors.groupsEndDate?.message}>
+                    <Input
+                      {...infoForm.register("groupsEndDate")}
+                      type="date"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Hasta aquí se juegan los grupos; después, el cuadro final.
+                    </p>
+                  </Field>
+                )}
               </div>
               <Field label="Imagen del banner (opcional)">
                 <TournamentImageUploader
@@ -672,11 +703,11 @@ export default function NuevoTorneoPage() {
                 />
               </Field>
               <PlainTextField
-                label="Sobre el torneo"
+                label={league ? "Sobre la liga" : "Sobre el torneo"}
                 value={infoForm.watch("description") ?? ""}
                 onChange={(v) => infoForm.setValue("description", v, { shouldDirty: true, shouldValidate: !!infoForm.formState.errors.description })}
                 max={TOURNAMENT_DESCRIPTION_MAX}
-                placeholder="Qué es el torneo, a quién va dirigido, qué incluye…"
+                placeholder={league ? "Qué es la liga, a quién va dirigida, cómo se juega…" : "Qué es el torneo, a quién va dirigido, qué incluye…"}
                 help="Opcional. Texto plano: se enseña tal cual, con sus saltos de línea, en el visor público."
                 error={infoForm.formState.errors.description?.message}
               />
@@ -698,7 +729,7 @@ export default function NuevoTorneoPage() {
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-heading text-lg text-foreground">Categorías del torneo</h3>
+                  <h3 className="font-heading text-lg text-foreground">{league ? "Niveles de la liga (categorías)" : "Categorías del torneo"}</h3>
                   <p className="text-sm text-muted-foreground mt-0.5">Define las categorías y plazas disponibles</p>
                 </div>
                 <button
@@ -1113,7 +1144,7 @@ export default function NuevoTorneoPage() {
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Confirmar creación</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">Revisa los datos antes de crear el torneo</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Revisa los datos antes de crear {league ? "la liga" : "el torneo"}</p>
               </div>
 
               <div className="space-y-3">
@@ -1124,6 +1155,7 @@ export default function NuevoTorneoPage() {
                     ["Nombre",   infoData.name],
                     ["Club",     (isClubUser ? myClub?.name : clubs.find(c => c.id === infoData.clubId)?.name) ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
+                    ...(league ? [["Fin de grupos", infoData.groupsEndDate ?? "—"]] : []),
                     ["Premio",   infoData.prize || "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
@@ -1241,7 +1273,7 @@ export default function NuevoTorneoPage() {
             className="flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
           >
             {create.isPending && <Loader2 size={14} className="animate-spin" />}
-            {step === 5 ? (create.isPending ? "Creando..." : "Crear torneo") : "Siguiente"}
+            {step === 5 ? (create.isPending ? "Creando..." : league ? "Crear liga" : "Crear torneo") : "Siguiente"}
             {step < 5 && <ChevronRight size={15} />}
           </button>
         </div>
@@ -1254,13 +1286,13 @@ export default function NuevoTorneoPage() {
         confirmLabel="Salir"
         danger
         onClose={() => setShowLeaveModal(false)}
-        onConfirm={() => router.push("/torneos")}
+        onConfirm={() => router.push(base)}
       />
 
       <ConfirmModal
         open={confirmRetry}
         title="¿Volver a intentarlo?"
-        description="El intento anterior no tuvo una respuesta clara y puede que el torneo ya se haya creado. Revisa la lista de torneos: si está, volver a crearlo lo duplicaría."
+        description={`El intento anterior no tuvo una respuesta clara y puede que ${league ? "la liga ya se haya creado" : "el torneo ya se haya creado"}. Revisa la lista de ${league ? "ligas" : "torneos"}: si está, volver a crearl${league ? "a la duplicaría" : "o lo duplicaría"}.`}
         confirmLabel="Crear de todos modos"
         onClose={() => setConfirmRetry(false)}
         onConfirm={() => {

@@ -37,6 +37,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { kindWord, tournamentsBase } from "@/lib/league";
 import { z } from "zod";
 import type { TournamentStatus } from "@/types";
 
@@ -56,6 +57,8 @@ const makeSchema = (original: { current: Original | null }) => z.object({
   imageUrl:             z.string().nullable().optional(),
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
+  // Solo en una liga (el formulario de un torneo no lo trae): fin de la fase de grupos
+  groupsEndDate:        z.string().optional(),
   prize:                z.string().optional(),
   tier:                 z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:               z.string().optional(),
@@ -82,6 +85,14 @@ const makeSchema = (original: { current: Original | null }) => z.object({
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
+  }
+  // Liga: obligatorio, posterior al inicio y no posterior al fin (como el back)
+  if (data.groupsEndDate !== undefined) {
+    if (!data.groupsEndDate) {
+      ctx.addIssue({ code: "custom", path: ["groupsEndDate"], message: "Indica el fin de la fase de grupos" });
+    } else if (data.startDate && data.endDate && (data.groupsEndDate <= data.startDate || data.groupsEndDate > data.endDate)) {
+      ctx.addIssue({ code: "custom", path: ["groupsEndDate"], message: "Debe ser posterior al inicio y no posterior al fin de la liga" });
+    }
   }
   // La regla del asistente y del back, en la zona del torneo y sin exigir que
   // sea futuro (un torneo pasado se tiene que poder guardar). Solo si cambia
@@ -158,6 +169,10 @@ export default function EditarTorneoPage() {
     0,
   );
 
+  const league = tournament?.kind === "LEAGUE";
+  const base   = tournamentsBase(tournament?.kind);
+  const word   = kindWord(tournament?.kind);
+
   const original = useRef<Original | null>(null);
   const schema = useMemo(() => makeSchema(original), []);
   const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isDirty, dirtyFields } } = useForm<FormData>({
@@ -182,6 +197,7 @@ export default function EditarTorneoPage() {
       imageUrl:             tournament.imageUrl ?? "",
       startDate:            startStr,
       endDate:              endStr,
+      ...(tournament.kind === "LEAGUE" ? { groupsEndDate: dateOnlyKey(tournament.groupsEndDate) } : {}),
       prize:                tournament.prize ?? "",
       format:               tournament.format ?? "",
       scoringSystem:        tournament.scoringSystem ?? "",
@@ -221,8 +237,8 @@ export default function EditarTorneoPage() {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       // Con otra zona, los partidos con hora cambian de instante
       qc.invalidateQueries({ queryKey: ["matches", id] });
-      toast.success("Torneo actualizado correctamente");
-      router.push(`/torneos/${id}`);
+      toast.success(`${league ? "Liga actualizada" : "Torneo actualizado"} correctamente`);
+      router.push(`${base}/${id}`);
     },
     onError: (err: Error, variables) => {
       // Convención "Confirma para…": el admin (dueño) puede forzar transiciones no
@@ -234,7 +250,7 @@ export default function EditarTorneoPage() {
         save.mutate({ ...variables, force: true });
         return;
       }
-      toast.error(msg || "Error al actualizar el torneo");
+      toast.error(msg || `Error al actualizar ${league ? "la liga" : "el torneo"}`);
     },
   });
 
@@ -280,16 +296,16 @@ export default function EditarTorneoPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Editar torneo" />
+      <Header title={`Editar ${word}`} />
 
       <div className="flex-1 p-6 max-w-3xl mx-auto w-full space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/torneos" className="hover:text-foreground flex items-center gap-1">
-            <ChevronLeft size={14} /> Torneos
+          <Link href={base} className="hover:text-foreground flex items-center gap-1">
+            <ChevronLeft size={14} /> {league ? "Ligas" : "Torneos"}
           </Link>
           <span>/</span>
-          <Link href={`/torneos/${id}`} className="hover:text-foreground truncate max-w-[200px]">
+          <Link href={`${base}/${id}`} className="hover:text-foreground truncate max-w-[200px]">
             {tournament.name}
           </Link>
           <span>/</span>
@@ -397,9 +413,14 @@ export default function EditarTorneoPage() {
                 {/* deps: el error del cierre depende del inicio y se revalida al cambiarlo */}
                 <Input {...register("startDate", { deps: ["registrationDeadline"] })} type="date" />
               </Field>
-              <Field label="Fecha de fin" error={errors.endDate?.message}>
-                <Input {...register("endDate")} type="date" />
+              <Field label={league ? "Fin de la liga" : "Fecha de fin"} error={errors.endDate?.message}>
+                <Input {...register("endDate", { deps: ["groupsEndDate"] })} type="date" />
               </Field>
+              {league && (
+                <Field label="Fin de la fase de grupos" error={errors.groupsEndDate?.message}>
+                  <Input {...register("groupsEndDate")} type="date" />
+                </Field>
+              )}
             </div>
             <PlainTextField
               label="Sobre el torneo"
@@ -641,7 +662,7 @@ export default function EditarTorneoPage() {
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">
             <Link
-              href={`/torneos/${id}`}
+              href={`${base}/${id}`}
               className="px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             >
               Cancelar

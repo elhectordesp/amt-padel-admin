@@ -5,6 +5,8 @@ export type Gender             = "M" | "F";
 export type CategoryGender     = "M" | "F" | "MX" | "G" | "J";
 export type SponsorScope       = "CIRCUIT" | "TOURNAMENT" | "REGIONAL";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
+// Una liga es un torneo con fase de grupos larga y cuadro final (el `kind` del back)
+export type TournamentKind     = "TOURNAMENT" | "LEAGUE";
 export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
@@ -21,6 +23,8 @@ export type RankingGender      = Gender | "MX";
 
 export interface AdminStats {
   activeTournaments: number;
+  /** Ligas en marcha (falta con un back anterior a las ligas). */
+  activeLeagues?:    number;
   /** Jugadores distintos con una inscripción viva en torneos de la temporada. */
   registeredPlayers: number;
   /** Partidos por jugar programados para hoy (el día de España). */
@@ -177,6 +181,10 @@ export interface Tournament {
   club:        Club;
   prize?:       string;
   status:       TournamentStatus;
+  /** Falta con un back anterior a las ligas: entonces, un torneo. */
+  kind?:        TournamentKind;
+  /** Fin de la fase de grupos (solo ligas). */
+  groupsEndDate?: string | null;
   tier?:       TournamentTier;   // DB enum — usado por el admin
   spaTier?:    string;            // Clave SPA traducida — usado por la app móvil
   categories:  TournamentCategory[];
@@ -261,6 +269,7 @@ export interface DeletedTournament {
   id:        string;
   name:      string;
   status:    TournamentStatus;
+  kind?:     TournamentKind;
   startDate: string;
   endDate:   string;
   deletedAt: string;
@@ -670,6 +679,9 @@ export interface CreateTournamentPayload {
   imageUrl?:   string;
   startDate:   string;
   endDate:     string;
+  /** Sin él, un torneo. Una liga exige `groupsEndDate`. */
+  kind?:       TournamentKind;
+  groupsEndDate?: string;
   prize?:      string;
   tier:        TournamentTier;
   format?:     string;

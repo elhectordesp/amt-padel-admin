@@ -216,6 +216,11 @@ export const adminService = {
       api.get<Tournament[]>("/admin/tournaments").then((r) =>
         (r.data ?? []).map((t) => ({ ...t, status: t.status?.toUpperCase() as Tournament["status"] }))
       ),
+    /** Las ligas (el back, sin tipo, devuelve solo torneos: `list`). */
+    listLeagues: () =>
+      api.get<Tournament[]>("/admin/tournaments", { params: { kind: "LEAGUE" } }).then((r) =>
+        (r.data ?? []).map((t) => ({ ...t, status: t.status?.toUpperCase() as Tournament["status"] }))
+      ),
     detail: (id: string) =>
       api.get<Tournament>(`/tournaments/${id}`).then((r) =>
         r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
