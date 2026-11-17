@@ -5,7 +5,7 @@ import { canAccess, type ClubArea, type ClubStaffRole } from "@/lib/club-permiss
 describe("navForRole", () => {
   it("el gestor del club: lo diario arriba, sin Inscripciones ni Resultados", () => {
     expect(navForRole("club").map((i) => i.label)).toEqual([
-      "Hoy", "Calendario", "Reservas", "Caja", "Clientes", "Torneos", "Mi club", "Equipo", "Historial", "Patrocinadores",
+      "Hoy", "Calendario", "Reservas", "Caja", "Clientes", "Mensajes", "Torneos", "Mi club", "Equipo", "Historial", "Patrocinadores",
     ]);
     const hrefs = navForRole("club").map((i) => i.href);
     expect(hrefs).toContain("/caja");

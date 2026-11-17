@@ -85,6 +85,7 @@ describe("areaForPath", () => {
     ["/historial", "staff"],
     ["/mi-club/clientes", "customers"],
     ["/mi-club/clientes/abc", "customers"],
+    ["/mi-club/mensajes", "customers"],
     ["/torneos", "tournaments"],
     ["/torneos/t1/editar", "tournaments"],
     ["/mi-club/torneos", "tournaments"],

@@ -89,7 +89,7 @@ export function canAccess(
 export function areaForPath(pathname: string): ClubArea | null {
   const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
   if (under("/mi-club/equipo") || under("/historial")) return "staff";
-  if (under("/mi-club/clientes")) return "customers";
+  if (under("/mi-club/clientes") || under("/mi-club/mensajes")) return "customers";
   if (under("/mi-club/torneos") || under("/torneos") || under("/inscripciones")) return "tournaments";
   if (under("/resultados")) return "results";
   if (under("/caja")) return "cash";

@@ -146,6 +146,7 @@ function CustomerView({
         <div className="text-sm text-muted-foreground">
           {c.hasAccount ? "Tiene cuenta en la app de AMT" : "No tiene la app"}
           {c.archivedAt && " · Archivado"}
+          {c.messagesOptOutAt && " · No recibe mensajes del club"}
         </div>
         <Button variant="outline" size="sm" onClick={() => archive.mutate()} disabled={archive.isPending}>
           {c.archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
