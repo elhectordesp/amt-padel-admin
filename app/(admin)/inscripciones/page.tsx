@@ -16,7 +16,9 @@ import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { PaymentTotals } from "@/components/admin/payment-totals";
+import { TournamentSelectOptions } from "@/components/admin/tournament-select-options";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
+import { kindWord, tournamentsBase } from "@/lib/league";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
 import { compareWaitlist, groupByPair, paymentCsvColumns, pendingInviteLabel, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
@@ -73,8 +75,8 @@ export default function InscripcionesPage() {
 function InscripcionesRoute() {
   const param = useSearchParams().get("torneo") ?? "";
   const { data: tournaments, isPending } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey: ["tournaments", "all"],
+    queryFn:  adminService.tournaments.listAll,
   });
   const unknown = !!param && !!tournaments && !tournaments.some((t: Tournament) => t.id === param);
 
@@ -113,8 +115,8 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
   const [paymentOf,        setPaymentOf]        = useState<{ reg: AdminRegistration; player: PaymentPlayer } | null>(null);
 
   const { data: tournaments = [] } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey: ["tournaments", "all"],
+    queryFn:  adminService.tournaments.listAll,
   });
 
   const { data: registrations = [], isLoading } = useQuery({
@@ -350,21 +352,19 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
             onChange={(e) => handleTournamentChange(e.target.value)}
             className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] min-w-[280px]"
           >
-            <option value="">Selecciona un torneo...</option>
+            <option value="">Selecciona un torneo o una liga...</option>
             {(tournaments as Tournament[]).length === 0 && (
-              <option disabled>— No hay torneos disponibles —</option>
+              <option disabled>— No hay torneos ni ligas disponibles —</option>
             )}
-            {(tournaments as Tournament[]).map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
+            <TournamentSelectOptions tournaments={tournaments as Tournament[]} />
           </select>
 
           {selectedTournament && (
             <Link
-              href={`/torneos/${selectedTournament.id}`}
+              href={`${tournamentsBase(selectedTournament.kind)}/${selectedTournament.id}`}
               className="flex items-center gap-1 text-xs text-[#D4AF37] hover:underline"
             >
-              Ver torneo <ChevronRight size={12} />
+              Ver {kindWord(selectedTournament.kind)} <ChevronRight size={12} />
             </Link>
           )}
 

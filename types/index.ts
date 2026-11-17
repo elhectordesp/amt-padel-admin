@@ -65,7 +65,10 @@ export interface TournamentScheduleDay {
   id:                      string;
   label:                   string;
   // Medianoche UTC del día (dateOnlyKey); null en jornadas antiguas sin fecha
+  // y en los días de una liga
   date?:                   string | null;
+  // Solo en ligas: día de la semana (1 = lunes … 7 = domingo); el `label` es «Lunes»
+  weekday?:                number | null;
   slots:                   string[];
   maxUnavailableHours:     number;
   isFinal?:                boolean;
@@ -542,6 +545,12 @@ export interface MatchResult {
   scoringFormat?: ScoringFormat;
   /** El del back, en mayúsculas (SCHEDULED, ONGOING, FINISHED…). Para saber si tiene resultado, isMatchFinished. */
   status:      string;
+  /** Nombre del grupo («Grupo A»), en los partidos de grupos. */
+  group?:      string | null;
+  /** Ronda del partido; en una liga, su jornada (1, 2, 3…). */
+  round?:      number | null;
+  /** Los jugadores del partido (con el equipo, 1 o 2). */
+  players?:    { userId: string; team: number }[];
 }
 
 /** Una jornada del torneo, con sus franjas. `date` puede faltar. */
@@ -724,12 +733,21 @@ export interface CreateTournamentPayload {
     prizeConsolation?:string;
     hasConsolation?:  boolean;
   }[];
-  schedule?: {
-    date:   string;
-    blocks: {
-      start: string;
-      end:   string;
-    }[];
+  /** Un torneo, un día por fecha; una liga, un día por día de la semana. */
+  schedule?: ScheduleDayPayload[];
+}
+
+/** Un día de juego que se manda al back: con `date` (torneo) o con `weekday` (liga). */
+export interface ScheduleDayPayload {
+  date?:    string;
+  /** Solo ligas: 1 = lunes … 7 = domingo; sin `date`. */
+  weekday?: number;
+  type?:    string;
+  isFinal?: boolean;
+  maxUnavailableSlots?: number;
+  blocks: {
+    start: string;
+    end:   string;
   }[];
 }
 

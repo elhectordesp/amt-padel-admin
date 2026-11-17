@@ -15,7 +15,7 @@ import type {
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
-  DeletedTournament, DeletedPlayer, CategoryGender, ScoringFormat,
+  DeletedTournament, DeletedPlayer, CategoryGender, ScoringFormat, ScheduleDayPayload,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
@@ -222,6 +222,18 @@ export const adminService = {
       api.get<Tournament[]>("/admin/tournaments", { params: { kind: "LEAGUE" } }).then((r) =>
         (r.data ?? []).map((t) => ({ ...t, status: t.status?.toUpperCase() as Tournament["status"] }))
       ),
+    /**
+     * Torneos y ligas juntos, con su `kind` (los torneos, aunque el back no lo
+     * mande, `TOURNAMENT`): para los selectores de Inscripciones, Resultados y
+     * el buscador, que sirven para los dos tipos.
+     */
+    listAll: () =>
+      Promise.all([adminService.tournaments.list(), adminService.tournaments.listLeagues()]).then(
+        ([tournaments, leagues]) => [
+          ...tournaments.map((t) => ({ ...t, kind: t.kind ?? ("TOURNAMENT" as const) })),
+          ...leagues,
+        ],
+      ),
     detail: (id: string) =>
       api.get<Tournament>(`/tournaments/${id}`).then((r) =>
         r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
@@ -235,7 +247,7 @@ export const adminService = {
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data, { timeout: 30_000 }).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     /** Editar jornadas/tramos horarios (solo durante el montaje). Reemplaza todas las jornadas. */
-    updateSchedule:  (id: string, schedule: { date: string; type?: string; isFinal?: boolean; maxUnavailableSlots?: number; blocks: { start: string; end: string }[] }[]) =>
+    updateSchedule:  (id: string, schedule: ScheduleDayPayload[]) =>
       api.put(`/admin/tournaments/${id}/schedule`, { schedule }).then((r) => r.data),
     delete:          (id: string, force?: boolean)  => api.delete(`/admin/tournaments/${id}`, force ? { params: { force: true } } : undefined).then((r) => r.data),
     /** Los torneos borrados, los más recientes primero (solo AMT). */

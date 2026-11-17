@@ -260,10 +260,11 @@ describe("TournamentPreparationChecklist — liga", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Liga publicada"));
   });
 
-  it("el paso de grupos lleva al cuadro y el enlace de «Avanzado» cuelga de /ligas", async () => {
+  it("el paso de grupos lleva a los grupos y el enlace de «Avanzado» cuelga de /ligas", async () => {
     preparationMock.mockResolvedValue(leaguePrep("OPEN", ["CATEGORIES", "PUBLISH"]));
     const { onNavigate } = renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");
-    fireEvent.click(await screen.findByRole("button", { name: "Ir al cuadro" }));
+    // En una liga, la pestaña del sorteo se llama «Grupos» (su clave sigue siendo «cuadro»)
+    fireEvent.click(await screen.findByRole("button", { name: "Ir a los grupos" }));
     expect(onNavigate).toHaveBeenCalledWith("cuadro");
     expect(screen.getByRole("link", { name: "Editar → Avanzado" })).toHaveAttribute("href", "/ligas/t1/editar#avanzado");
   });

@@ -254,7 +254,7 @@ export function TournamentPreparationChecklist({
           <button className={secondary} onClick={() => setConfirm("close")}>Cerrar inscripciones</button>
         ) : null;
       case "DRAW":
-        return <button className={secondary} onClick={() => onNavigate("cuadro")}>Ir al cuadro</button>;
+        return <button className={secondary} onClick={() => onNavigate("cuadro")}>{league ? "Ir a los grupos" : "Ir al cuadro"}</button>;
       case "SCHEDULE":
         return <button className={secondary} onClick={() => onNavigate("horarios")}>Ir a horarios</button>;
       case "PUBLISH":

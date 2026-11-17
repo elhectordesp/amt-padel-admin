@@ -39,6 +39,7 @@ import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-di
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { TournamentPreparationChecklist } from "@/components/admin/tournament-preparation-checklist";
 import { AvailabilityHeatmap } from "@/components/admin/availability-heatmap";
+import { LeagueRoundsTab, LeagueStandingsTab, type LeagueStandingsGroup } from "@/components/admin/league-tabs";
 import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
@@ -1467,7 +1468,8 @@ function PistasTab({
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "cuadro" | "horarios" | "mas";
+// «jornadas» y «clasificacion» son de las ligas
+type Tab = "resumen" | "inscripciones" | "cuadro" | "jornadas" | "clasificacion" | "horarios" | "mas";
 // El filtro de Inscripciones: por estado o «Sin pagar» (UNPAID: las no
 // canceladas a las que les falta pagar a alguno de sus jugadores)
 type RegFilter = "all" | RegistrationStatus | "UNPAID";
@@ -2394,9 +2396,17 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
-              { key: "cuadro",        label: "Cuadro"         },
+              // En una liga, el sorteo de los grupos; y tras él, las jornadas y la clasificación
+              { key: "cuadro",        label: league ? "Grupos" : "Cuadro" },
+              ...(league
+                ? [
+                    { key: "jornadas",      label: "Jornadas"      },
+                    { key: "clasificacion", label: "Clasificación" },
+                  ]
+                : []),
               { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
-              { key: "horarios",      label: "Horarios"       },
+              // Una liga no tiene fecha ni pista por partido: solo la disponibilidad de los jugadores
+              { key: "horarios",      label: league ? "Disponibilidad" : "Horarios" },
               { key: "mas",           label: "Más"            },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
@@ -2415,7 +2425,7 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Sub-navegación de Horarios (Lista / Tablero) */}
-        {tab === "horarios" && (
+        {tab === "horarios" && !league && (
           <div className="flex flex-wrap items-center gap-2 py-3">
             {([
               { key: "lista", label: "Lista / Calendario" },
@@ -3159,7 +3169,7 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── CALENDARIO TAB ── */}
-        {tab === "horarios" && horariosView === "lista" && (
+        {tab === "horarios" && !league && horariosView === "lista" && (
           <CalendarTab
             matches={matches}
             loading={loadingMatches}
@@ -4146,12 +4156,32 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── PISTAS TAB ── */}
-        {tab === "horarios" && horariosView === "tablero" && (
+        {tab === "horarios" && !league && horariosView === "tablero" && (
           <PistasTab tournamentId={id} categories={tournament?.categories ?? []} timeZone={tournamentTimeZone(tournament)} />
         )}
 
-        {tab === "horarios" && horariosView === "disponibilidad" && (
+        {tab === "horarios" && (league || horariosView === "disponibilidad") && (
           <AvailabilityHeatmap tournamentId={id} categories={tournament.categories} />
+        )}
+
+        {/* ── JORNADAS TAB (liga) ── */}
+        {tab === "jornadas" && league && (
+          <LeagueRoundsTab
+            startDate={dateOnlyKey(tournament.startDate)}
+            categories={tournament.categories}
+            matches={bracketMatches}
+            standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+            onEnterResult={(m) => { setResultMatch(m); setResultCorrection(false); }}
+            onCorrectResult={(m) => { setResultMatch(m); setResultCorrection(true); }}
+          />
+        )}
+
+        {/* ── CLASIFICACIÓN TAB (liga) ── */}
+        {tab === "clasificacion" && league && (
+          <LeagueStandingsTab
+            categories={tournament.categories}
+            standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+          />
         )}
 
         {/* ── HISTORIAL TAB ── */}
@@ -4254,6 +4284,7 @@ export default function TorneoDetailPage() {
           tournament.categories.find((c) => c.id === bracketCatId)
             ?.confirmedCount ?? 0
         }
+        league={league}
         alreadyHasBracket={bracketMatches.some(
           (m: any) => m.categoryId === bracketCatId,
         )}

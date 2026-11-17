@@ -63,6 +63,12 @@ interface Props {
    * deshabilitado con motivo claro.
    */
   registrationsOpenReason?: string | null;
+  /**
+   * Es una liga: siempre son grupos (todos contra todos por jornadas) y su
+   * cuadro final llega más adelante, así que no se piden formato, clasificados
+   * ni ronda inicial.
+   */
+  league?: boolean;
   /** «Forzar» el bloqueo de los grupos del cuadro publicado al regenerar. */
   lock?: GroupsLockOptions;
   /**
@@ -99,6 +105,7 @@ export function GenerateBracketDialog({
   alreadyHasBracket = false,
   currentFormat = null,
   registrationsOpenReason = null,
+  league = false,
   lock,
   onGroupsLocked,
   onGenerated,
@@ -106,7 +113,7 @@ export function GenerateBracketDialog({
   const [genMode, setGenMode] = useState<GenerationMode>("auto"); // Bloque 3
   const [manualNumGroups, setManualNumGroups] = useState<number>(2);
   const [format, setFormat] = useState<Format>(() =>
-    alreadyHasBracket && currentFormat ? toDialogFormat(currentFormat) : "grupos+eliminatoria",
+    !league && alreadyHasBracket && currentFormat ? toDialogFormat(currentFormat) : "grupos+eliminatoria",
   );
   const [distMode, setDistMode] = useState<DistMode>("byCount");
   const [numGroups, setNumGroups] = useState<AutoOrNumber>("auto");
@@ -287,7 +294,7 @@ export function GenerateBracketDialog({
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
             <h2 className="font-heading text-base text-foreground">
-              Generar cuadro — {categoryLabel}
+              {league ? "Sortear grupos" : "Generar cuadro"} — {categoryLabel}
             </h2>
           </div>
           <button
@@ -409,6 +416,12 @@ export function GenerateBracketDialog({
           {genMode === "auto" && (
           <>
           {/* ── Formato ──────────────────────────────────────────── */}
+          {league ? (
+            <div className="rounded-md border border-border bg-background p-2.5 text-[11px] text-muted-foreground">
+              Una liga se juega en <span className="text-foreground">grupos, todos contra todos por jornadas</span>.
+              El cuadro final llegará más adelante.
+            </div>
+          ) : (
           <Field label="Formato">
             <div className="space-y-1.5">
               <Radio
@@ -423,6 +436,7 @@ export function GenerateBracketDialog({
               />
             </div>
           </Field>
+          )}
 
           {format === "grupos+eliminatoria" && (
             <>
@@ -482,6 +496,8 @@ export function GenerateBracketDialog({
                 </div>
               </Field>
 
+              {!league && (
+              <>
               {/* ── Top N (base por grupo) ────────────────────── */}
               <Field label="Pasan de cada grupo">
                 <div className="flex gap-3">
@@ -540,6 +556,8 @@ export function GenerateBracketDialog({
                   })}
                 </select>
               </Field>
+              </>
+              )}
             </>
           )}
 
@@ -571,6 +589,7 @@ export function GenerateBracketDialog({
                 topN={topN}
                 extraN={extraN}
                 elimRound={elimRound}
+                league={league}
               />
             ) : null}
           </div>
@@ -620,7 +639,7 @@ export function GenerateBracketDialog({
               ) : (
                 <GitBranch size={14} />
               )}
-              {genMode === "manual" ? "Crear grupos vacíos" : "Generar cuadro"}
+              {genMode === "manual" ? "Crear grupos vacíos" : league ? "Sortear grupos" : "Generar cuadro"}
             </Button>
           )}
         </div>
@@ -671,8 +690,27 @@ function Radio({
 }
 
 function PreviewSummary({
-  preview, topN, extraN, elimRound,
-}: { preview: PreviewResp; topN: number; extraN: number; elimRound: AutoOrRound }) {
+  preview, topN, extraN, elimRound, league = false,
+}: { preview: PreviewResp; topN: number; extraN: number; elimRound: AutoOrRound; league?: boolean }) {
+  // Una liga: los grupos y sus jornadas (con N parejas, N-1 jornadas si es par y N si es impar)
+  if (league && preview.isGroups) {
+    const sizes = preview.groups.map((g) => g.pairs.length);
+    const rounds = Math.max(0, ...sizes.map((n) => (n % 2 === 0 ? n - 1 : n)));
+    const sizeBreakdown = countBy(sizes)
+      .map(([size, count]) => `${count} de ${size}`)
+      .join(" + ");
+    return (
+      <div className="space-y-1 text-xs">
+        <p className="flex items-center gap-1.5 text-foreground">
+          <Users size={11} className="text-primary" />
+          {preview.groups.length} grupos ({sizeBreakdown}) · {preview.totalPairs} parejas
+        </p>
+        <p className="text-muted-foreground">
+          {preview.totalMatches} partidos en {rounds} {rounds === 1 ? "jornada" : "jornadas"}
+        </p>
+      </div>
+    );
+  }
   if (!preview.isGroups) {
     return (
       <div className="space-y-1 text-xs">
