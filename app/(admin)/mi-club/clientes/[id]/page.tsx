@@ -1,6 +1,7 @@
 /**
  * /mi-club/clientes/[id] — ficha de un cliente del club: contacto, si es
- * socio (número y fecha de alta), etiquetas, notas privadas del club y sus
+ * socio (número y fecha de alta), etiquetas, notas privadas del club, sus
+ * bonos de reservas (vender, cobrar, cancelar; solo con acceso a la caja) y sus
  * reservas y torneos en el club. Con cuenta AMT, el contacto es el de su
  * cuenta y no se edita aquí; sin cuenta, sí.
  */
@@ -12,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Archive, ArchiveRestore, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import { CustomerVouchersSection } from "@/components/admin/customer-vouchers-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Field, Input } from "@/components/admin/form";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -24,6 +26,7 @@ import {
   type ClubCustomerDetail,
   type UpdateClubCustomerPayload,
 } from "@/lib/services/club-customers";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -98,6 +101,8 @@ function CustomerView({
   clubId, customer: c, timeZone,
 }: { clubId: string; customer: ClubCustomerDetail; timeZone: string | null }) {
   const qc = useQueryClient();
+  // Los bonos son dinero: solo los ve quien puede leer la caja
+  const canSeeVouchers = useClubAccess().can("cash", "read");
   const [tab, setTab] = useState<Tab>("bookings");
   const [notes, setNotes] = useState(c.notes ?? "");
   const [isMember, setIsMember] = useState(c.isMember);
@@ -216,6 +221,12 @@ function CustomerView({
           </Button>
         </Card>
       </div>
+
+      {canSeeVouchers && timeZone && (
+        <div className="mt-4">
+          <CustomerVouchersSection clubId={clubId} customerId={c.id} timeZone={timeZone} />
+        </div>
+      )}
 
       <div className="mt-6 flex gap-2">
         <TabButton active={tab === "bookings"} onClick={() => setTab("bookings")}>Reservas</TabButton>

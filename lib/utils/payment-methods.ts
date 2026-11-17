@@ -18,6 +18,8 @@ const LABELS: Record<string, string> = {
   ...Object.fromEntries(PAYMENT_METHOD_OPTIONS.map((o) => [o.value, o.label])),
   ONLINE:        "Online",
   PENDING:       "Pendiente",
+  // Reserva pagada con una sesión de un bono (no es un método de cobro: solo se lee)
+  VOUCHER:       "Bono",
   // Solo filas antiguas de reservas (no se sabe si fue efectivo o tarjeta)
   CASH_AT_VENUE: "En el club",
   PAID_MANUAL:   "Pagada",

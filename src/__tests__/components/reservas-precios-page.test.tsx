@@ -34,6 +34,13 @@ vi.mock("@/lib/services/bookings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/bookings")>("@/lib/services/bookings");
   return { ...actual, bookingsService: svc };
 });
+// La pestaña «Bonos»: su catálogo y el acceso del rol (aquí, todo)
+const voucherSvc = vi.hoisted(() => ({ types: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }));
+vi.mock("@/lib/services/club-vouchers", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/club-vouchers")>("@/lib/services/club-vouchers");
+  return { ...actual, clubVouchersService: voucherSvc };
+});
+vi.mock("@/lib/use-club-access", () => ({ useClubAccess: () => ({ roles: null, can: () => true }) }));
 
 import PreciosPage from "../../../app/(admin)/mi-club/reservas/precios/page";
 
@@ -177,6 +184,25 @@ describe("Precios de las pistas", () => {
         membersOnly: false,
       }),
     );
+  });
+
+  it("la pestaña «Bonos» enseña el catálogo de bonos y «Precios» vuelve a las cuadrículas", async () => {
+    voucherSvc.types.list.mockResolvedValue([
+      { id: "t1", clubId: "c1", name: "Bono 10", sessions: 10, priceCents: 12000, validDays: 90, active: true },
+    ]);
+    renderPage();
+    // Por defecto, los precios de siempre
+    expect(await screen.findByLabelText("Precio 90 min, franja 1 (€)")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Precios" })).toHaveAttribute("aria-selected", "true");
+    expect(voucherSvc.types.list).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Bonos" }));
+    expect(await screen.findByText("Bono 10")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Bonos" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByLabelText("Precio 90 min, franja 1 (€)")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Precios" }));
+    expect(await screen.findByLabelText("Precio 90 min, franja 1 (€)")).toBeInTheDocument();
   });
 
   it("una oferta sin descuento válido no se manda", async () => {

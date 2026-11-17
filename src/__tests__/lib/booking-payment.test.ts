@@ -16,6 +16,10 @@ describe("paymentMethodLabel", () => {
     expect(paymentMethodLabel("ONLINE")).toBe("Online");
   });
 
+  it("pagada con una sesión de bono: «Bono»", () => {
+    expect(paymentMethodLabel("VOUCHER")).toBe("Bono");
+  });
+
   it("los valores antiguos de las reservas conservan su etiqueta", () => {
     expect(paymentMethodLabel("CASH_AT_VENUE")).toBe("En el club");
     expect(paymentMethodLabel("PAID_MANUAL")).toBe("Pagada");
@@ -35,6 +39,10 @@ describe("paymentAction", () => {
     for (const method of ["CASH", "CARD", "BIZUM", "TRANSFER", "OTHER", "CASH_AT_VENUE", "ONLINE", "PAID_MANUAL"] as const) {
       expect(paymentAction(method)).toBe("markUnpaid");
     }
+  });
+
+  it("pagada con bono: quitarle el bono (la sesión vuelve), no «marcar como no pagada»", () => {
+    expect(paymentAction("VOUCHER")).toBe("removeVoucher");
   });
 
   it("sin método, nada: ni «Marcar como no pagada» ni volver a crear lo que se borró", () => {

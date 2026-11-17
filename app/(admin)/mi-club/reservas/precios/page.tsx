@@ -8,6 +8,8 @@
  *
  * Encima, el selector «Precios base / <temporada>»: la cuadrícula edita los
  * precios de lo elegido (cada temporada tiene los suyos). Debajo, las ofertas.
+ *
+ * La pestaña «Bonos» es el catálogo de bonos de reservas del club.
  */
 
 "use client";
@@ -20,6 +22,7 @@ import { toast } from "sonner";
 import { PriceOffersSection } from "@/components/admin/price-offers-section";
 import { PriceSeasonsPanel } from "@/components/admin/price-seasons-panel";
 import { ReservasPage } from "@/components/admin/reservas-page";
+import { VoucherTypesSection } from "@/components/admin/voucher-types-section";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
@@ -42,8 +45,39 @@ import {
 import type { Court } from "@/types";
 import type { ClubOperatingHours, CourtPriceSlot } from "@/types/bookings";
 
+type PriceTab = "precios" | "bonos";
+
+const PRICE_TABS: { id: PriceTab; label: string }[] = [
+  { id: "precios", label: "Precios" },
+  { id: "bonos",   label: "Bonos" },
+];
+
+function PriceTabs({ tab, onChange }: { tab: PriceTab; onChange: (tab: PriceTab) => void }) {
+  return (
+    <div role="tablist" className="mt-2 flex gap-1 border-b border-border">
+      {PRICE_TABS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={tab === t.id}
+          onClick={() => onChange(t.id)}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            tab === t.id
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function PreciosPage() {
   const { role, clubId } = useRole();
+  const [tab, setTab] = useState<PriceTab>("precios");
 
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
@@ -86,9 +120,21 @@ export default function PreciosPage() {
 
   const courts = courtsQuery.data ?? [];
 
+  if (tab === "bonos") {
+    return (
+      <ReservasPage title="Precios">
+        <PriceTabs tab={tab} onChange={setTab} />
+        <div className="mt-6">
+          <VoucherTypesSection clubId={clubId} />
+        </div>
+      </ReservasPage>
+    );
+  }
+
   return (
     <ReservasPage title="Precios">
-      <p className="mt-2 text-sm text-muted-foreground">
+      <PriceTabs tab={tab} onChange={setTab} />
+      <p className="mt-4 text-sm text-muted-foreground">
         El precio es POR PISTA (toda la reserva, no por jugador). Si una combinación de día, franja y duración no tiene precio, no se ofrecerá al jugador.
       </p>
 

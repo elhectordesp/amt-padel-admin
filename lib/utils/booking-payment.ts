@@ -16,13 +16,15 @@ export function paymentMethodLabel(method: BookingPaymentMethod | null): string 
 }
 
 /**
- * Qué puede hacer el club con el pago: marcarla pagada si está pendiente o
- * como no pagada si consta un cobro. Sin método, nada: sus datos de cobro se
- * borraron y marcarla los volvería a crear.
+ * Qué puede hacer el club con el pago: marcarla pagada si está pendiente,
+ * como no pagada si consta un cobro, o quitarle el bono si se pagó con uno (la
+ * sesión vuelve al bono). Sin método, nada: sus datos de cobro se borraron y
+ * marcarla los volvería a crear.
  */
 export function paymentAction(
   method: BookingPaymentMethod | null,
-): "markPaid" | "markUnpaid" | null {
+): "markPaid" | "markUnpaid" | "removeVoucher" | null {
   if (method === null) return null;
+  if (method === "VOUCHER") return "removeVoucher";
   return method === "PENDING" ? "markPaid" : "markUnpaid";
 }

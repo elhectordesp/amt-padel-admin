@@ -3,11 +3,14 @@ import { api } from "@/lib/api";
 /**
  * Caja del día y deudas del club (B9). Los importes van en céntimos. El método
  * de cada movimiento es del catálogo único (CASH, CARD, BIZUM, TRANSFER,
- * ONLINE, OTHER) o, en reservas antiguas, CASH_AT_VENUE / PAID_MANUAL.
+ * ONLINE, OTHER) o, en reservas antiguas, CASH_AT_VENUE / PAID_MANUAL. Una
+ * reserva pagada con bono lleva VOUCHER y suma 0: el dinero entró con la venta
+ * del bono.
  */
 
 export interface CashMovement {
-  source:      "BOOKING" | "REGISTRATION";
+  /** VOUCHER: la venta de un bono (el día de su cobro) o, en negativo, su devolución. */
+  source:      "BOOKING" | "REGISTRATION" | "VOUCHER";
   refId:       string;
   /** Cuándo se cobró (ISO). */
   at:          string;
