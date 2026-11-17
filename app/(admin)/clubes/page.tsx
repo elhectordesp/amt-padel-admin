@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -58,6 +58,8 @@ function CourtsPanel({
   );
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // ── ClubModal ──────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
@@ -95,6 +97,13 @@ function ClubModal({
         }
       : { ...EMPTY_FORM }
   );
+  // Alta de un club nuevo en dos pasos: datos del club y email de su primer
+  // propietario. Si el club se crea y la invitación falla, el club ya existe:
+  // se reintenta solo la invitación.
+  const [step,         setStep]         = useState<1 | 2>(1);
+  const [ownerEmail,   setOwnerEmail]   = useState("");
+  const [created,      setCreated]      = useState<Club | null>(null);
+  const [inviteError,  setInviteError]  = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeLog, setGeoLog]   = useState<{ query: string; found: string | null }[]>([]);
 
@@ -144,6 +153,25 @@ function ClubModal({
     }
   };
 
+  const inviteFailed = useRef(false);
+  const createAndInvite = async (payload: Parameters<typeof adminService.clubs.create>[0]): Promise<Club> => {
+    inviteFailed.current = false;
+    setInviteError(null);
+    let target = created;
+    if (!target) {
+      target = await adminService.clubs.create(payload);
+      setCreated(target);
+      qc.invalidateQueries({ queryKey: ["admin-clubs"] });
+    }
+    try {
+      await adminService.clubs.inviteStaff(target.id, ownerEmail.trim(), ["OWNER"]);
+    } catch (e) {
+      inviteFailed.current = true;
+      setInviteError(e instanceof Error ? e.message : "No se pudo enviar la invitación");
+    }
+    return target;
+  };
+
   const save = useMutation({
     mutationFn: () => {
       const latN = form.lat.trim() !== "" ? Number(form.lat) : undefined;
@@ -164,12 +192,14 @@ function ClubModal({
         // La heredan los torneos nuevos del club
         timezone:     form.timezone,
       };
-      return isEditing
-        ? adminService.clubs.update(club!.id, payload)
-        : adminService.clubs.create(payload);
+      if (isEditing) return adminService.clubs.update(club!.id, payload);
+      return createAndInvite(payload);
     },
     onSuccess: (saved: Club | undefined) => {
       qc.invalidateQueries({ queryKey: ["admin-clubs"] });
+      // Alta con la invitación fallida: el club queda creado y se queda el
+      // diálogo abierto para reintentar
+      if (!isEditing && inviteFailed.current) return;
       // Un club por configurar se activa solo al guardar sus datos reales
       if (isEditing && club?.active === false && saved?.active === true)
         toast.success("Club actualizado y publicado en la app");
@@ -190,6 +220,14 @@ function ClubModal({
       toast.error("El email de contacto no parece válido");
       return;
     }
+    if (!isEditing && step === 1) {
+      setStep(2);
+      return;
+    }
+    if (!isEditing && !EMAIL_RE.test(ownerEmail.trim())) {
+      toast.error("Escribe un email válido para el propietario");
+      return;
+    }
     save.mutate();
   };
 
@@ -198,7 +236,7 @@ function ClubModal({
       <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="font-heading text-lg">
-            {isEditing ? "Editar club" : "Nuevo club"}
+            {isEditing ? "Editar club" : step === 1 ? "Nuevo club · 1 de 2" : "Nuevo club · 2 de 2"}
           </h2>
           <button
             type="button"
@@ -211,6 +249,35 @@ function ClubModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {club && <ClubStatusNote club={club} />}
+          {!isEditing && step === 2 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {created
+                  ? <>El club <strong className="text-foreground">{created.name}</strong> ya está creado.</>
+                  : <>Se creará <strong className="text-foreground">{form.name.trim()}</strong> y se invitará a su primer propietario.</>}
+                {" "}Recibirá un email para entrar y activar el club.
+              </p>
+              <label className="space-y-1.5 block">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Email del propietario <span className="text-destructive">*</span>
+                </span>
+                <input
+                  type="email"
+                  autoFocus
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  placeholder="propietario@clubejemplo.com"
+                  className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                />
+              </label>
+              {inviteError && (
+                <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  El club se ha creado, pero no se ha podido enviar la invitación: {inviteError}. Revisa el email y reintenta.
+                </p>
+              )}
+            </div>
+          )}
+          <div className={!isEditing && step === 2 ? "hidden" : "space-y-4"}>
           {/* Name + City */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="space-y-1.5">
@@ -419,21 +486,35 @@ function ClubModal({
             <span className="text-sm text-foreground">Club asociado AMT</span>
           </label>
 
+          </div>
+
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground"
-            >
-              Cancelar
-            </button>
+            {!isEditing && step === 2 && !created ? (
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground"
+              >
+                Atrás
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground"
+              >
+                {created ? "Cerrar" : "Cancelar"}
+              </button>
+            )}
             <button
               type="submit"
               disabled={save.isPending}
               className="px-5 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-2"
             >
               {save.isPending && <Loader2 size={14} className="animate-spin" />}
-              {isEditing ? "Guardar cambios" : "Crear club"}
+              {isEditing
+                ? "Guardar cambios"
+                : step === 1 ? "Siguiente" : created ? "Reintentar invitación" : "Crear club e invitar"}
             </button>
           </div>
         </form>
