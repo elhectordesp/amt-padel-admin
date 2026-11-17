@@ -85,6 +85,8 @@ export interface AdminUser {
   // Los clubes en los que trabaja (equipo) y con cuál está trabajando ahora
   clubs?:        ClubMembership[];
   activeClubId?: string | null;
+  // Club en el que AMT trabaja como soporte (null: no está en soporte)
+  supportClubId?: string | null;
 }
 
 /**

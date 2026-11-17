@@ -191,7 +191,7 @@ export function Sidebar() {
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────────────── */}
-      <div className="hidden min-[1025px]:flex h-screen sticky top-0 shrink-0">
+      <div className="hidden min-[1025px]:flex h-full sticky top-0 shrink-0">
         {sidebarContent(false)}
       </div>
 
