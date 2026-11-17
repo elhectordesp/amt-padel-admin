@@ -88,6 +88,26 @@ describe("Horarios: cierre a medianoche", () => {
       expect(svc.exceptions.create).toHaveBeenCalledWith("c1", expect.objectContaining({ customClose: "24:00" })),
     );
   });
+
+  it("un festivo puede cobrarse como otro día de la semana", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.change(screen.getByLabelText(/Se cobra como/), { target: { value: "7" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+
+    await waitFor(() =>
+      expect(svc.exceptions.create).toHaveBeenCalledWith("c1", expect.objectContaining({ priceAsDayOfWeek: 7 })),
+    );
+  });
+
+  it("sin elegir «se cobra como», no se manda", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+
+    await waitFor(() => expect(svc.exceptions.create).toHaveBeenCalled());
+    expect(svc.exceptions.create.mock.calls[0][1].priceAsDayOfWeek).toBeUndefined();
+  });
 });
 
 describe("Horarios — zona del club (B1)", () => {

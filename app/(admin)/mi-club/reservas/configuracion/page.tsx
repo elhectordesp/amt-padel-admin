@@ -42,6 +42,7 @@ type FormState = Pick<
   | "welcomeMessageMarkdown"
   | "notifyAdminViaPush"
   | "notifyAdminViaEmail"
+  | "memberDiscountPercent"
 >;
 
 export default function ConfiguracionPage() {
@@ -81,6 +82,7 @@ export default function ConfiguracionPage() {
         welcomeMessageMarkdown,
         notifyAdminViaPush,
         notifyAdminViaEmail,
+        memberDiscountPercent,
       } = query.data;
       setForm({
         cancellationWindowHours,
@@ -104,6 +106,7 @@ export default function ConfiguracionPage() {
         welcomeMessageMarkdown,
         notifyAdminViaPush,
         notifyAdminViaEmail,
+        memberDiscountPercent,
       });
       setHydrated(true);
     }
@@ -251,6 +254,17 @@ export default function ConfiguracionPage() {
             value={form!.allowGuestPlayers}
             onChange={(v) => set("allowGuestPlayers", v)}
             help="Útil cuando vienen amigos de fuera. Los invitados no cuentan para las estadísticas del ranking."
+          />
+        </Section>
+
+        {/* Socios */}
+        <Section title="Socios">
+          <NumberField
+            label="Descuento para socios (%)"
+            value={form!.memberDiscountPercent}
+            onChange={(v) => set("memberDiscountPercent", v)}
+            min={0} max={100}
+            help="Los clientes marcados como socios pagan este porcentaje menos al reservar. No se suma a las ofertas: se aplica el mayor de los dos. 0 = sin descuento."
           />
         </Section>
 

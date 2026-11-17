@@ -65,6 +65,8 @@ export interface ClubScheduleException {
   customOpen: string | null;
   customClose: string | null;
   reason: string | null;
+  /** Festivo que se cobra como ese día de la semana (1=lunes … 7=domingo). */
+  priceAsDayOfWeek: number | null;
 }
 
 export interface ClubBookingConfig {
@@ -91,6 +93,8 @@ export interface ClubBookingConfig {
   welcomeMessageMarkdown: string | null;
   notifyAdminViaPush: boolean;
   notifyAdminViaEmail: boolean;
+  /** Descuento (%) para los clientes socios; 0 = sin descuento. */
+  memberDiscountPercent: number;
 }
 
 export interface ClubRulesResponse {
@@ -116,6 +120,49 @@ export interface CourtPriceSlot {
   durationMinutes: number;
   priceCents: number;
   label?: string | null;
+  /** null = precio base de todo el año. */
+  seasonId?: string | null;
+}
+
+export interface ClubSeason {
+  id: string;
+  clubId: string;
+  name: string;
+  startDate: string; // ISO; se lee como día de calendario
+  endDate: string;
+}
+
+export interface ClubPriceOffer {
+  id: string;
+  clubId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  daysOfWeek: number[]; // 1=lunes … 7=domingo
+  startTime: string;
+  endTime: string;
+  /** Vacío = todas las pistas. */
+  courtIds: string[];
+  discountPercent: number;
+  membersOnly: boolean;
+}
+
+export interface ClubSeasonPayload {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface ClubPriceOfferPayload {
+  name: string;
+  startDate: string;
+  endDate: string;
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
+  courtIds: string[];
+  discountPercent: number;
+  membersOnly: boolean;
 }
 
 export interface BookingExtra {
@@ -296,6 +343,7 @@ export interface CreateScheduleExceptionPayload {
   customOpen?: string;
   customClose?: string;
   reason?: string;
+  priceAsDayOfWeek?: number;
 }
 
 export interface UpdateScheduleExceptionPayload {
@@ -303,6 +351,8 @@ export interface UpdateScheduleExceptionPayload {
   customOpen?: string | null;
   customClose?: string | null;
   reason?: string | null;
+  /** null lo quita. */
+  priceAsDayOfWeek?: number | null;
 }
 
 export type UpdateBookingConfigPayload = Partial<
@@ -333,11 +383,15 @@ export interface PriceSlotInput {
 }
 
 export interface ReplaceCourtPricingPayload {
+  /** Sin ella, los precios base. */
+  seasonId?: string;
   slots: PriceSlotInput[];
 }
 
 export interface ReplaceClubPriceSlotsPayload {
   courtIds: string[];
+  /** Sin ella, los precios base. */
+  seasonId?: string;
   slots: PriceSlotInput[];
 }
 
@@ -391,7 +445,12 @@ export interface AvailableSlot {
   endsAt: string;
   startsAtLocal: string; // "HH:mm" local del club
   durationMinutes: number;
+  /** Precio final (con el descuento). */
   priceCents: number;
+  /** Precio sin descuento. */
+  basePriceCents: number;
+  /** «-20 % Mañanas de agosto»; null si no hay descuento. */
+  discountLabel: string | null;
   priceBreakdown: {
     slot: number;
     extras: { id: string; name: string; cents: number }[];

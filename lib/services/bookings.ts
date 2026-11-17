@@ -24,6 +24,10 @@ import type {
   ClubOperatingHours,
   ClubRulesResponse,
   ClubScheduleException,
+  ClubSeason,
+  ClubSeasonPayload,
+  ClubPriceOffer,
+  ClubPriceOfferPayload,
   ClubTesterUser,
   CourtAvailableDuration,
   CourtPriceSlot,
@@ -160,9 +164,12 @@ export const bookingsService = {
   },
 
   courtPricing: {
-    list: (clubId: string, courtId: string) =>
+    /** Sin temporada, los precios base; con ella, solo los de esa temporada. */
+    list: (clubId: string, courtId: string, seasonId?: string | null) =>
       api
-        .get<CourtPriceSlot[]>(`${base(clubId)}/courts/${courtId}/pricing`)
+        .get<CourtPriceSlot[]>(`${base(clubId)}/courts/${courtId}/pricing`, {
+          params: seasonId ? { seasonId } : undefined,
+        })
         .then((r) => r.data),
 
     replace: (
@@ -185,6 +192,47 @@ export const bookingsService = {
           payload,
         )
         .then((r) => r.data),
+  },
+
+  // ── Temporadas de precios ───────────────────────────────────────────────
+
+  seasons: {
+    list: (clubId: string) =>
+      api.get<ClubSeason[]>(`/admin/clubs/${clubId}/seasons`).then((r) => r.data),
+
+    create: (clubId: string, payload: ClubSeasonPayload) =>
+      api
+        .post<ClubSeason>(`/admin/clubs/${clubId}/seasons`, payload)
+        .then((r) => r.data),
+
+    update: (clubId: string, seasonId: string, payload: Partial<ClubSeasonPayload>) =>
+      api
+        .patch<ClubSeason>(`/admin/clubs/${clubId}/seasons/${seasonId}`, payload)
+        .then((r) => r.data),
+
+    /** Borra también los precios de la temporada. */
+    remove: (clubId: string, seasonId: string) =>
+      api.delete(`/admin/clubs/${clubId}/seasons/${seasonId}`).then(() => undefined),
+  },
+
+  // ── Ofertas de precio ───────────────────────────────────────────────────
+
+  priceOffers: {
+    list: (clubId: string) =>
+      api.get<ClubPriceOffer[]>(`/admin/clubs/${clubId}/price-offers`).then((r) => r.data),
+
+    create: (clubId: string, payload: ClubPriceOfferPayload) =>
+      api
+        .post<ClubPriceOffer>(`/admin/clubs/${clubId}/price-offers`, payload)
+        .then((r) => r.data),
+
+    update: (clubId: string, offerId: string, payload: Partial<ClubPriceOfferPayload>) =>
+      api
+        .patch<ClubPriceOffer>(`/admin/clubs/${clubId}/price-offers/${offerId}`, payload)
+        .then((r) => r.data),
+
+    remove: (clubId: string, offerId: string) =>
+      api.delete(`/admin/clubs/${clubId}/price-offers/${offerId}`).then(() => undefined),
   },
 
   // ── Extras ─────────────────────────────────────────────────────────────
@@ -375,8 +423,10 @@ export const bookingsQK = {
   rules: (clubId: string) => ["bookings", "rules", clubId] as const,
   courtDurations: (clubId: string, courtId: string) =>
     ["bookings", "courtDurations", clubId, courtId] as const,
-  courtPricing: (clubId: string, courtId: string) =>
-    ["bookings", "courtPricing", clubId, courtId] as const,
+  courtPricing: (clubId: string, courtId: string, seasonId?: string | null) =>
+    ["bookings", "courtPricing", clubId, courtId, seasonId ?? "base"] as const,
+  seasons: (clubId: string) => ["bookings", "seasons", clubId] as const,
+  priceOffers: (clubId: string) => ["bookings", "priceOffers", clubId] as const,
   extras: (clubId: string, onlyActive: boolean) =>
     ["bookings", "extras", clubId, onlyActive] as const,
   activation: (clubId: string) => ["bookings", "activation", clubId] as const,
