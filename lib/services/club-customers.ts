@@ -23,6 +23,8 @@ export interface ClubCustomer {
   tags:         string[];
   source:       ClubCustomerSource;
   archivedAt:   string | null;
+  /** Cuándo se dio de baja de los mensajes del club (lo hace la persona desde el email; el club no puede quitarlo). */
+  messagesOptOutAt?: string | null;
   createdAt:    string;
 }
 
