@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
  * Con cuenta, nombre y contacto vienen de la cuenta (el club no los edita).
  */
 
-export type ClubCustomerSource = "BOOKING" | "REGISTRATION" | "MANUAL";
+export type ClubCustomerSource = "BOOKING" | "REGISTRATION" | "MANUAL" | "IMPORT";
 
 export interface ClubCustomer {
   id:           string;
@@ -85,6 +85,15 @@ export interface UpdateClubCustomerPayload {
   memberSince?:  string | null;
 }
 
+/** Informe de la importación de un CSV (la misma forma en la vista previa y al confirmar). */
+export interface ClubCustomersImportReport {
+  total:      number;
+  toCreate:   number;
+  created:    number;
+  duplicates: { line: number; reason: string }[];
+  errors:     { line: number; message: string }[];
+}
+
 export const clubCustomersQK = {
   all:    (clubId: string) => ["club-customers", clubId] as const,
   list:   (clubId: string, q: ClubCustomersQuery) => ["club-customers", clubId, "list", q] as const,
@@ -105,6 +114,16 @@ export const clubCustomersService = {
     api.post<ClubCustomer>(base(clubId), data).then((r) => r.data),
   update: (clubId: string, id: string, data: UpdateClubCustomerPayload) =>
     api.patch<ClubCustomer>(`${base(clubId)}/${id}`, data).then((r) => r.data),
+  importCsv: (clubId: string, file: File, dryRun: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api
+      .post<ClubCustomersImportReport>(`${base(clubId)}/import`, form, {
+        params: { dryRun },
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
+  },
   archive: (clubId: string, id: string) =>
     api.post<ClubCustomer>(`${base(clubId)}/${id}/archive`).then((r) => r.data),
   unarchive: (clubId: string, id: string) =>
