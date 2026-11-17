@@ -25,6 +25,7 @@ describe("canAccess", () => {
     expect(rw(r, "results")).toEqual([true, true]);
     expect(rw(r, "bookings")).toEqual([true, false]);
     expect(rw(r, "customers")).toEqual([true, false]);
+    expect(rw(r, "club")).toEqual([true, false]);
     expect(rw(r, "cash")).toEqual([false, false]);
     expect(rw(r, "settings")).toEqual([false, false]);
     expect(rw(r, "staff")).toEqual([false, false]);
@@ -50,7 +51,7 @@ describe("canAccess", () => {
   it("entrenador: solo lee reservas", () => {
     const r: ClubStaffRole[] = ["COACH"];
     expect(rw(r, "bookings")).toEqual([true, false]);
-    for (const area of CLUB_AREAS.filter((a) => a !== "bookings")) {
+    for (const area of CLUB_AREAS.filter((a) => a !== "bookings" && a !== "club")) {
       expect(rw(r, area)).toEqual([false, false]);
     }
   });
@@ -59,6 +60,14 @@ describe("canAccess", () => {
     const r: ClubStaffRole[] = ["COACH", "RECEPTION"];
     expect(rw(r, "bookings")).toEqual([true, true]);
     expect(rw(r, "cash")).toEqual([true, true]);
+  });
+
+  it("club: lo lee todo el equipo y solo lo escriben propietario y gestor", () => {
+    for (const role of ["TOURNAMENTS", "RESULTS", "RECEPTION", "COACH"] as const) {
+      expect(rw([role], "club")).toEqual([true, false]);
+    }
+    expect(rw(["OWNER"], "club")).toEqual([true, true]);
+    expect(rw(["MANAGER"], "club")).toEqual([true, true]);
   });
 
   it("sin roles no hay acceso", () => {

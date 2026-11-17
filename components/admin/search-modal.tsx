@@ -11,6 +11,7 @@ import type { Tournament, Player } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import { matchesSearch } from "@/lib/utils/search";
 import { isClub, useRole } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useState } from "react";
 
 interface SearchResult {
@@ -47,10 +48,12 @@ export function SearchModal() {
   const { role } = useRole();
   const searchPlayers = !isClub(role);
 
+  // Los torneos solo los lee quien tiene el área (el entrenador de un club no)
+  const access = useClubAccess();
   const { data: tournaments = [] } = useQuery({
     queryKey: ["tournaments"],
     queryFn:  adminService.tournaments.list,
-    enabled:  open,
+    enabled:  open && (!isClub(role) || access.can("tournaments")),
   });
 
   // Los jugadores los busca el servidor, en todos y sin mirar tildes (el

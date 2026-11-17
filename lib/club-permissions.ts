@@ -18,7 +18,10 @@ export interface ClubMembership {
 }
 
 export const CLUB_AREAS = [
-  "tournaments", "results", "bookings", "customers", "cash", "settings", "staff",
+  // Datos básicos del club que cualquier pantalla necesita (el club, sus pistas,
+  // horarios y excepciones, su config de reservas): lo lee todo el equipo. No es
+  // un área de menú ni de página (areaForPath nunca la devuelve).
+  "club", "tournaments", "results", "bookings", "customers", "cash", "settings", "staff",
 ] as const;
 export type ClubArea = (typeof CLUB_AREAS)[number];
 
@@ -52,17 +55,17 @@ export const ROLE_DESCRIPTION: Record<ClubStaffRole, string> = {
 type Grant = Partial<Record<ClubArea, AccessLevel>>;
 
 const ALL_WRITE: Grant = {
-  tournaments: "write", results: "write", bookings: "write", customers: "write",
+  club: "write", tournaments: "write", results: "write", bookings: "write", customers: "write",
   cash: "write", settings: "write", staff: "write",
 };
 
 const PERMISSIONS: Record<ClubStaffRole, Grant> = {
   OWNER:       ALL_WRITE,
   MANAGER:     { ...ALL_WRITE, staff: "read" },
-  TOURNAMENTS: { tournaments: "write", results: "write", bookings: "read", customers: "read" },
-  RESULTS:     { tournaments: "read", results: "write" },
-  RECEPTION:   { bookings: "write", customers: "write", cash: "write", tournaments: "read", settings: "read" },
-  COACH:       { bookings: "read" },
+  TOURNAMENTS: { club: "read", tournaments: "write", results: "write", bookings: "read", customers: "read" },
+  RESULTS:     { club: "read", tournaments: "read", results: "write" },
+  RECEPTION:   { club: "read", bookings: "write", customers: "write", cash: "write", tournaments: "read", settings: "read" },
+  COACH:       { club: "read", bookings: "read" },
 };
 
 /** Si alguno de los roles da ese nivel en el área (escribir incluye leer). */
