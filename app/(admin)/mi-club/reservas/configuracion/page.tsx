@@ -266,16 +266,18 @@ export default function ConfiguracionPage() {
         </Section>
 
         {/* Notificaciones admin */}
-        <Section title="Avisos al club">
+        <Section title="Avisos al equipo">
           <BoolField
-            label="Recibir avisos en el móvil sobre las reservas"
+            label="Avisos push al equipo"
             value={form!.notifyAdminViaPush}
             onChange={(v) => set("notifyAdminViaPush", v)}
+            help="Avisa al móvil de propietario, gestor y recepción (reservas) y de propietario, gestor y torneos (inscripciones). La campana del panel siempre avisa."
           />
           <BoolField
-            label="Recibir avisos por email sobre las reservas"
+            label="Email al equipo (solo anulaciones)"
             value={form!.notifyAdminViaEmail}
             onChange={(v) => set("notifyAdminViaEmail", v)}
+            help="Cuando un jugador anula una reserva, a las cuentas del equipo con el email verificado."
           />
         </Section>
       </div>

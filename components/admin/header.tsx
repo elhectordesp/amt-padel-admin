@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { adminService } from "@/lib/services/admin";
 import { useSearch } from "@/components/admin/search-context";
 import { LogoutModal } from "@/components/admin/logout-modal";
+import { ClubNoticesBell } from "@/components/admin/club-notices-bell";
 import { roleLabel, useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
 import { useClubAccess } from "@/lib/use-club-access";
@@ -41,7 +42,8 @@ export function Header({ title }: HeaderProps) {
   }, [menuOpen, bellOpen]);
 
   const { data: me } = useMe();
-  const { role } = useRole();
+  const { role, clubId } = useRole();
+  const activeClubId = me?.activeClubId ?? clubId;
   const isClubRole = isClub(role);
   const access = useClubAccess();
 
@@ -82,7 +84,10 @@ export function Header({ title }: HeaderProps) {
             <Search size={18} />
           </button>
 
-          {/* Notification bell dropdown */}
+          {/* Equipo de un club: sus avisos (lo que hacen los jugadores). AMT: lo de hoy */}
+          {isClubRole && activeClubId ? (
+            <ClubNoticesBell clubId={activeClubId} />
+          ) : (
           <div ref={bellRef} className="relative">
             <button
               type="button"
@@ -134,6 +139,7 @@ export function Header({ title }: HeaderProps) {
               </div>
             )}
           </div>
+          )}
 
           {/* Admin profile dropdown */}
           <div ref={menuRef} className="relative">
