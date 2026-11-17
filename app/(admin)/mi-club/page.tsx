@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, AlertCircle, CheckCircle2, Save, LayoutGrid } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Save, LayoutGrid, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { CourtsManager } from "@/components/admin/courts-manager";
+import { ClubFiscalCard } from "@/components/admin/club-fiscal-card";
 import { adminService } from "@/lib/services/admin";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import { PROVINCES } from "@/lib/constants/spain";
 import { DEFAULT_TIME_ZONE, timeZoneOptions, tournamentTimeZone } from "@/lib/utils/time-zone";
 import type { Club } from "@/types";
+
+// 44 px en tablet, como el resto de controles del panel del club
+const INPUT =
+  "w-full h-10 max-[1024px]:h-11 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]";
+
+// Lo que admite el back (JPEG, PNG o WEBP de hasta 2 MB)
+const LOGO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
 type Form = {
   name: string;
@@ -21,8 +31,9 @@ type Form = {
   phone: string;
   website: string;
   instagram: string;
+  facebook: string;
+  tiktok: string;
   contactEmail: string;
-  logoUrl: string;
   timezone: string;
 };
 
@@ -34,8 +45,9 @@ const EMPTY: Form = {
   phone: "",
   website: "",
   instagram: "",
+  facebook: "",
+  tiktok: "",
   contactEmail: "",
-  logoUrl: "",
   timezone: DEFAULT_TIME_ZONE,
 };
 
@@ -49,8 +61,9 @@ function buildForm(club: Club | undefined): Form {
     phone:        club.phone ?? "",
     website:      club.website ?? "",
     instagram:    club.instagram ?? "",
+    facebook:     club.facebook ?? "",
+    tiktok:       club.tiktok ?? "",
     contactEmail: club.contactEmail ?? "",
-    logoUrl:      club.logoUrl ?? "",
     timezone:     tournamentTimeZone(club),
   };
 }
@@ -70,6 +83,10 @@ export default function MiClubPage() {
   }, [role, router]);
 
   const enabled = !!clubId && isClub(role);
+
+  // Los datos fiscales los abren propietario y gestor; sin saber los roles, el back decide
+  const { roles } = useClubAccess();
+  const canSeeFiscal = roles === null || roles.includes("OWNER") || roles.includes("MANAGER");
 
   const { data: club, isLoading } = useQuery({
     queryKey: ["my-club", clubId],
@@ -101,8 +118,10 @@ export default function MiClubPage() {
         phone: form.phone.trim() || null,
         website: form.website.trim() || null,
         instagram: form.instagram.trim() || null,
+        facebook: form.facebook.trim() || null,
+        tiktok: form.tiktok.trim() || null,
         contactEmail: form.contactEmail.trim() || null,
-        logoUrl: form.logoUrl.trim() || null,
+        // El logo no va aquí: se sube aparte y se guarda al subirlo
         // La heredan los torneos nuevos del club
         timezone: form.timezone,
       };
@@ -119,6 +138,36 @@ export default function MiClubPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Logo: se sube al elegir el fichero (no espera a «Guardar cambios»)
+  const logoInput = useRef<HTMLInputElement>(null);
+  const uploadLogo = useMutation({
+    mutationFn: (file: File) => {
+      if (!clubId) throw new Error("Sin clubId");
+      return adminService.clubs.uploadLogo(clubId, file);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-club", clubId] });
+      toast.success("Logo actualizado");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Se vacía para poder elegir otra vez el mismo fichero
+    e.target.value = "";
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) {
+      toast.error("El logo tiene que ser JPEG, PNG o WEBP");
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      toast.error("El logo no puede superar 2 MB");
+      return;
+    }
+    uploadLogo.mutate(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +233,7 @@ export default function MiClubPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, name: e.target.value }))
                   }
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
@@ -197,7 +246,7 @@ export default function MiClubPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, city: e.target.value }))
                   }
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
@@ -210,7 +259,7 @@ export default function MiClubPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, province: e.target.value }))
                   }
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 >
                   <option value="">— Selecciona —</option>
                   {PROVINCES.map((p) => (
@@ -230,7 +279,7 @@ export default function MiClubPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, timezone: e.target.value }))
                   }
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 >
                   {timeZoneOptions(form.timezone).map((o) => (
                     <option key={o.value} value={o.value}>
@@ -252,7 +301,7 @@ export default function MiClubPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, phone: e.target.value }))
                   }
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
@@ -266,7 +315,7 @@ export default function MiClubPage() {
                     setForm((f) => ({ ...f, address: e.target.value }))
                   }
                   placeholder="Calle, número, código postal..."
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
@@ -280,7 +329,7 @@ export default function MiClubPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, contactEmail: e.target.value }))
                   }
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
@@ -294,7 +343,7 @@ export default function MiClubPage() {
                     setForm((f) => ({ ...f, website: e.target.value }))
                   }
                   placeholder="https://..."
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
@@ -308,23 +357,79 @@ export default function MiClubPage() {
                     setForm((f) => ({ ...f, instagram: e.target.value }))
                   }
                   placeholder="miclub"
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  className={INPUT}
                 />
               </label>
 
-              <label className="space-y-1.5 sm:col-span-2">
+              <label className="space-y-1.5">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Logo (URL de imagen)
+                  Facebook
                 </span>
                 <input
-                  value={form.logoUrl}
+                  value={form.facebook}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, logoUrl: e.target.value }))
+                    setForm((f) => ({ ...f, facebook: e.target.value }))
                   }
-                  placeholder="https://..."
-                  className="w-full h-10 px-3 rounded-md bg-input border border-border text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                  placeholder="miclub o https://facebook.com/miclub"
+                  className={INPUT}
                 />
               </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  TikTok (sin @)
+                </span>
+                <input
+                  value={form.tiktok}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, tiktok: e.target.value }))
+                  }
+                  placeholder="miclub"
+                  className={INPUT}
+                />
+              </label>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">
+                  Logo
+                </span>
+                <div className="flex items-center gap-4">
+                  <div className="size-20 shrink-0 rounded-lg border border-border bg-input flex items-center justify-center overflow-hidden">
+                    {club?.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={club.logoUrl} alt="Logo de tu club" className="size-full object-contain" />
+                    ) : (
+                      <ImagePlus size={22} className="text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <input
+                      ref={logoInput}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleLogoFile}
+                      className="hidden"
+                      aria-label="Elegir logo"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => logoInput.current?.click()}
+                      disabled={uploadLogo.isPending}
+                      className="flex items-center gap-2 h-10 max-[1024px]:h-11 px-4 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors disabled:opacity-60"
+                    >
+                      {uploadLogo.isPending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <ImagePlus size={14} />
+                      )}
+                      {club?.logoUrl ? "Cambiar logo" : "Subir logo"}
+                    </button>
+                    <span className="text-xs text-muted-foreground block">
+                      JPEG, PNG o WEBP de hasta 2 MB. Se guarda al subirlo.
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end pt-2">
@@ -343,6 +448,9 @@ export default function MiClubPage() {
             </div>
           </form>
         )}
+
+        {/* Datos fiscales: solo propietario y gestor (el back los niega al resto) */}
+        {clubId && canSeeFiscal && <ClubFiscalCard clubId={clubId} />}
 
         {/* Pistas del club. Solo aparece cuando el club ya tiene id cargado;
             la sección se gestiona inline igual que en /clubes para AMT. */}

@@ -10,7 +10,7 @@ import type {
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
-  ClubTournamentConfig, UpdateClubTournamentConfigPayload,
+  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
@@ -21,6 +21,7 @@ import type {
   CategoryLevelSummary, GroupsLockOptions,
 } from "@/types/preparation";
 import type { ClubMembership, ClubStaffRole } from "@/lib/club-permissions";
+import type { AuditArea } from "@/lib/constants";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AutomaticInvite } from "@/lib/player-invite";
@@ -171,6 +172,8 @@ export const adminService = {
 
   /** P3 — Historial de auditoría con filtros y paginación. */
   auditLogs: (filters: {
+    area?: AuditArea;
+    clubId?: string;  // solo AMT: un club siempre ve el suyo
     tournamentId?: string;
     action?: string;
     adminId?: string;
@@ -671,6 +674,19 @@ export const adminService = {
       api.patch<Club>(`/admin/clubs/${id}`, data).then((r) => r.data),
     deactivate:   (id: string) =>
       api.delete(`/admin/clubs/${id}`).then((r) => r.data),
+    // Logo: imagen de hasta 2 MB; el back la guarda y devuelve su URL
+    uploadLogo: (id: string, file: File) => {
+      const form = new FormData();
+      form.append("image", file);
+      return api.post<{ logoUrl: string }>(`/admin/clubs/${id}/logo`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }).then((r) => r.data);
+    },
+    // Datos fiscales (solo propietario, gestor y AMT): no vienen en ningún otro GET del club
+    fiscal: (id: string) =>
+      api.get<ClubFiscal>(`/admin/clubs/${id}/fiscal`).then((r) => r.data),
+    updateFiscal: (id: string, data: ClubFiscal) =>
+      api.put<ClubFiscal>(`/admin/clubs/${id}/fiscal`, data).then((r) => r.data),
     geocodeBatch: () =>
       api.post<{ updated: number; skipped: number; errors: string[] }>('/admin/clubs/geocode-batch').then((r) => r.data),
     // Crea un club stub + invita a su admin en un solo paso. El propio

@@ -601,6 +601,36 @@ describe('adminService', () => {
     });
   });
 
+  describe('ficha del club e historial (A3)', () => {
+    const mockPut = api.put as ReturnType<typeof vi.fn>;
+
+    it('el historial manda el área y no manda los filtros vacíos', async () => {
+      mockGet.mockResolvedValueOnce({ data: { items: [], total: 0 } });
+      await adminService.auditLogs({ area: 'bookings', search: '', page: 2 });
+      expect(mockGet).toHaveBeenCalledWith('/admin/audit-logs?area=bookings&page=2');
+    });
+
+    it('datos fiscales: GET y PUT /admin/clubs/:id/fiscal', async () => {
+      const fiscal = { legalName: 'Club SL', taxId: 'B12345678', fiscalAddress: null };
+      mockGet.mockResolvedValueOnce({ data: fiscal });
+      await expect(adminService.clubs.fiscal('c1')).resolves.toEqual(fiscal);
+      expect(mockGet).toHaveBeenCalledWith('/admin/clubs/c1/fiscal');
+      mockPut.mockResolvedValueOnce({ data: fiscal });
+      await adminService.clubs.updateFiscal('c1', fiscal);
+      expect(mockPut).toHaveBeenCalledWith('/admin/clubs/c1/fiscal', fiscal);
+    });
+
+    it('logo: POST multipart a /admin/clubs/:id/logo con el campo image', async () => {
+      mockPost.mockResolvedValueOnce({ data: { logoUrl: 'https://cdn/logo.png' } });
+      const file = new File(['x'], 'logo.png', { type: 'image/png' });
+      await expect(adminService.clubs.uploadLogo('c1', file)).resolves.toEqual({ logoUrl: 'https://cdn/logo.png' });
+      const [url, form, cfg] = mockPost.mock.calls.at(-1)!;
+      expect(url).toBe('/admin/clubs/c1/logo');
+      expect((form as FormData).get('image')).toBe(file);
+      expect(cfg).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } });
+    });
+  });
+
   describe('opciones de torneo del club (B5-1)', () => {
     const mockPut = api.put as ReturnType<typeof vi.fn>;
 

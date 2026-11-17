@@ -82,6 +82,9 @@ export interface Club {
   phone?:               string | null;
   website?:             string | null;
   instagram?:           string | null;
+  // Handle o URL; no vienen con un back anterior
+  facebook?:            string | null;
+  tiktok?:              string | null;
   logoUrl?:             string | null;
   contactEmail?:        string | null;
   isAmtPartner?:        boolean;
@@ -97,6 +100,13 @@ export interface Club {
   lng?:                 number | null;
   // Zona horaria IANA del club: la heredan sus torneos. No viene con un back anterior
   timezone?:            string;
+}
+
+/** Datos fiscales del club: solo para su gestoría (AMT no emite facturas). */
+export interface ClubFiscal {
+  legalName:     string | null;
+  taxId:         string | null;
+  fiscalAddress: string | null;
 }
 
 /** Por qué está ocupada una pista (además de las reservas). */

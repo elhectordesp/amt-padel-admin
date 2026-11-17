@@ -9,10 +9,11 @@ import {
 import { Header } from "@/components/admin/header";
 import { Pagination, useKeepPageInRange } from "@/components/admin/pagination";
 import { adminService } from "@/lib/services/admin";
-import { auditResourceLabel } from "@/lib/constants";
+import { AUDIT_AREAS, auditResourceLabel, type AuditArea } from "@/lib/constants";
 import { DEFAULT_PAGE_SIZE, type PageSize } from "@/lib/utils/pagination";
 
 interface Filters {
+  area: AuditArea | "";
   search: string;
   action: string;
   tournamentId: string;
@@ -23,6 +24,7 @@ interface Filters {
 }
 
 const EMPTY_FILTERS: Filters = {
+  area: "",
   search: "",
   action: "",
   tournamentId: "",
@@ -73,6 +75,7 @@ export default function HistorialPage() {
 
   const queryArgs = useMemo(
     () => ({
+      area: filters.area || undefined,
       search: filters.search.trim() || undefined,
       action: filters.action || undefined,
       tournamentId: filters.tournamentId.trim() || undefined,
@@ -95,7 +98,7 @@ export default function HistorialPage() {
   useKeepPageInRange(filters.page, setPage, filters.pageSize, isPlaceholderData ? undefined : data?.total);
 
   const hasActiveFilters =
-    !!filters.search || !!filters.action || !!filters.tournamentId || !!filters.from || !!filters.to;
+    !!filters.area || !!filters.search || !!filters.action || !!filters.tournamentId || !!filters.from || !!filters.to;
 
   return (
     <div>
@@ -107,7 +110,21 @@ export default function HistorialPage() {
       <div className="px-4 sm:px-6 py-4 space-y-4">
         {/* ── Filtros ────────────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Área</label>
+              <select
+                value={filters.area}
+                onChange={(e) => setFilters((f) => ({ ...f, area: e.target.value as AuditArea | "", page: 1 }))}
+                className="w-full px-2 py-1.5 text-sm bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              >
+                <option value="">Todas las áreas</option>
+                {AUDIT_AREAS.map((a) => (
+                  <option key={a.value} value={a.value}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Buscar admin</label>
               <div className="relative">

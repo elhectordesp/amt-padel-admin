@@ -82,6 +82,7 @@ describe("canAccess", () => {
 describe("areaForPath", () => {
   it.each([
     ["/mi-club/equipo", "staff"],
+    ["/historial", "staff"],
     ["/mi-club/clientes", "customers"],
     ["/mi-club/clientes/abc", "customers"],
     ["/torneos", "tournaments"],
