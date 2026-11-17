@@ -34,6 +34,8 @@ export type BookingPaymentMethod =
   | "TRANSFER"
   | "OTHER"
   | "ONLINE"
+  // Pagada con una sesión de un bono del club: solo la pone el uso del bono
+  | "VOUCHER"
   // Solo reservas antiguas
   | "CASH_AT_VENUE"
   | "PAID_MANUAL";
@@ -312,6 +314,9 @@ export interface Booking {
   court?: { id: string; name: string; type: CourtType; isIndoor: boolean };
   club?: { id: string; name: string; city: string };
   participants?: BookingParticipant[];
+  // El cliente del club a quien se reservó (null: sin cliente). Un bono solo
+  // paga reservas de su dueño
+  clubCustomerId?: string | null;
   // Solo en el listado del personal del club: el titular (el cliente del club
   // y quien la apuntó). No vienen con un back anterior
   clubCustomer?: { id: string; name: string | null; phone: string | null } | null;

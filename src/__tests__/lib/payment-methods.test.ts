@@ -21,6 +21,11 @@ describe("catálogo de métodos de cobro", () => {
     expect(methodLabel("PAID_MANUAL")).toBe("Pagada");
     expect(methodLabel(null)).toBe("Sin método");
   });
+
+  it("«Bono» solo se lee: una reserva pagada con una sesión de bono, no un método de cobro", () => {
+    expect(methodLabel("VOUCHER")).toBe("Bono");
+    expect(PAYMENT_METHOD_OPTIONS.map((o) => o.value)).not.toContain("VOUCHER");
+  });
 });
 
 describe("importes", () => {
@@ -59,6 +64,24 @@ describe("cierre de caja para imprimir", () => {
 
   it("ordena los métodos: los del catálogo y luego los antiguos", () => {
     expect(methodsWithTotals(cash.totalsByMethod)).toEqual(["CARD", "CASH_AT_VENUE"]);
+  });
+
+  it("las reservas pagadas con bono (0 €) y la devolución de un bono (negativa) salen en su método", () => {
+    const withVouchers: CashOfDay = {
+      ...cash,
+      movements: [
+        { source: "VOUCHER", refId: "v1", at: "2026-11-10T09:00:00.000Z", concept: "Bono Bono 10", person: "Ana", method: "CARD", amountCents: 12000 },
+        { source: "BOOKING", refId: "b1", at: "2026-11-10T09:30:00.000Z", concept: "Reserva Pista 1", person: "Ana", method: "VOUCHER", amountCents: 0 },
+        { source: "VOUCHER", refId: "v2", at: "2026-11-10T11:00:00.000Z", concept: "Devolución del bono Bono 5", person: "Luis", method: "CARD", amountCents: -3000 },
+      ],
+      totalsByMethod: { CARD: 9000, VOUCHER: 0 },
+      totalCents: 9000,
+    };
+    expect(methodsWithTotals(withVouchers.totalsByMethod)).toEqual(["CARD", "VOUCHER"]);
+    const html = buildCashHtml(withVouchers, "Club Norte");
+    expect(html).toContain("Bono");
+    expect(html).toContain("Devolución del bono Bono 5");
+    expect(html).toContain("-30,00");
   });
 
   it("lleva el día, las horas del club, los totales y escapa lo que viene del back", () => {

@@ -14,17 +14,20 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar, CalendarClock, Clock, CreditCard, Crown, FileText, Flame,
-  Loader2, MapPin, Trophy, Users, X,
+  Loader2, MapPin, Ticket, Trophy, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
+import { PayWithVoucherModal } from "@/components/admin/pay-with-voucher-modal";
 import { RescheduleBookingDialog } from "@/components/admin/reschedule-booking-dialog";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { clubVouchersQK, clubVouchersService } from "@/lib/services/club-vouchers";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { MODE_LABELS } from "@/lib/utils/booking-labels";
@@ -115,7 +118,10 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const [showCancel, setShowCancel] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
   const [showCollect, setShowCollect] = useState(false);
+  const [showVoucher, setShowVoucher] = useState(false);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
+  // Pagar con bono es un cobro: el área «cash» (el back lo exige igual)
+  const canVoucher = useClubAccess().can("cash", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.bookingDetail(id),
@@ -136,6 +142,28 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         (err as Error)?.message ??
         "Error al actualizar el pago";
+      toast.error(msg);
+    },
+  });
+
+  // Qué cambia al pagar con bono o quitárselo: la reserva, sus listas, la caja y los bonos
+  const refreshAfterVoucher = () => {
+    qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
+    qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+    qc.invalidateQueries({ queryKey: ["club-cash"] });
+    if (clubId) qc.invalidateQueries({ queryKey: clubVouchersQK.all(clubId) });
+  };
+  const removeVoucherMut = useMutation({
+    mutationFn: () => clubVouchersService.booking.remove(clubId!, id),
+    onSuccess: () => {
+      toast.success("Bono quitado: la sesión vuelve al bono y la reserva queda sin pagar");
+      refreshAfterVoucher();
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ??
+        "Error al quitar el bono";
       toast.error(msg);
     },
   });
@@ -267,9 +295,23 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
         {b.status !== "CANCELLED" && payment && (
           <div className="ml-7 flex flex-wrap items-center gap-2">
             {payment === "markPaid" ? (
-              <Button variant="outline" size="sm" onClick={() => setShowCollect(true)}>
-                <CreditCard className="h-3.5 w-3.5" /> Cobrar
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => setShowCollect(true)}>
+                  <CreditCard className="h-3.5 w-3.5" /> Cobrar
+                </Button>
+                {/* Un bono solo paga reservas de su dueño: sin cliente, no hay bono que elegir */}
+                {canVoucher && b.clubCustomerId && (
+                  <Button variant="outline" size="sm" onClick={() => setShowVoucher(true)}>
+                    <Ticket className="h-3.5 w-3.5" /> Pagar con bono
+                  </Button>
+                )}
+              </>
+            ) : payment === "removeVoucher" ? (
+              canVoucher && (
+                <Button variant="outline" size="sm" onClick={() => removeVoucherMut.mutate()} disabled={removeVoucherMut.isPending}>
+                  {removeVoucherMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Quitar el bono
+                </Button>
+              )
             ) : (
               <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PENDING")} disabled={markPaidMut.isPending}>
                 {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar como no pagada
@@ -378,6 +420,16 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
             qc.invalidateQueries({ queryKey: ["club-cash"] });
           }}
           onClose={() => setShowCollect(false)}
+        />
+      )}
+      {showVoucher && (
+        <PayWithVoucherModal
+          clubId={clubId}
+          bookingId={id}
+          subtitle={`${b.shortCode} · ${b.court?.name ?? "—"} · ${dateStr}, ${timeStr}`}
+          timeZone={tz}
+          onDone={refreshAfterVoucher}
+          onClose={() => setShowVoucher(false)}
         />
       )}
     </ReservasPage>

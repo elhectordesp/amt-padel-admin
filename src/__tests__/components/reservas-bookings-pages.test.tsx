@@ -43,6 +43,11 @@ vi.mock("@/lib/services/bookings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/bookings")>("@/lib/services/bookings");
   return { ...actual, bookingsService: svc };
 });
+const voucherSvc = vi.hoisted(() => ({ booking: { usable: vi.fn(), use: vi.fn(), remove: vi.fn() } }));
+vi.mock("@/lib/services/club-vouchers", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/club-vouchers")>("@/lib/services/club-vouchers");
+  return { ...actual, clubVouchersService: voucherSvc };
+});
 
 import BookingsListPage from "../../../app/(admin)/mi-club/reservas/bookings/page";
 import BookingDetailPage from "../../../app/(admin)/mi-club/reservas/bookings/[id]/page";
@@ -377,6 +382,55 @@ describe("Detalle de reserva", () => {
     expect(screen.queryByText("()")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Marcar pagado/ })).not.toBeInTheDocument();
+  });
+
+  describe("bonos (B14)", () => {
+    const WITH_CUSTOMER = { ...BOOKING, clubCustomerId: "cc1" };
+
+    it("pendiente y con cliente: ofrece «Pagar con bono» y abre los bonos de ESA reserva", async () => {
+      svc.bookings.detail.mockResolvedValue(WITH_CUSTOMER);
+      voucherSvc.booking.usable.mockResolvedValue([]);
+      await renderDetail();
+      fireEvent.click(await screen.findByRole("button", { name: /Pagar con bono/ }));
+
+      expect(await screen.findByRole("dialog", { name: "Pagar con bono" })).toBeInTheDocument();
+      expect(voucherSvc.booking.usable).toHaveBeenCalledWith("c1", "b1");
+    });
+
+    it("sin cliente, no hay bono que elegir: no ofrece «Pagar con bono» (sí «Cobrar»)", async () => {
+      await renderDetail();
+      expect(await screen.findByRole("button", { name: /Cobrar/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Pagar con bono/ })).not.toBeInTheDocument();
+    });
+
+    it("pagada con bono: lo dice, ofrece quitar el bono (no «Marcar como no pagada») y al quitarlo lo manda al back", async () => {
+      svc.bookings.detail.mockResolvedValue({
+        ...WITH_CUSTOMER,
+        paymentMethod: "VOUCHER",
+        paidAt: "2026-10-27T10:00:00.000Z",
+        paidAmountCents: 0,
+      });
+      voucherSvc.booking.remove.mockResolvedValue({});
+      await renderDetail();
+      expect(await screen.findByText("(Bono)")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Quitar el bono/ }));
+      await waitFor(() => expect(voucherSvc.booking.remove).toHaveBeenCalledWith("c1", "b1"));
+      expect(svc.bookings.markPaid).not.toHaveBeenCalled();
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("Bono quitado")));
+    });
+
+    it("sin acceso de escritura a la caja (Entrenador): ni pagar con bono ni quitarlo", async () => {
+      meMock.data = {
+        id: "coach", name: "Profe", activeClubId: "c1",
+        clubs: [{ clubId: "c1", clubName: "Club Centro", roles: ["COACH"] }],
+      } as unknown as typeof meMock.data;
+      svc.bookings.detail.mockResolvedValue(WITH_CUSTOMER);
+      await renderDetail();
+      await screen.findByRole("button", { name: /Cobrar/ });
+      expect(screen.queryByRole("button", { name: /Pagar con bono/ })).not.toBeInTheDocument();
+    });
   });
 });
 
