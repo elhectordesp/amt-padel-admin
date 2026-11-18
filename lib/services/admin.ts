@@ -780,8 +780,10 @@ export const adminService = {
     remove: (clubId: string, courtId: string) =>
       api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),
     blocks: {
-      list:   (clubId: string, courtId: string) =>
-        api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`).then((r) => r.data ?? []),
+      // Sin `from`, solo los que acaban hoy o después; con él (YYYY-MM-DD), también los pasados desde ese día
+      list:   (clubId: string, courtId: string, from?: string) =>
+        api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, { params: from ? { from } : undefined })
+          .then((r) => r.data ?? []),
       create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string; kind?: CourtBlockKind }) =>
         api.post<CourtBlock>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, data).then((r) => r.data),
       remove: (clubId: string, courtId: string, blockId: string) =>

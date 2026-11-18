@@ -283,4 +283,39 @@ describe("CourtsManager", () => {
     // Y no se puede borrar desde aquí
     expect(screen.queryByTitle("Eliminar bloqueo")).not.toBeInTheDocument();
   });
+
+  it("los bloqueos salen sin los pasados; «Ver también los pasados» los pide desde hace un año", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-18T12:00:00Z"), toFake: ["Date"] });
+    try {
+      listMock.mockResolvedValue([makeCourt({ id: "c1", name: "Pista 1" })]);
+      blocksListMock.mockImplementation((_club: string, _court: string, from?: string) =>
+        Promise.resolve(
+          from
+            ? [
+                { id: "k0", courtId: "c1", kind: "MAINTENANCE", startDate: "2026-03-02", endDate: "2026-03-02", reason: "Pasado", createdAt: "" },
+                { id: "k1", courtId: "c1", kind: "MAINTENANCE", startDate: "2026-11-24", endDate: "2026-11-24", reason: "Obras", createdAt: "" },
+              ]
+            : [{ id: "k1", courtId: "c1", kind: "MAINTENANCE", startDate: "2026-11-24", endDate: "2026-11-24", reason: "Obras", createdAt: "" }],
+        ),
+      );
+      renderWithClient(<CourtsManager clubId="club-1" />);
+      fireEvent.click(await screen.findByTitle("Gestionar bloqueos"));
+
+      // Sin `from`: lo que quedó por delante, que decide el back
+      expect(await screen.findByText(/Obras/)).toBeInTheDocument();
+      expect(blocksListMock).toHaveBeenLastCalledWith("club-1", "c1", undefined);
+      expect(screen.queryByText(/Pasado/)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Ver también los pasados" }));
+      expect(await screen.findByText(/Pasado/)).toBeInTheDocument();
+      expect(blocksListMock).toHaveBeenLastCalledWith("club-1", "c1", "2025-11-18");
+
+      // Y se vuelve a ocultar
+      fireEvent.click(screen.getByRole("button", { name: "Ocultar los pasados" }));
+      await waitFor(() => expect(screen.queryByText(/Pasado/)).not.toBeInTheDocument());
+      expect(blocksListMock).toHaveBeenLastCalledWith("club-1", "c1", undefined);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
