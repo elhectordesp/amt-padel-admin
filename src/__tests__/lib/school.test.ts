@@ -271,7 +271,9 @@ describe("schoolService", () => {
     await schoolService.sessions.update("c1", "s1", { courtId: null });
     expect(http.patch).toHaveBeenLastCalledWith("/admin/clubs/c1/school/sessions/s1", { courtId: null });
     await schoolService.sessions.cancel("c1", "s1", "Lluvia");
-    expect(http.post).toHaveBeenLastCalledWith("/admin/clubs/c1/school/sessions/s1/cancel", { reason: "Lluvia" });
+    expect(http.post).toHaveBeenLastCalledWith("/admin/clubs/c1/school/sessions/s1/cancel", { reason: "Lluvia", grantRecovery: true });
+    await schoolService.sessions.cancel("c1", "s1", undefined, false);
+    expect(http.post).toHaveBeenLastCalledWith("/admin/clubs/c1/school/sessions/s1/cancel", { reason: undefined, grantRecovery: false });
     await schoolService.sessions.setAttendance("c1", "s1", [{ clubCustomerId: "cc1", status: "PRESENT" }]);
     expect(http.put).toHaveBeenLastCalledWith("/admin/clubs/c1/school/sessions/s1/attendance", {
       entries: [{ clubCustomerId: "cc1", status: "PRESENT" }],

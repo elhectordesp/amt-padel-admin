@@ -88,12 +88,22 @@ export interface SchoolAttendanceStudent {
   name:           string | null;
   /** null: aún sin apuntar. */
   status:         SchoolAttendanceStatus | null;
+  /** Cuándo avisó de que falta (ausencia avisada); null si no ha avisado. */
+  noticedAt:      string | null;
+  /** La recuperación que ganó con ese aviso; null si avisó tarde. */
+  earnedCreditId: string | null;
+  /** Si está en la lista porque recupera (no es alumno del grupo). */
+  recovery:       boolean;
+  /** El crédito que ha gastado para estar en esta clase (solo si recupera). */
+  usedCreditId:   string | null;
 }
 
 export interface SchoolAttendanceSheet {
   session:  SchoolSession;
   group:    { id: string; name: string };
   students: SchoolAttendanceStudent[];
+  /** Plazas del grupo y cuántas quedan libres (descontando avisos y recuperaciones). */
+  capacity: { maxStudents: number; freeSpots: number };
 }
 
 export interface SchoolCoach {

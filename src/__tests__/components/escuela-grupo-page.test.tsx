@@ -195,7 +195,7 @@ describe("Escuela: ficha del grupo", () => {
   });
 
   it("cancelar una clase pide el motivo y libera su pista; las que ya tienen asistencia no se pueden cancelar", async () => {
-    school.sessions.cancel.mockResolvedValue({});
+    school.sessions.cancel.mockResolvedValue({ recoveries: { granted: 0, returned: 0 } });
     await renderPage();
     await screen.findByText("Marta Prueba", {}, WAIT);
     const sessions = screen.getByRole("region", { name: "Clases" });
@@ -207,7 +207,26 @@ describe("Escuela: ficha del grupo", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByPlaceholderText(/Lluvia/), { target: { value: " Obras " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar clase" }));
-    await waitFor(() => expect(school.sessions.cancel).toHaveBeenCalledWith("c1", "next1", "Obras"), WAIT);
+    // Por defecto, los alumnos ganan una recuperación
+    await waitFor(() => expect(school.sessions.cancel).toHaveBeenCalledWith("c1", "next1", "Obras", true), WAIT);
+  });
+
+  it("cancelar sin marcar «Dar recuperación a los alumnos» lo manda desmarcado y cuenta lo devuelto", async () => {
+    school.sessions.cancel.mockResolvedValue({ recoveries: { granted: 0, returned: 1 } });
+    await renderPage();
+    await screen.findByText("Marta Prueba", {}, WAIT);
+    const sessions = screen.getByRole("region", { name: "Clases" });
+    fireEvent.click(within(sessions).getAllByRole("button", { name: /^Cancelar la clase del/ })[0]);
+    const dialog = await screen.findByRole("dialog");
+    const grant = within(dialog).getByRole("checkbox", { name: /Dar recuperación a los alumnos/ });
+    expect(grant).toBeChecked();
+    fireEvent.click(grant);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar clase" }));
+    await waitFor(() => expect(school.sessions.cancel).toHaveBeenCalledWith("c1", "next1", undefined, false), WAIT);
+    await waitFor(
+      () => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("1 recuperación devuelta")),
+      WAIT,
+    );
   });
 
   it("cambiar la pista de una clase manda solo lo que cambia; si el back dice que está ocupada, lo enseña", async () => {

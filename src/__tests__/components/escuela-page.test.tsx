@@ -23,6 +23,18 @@ vi.mock("@/lib/use-club-access", () => ({
   useClubAccess: () => ({ roles: null, can: (_a: string, level = "read") => level === "read" || access.write }),
 }));
 vi.mock("@/lib/use-me", () => ({ useMe: () => ({ data: { id: "u-marta", name: "Marta" } }) }));
+vi.mock("@/lib/use-club-time-zone", () => ({
+  useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
+}));
+const recovery = vi.hoisted(() => ({
+  requests: { list: vi.fn() },
+  config: { get: vi.fn() },
+  credits: { list: vi.fn() },
+}));
+vi.mock("@/lib/services/school-recovery", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/school-recovery")>("@/lib/services/school-recovery");
+  return { ...actual, schoolRecoveryService: { ...actual.schoolRecoveryService, ...recovery } };
+});
 
 const school = vi.hoisted(() => ({
   groups: { list: vi.fn(), create: vi.fn() },
@@ -81,6 +93,9 @@ describe("Escuela: grupos", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     access.write = true;
+    recovery.requests.list.mockResolvedValue([]);
+    recovery.config.get.mockResolvedValue({ recoveryNoticeHours: 24, recoveryValidDays: 60 });
+    recovery.credits.list.mockResolvedValue([]);
     school.groups.list.mockResolvedValue([OTHER, group()]);
     school.coaches.list.mockResolvedValue([
       { staffId: "st1", userId: "u-marta", name: "Marta Prueba", coachBio: null, groups: [{ id: "g1", name: "Iniciación" }] },
@@ -116,14 +131,57 @@ describe("Escuela: grupos", () => {
     expect(school.coaches.list).toHaveBeenCalledWith("c1");
   });
 
-  it("un entrenador solo ve sus grupos: sin Nuevo grupo ni pestañas", async () => {
+  it("un entrenador solo ve sus grupos: sin Nuevo grupo, y de pestañas solo Grupos, Bandeja y Clases privadas", async () => {
     access.write = false;
     school.groups.list.mockResolvedValue([group()]);
     renderPage();
     expect(await screen.findByText("Mis grupos", {}, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Nuevo grupo/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Grupos", "Bandeja", "Clases privadas"]);
     expect(screen.queryByText("Resto de grupos")).not.toBeInTheDocument();
+  });
+
+  it("el gestor tiene todas las pestañas y la Bandeja lleva el contador de pendientes", async () => {
+    recovery.requests.list.mockResolvedValue([{ id: "r1" }, { id: "r2" }, { id: "r3" }]);
+    renderPage();
+    await screen.findByText("Mis grupos", {}, WAIT);
+    expect(await screen.findByRole("tab", { name: "Bandeja (3)" }, WAIT)).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Grupos",
+      "Bandeja (3)",
+      "Clases privadas",
+      "Cuotas",
+      "Recuperaciones",
+      "Entrenadores",
+    ]);
+    expect(recovery.requests.list).toHaveBeenCalledWith("c1", "PENDING");
+  });
+
+  it("la pestaña Bandeja: el entrenador la ve y puede apuntar una solicitud", async () => {
+    access.write = false;
+    school.groups.list.mockResolvedValue([group()]);
+    recovery.requests.list.mockResolvedValue([
+      {
+        id: "r1", kind: "OTHER", status: "PENDING", clubCustomerId: null, customerName: null, contactName: "Pedro Prueba",
+        contactPhone: null, group: null, session: null, coach: null, message: "Pide horario", createdBy: "Marta Prueba",
+        createdAt: "2026-11-17T18:30:00.000Z", resolvedBy: null, resolvedAt: null, resolutionNote: null,
+      },
+    ]);
+    renderPage();
+    await screen.findByText("Mis grupos", {}, WAIT);
+    fireEvent.click(screen.getByRole("tab", { name: "Bandeja (1)" }));
+    expect(await screen.findByText("Pide horario", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nueva solicitud/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Aceptar/ })).not.toBeInTheDocument();
+  });
+
+  it("la pestaña Recuperaciones es del gestor y carga los ajustes y los créditos", async () => {
+    renderPage();
+    await screen.findByText("Mis grupos", {}, WAIT);
+    fireEvent.click(screen.getByRole("tab", { name: "Recuperaciones" }));
+    expect(await screen.findByRole("form", { name: "Ajustes de las recuperaciones" }, WAIT)).toBeInTheDocument();
+    expect(recovery.config.get).toHaveBeenCalledWith("c1");
+    expect(recovery.credits.list).toHaveBeenCalledWith("c1", { status: "available" });
   });
 
   it("un entrenador sin grupos lo lee claro", async () => {
@@ -237,7 +295,14 @@ describe("Escuela: cuotas, clases privadas y tarifa del entrenador", () => {
   it("el gestor tiene las pestañas Clases privadas y Cuotas, cada una con lo suyo", async () => {
     renderPage();
     await screen.findByText("Mis grupos", {}, WAIT);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Grupos", "Clases privadas", "Cuotas", "Entrenadores"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Grupos",
+      "Bandeja",
+      "Clases privadas",
+      "Cuotas",
+      "Recuperaciones",
+      "Entrenadores",
+    ]);
 
     fireEvent.click(screen.getByRole("tab", { name: "Clases privadas" }));
     expect(await screen.findByText("No hay clases privadas en estos días.", {}, WAIT)).toBeInTheDocument();
@@ -250,13 +315,16 @@ describe("Escuela: cuotas, clases privadas y tarifa del entrenador", () => {
     expect(screen.getByRole("button", { name: /Generar cuotas de/ })).toBeInTheDocument();
   });
 
-  it("un entrenador no tiene pestañas: no ve cuotas ni clases privadas", async () => {
+  it("un entrenador ve sus clases privadas sin poder crearlas y no ve las cuotas", async () => {
     access.write = false;
     renderPage();
     await screen.findByText("Mis grupos", {}, WAIT);
-    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Cuotas" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Clases privadas" }));
+    expect(await screen.findByText("No hay clases privadas en estos días.", {}, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nueva clase privada/ })).not.toBeInTheDocument();
+    expect(billing.privateClasses.list).toHaveBeenCalled();
     expect(billing.fees.list).not.toHaveBeenCalled();
-    expect(billing.privateClasses.list).not.toHaveBeenCalled();
   });
 
   it("la tarifa de clase privada del entrenador: euros a céntimos, vacía la quita y una mala no se manda", async () => {
