@@ -4,7 +4,7 @@
  * Rejilla de recepción: filas = franjas de 30 min desde la apertura hasta el
  * cierre, columnas = pistas. Cada reserva ocupa las franjas que dura. Un hueco
  * libre dentro del horario se pulsa para crear ahí la reserva (pista y hora
- * ya elegidas). Lo que ocupa una pista sin ser una reserva (mantenimiento,
+ * ya elegidas), salvo para quien solo lee. Lo que ocupa una pista sin ser una reserva (mantenimiento,
  * clase, partido de torneo, liga, evento, otro) sale con el color de su tipo;
  * un partido de torneo lleva al torneo.
  *
@@ -48,7 +48,8 @@ interface Props {
   bookings: Booking[]; // reservas de ese día
   occupations?: CourtOccupation[]; // bloqueos y partidos de torneo de ese día
   window: DayWindow | null; // horario del día; null = cerrado
-  onSlotClick: (args: { courtId: string; startsAtISO: string }) => void;
+  /** Sin él (quien solo lee las reservas) los huecos libres no se pulsan. */
+  onSlotClick?: (args: { courtId: string; startsAtISO: string }) => void;
   /** Solo la mañana o la tarde (por defecto, el día entero). */
   period?: DayPeriod;
   /** Minutos desde las 00:00 del club ahora mismo, solo si `date` es hoy: la línea de la hora. */
@@ -206,21 +207,25 @@ export function ReservasDayGrid({
                   }
                   return (
                     <td key={c.id} className={`${lineCell}border-t border-l border-border p-0 align-top`}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const startsAt = zonedToDate(`${date}T${time}`, timeZone);
-                          if (startsAt) onSlotClick({ courtId: c.id, startsAtISO: startsAt.toISOString() });
-                        }}
-                        className={`group flex ${slotHeight} w-full items-center justify-center rounded-sm transition-colors hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary focus:outline-none`}
-                        aria-label={`Crear reserva en ${c.name} a las ${time}`}
-                      >
-                        {/* Siempre a la vista, discreto: en táctil no hay hover
-                            y el hueco parecía una celda vacía */}
-                        <span className="text-sm text-muted-foreground/40 transition-colors group-hover:text-primary group-focus:text-primary">
-                          +
-                        </span>
-                      </button>
+                      {onSlotClick ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const startsAt = zonedToDate(`${date}T${time}`, timeZone);
+                            if (startsAt) onSlotClick({ courtId: c.id, startsAtISO: startsAt.toISOString() });
+                          }}
+                          className={`group flex ${slotHeight} w-full items-center justify-center rounded-sm transition-colors hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary focus:outline-none`}
+                          aria-label={`Crear reserva en ${c.name} a las ${time}`}
+                        >
+                          {/* Siempre a la vista, discreto: en táctil no hay hover
+                              y el hueco parecía una celda vacía */}
+                          <span className="text-sm text-muted-foreground/40 transition-colors group-hover:text-primary group-focus:text-primary">
+                            +
+                          </span>
+                        </button>
+                      ) : (
+                        <div className={slotHeight} />
+                      )}
                       {nowHere !== null && <NowLine at={nowHere} />}
                     </td>
                   );

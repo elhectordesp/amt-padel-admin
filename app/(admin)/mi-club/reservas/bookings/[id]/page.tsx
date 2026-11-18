@@ -120,8 +120,11 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const [showCollect, setShowCollect] = useState(false);
   const [showVoucher, setShowVoucher] = useState(false);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
-  // Pagar con bono es un cobro: el área «cash» (el back lo exige igual)
-  const canVoucher = useClubAccess().can("cash", "write");
+  // Mover, cancelar y cobrar la reserva son del área «bookings»; pagar con
+  // bono es un cobro de caja: el área «cash» (el back lo exige igual)
+  const { can } = useClubAccess();
+  const canWrite = can("bookings", "write");
+  const canVoucher = can("cash", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.bookingDetail(id),
@@ -221,11 +224,16 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const timeStr = `${zonedTime(b.startsAt, tz)} – ${zonedTime(b.endsAt, tz)}`;
   const at = (iso: string) => formatInTimeZone(iso, tz, DATE_TIME);
   const isOpen = b.matchMode === "OPEN";
-  const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
+  const canCancel = canWrite && !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
   // Solo una que aún no ha empezado: después ya no tiene sentido moverla
   const canReschedule =
-    ["PENDING_INVITES", "CONFIRMED"].includes(b.status) && new Date(b.startsAt) > new Date();
-  const payment = paymentAction(b.paymentMethod);
+    canWrite && ["PENDING_INVITES", "CONFIRMED"].includes(b.status) && new Date(b.startsAt) > new Date();
+  const payment = b.status === "CANCELLED" ? null : paymentAction(b.paymentMethod);
+  // Qué botones de cobro le tocan a quien mira: así no queda una fila vacía
+  const showCollectBtn = canWrite && payment === "markPaid";
+  const showVoucherBtn = canVoucher && payment === "markPaid" && !!b.clubCustomerId;
+  const showRemoveVoucherBtn = canVoucher && payment === "removeVoucher";
+  const showUnpaidBtn = canWrite && payment === "markUnpaid";
 
   return (
     <ReservasPage title={`Reserva ${b.shortCode}`} back={back} className="max-w-4xl">
@@ -250,18 +258,20 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canReschedule && (
-            <Button variant="outline" size="sm" onClick={() => setShowReschedule(true)}>
-              <CalendarClock className="h-3.5 w-3.5" /> Cambiar hora o pista
-            </Button>
-          )}
-          {canCancel && (
-            <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
-              <X className="h-3.5 w-3.5" /> Cancelar reserva
-            </Button>
-          )}
-        </div>
+        {(canReschedule || canCancel) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canReschedule && (
+              <Button variant="outline" size="sm" onClick={() => setShowReschedule(true)}>
+                <CalendarClock className="h-3.5 w-3.5" /> Cambiar hora o pista
+              </Button>
+            )}
+            {canCancel && (
+              <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
+                <X className="h-3.5 w-3.5" /> Cancelar reserva
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Resumen */}
@@ -292,27 +302,25 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
             </span>
           )}
         </Row>
-        {b.status !== "CANCELLED" && payment && (
+        {(showCollectBtn || showVoucherBtn || showRemoveVoucherBtn || showUnpaidBtn) && (
           <div className="ml-7 flex flex-wrap items-center gap-2">
-            {payment === "markPaid" ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => setShowCollect(true)}>
-                  <CreditCard className="h-3.5 w-3.5" /> Cobrar
-                </Button>
-                {/* Un bono solo paga reservas de su dueño: sin cliente, no hay bono que elegir */}
-                {canVoucher && b.clubCustomerId && (
-                  <Button variant="outline" size="sm" onClick={() => setShowVoucher(true)}>
-                    <Ticket className="h-3.5 w-3.5" /> Pagar con bono
-                  </Button>
-                )}
-              </>
-            ) : payment === "removeVoucher" ? (
-              canVoucher && (
-                <Button variant="outline" size="sm" onClick={() => removeVoucherMut.mutate()} disabled={removeVoucherMut.isPending}>
-                  {removeVoucherMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Quitar el bono
-                </Button>
-              )
-            ) : (
+            {showCollectBtn && (
+              <Button variant="outline" size="sm" onClick={() => setShowCollect(true)}>
+                <CreditCard className="h-3.5 w-3.5" /> Cobrar
+              </Button>
+            )}
+            {/* Un bono solo paga reservas de su dueño: sin cliente, no hay bono que elegir */}
+            {showVoucherBtn && (
+              <Button variant="outline" size="sm" onClick={() => setShowVoucher(true)}>
+                <Ticket className="h-3.5 w-3.5" /> Pagar con bono
+              </Button>
+            )}
+            {showRemoveVoucherBtn && (
+              <Button variant="outline" size="sm" onClick={() => removeVoucherMut.mutate()} disabled={removeVoucherMut.isPending}>
+                {removeVoucherMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Quitar el bono
+              </Button>
+            )}
+            {showUnpaidBtn && (
               <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PENDING")} disabled={markPaidMut.isPending}>
                 {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar como no pagada
               </Button>

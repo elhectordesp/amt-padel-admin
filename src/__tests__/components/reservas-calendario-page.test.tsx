@@ -71,6 +71,7 @@ vi.mock("@/lib/services/bookings", async () => {
 });
 
 import CalendarioPage from "../../../app/(admin)/mi-club/reservas/calendario/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
 const COURTS = [
   { id: "p1", clubId: "c1", name: "Pista 1", isIndoor: false, isCentral: false, order: 1, active: true, type: "DOUBLES" },
@@ -100,9 +101,15 @@ const CLUB_CANARIAS = { id: "c1", name: "Club Atlántico", timezone: "Atlantic/C
 // staleTime: el del panel (components/providers.tsx) cuando lo que se prueba es cuándo se vuelve a pedir.
 // club: ya en la caché (como al llegar desde Mi club), para que la rejilla se pinte en un solo paso;
 // null para probar lo que se ve mientras no llega o si falla
-function renderPage({ staleTime = 0, club = CLUB_MADRID }: { staleTime?: number; club?: typeof CLUB_MADRID | null } = {}) {
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage({
+  staleTime = 0,
+  club = CLUB_MADRID,
+  me,
+}: { staleTime?: number; club?: typeof CLUB_MADRID | null; me?: object } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime } } });
   if (club) qc.setQueryData(["my-club", "c1"], club);
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <CalendarioPage />
@@ -896,5 +903,37 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
     expect(await screen.findByRole("separator", { name: "Hora actual, 10:00" })).toBeInTheDocument();
+  });
+});
+
+describe("Calendario con un rol de solo lectura", () => {
+  const asRole = (role: string) => ({
+    id: "staff", name: "Equipo", activeClubId: "c1",
+    clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+  });
+
+  it("Entrenador: ve la rejilla y las reservas, pero ni «Nueva reserva» ni huecos que pulsar", async () => {
+    svc.bookings.listAll.mockResolvedValue([booking({ participants: [] })]);
+    renderPage({ me: asRole("COACH") });
+
+    await screen.findByRole("link", { name: /AMT-1|18:00/ });
+    expect(screen.queryByRole("button", { name: /Nueva reserva/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Crear reserva en/)).not.toBeInTheDocument();
+    // La rejilla sigue ahí, con sus horas y pistas
+    expect(screen.getByText("Pista 1")).toBeInTheDocument();
+    expect(screen.getByText("Pista 2")).toBeInTheDocument();
+  });
+
+  it("Entrenador: «?nueva=1» (el atajo de la portada) no le abre el alta", async () => {
+    url.set("?nueva=1");
+    renderPage({ me: asRole("COACH") });
+    await screen.findByText("Pista 1");
+    expect(screen.queryByText("Crear reserva", { selector: "h2" })).not.toBeInTheDocument();
+  });
+
+  it("Recepción: «Nueva reserva» y los huecos libres para crear", async () => {
+    renderPage({ me: asRole("RECEPTION") });
+    expect(await screen.findByLabelText("Crear reserva en Pista 1 a las 09:00")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nueva reserva/ })).toBeInTheDocument();
   });
 });

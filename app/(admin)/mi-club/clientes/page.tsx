@@ -23,6 +23,7 @@ import {
   clubCustomersService,
   type ClubCustomersQuery,
 } from "@/lib/services/club-customers";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 
 const MEMBER_OPTIONS = [
@@ -33,6 +34,8 @@ const MEMBER_OPTIONS = [
 
 export default function ClientesPage() {
   const { role, clubId } = useRole();
+  // Dar de alta e importar clientes es de quien escribe el área; quien solo lee los ve
+  const canWrite = useClubAccess().can("customers", "write");
   const router = useRouter();
   const enabled = !!clubId && isClub(role);
   const { page, setPage, pageSize, setPageSize } = usePagination();
@@ -104,17 +107,19 @@ export default function ClientesPage() {
       <div className="p-4 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">
-            Las personas que reservan o juegan en tu club, tengan o no la app. Aquí apuntas sus notas y etiquetas
-            (solo las ve tu club) y quién es socio.
+            Las personas que reservan o juegan en tu club, tengan o no la app.
+            {canWrite && " Aquí apuntas sus notas y etiquetas (solo las ve tu club) y quién es socio."}
           </p>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-3.5 w-3.5" /> Importar
-            </Button>
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="h-3.5 w-3.5" /> Nuevo cliente
-            </Button>
-          </div>
+          {canWrite && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-3.5 w-3.5" /> Importar
+              </Button>
+              <Button size="sm" onClick={() => setShowCreate(true)}>
+                <Plus className="h-3.5 w-3.5" /> Nuevo cliente
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -153,7 +158,7 @@ export default function ClientesPage() {
             <Users className="mx-auto mb-2 h-6 w-6 opacity-50" />
             {filtered
               ? "Ningún cliente coincide con la búsqueda."
-              : "Todavía no hay clientes. Aparecen solos cuando alguien reserva o se inscribe en tus torneos, o los añades tú."}
+              : `Todavía no hay clientes. Aparecen solos cuando alguien reserva o se inscribe en tus torneos${canWrite ? ", o los añades tú" : ""}.`}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -219,16 +224,20 @@ export default function ClientesPage() {
         )}
       </div>
 
-      <ClubCustomerImportDialog open={showImport} clubId={clubId!} onClose={() => setShowImport(false)} />
-      <ClubCustomerCreateDialog
-        open={showCreate}
-        clubId={clubId!}
-        onClose={() => setShowCreate(false)}
-        onDone={(c) => {
-          setShowCreate(false);
-          router.push(`/mi-club/clientes/${c.id}`);
-        }}
-      />
+      {canWrite && (
+        <>
+          <ClubCustomerImportDialog open={showImport} clubId={clubId!} onClose={() => setShowImport(false)} />
+          <ClubCustomerCreateDialog
+            open={showCreate}
+            clubId={clubId!}
+            onClose={() => setShowCreate(false)}
+            onDone={(c) => {
+              setShowCreate(false);
+              router.push(`/mi-club/clientes/${c.id}`);
+            }}
+          />
+        </>
+      )}
     </>
   );
 }

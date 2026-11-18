@@ -26,6 +26,7 @@ import {
   type ClubMessagePreview,
   type ClubMessageSegment,
 } from "@/lib/services/club-messages";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { charCount } from "@/lib/utils/char-count";
 import type { CategoryLevel } from "@/types";
@@ -80,6 +81,8 @@ function describeSegment(s: ClubMessageSegment): string {
 
 export default function MensajesPage() {
   const { role, clubId } = useRole();
+  // Escribir a los clientes es de quien escribe el área; quien solo lee ve lo enviado
+  const canWrite = useClubAccess().can("customers", "write");
   const qc = useQueryClient();
   const enabled = !!clubId && isClub(role);
 
@@ -181,163 +184,165 @@ export default function MensajesPage() {
   return (
     <>
       <Header title="Mensajes" />
-      <div className="p-4 sm:p-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
-        {/* ── Formulario ── */}
-        <section className="bg-card border border-border rounded-xl p-5 space-y-4 self-start" aria-labelledby="msg-form-title">
-          <div>
-            <h2 id="msg-form-title" className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Megaphone size={14} className="text-[#D4AF37]" /> Nuevo mensaje a tus clientes
-            </h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Avisa de un cierre, un torneo o una liga. Llega como notificación en la app a quien la tiene y como email;
-              cada email lleva un enlace para darse de baja.
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label htmlFor="msg-title" className="text-xs font-medium text-foreground">Título</label>
-              <Counter value={title} max={CLUB_MESSAGE_TITLE_MAX} />
+      <div className={`p-4 sm:p-6 grid grid-cols-1 gap-5 ${canWrite ? "xl:grid-cols-2" : ""}`}>
+        {/* ── Formulario: solo para quien puede escribir a los clientes ── */}
+        {canWrite && (
+          <section className="bg-card border border-border rounded-xl p-5 space-y-4 self-start" aria-labelledby="msg-form-title">
+            <div>
+              <h2 id="msg-form-title" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Megaphone size={14} className="text-[#D4AF37]" /> Nuevo mensaje a tus clientes
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Avisa de un cierre, un torneo o una liga. Llega como notificación en la app a quien la tiene y como email;
+                cada email lleva un enlace para darse de baja.
+              </p>
             </div>
-            <input
-              id="msg-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ej.: Cerramos el sábado por el torneo"
-              className={INPUT}
-            />
-          </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label htmlFor="msg-body" className="text-xs font-medium text-foreground">Texto</label>
-              <Counter value={body} max={CLUB_MESSAGE_BODY_MAX} />
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="msg-title" className="text-xs font-medium text-foreground">Título</label>
+                <Counter value={title} max={CLUB_MESSAGE_TITLE_MAX} />
+              </div>
+              <input
+                id="msg-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ej.: Cerramos el sábado por el torneo"
+                className={INPUT}
+              />
             </div>
-            <textarea
-              id="msg-body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={5}
-              placeholder="Ej.: El sábado las pistas estarán ocupadas por el torneo. Volvemos a abrir el domingo a las 9:00."
-              className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm text-foreground resize-y focus:outline-none focus:border-[#D4AF37]"
-            />
-          </div>
 
-          <fieldset className="space-y-2">
-            <legend className="text-xs font-medium text-foreground">Por dónde se manda</legend>
-            <div className="flex flex-wrap gap-2">
-              <label className={`${CHIP} ${sendPush ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
-                <input type="checkbox" checked={sendPush} onChange={(e) => setSendPush(e.target.checked)} className="accent-[#D4AF37]" />
-                Notificación en la app
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="msg-body" className="text-xs font-medium text-foreground">Texto</label>
+                <Counter value={body} max={CLUB_MESSAGE_BODY_MAX} />
+              </div>
+              <textarea
+                id="msg-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={5}
+                placeholder="Ej.: El sábado las pistas estarán ocupadas por el torneo. Volvemos a abrir el domingo a las 9:00."
+                className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm text-foreground resize-y focus:outline-none focus:border-[#D4AF37]"
+              />
+            </div>
+
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium text-foreground">Por dónde se manda</legend>
+              <div className="flex flex-wrap gap-2">
+                <label className={`${CHIP} ${sendPush ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
+                  <input type="checkbox" checked={sendPush} onChange={(e) => setSendPush(e.target.checked)} className="accent-[#D4AF37]" />
+                  Notificación en la app
+                </label>
+                <label className={`${CHIP} ${sendEmail ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
+                  <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} className="accent-[#D4AF37]" />
+                  Email
+                </label>
+              </div>
+              {!channelOk && <p className="text-xs text-destructive">Elige al menos un canal.</p>}
+            </fieldset>
+
+            <fieldset className="space-y-3 border-t border-border pt-4">
+              <legend className="text-xs font-medium text-foreground">A quién (todos los filtros a la vez; sin filtros, a todos)</legend>
+
+              <label className={`${CHIP} w-fit ${members ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
+                <input type="checkbox" checked={members} onChange={(e) => setMembers(e.target.checked)} className="accent-[#D4AF37]" />
+                Solo socios
               </label>
-              <label className={`${CHIP} ${sendEmail ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
-                <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} className="accent-[#D4AF37]" />
-                Email
-              </label>
-            </div>
-            {!channelOk && <p className="text-xs text-destructive">Elige al menos un canal.</p>}
-          </fieldset>
 
-          <fieldset className="space-y-3 border-t border-border pt-4">
-            <legend className="text-xs font-medium text-foreground">A quién (todos los filtros a la vez; sin filtros, a todos)</legend>
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Etiquetas (los que tengan alguna)</p>
+                {tagsQuery.isLoading ? (
+                  <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                ) : (tagsQuery.data ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Aún no has puesto etiquetas a tus clientes.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {(tagsQuery.data ?? []).map((t) => (
+                      <label key={t} className={`${CHIP} ${tags.includes(t) ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
+                        <input type="checkbox" checked={tags.includes(t)} onChange={() => toggle(tags, setTags, t)} className="accent-[#D4AF37]" />
+                        {t}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <label className={`${CHIP} w-fit ${members ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
-              <input type="checkbox" checked={members} onChange={(e) => setMembers(e.target.checked)} className="accent-[#D4AF37]" />
-              Solo socios
-            </label>
-
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">Etiquetas (los que tengan alguna)</p>
-              {tagsQuery.isLoading ? (
-                <Loader2 size={14} className="animate-spin text-muted-foreground" />
-              ) : (tagsQuery.data ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground">Aún no has puesto etiquetas a tus clientes.</p>
-              ) : (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Nivel del jugador (solo los que tienen la app)</p>
                 <div className="flex flex-wrap gap-2">
-                  {(tagsQuery.data ?? []).map((t) => (
-                    <label key={t} className={`${CHIP} ${tags.includes(t) ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
-                      <input type="checkbox" checked={tags.includes(t)} onChange={() => toggle(tags, setTags, t)} className="accent-[#D4AF37]" />
-                      {t}
+                  {LEVELS.map((l) => (
+                    <label key={l} className={`${CHIP} ${levels.includes(l) ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
+                      <input type="checkbox" checked={levels.includes(l)} onChange={() => toggle(levels, setLevels, l)} className="accent-[#D4AF37]" />
+                      {CATEGORY_LABEL[l]}
                     </label>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
 
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">Nivel del jugador (solo los que tienen la app)</p>
-              <div className="flex flex-wrap gap-2">
-                {LEVELS.map((l) => (
-                  <label key={l} className={`${CHIP} ${levels.includes(l) ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
-                    <input type="checkbox" checked={levels.includes(l)} onChange={() => toggle(levels, setLevels, l)} className="accent-[#D4AF37]" />
-                    {CATEGORY_LABEL[l]}
-                  </label>
-                ))}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className={`${CHIP} ${inactiveOn ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
+                  <input type="checkbox" checked={inactiveOn} onChange={(e) => setInactiveOn(e.target.checked)} className="accent-[#D4AF37]" />
+                  Sin reservar en los últimos
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  aria-label="Días sin reservar"
+                  value={inactiveText}
+                  disabled={!inactiveOn}
+                  onChange={(e) => setInactiveText(e.target.value)}
+                  className={`${INPUT} !w-24 disabled:opacity-50`}
+                />
+                <span className="text-xs text-muted-foreground">días</span>
+                {inactiveOn && !inactiveValid && <span className="text-xs text-destructive">Entre 1 y 3650 días.</span>}
+              </div>
+            </fieldset>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+              <p className="min-w-0 flex-1 basis-56 text-xs text-muted-foreground flex items-start gap-1.5" aria-live="polite">
+                <Users size={12} className="mt-0.5 shrink-0" />
+                {previewMutation.isPending ? (
+                  "Contando clientes…"
+                ) : currentPreview ? (
+                  currentPreview.recipients === 0 ? (
+                    "Ningún cliente cumple esos filtros."
+                  ) : (
+                    <span>
+                      Llegará a <strong className="text-foreground">{plural(currentPreview.recipients, "cliente", "clientes")}</strong>:{" "}
+                      {plural(currentPreview.withPush, "con la app", "con la app")} y{" "}
+                      {plural(currentPreview.withEmail, "con email", "con email")}.
+                      {channelOk && reachable === 0 && " Por los canales elegidos no llega a nadie."}
+                    </span>
+                  )
+                ) : (
+                  "Pulsa «Ver a cuántos llega» antes de enviar."
+                )}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => previewMutation.mutate()}
+                  disabled={!canPreview}
+                  className={`${BUTTON} border border-border text-foreground hover:bg-secondary`}
+                >
+                  {previewMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
+                  Ver a cuántos llega
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(true)}
+                  disabled={!canSend}
+                  className={`${BUTTON} bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]`}
+                >
+                  {send.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  Enviar
+                </button>
               </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <label className={`${CHIP} ${inactiveOn ? "border-[#D4AF37] text-[#D4AF37] bg-[#D4AF37]/10" : "border-border text-muted-foreground"}`}>
-                <input type="checkbox" checked={inactiveOn} onChange={(e) => setInactiveOn(e.target.checked)} className="accent-[#D4AF37]" />
-                Sin reservar en los últimos
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={3650}
-                aria-label="Días sin reservar"
-                value={inactiveText}
-                disabled={!inactiveOn}
-                onChange={(e) => setInactiveText(e.target.value)}
-                className={`${INPUT} !w-24 disabled:opacity-50`}
-              />
-              <span className="text-xs text-muted-foreground">días</span>
-              {inactiveOn && !inactiveValid && <span className="text-xs text-destructive">Entre 1 y 3650 días.</span>}
-            </div>
-          </fieldset>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <p className="min-w-0 flex-1 basis-56 text-xs text-muted-foreground flex items-start gap-1.5" aria-live="polite">
-              <Users size={12} className="mt-0.5 shrink-0" />
-              {previewMutation.isPending ? (
-                "Contando clientes…"
-              ) : currentPreview ? (
-                currentPreview.recipients === 0 ? (
-                  "Ningún cliente cumple esos filtros."
-                ) : (
-                  <span>
-                    Llegará a <strong className="text-foreground">{plural(currentPreview.recipients, "cliente", "clientes")}</strong>:{" "}
-                    {plural(currentPreview.withPush, "con la app", "con la app")} y{" "}
-                    {plural(currentPreview.withEmail, "con email", "con email")}.
-                    {channelOk && reachable === 0 && " Por los canales elegidos no llega a nadie."}
-                  </span>
-                )
-              ) : (
-                "Pulsa «Ver a cuántos llega» antes de enviar."
-              )}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => previewMutation.mutate()}
-                disabled={!canPreview}
-                className={`${BUTTON} border border-border text-foreground hover:bg-secondary`}
-              >
-                {previewMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
-                Ver a cuántos llega
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                disabled={!canSend}
-                className={`${BUTTON} bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]`}
-              >
-                {send.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                Enviar
-              </button>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* ── Historial ── */}
         <section className="bg-card border border-border rounded-xl p-5 space-y-3" aria-labelledby="msg-history-title">
@@ -349,7 +354,9 @@ export default function MensajesPage() {
               <Loader2 size={18} className="animate-spin text-muted-foreground" />
             </div>
           ) : items.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-6 text-center">Aún no has enviado ningún mensaje.</p>
+            <p className="text-xs text-muted-foreground py-6 text-center">
+              {canWrite ? "Aún no has enviado ningún mensaje." : "El club aún no ha enviado ningún mensaje."}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -413,15 +420,17 @@ export default function MensajesPage() {
         </section>
       </div>
 
-      <ConfirmModal
-        open={confirming}
-        title={`Enviar a ${plural(currentPreview?.recipients ?? 0, "cliente", "clientes")}`}
-        description={`«${title.trim()}» se mandará ${[sendPush && "como notificación en la app", sendEmail && "por email"].filter(Boolean).join(" y ")}. No se puede retirar.`}
-        confirmLabel="Enviar"
-        loading={send.isPending}
-        onClose={() => { if (!send.isPending) setConfirming(false); }}
-        onConfirm={() => send.mutate()}
-      />
+      {canWrite && (
+        <ConfirmModal
+          open={confirming}
+          title={`Enviar a ${plural(currentPreview?.recipients ?? 0, "cliente", "clientes")}`}
+          description={`«${title.trim()}» se mandará ${[sendPush && "como notificación en la app", sendEmail && "por email"].filter(Boolean).join(" y ")}. No se puede retirar.`}
+          confirmLabel="Enviar"
+          loading={send.isPending}
+          onClose={() => { if (!send.isPending) setConfirming(false); }}
+          onConfirm={() => send.mutate()}
+        />
+      )}
     </>
   );
 }

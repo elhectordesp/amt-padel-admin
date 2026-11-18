@@ -15,6 +15,7 @@ import { ReservasPage } from "@/components/admin/reservas-page";
 import { BookingRulesCard } from "@/components/admin/booking-rules-card";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { rulesError } from "@/lib/utils/booking-rules";
 import type { ClubBookingConfig } from "@/types/bookings";
@@ -47,6 +48,8 @@ type FormState = Pick<
 
 export default function ConfiguracionPage() {
   const { role, clubId } = useRole();
+  // Quien solo lee la configuración la ve, sin «Guardar» y con los campos fijos
+  const canWrite = useClubAccess().can("settings", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.config(clubId ?? ""),
@@ -154,18 +157,20 @@ export default function ConfiguracionPage() {
   return (
     <ReservasPage title="Configuración">
       {/* Guardar, en el contenido: la cabecera del panel va sola y a todo el ancho */}
-      <div className="mt-2 flex justify-end">
-        <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
-          {save.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-          Guardar
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="mt-2 flex justify-end">
+          <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
+            {save.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            Guardar
+          </Button>
+        </div>
+      )}
 
-      <div className="mt-6 space-y-8">
+      <fieldset disabled={!canWrite} className="mt-6 min-w-0 space-y-8">
         {/* Cancelación + antelación */}
         <Section title="Cancelación y antelación">
           <NumberField
@@ -294,7 +299,7 @@ export default function ConfiguracionPage() {
             help="Cuando un jugador anula una reserva, a las cuentas del equipo con el email verificado."
           />
         </Section>
-      </div>
+      </fieldset>
     </ReservasPage>
   );
 }

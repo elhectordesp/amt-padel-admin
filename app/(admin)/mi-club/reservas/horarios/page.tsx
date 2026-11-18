@@ -21,6 +21,7 @@ import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { dateOnlyKey, formatDayKey, zonedDayKey } from "@/lib/utils/time-zone";
@@ -99,6 +100,8 @@ export default function HorariosPage() {
 
 function WeeklyHoursSection({ clubId }: { clubId: string }) {
   const qc = useQueryClient();
+  // Quien solo lee la configuración ve el horario, sin «Guardar» y con los campos fijos
+  const canWrite = useClubAccess().can("settings", "write");
   const [rows, setRows] = useState<DayRow[]>(DEFAULT_DAY_ROWS);
   const [hydrated, setHydrated] = useState(false);
 
@@ -199,22 +202,24 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
     <section>
       <div className="flex items-center justify-between gap-3">
         <SectionTitle>Horario semanal</SectionTitle>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={applyToAll}>
-            Aplicar a todos
-          </Button>
-          <Button onClick={handleSave} disabled={save.isPending} size="sm">
-            {save.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
-              </>
-            ) : (
-              <>
-                <Save className="h-3.5 w-3.5" /> Guardar
-              </>
-            )}
-          </Button>
-        </div>
+        {canWrite && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={applyToAll}>
+              Aplicar a todos
+            </Button>
+            <Button onClick={handleSave} disabled={save.isPending} size="sm">
+              {save.isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" /> Guardar
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-border">
@@ -238,6 +243,7 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
                       className="h-4 w-4 rounded border-border accent-primary"
                       checked={r.active}
                       onChange={(e) => updateRow(i, { active: e.target.checked })}
+                      disabled={!canWrite}
                     />
                   </label>
                 </td>
@@ -247,14 +253,14 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
                     className="rounded border border-border bg-background px-2 py-1 text-sm disabled:opacity-40"
                     value={r.openTime}
                     onChange={(e) => updateRow(i, { openTime: e.target.value })}
-                    disabled={!r.active}
+                    disabled={!r.active || !canWrite}
                   />
                 </td>
                 <td className="px-4 py-3">
                   <CloseTimeInput
                     value={r.closeTime}
                     onChange={(closeTime) => updateRow(i, { closeTime })}
-                    disabled={!r.active}
+                    disabled={!r.active || !canWrite}
                     label={DAY_NAMES[r.dayOfWeek]}
                   />
                 </td>
@@ -271,6 +277,7 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
 
 function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   // Hoy en el club (con el día UTC, de 00:00 a 02:00 en Madrid salía el de ayer)
   const today = zonedDayKey(new Date(), timeZone);
 
@@ -330,20 +337,22 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
     <section>
       <div className="flex items-center justify-between">
         <SectionTitle>Excepciones por fecha</SectionTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowForm((s) => !s)}
-        >
-          <Plus className="h-3.5 w-3.5" /> Añadir
-        </Button>
+        {canWrite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowForm((s) => !s)}
+          >
+            <Plus className="h-3.5 w-3.5" /> Añadir
+          </Button>
+        )}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Festivos, cierres puntuales, horarios reducidos. Tienen prioridad
         sobre el horario semanal regular.
       </p>
 
-      {showForm && (
+      {canWrite && showForm && (
         <div className="mt-4 rounded-lg border border-border bg-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha">
@@ -450,7 +459,7 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
                 <th className="px-4 py-2.5 text-left font-medium">Fecha</th>
                 <th className="px-4 py-2.5 text-left font-medium">Estado</th>
                 <th className="px-4 py-2.5 text-left font-medium">Motivo</th>
-                <th className="px-4 py-2.5"></th>
+                {canWrite && <th className="px-4 py-2.5"></th>}
               </tr>
             </thead>
             <tbody>
@@ -458,7 +467,7 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
                 <ExceptionRow
                   key={exc.id}
                   exc={exc}
-                  onRemove={() => remove.mutate(exc.id)}
+                  onRemove={canWrite ? () => remove.mutate(exc.id) : undefined}
                 />
               ))}
             </tbody>
@@ -474,7 +483,8 @@ function ExceptionRow({
   onRemove,
 }: {
   exc: ClubScheduleException;
-  onRemove: () => void;
+  /** Sin él (quien solo lee la configuración) no hay botón ni columna de borrar. */
+  onRemove?: () => void;
 }) {
   // Una fecha de calendario, sin zona: en la del navegador, al oeste de UTC
   // salía el día anterior
@@ -510,16 +520,18 @@ function ExceptionRow({
         )}
       </td>
       <td className="px-4 py-3 text-muted-foreground">{exc.reason ?? "—"}</td>
-      <td className="px-4 py-3 text-right">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onRemove}
-          aria-label="Eliminar excepción"
-        >
-          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-        </Button>
-      </td>
+      {onRemove && (
+        <td className="px-4 py-3 text-right">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onRemove}
+            aria-label="Eliminar excepción"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </td>
+      )}
     </tr>
   );
 }

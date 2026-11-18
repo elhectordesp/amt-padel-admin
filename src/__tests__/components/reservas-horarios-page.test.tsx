@@ -31,9 +31,17 @@ vi.mock("@/lib/services/bookings", async () => {
 });
 
 import HorariosPage from "../../../app/(admin)/mi-club/reservas/horarios/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
-function renderPage() {
+const asRole = (role: string) => ({
+  id: "staff", name: "Equipo", activeClubId: "c1",
+  clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+});
+
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage(me?: object) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <HorariosPage />
@@ -157,5 +165,32 @@ describe("Horarios — zona del club (B1)", () => {
     } finally {
       process.env.TZ = browserTz;
     }
+  });
+
+  describe("con un rol de solo lectura (Recepción lee la configuración)", () => {
+    beforeEach(() => {
+      svc.exceptions.list.mockResolvedValue([
+        { id: "e1", clubId: "c1", date: "2026-11-20", isClosed: true, customOpen: null, customClose: null, reason: "Festivo" },
+      ]);
+    });
+
+    it("ve el horario y las excepciones, sin «Guardar», «Aplicar a todos», «Añadir» ni borrar", async () => {
+      renderPage(asRole("RECEPTION"));
+      expect(await screen.findByText("vie, 20 nov 2026")).toBeInTheDocument();
+      expect(screen.getByText("Lunes")).toBeInTheDocument();
+      for (const name of [/Guardar/, /Aplicar a todos/, /Añadir/, /Eliminar excepción/]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      }
+      // El horario se lee, no se cambia
+      expect(screen.getByLabelText("Cierre de Lunes")).toBeDisabled();
+    });
+
+    it("con escritura (Propietario) están todos esos botones", async () => {
+      renderPage(asRole("OWNER"));
+      expect(await screen.findByText("vie, 20 nov 2026")).toBeInTheDocument();
+      for (const name of [/Guardar/, /Aplicar a todos/, /Añadir/, /Eliminar excepción/]) {
+        expect(screen.getByRole("button", { name })).toBeInTheDocument();
+      }
+    });
   });
 });

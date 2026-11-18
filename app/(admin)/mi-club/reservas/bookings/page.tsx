@@ -30,6 +30,7 @@ import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { cancelFailureReason, cancelledSummary } from "@/lib/utils/booking-cancel-many";
@@ -78,6 +79,8 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
 
 export default function BookingsListPage() {
   const { role, clubId } = useRole();
+  // Crear y cancelar son de quien escribe las reservas; quien solo lee ve el listado
+  const canWrite = useClubAccess().can("bookings", "write");
   const [tab, setTab] = useState<Tab>("today");
   const [showCreate, setShowCreate] = useState(false);
   // Un día concreto (YYYY-MM-DD, el del club): manda sobre la pestaña
@@ -242,20 +245,24 @@ export default function BookingsListPage() {
       {/* El botón va con el texto, no junto a la cabecera: en el móvil se cortaba */}
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">
-          Listado de reservas de tu club. Cancelar aquí notifica automáticamente
-          a los jugadores con el motivo opcional.
+          Listado de reservas de tu club.
+          {canWrite && " Cancelar aquí notifica automáticamente a los jugadores con el motivo opcional."}
         </p>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
-          <Plus className="h-3.5 w-3.5" /> Crear reserva
-        </Button>
+        {canWrite && (
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus className="h-3.5 w-3.5" /> Crear reserva
+          </Button>
+        )}
       </div>
 
-      <BookingCreateDialog
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        clubId={clubId}
-        timeZone={timeZone}
-      />
+      {canWrite && (
+        <BookingCreateDialog
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          clubId={clubId}
+          timeZone={timeZone}
+        />
+      )}
 
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">
@@ -345,7 +352,7 @@ export default function BookingsListPage() {
           />
         )}
 
-        {!query.isError && items.some(isCancelable) && (
+        {canWrite && !query.isError && items.some(isCancelable) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void selectAll()} disabled={selectingAll}>
               {selectingAll && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Seleccionar todas
@@ -383,7 +390,7 @@ export default function BookingsListPage() {
               <table className="w-full min-w-[56rem] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th className="w-8 px-3 py-2" aria-label="Seleccionar" />
+                    {canWrite && <th className="w-8 px-3 py-2" aria-label="Seleccionar" />}
                     <th className="px-3 py-2 font-medium">Hora</th>
                     <th className="px-3 py-2 font-medium">Pista</th>
                     <th className="px-3 py-2 font-medium">Titular</th>
@@ -391,7 +398,7 @@ export default function BookingsListPage() {
                     <th className="px-3 py-2 text-right font-medium">Importe</th>
                     <th className="px-3 py-2 font-medium">Pago</th>
                     <th className="px-3 py-2 font-medium">Estado</th>
-                    <th className="px-3 py-2" aria-label="Acciones" />
+                    {canWrite && <th className="px-3 py-2" aria-label="Acciones" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -400,6 +407,7 @@ export default function BookingsListPage() {
                       key={b.id}
                       booking={b}
                       timeZone={timeZone}
+                      canWrite={canWrite}
                       selected={selected.has(b.id)}
                       onToggle={() => toggle(b)}
                     />
@@ -489,11 +497,14 @@ function bookingLabel(b: Booking, timeZone: string): string {
 function BookingRow({
   booking: b,
   timeZone,
+  canWrite,
   selected,
   onToggle,
 }: {
   booking: Booking;
   timeZone: string;
+  /** Sin escritura no hay casilla ni «Cancelar» (ni sus columnas). */
+  canWrite: boolean;
   selected: boolean;
   onToggle: () => void;
 }) {
@@ -513,17 +524,19 @@ function BookingRow({
 
   return (
     <tr className="border-b border-border last:border-0 transition-colors hover:bg-muted/40">
-      <td className="px-3 py-2 align-top">
-        {isCancelable(b) && (
-          <input
-            type="checkbox"
-            aria-label={`Seleccionar la reserva ${b.shortCode}`}
-            checked={selected}
-            onChange={onToggle}
-            className="mt-0.5 h-4 w-4 cursor-pointer"
-          />
-        )}
-      </td>
+      {canWrite && (
+        <td className="px-3 py-2 align-top">
+          {isCancelable(b) && (
+            <input
+              type="checkbox"
+              aria-label={`Seleccionar la reserva ${b.shortCode}`}
+              checked={selected}
+              onChange={onToggle}
+              className="mt-0.5 h-4 w-4 cursor-pointer"
+            />
+          )}
+        </td>
+      )}
       <td className="px-3 py-2 align-top">
         <Link href={href} className="block cursor-pointer">
           <span className="font-medium tabular-nums">{timeStr}</span>
@@ -562,16 +575,18 @@ function BookingRow({
           {STATUS_LABELS[b.status]}
         </span>
       </td>
-      <td className="px-3 py-2 text-right align-top">
-        {isCancelable(b) && (
-          <Button variant="ghost" size="sm" onClick={() => setShowCancel(true)}>
-            <X className="h-3.5 w-3.5" /> Cancelar
-          </Button>
-        )}
-        {showCancel && (
-          <CancelBookingDialog booking={b} timeZone={timeZone} onClose={() => setShowCancel(false)} />
-        )}
-      </td>
+      {canWrite && (
+        <td className="px-3 py-2 text-right align-top">
+          {isCancelable(b) && (
+            <Button variant="ghost" size="sm" onClick={() => setShowCancel(true)}>
+              <X className="h-3.5 w-3.5" /> Cancelar
+            </Button>
+          )}
+          {showCancel && (
+            <CancelBookingDialog booking={b} timeZone={timeZone} onClose={() => setShowCancel(false)} />
+          )}
+        </td>
+      )}
     </tr>
   );
 }

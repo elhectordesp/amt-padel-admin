@@ -36,6 +36,7 @@ import { formatInTimeZone, zonedDateTimeToIso } from "@/lib/utils/time-zone";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import type { Player } from "@/types";
@@ -93,6 +94,8 @@ export default function ActivacionPage() {
 
 function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
+  // Pedir la activación y publicar son de quien escribe la configuración
+  const canWrite = useClubAccess().can("settings", "write");
   const query = useQuery({
     queryKey: bookingsQK.activation(clubId),
     queryFn: () => bookingsService.activation.state(clubId),
@@ -161,18 +164,22 @@ function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: stri
             </div>
           </div>
           {state.readiness && <ActivationChecklist readiness={state.readiness} />}
-          <Button onClick={() => requestMut.mutate()} disabled={requestMut.isPending || notReady}>
-            {requestMut.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
-            )}
-            Solicitar activación
-          </Button>
-          {notReady && (
-            <p className="text-xs text-muted-foreground">
-              Completa los pasos pendientes de la lista para poder solicitarla.
-            </p>
+          {canWrite && (
+            <>
+              <Button onClick={() => requestMut.mutate()} disabled={requestMut.isPending || notReady}>
+                {requestMut.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                Solicitar activación
+              </Button>
+              {notReady && (
+                <p className="text-xs text-muted-foreground">
+                  Completa los pasos pendientes de la lista para poder solicitarla.
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
@@ -190,20 +197,24 @@ function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: stri
               </p>
             </div>
           </div>
-          <Button onClick={() => setConfirmPublish(true)}>
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Publicar al público
-          </Button>
-          <ConfirmModal
-            open={confirmPublish}
-            title="¿Publicar el club al público?"
-            description="Tu club aparecerá a todos los jugadores de la app; para retirarlo tendrás que pedírselo a AMT."
-            confirmLabel="Sí, publicar"
-            cancelLabel="No, volver"
-            loading={publishMut.isPending}
-            onClose={() => setConfirmPublish(false)}
-            onConfirm={() => publishMut.mutate()}
-          />
+          {canWrite && (
+            <>
+              <Button onClick={() => setConfirmPublish(true)}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Publicar al público
+              </Button>
+              <ConfirmModal
+                open={confirmPublish}
+                title="¿Publicar el club al público?"
+                description="Tu club aparecerá a todos los jugadores de la app; para retirarlo tendrás que pedírselo a AMT."
+                confirmLabel="Sí, publicar"
+                cancelLabel="No, volver"
+                loading={publishMut.isPending}
+                onClose={() => setConfirmPublish(false)}
+                onConfirm={() => publishMut.mutate()}
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -304,6 +315,7 @@ function ActivationChecklist({ readiness }: { readiness: ActivationReadiness }) 
 
 function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Player | null>(null);
   const [validUntil, setValidUntil] = useState("");
@@ -353,16 +365,18 @@ function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string
           <Users className="mr-1 inline-block h-3.5 w-3.5" />
           Testers
         </h2>
-        <Button variant="outline" size="sm" onClick={() => setShowForm((s) => !s)}>
-          <Plus className="h-3.5 w-3.5" /> Añadir
-        </Button>
+        {canWrite && (
+          <Button variant="outline" size="sm" onClick={() => setShowForm((s) => !s)}>
+            <Plus className="h-3.5 w-3.5" /> Añadir
+          </Button>
+        )}
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
         Usuarios AMT que pueden ver y reservar mientras el club está en modo
         prueba. Si no especificas fecha, expiran en 7 días.
       </p>
 
-      {showForm && (
+      {canWrite && showForm && (
         <div className="mb-4 rounded-md border border-border bg-background p-3 space-y-3">
           {selected ? (
             <div className="flex items-center justify-between rounded border border-primary/30 bg-primary/5 px-3 py-2">
@@ -432,14 +446,16 @@ function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string
                   })}
                 </p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => remove.mutate(t.id)}
-                title="Eliminar"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-              </Button>
+              {canWrite && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => remove.mutate(t.id)}
+                  title="Eliminar"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>

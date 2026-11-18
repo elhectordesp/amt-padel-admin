@@ -30,6 +30,12 @@ vi.mock("@/lib/services/club-customers", async () => {
 
 import ClientesPage from "../../../app/(admin)/mi-club/clientes/page";
 import { TagInput } from "@/components/admin/tag-input";
+import { ME_QUERY_KEY } from "@/lib/use-me";
+
+const asRole = (role: string) => ({
+  id: "staff", name: "Equipo", activeClubId: "c1",
+  clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+});
 
 const ANA = {
   id: "cc-1", clubId: "c1", userId: null, hasAccount: false, name: "Ana Pérez", phone: "600111222", email: null,
@@ -37,8 +43,10 @@ const ANA = {
   source: "MANUAL", archivedAt: null, createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-function renderPage() {
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage(me?: object) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <ClientesPage />
@@ -85,6 +93,20 @@ describe("Clientes del club", () => {
     await waitFor(() => expect(service.create).toHaveBeenCalledWith("c1", { name: "Luis Gómez", phone: "699000111", email: undefined }), WAIT);
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/clientes/cc-2"), WAIT);
   });
+
+  it("con un rol de solo lectura (Torneos) se ven los clientes, sin «Nuevo cliente» ni «Importar»", async () => {
+    renderPage(asRole("TOURNAMENTS"));
+    expect(await screen.findByText("Ana Pérez", {}, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nuevo cliente/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Importar/ })).not.toBeInTheDocument();
+  });
+
+  it("con escritura (Recepción) están «Nuevo cliente» e «Importar»", async () => {
+    renderPage(asRole("RECEPTION"));
+    await screen.findByText("Ana Pérez", {}, WAIT);
+    expect(screen.getByRole("button", { name: /Nuevo cliente/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Importar/ })).toBeInTheDocument();
+  });
 });
 
 describe("TagInput", () => {
@@ -107,5 +129,13 @@ describe("TagInput", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Quitar la etiqueta profe" }));
     expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("de solo lectura enseña las etiquetas sin quitarlas, sin campo y sin sugerencias", () => {
+    render(<TagInput tags={["profe"]} suggestions={["nivel 3"]} onChange={vi.fn()} readOnly />);
+    expect(screen.getByText("profe")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Quitar la etiqueta/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Añadir etiqueta")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "nivel 3" })).not.toBeInTheDocument();
   });
 });

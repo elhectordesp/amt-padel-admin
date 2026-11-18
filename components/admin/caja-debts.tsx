@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService } from "@/lib/services/bookings";
 import { cashQK, cashService, type DebtItem } from "@/lib/services/cash";
+import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
 import { formatInTimeZone } from "@/lib/utils/time-zone";
@@ -36,6 +37,9 @@ export function collectDebt(item: DebtItem, method: CounterPaymentMethod, amount
 /** «Pendiente de cobro»: quién debe al club, por persona, con el cobro ahí mismo. */
 export function CajaDebts({ clubId, timeZone }: Props) {
   const qc = useQueryClient();
+  const { can } = useClubAccess();
+  // Cada cobro va al área que lo escribe en el back: la reserva, a «bookings»; la inscripción, a «cash»
+  const canCollect = (item: DebtItem) => can(item.source === "BOOKING" ? "bookings" : "cash", "write");
   const [collecting, setCollecting] = useState<{ person: string; item: DebtItem } | null>(null);
 
   const query = useQuery({
@@ -77,9 +81,11 @@ export function CajaDebts({ clubId, timeZone }: Props) {
                       <p className="text-xs text-muted-foreground">{formatInTimeZone(item.date, timeZone, DAY)}</p>
                     </div>
                     <span className="text-sm font-medium text-foreground">{formatCents(item.amountCents)}</span>
-                    <Button variant="outline" size="sm" onClick={() => setCollecting({ person: p.name, item })}>
-                      <CreditCard className="h-3.5 w-3.5" /> Cobrar
-                    </Button>
+                    {canCollect(item) && (
+                      <Button variant="outline" size="sm" onClick={() => setCollecting({ person: p.name, item })}>
+                        <CreditCard className="h-3.5 w-3.5" /> Cobrar
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
