@@ -308,7 +308,7 @@ export function SchoolGroupDialog({
               : "Generar ahora las clases de la temporada y reservar sus pistas"}
             <span className="block text-xs text-muted-foreground">
               {editing
-                ? "Se rehacen las clases futuras sin asistencia (también las que hayas movido a mano). No se tocan las pasadas, las canceladas ni las que ya tienen asistencia."
+                ? "Se rehacen las clases futuras sin asistencia. No se tocan las pasadas, las canceladas, las que hayas movido o cambiado de pista a mano ni las que ya tienen asistencia, recuperaciones o solicitudes pendientes."
                 : "Se crea una clase por franja y semana hasta el fin de la temporada, saltando los días que el club cierra."}
             </span>
           </span>

@@ -24,6 +24,7 @@ import type {
   ClubOperatingHours,
   ClubRulesResponse,
   ClubScheduleException,
+  SavedScheduleException,
   ClubSeason,
   ClubSeasonPayload,
   ClubPriceOffer,
@@ -95,7 +96,7 @@ export const bookingsService = {
 
     create: (clubId: string, payload: CreateScheduleExceptionPayload) =>
       api
-        .post<ClubScheduleException>(`${base(clubId)}/exceptions`, payload)
+        .post<SavedScheduleException>(`${base(clubId)}/exceptions`, payload)
         .then((r) => r.data),
 
     update: (
@@ -104,7 +105,7 @@ export const bookingsService = {
       payload: UpdateScheduleExceptionPayload,
     ) =>
       api
-        .patch<ClubScheduleException>(
+        .patch<SavedScheduleException>(
           `${base(clubId)}/exceptions/${exceptionId}`,
           payload,
         )

@@ -200,7 +200,7 @@ describe("Escuela: grupos", () => {
 
   it("Nuevo grupo: valida antes de mandar, crea con el horario, genera las clases y va a su ficha", async () => {
     school.groups.create.mockResolvedValue({ id: "g9" });
-    school.sessions.generate.mockResolvedValue({ created: 38, withoutCourt: 0, skippedClosedDays: 1, removed: 0 });
+    school.sessions.generate.mockResolvedValue({ created: 38, withoutCourt: 0, skippedClosedDays: 1, skippedOutsideHours: 0, removed: 0 });
     renderPage();
     await screen.findByText("Mis grupos", {}, WAIT);
     fireEvent.click(screen.getByRole("button", { name: /Nuevo grupo/ }));

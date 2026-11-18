@@ -71,6 +71,21 @@ export interface ClubScheduleException {
   priceAsDayOfWeek: number | null;
 }
 
+/** Una clase de la escuela (de grupo o privada) que una excepción de horario deja fuera de él. */
+export interface AffectedSchoolClass {
+  kind: "GROUP" | "PRIVATE";
+  id: string;
+  /** El grupo, o «Clase privada». */
+  name: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+/** Lo que devuelve el back al crear o editar una excepción: la excepción y las clases que se quedan fuera de horario (no se cancelan solas). */
+export interface SavedScheduleException extends ClubScheduleException {
+  affectedSchoolClasses: AffectedSchoolClass[];
+}
+
 export interface ClubBookingConfig {
   id: string;
   clubId: string;

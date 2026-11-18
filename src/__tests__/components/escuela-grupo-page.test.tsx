@@ -113,6 +113,23 @@ describe("Escuela: ficha del grupo", () => {
     ]);
   });
 
+  it("quien se dio de baja y volvió tiene un periodo nuevo: sale una vez entre los activos y su periodo anterior, con sus fechas, en las bajas", async () => {
+    school.groups.get.mockResolvedValue({
+      ...GROUP,
+      activeStudents: 1,
+      members: [
+        { ...member("m1", "Ana Prueba", "2026-10-01T08:00:00.000Z") },
+        { ...member("m4", "Ana Prueba"), joinedAt: "2026-11-10T08:00:00.000Z" },
+      ],
+    });
+    await renderPage();
+    const students = await screen.findByRole("region", { name: "Alumnos" }, WAIT);
+    expect(within(students).getByText("1 de 3 plazas")).toBeInTheDocument();
+    expect(within(students).getByText(/desde 10 nov 2026/)).toBeInTheDocument();
+    expect(within(students).getByText("Bajas (1)")).toBeInTheDocument();
+    expect(within(students).getByText(/desde 14 sept 2026 · baja el 1 oct 2026/)).toBeInTheDocument();
+  });
+
   it("enseña los datos, los alumnos con sus bajas y las clases próximas con su pista", async () => {
     await renderPage();
     expect(await screen.findByText("Marta Prueba", {}, WAIT)).toBeInTheDocument();
@@ -202,13 +219,13 @@ describe("Escuela: ficha del grupo", () => {
   });
 
   it("regenerar las clases pide confirmación y avisa de lo que se ha hecho, también de las que se quedan sin pista", async () => {
-    school.sessions.generate.mockResolvedValue({ created: 30, withoutCourt: 2, skippedClosedDays: 0, removed: 28 });
+    school.sessions.generate.mockResolvedValue({ created: 30, withoutCourt: 2, skippedClosedDays: 0, skippedOutsideHours: 0, removed: 28 });
     await renderPage();
     await screen.findByText("Marta Prueba", {}, WAIT);
     fireEvent.click(screen.getByRole("button", { name: "Regenerar clases" }));
     expect(school.sessions.generate).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/también las que hayas movido/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/las que hayas movido o cambiado de pista a mano/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Regenerar clases" }));
 
     await waitFor(() => expect(school.sessions.generate).toHaveBeenCalledWith("c1", "g1"), WAIT);
@@ -217,7 +234,7 @@ describe("Escuela: ficha del grupo", () => {
 
   it("sin clases, se generan directamente", async () => {
     school.groups.get.mockResolvedValue({ ...GROUP, sessions: [] });
-    school.sessions.generate.mockResolvedValue({ created: 38, withoutCourt: 0, skippedClosedDays: 0, removed: 0 });
+    school.sessions.generate.mockResolvedValue({ created: 38, withoutCourt: 0, skippedClosedDays: 0, skippedOutsideHours: 0, removed: 0 });
     await renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Generar clases de la temporada" }, WAIT));
     await waitFor(() => expect(school.sessions.generate).toHaveBeenCalledWith("c1", "g1"), WAIT);

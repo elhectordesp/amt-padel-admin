@@ -211,7 +211,7 @@ export function SchoolSessionsSection({
       <ConfirmModal
         open={confirmRegenerate}
         title="Regenerar las clases"
-        description="Se rehacen las clases futuras que siguen programadas y no tienen asistencia, con el horario y las fechas actuales del grupo (también las que hayas movido o cambiado de pista a mano). No se tocan las pasadas, las canceladas ni las que ya tienen asistencia."
+        description="Se rehacen las clases futuras que siguen programadas y no tienen asistencia, con el horario y las fechas actuales del grupo. No se tocan las pasadas, las canceladas, las que hayas movido o cambiado de pista a mano ni las que ya tienen asistencia, recuperaciones o solicitudes pendientes."
         confirmLabel="Regenerar clases"
         loading={generate.isPending}
         onClose={() => {

@@ -141,6 +141,8 @@ export interface GenerateSessionsResult {
   withoutCourt:      number;
   /** Clases que no se crean porque el club cierra ese día. */
   skippedClosedDays: number;
+  /** Clases que no se crean porque caen fuera del horario del club de ese día. */
+  skippedOutsideHours: number;
   /** Clases futuras sin asistencia que se borraron para volver a generarlas. */
   removed:           number;
 }
