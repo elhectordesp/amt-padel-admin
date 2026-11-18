@@ -596,9 +596,11 @@ export const adminService = {
      * Fija, cambia o quita la fecha y la pista de un partido de LIGA. Lo que no
      * se manda no se toca; null lo quita (una pista necesita fecha). `date` sin
      * zona es hora de la liga. Si la pista está ocupada (bloqueo, reserva u otro
-     * partido), el back da 409 con lo que la ocupa: no hay «Confirma para…».
+     * partido) o un jugador tiene otro partido a la vez, el back da 409 con lo
+     * que lo impide: eso no se confirma. Si el día no es de juego de la liga,
+     * avisa con «Confirma para…» y se repite con `force`.
      */
-    scheduleLeagueMatch: (matchId: string, data: { date?: string | null; court?: string | null }) =>
+    scheduleLeagueMatch: (matchId: string, data: { date?: string | null; court?: string | null; force?: boolean }) =>
       api.patch<{ match: { id: string; date: string | null; court: string | null; courtId: string | null } }>(`/admin/matches/${matchId}/league-schedule`, data).then((r) => r.data),
     setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
       // El back espera `winnerTeam`: con `walkoverWinnerTeam` lo descartaba

@@ -75,27 +75,41 @@ export function LeagueCalendarTab({ tournamentId, tournament, matches, canWrite,
   };
 
   const schedule = useMutation({
-    mutationFn: ({ matchId, change }: { matchId: string; change: LeagueScheduleChange }) =>
-      adminService.matches.scheduleLeagueMatch(matchId, change),
+    mutationFn: ({ matchId, change, force }: { matchId: string; change: LeagueScheduleChange; force?: boolean }) =>
+      adminService.matches.scheduleLeagueMatch(matchId, force ? { ...change, force: true } : change),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       void qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
     },
   });
 
+  // Convención «Confirma para…»: si el back avisa de algo que se puede confirmar
+  // (un día en que la liga no juega), se pregunta y se repite con force. Lo que
+  // no se puede confirmar (pista ocupada, un jugador con otro partido) llega
+  // como error
+  const scheduleConfirmed = async (matchId: string, change: LeagueScheduleChange) => {
+    try {
+      await schedule.mutateAsync({ matchId, change });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (/Confirma para/i.test(msg) && window.confirm(`${msg}\n\n¿Programarlo de todas formas?`)) {
+        await schedule.mutateAsync({ matchId, change, force: true });
+        return;
+      }
+      throw e;
+    }
+  };
+
   const save = async (matchId: string, change: LeagueScheduleChange) => {
-    await schedule.mutateAsync({ matchId, change });
+    await scheduleConfirmed(matchId, change);
     toast.success(change.date ? "Partido programado" : "Partido sin fecha");
   };
 
   // Arrastrar en el tablero: la misma petición; si la pista está ocupada, el aviso del back
   const move = (m: MatchResult, target: ScheduleTarget) => {
-    schedule.mutate(
-      { matchId: m.id, change: { date: zonedDateTimeToIso(target.date, tz) ?? null, court: target.court } },
-      {
-        onSuccess: () => toast.success("Partido movido"),
-        onError: (e) => toast.error(e instanceof Error && e.message ? e.message : "No se pudo mover el partido"),
-      },
+    scheduleConfirmed(m.id, { date: zonedDateTimeToIso(target.date, tz) ?? null, court: target.court }).then(
+      () => toast.success("Partido movido"),
+      (e: unknown) => toast.error(e instanceof Error && e.message ? e.message : "No se pudo mover el partido"),
     );
   };
 
