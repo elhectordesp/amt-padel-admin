@@ -130,7 +130,8 @@ export function SchoolMembersSection({
               <li key={m.id} className="px-3 py-2 text-muted-foreground">
                 {m.name ?? "Sin nombre"}
                 <span className="ml-2 text-xs">
-                  baja el {formatInTimeZone(m.leftAt, timeZone, DAY_FMT)}
+                  desde {formatInTimeZone(m.joinedAt, timeZone, DAY_FMT)} · baja el{" "}
+                  {formatInTimeZone(m.leftAt, timeZone, DAY_FMT)}
                 </span>
               </li>
             ))}

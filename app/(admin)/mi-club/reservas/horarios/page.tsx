@@ -7,6 +7,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,8 +25,10 @@ import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { sessionLabel } from "@/lib/utils/school";
 import { dateOnlyKey, formatDayKey, zonedDayKey } from "@/lib/utils/time-zone";
 import type {
+  AffectedSchoolClass,
   ClubOperatingHours,
   ClubScheduleException,
   OperatingHourInput,
@@ -288,6 +291,8 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
   });
 
   const [showForm, setShowForm] = useState(false);
+  // Clases de la escuela que la última excepción deja fuera de horario: no se cancelan solas
+  const [affected, setAffected] = useState<AffectedSchoolClass[]>([]);
   const [form, setForm] = useState({
     date: today,
     isClosed: false,
@@ -309,8 +314,9 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
         priceAsDayOfWeek:
           form.isClosed || !form.priceAsDayOfWeek ? undefined : Number(form.priceAsDayOfWeek),
       }),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success("Excepción añadida");
+      setAffected(saved.affectedSchoolClasses ?? []);
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["bookings", "exceptions", clubId] });
     },
@@ -351,6 +357,36 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
         Festivos, cierres puntuales, horarios reducidos. Tienen prioridad
         sobre el horario semanal regular.
       </p>
+
+      {affected.length > 0 && (
+        <div
+          role="alert"
+          className="mt-4 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+        >
+          <p className="font-medium">
+            {affected.length === 1
+              ? "1 clase de la escuela queda fuera del horario"
+              : `${affected.length} clases de la escuela quedan fuera del horario`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            No se han cancelado ni movido: decide qué hacer con cada una desde{" "}
+            <Link href="/mi-club/escuela" className="underline">
+              la escuela
+            </Link>
+            .
+          </p>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {affected.map((c) => (
+              <li key={`${c.kind}-${c.id}`}>
+                {c.name} · {sessionLabel(c, timeZone)}
+              </li>
+            ))}
+          </ul>
+          <Button variant="outline" size="sm" onClick={() => setAffected([])}>
+            Entendido
+          </Button>
+        </div>
+      )}
 
       {canWrite && showForm && (
         <div className="mt-4 rounded-lg border border-border bg-card p-4 space-y-3">

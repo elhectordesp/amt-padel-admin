@@ -205,14 +205,20 @@ describe("clases y asistencia", () => {
   });
 
   it("generateSummaryText cuenta lo creado y avisa de lo que se quedó sin pista o se saltó", () => {
-    expect(generateSummaryText({ created: 38, withoutCourt: 0, skippedClosedDays: 0, removed: 0 })).toBe(
-      "Se han creado 38 clases",
-    );
-    expect(generateSummaryText({ created: 1, withoutCourt: 1, skippedClosedDays: 2, removed: 30 })).toBe(
+    const base = { created: 0, withoutCourt: 0, skippedClosedDays: 0, skippedOutsideHours: 0, removed: 0 };
+    expect(generateSummaryText({ ...base, created: 38 })).toBe("Se han creado 38 clases");
+    expect(
+      generateSummaryText({ ...base, created: 1, withoutCourt: 1, skippedClosedDays: 2, removed: 30 }),
+    ).toBe(
       "Se ha creado 1 clase · 30 futuras sustituidas · 1 sin pista libre: asígnala a mano · 2 saltadas porque el club cierra",
     );
-    expect(generateSummaryText({ created: 0, withoutCourt: 0, skippedClosedDays: 0, removed: 0 })).toBe(
-      "No había clases nuevas que crear",
+    expect(generateSummaryText(base)).toBe("No había clases nuevas que crear");
+    // Las que caen fuera del horario del día se avisan aparte de las de días cerrados
+    expect(generateSummaryText({ ...base, created: 3, skippedOutsideHours: 2 })).toBe(
+      "Se han creado 3 clases · 2 saltadas por caer fuera del horario del club",
+    );
+    expect(generateSummaryText({ ...base, created: 3, skippedOutsideHours: 1 })).toBe(
+      "Se han creado 3 clases · 1 saltada por caer fuera del horario del club",
     );
   });
 

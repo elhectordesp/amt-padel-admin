@@ -97,6 +97,48 @@ describe("Horarios: cierre a medianoche", () => {
     );
   });
 
+  it("un cierre enseña las clases de la escuela que quedan fuera del horario, sin cancelarlas", async () => {
+    svc.exceptions.create.mockResolvedValue({
+      id: "e1",
+      affectedSchoolClasses: [
+        {
+          kind: "GROUP",
+          id: "ses1",
+          name: "Iniciación",
+          startsAt: "2026-12-25T17:00:00.000Z",
+          endsAt: "2026-12-25T18:00:00.000Z",
+        },
+        {
+          kind: "PRIVATE",
+          id: "pc1",
+          name: "Clase privada",
+          startsAt: "2026-12-25T09:00:00.000Z",
+          endsAt: "2026-12-25T10:00:00.000Z",
+        },
+      ],
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("2 clases de la escuela quedan fuera del horario");
+    expect(alert).toHaveTextContent("Iniciación");
+    expect(alert).toHaveTextContent("Clase privada");
+    expect(alert).toHaveTextContent("No se han cancelado ni movido");
+    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("sin clases afectadas no hay aviso", async () => {
+    svc.exceptions.create.mockResolvedValue({ id: "e1", affectedSchoolClasses: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+    await waitFor(() => expect(svc.exceptions.create).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("un festivo puede cobrarse como otro día de la semana", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));

@@ -188,6 +188,32 @@ describe("Escuela: pasar lista", () => {
     );
   });
 
+  it("Marcar todos presentes no toca a quien avisó de que faltaba (conserva su aviso y su recuperación)", async () => {
+    school.sessions.sheet.mockResolvedValue(
+      sheet({
+        students: [
+          student0("cc1", "Ana Prueba", null),
+          student0("cc2", "Beto Prueba", "EXCUSED", { noticedAt: "2026-11-15T10:00:00.000Z", earnedCreditId: "cr1" }),
+          student0("cc3", "Carla Prueba", null),
+        ],
+      }),
+    );
+    school.sessions.setAttendance.mockResolvedValue(sheet());
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: /Marcar todos presentes/ }));
+    expect(screen.getByText(/2 presentes · 0 ausentes · 1 justificadas · 0 sin apuntar/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar asistencia" }));
+    await waitFor(
+      () =>
+        expect(school.sessions.setAttendance).toHaveBeenCalledWith("c1", "ses1", [
+          { clubCustomerId: "cc1", status: "PRESENT" },
+          { clubCustomerId: "cc3", status: "PRESENT" },
+        ]),
+      WAIT,
+    );
+  });
+
   it("si el back lo rechaza (otro entrenador), enseña su mensaje y deja lo escrito", async () => {
     school.sessions.setAttendance.mockRejectedValue({
       response: { data: { message: "Solo el entrenador del grupo puede pasar lista de esta clase." } },

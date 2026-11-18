@@ -265,6 +265,11 @@ export function generateSummaryText(r: GenerateSessionsResult): string {
   if (r.skippedClosedDays > 0) {
     parts.push(`${r.skippedClosedDays} ${r.skippedClosedDays === 1 ? "saltada" : "saltadas"} porque el club cierra`);
   }
+  if (r.skippedOutsideHours > 0) {
+    parts.push(
+      `${r.skippedOutsideHours} ${r.skippedOutsideHours === 1 ? "saltada" : "saltadas"} por caer fuera del horario del club`,
+    );
+  }
   return parts.join(" · ");
 }
 

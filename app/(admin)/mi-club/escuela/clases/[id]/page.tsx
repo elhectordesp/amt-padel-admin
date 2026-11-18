@@ -221,7 +221,8 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                           ...prev,
                           ...Object.fromEntries(
                             students
-                              .filter((s) => s.status !== "PRESENT")
+                              // Quien avisó de que faltaba se queda como está: pasarlo a presente le quitaría su recuperación
+                              .filter((s) => s.status !== "PRESENT" && !s.noticedAt)
                               .map((s) => [s.clubCustomerId, "PRESENT" as const]),
                           ),
                         }))
