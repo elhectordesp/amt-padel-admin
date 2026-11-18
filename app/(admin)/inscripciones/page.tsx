@@ -19,6 +19,7 @@ import { PaymentTotals } from "@/components/admin/payment-totals";
 import { TournamentSelectOptions } from "@/components/admin/tournament-select-options";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
 import { useClubAccess } from "@/lib/use-club-access";
+import { REGISTRATION_PAYMENT_AREAS } from "@/lib/club-permissions";
 import { kindWord, tournamentsBase } from "@/lib/league";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
@@ -97,10 +98,11 @@ function InscripcionesRoute() {
 function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
   const qc = useQueryClient();
   // Sin escribir «tournaments» (altas, estados, categoría, pareja, disponibilidad)
-  // ni «cash» (cobros) no salen los botones que cambian algo; el back manda
+  // ni «cash» o «tournaments» (cobros) no salen los botones que cambian algo; el
+  // back manda
   const access  = useClubAccess();
   const canEdit = access.can("tournaments", "write");
-  const canCash = access.can("cash", "write");
+  const canCash = REGISTRATION_PAYMENT_AREAS.some((area) => access.can(area, "write"));
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [catFilter,    setCatFilter]    = useState("all");

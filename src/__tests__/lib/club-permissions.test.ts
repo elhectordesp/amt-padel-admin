@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  CLUB_AREAS, CLUB_STAFF_ROLES, areaForPath, canAccess,
+  CLUB_AREAS, CLUB_STAFF_ROLES, REGISTRATION_PAYMENT_AREAS, areaForPath, canAccess,
   type ClubArea, type ClubStaffRole,
 } from "@/lib/club-permissions";
 
@@ -82,6 +82,17 @@ describe("canAccess", () => {
 
   it("sin roles no hay acceso", () => {
     for (const area of CLUB_AREAS) expect(rw([], area)).toEqual([false, false]);
+  });
+
+  it("cobrar una inscripción: propietario, gestor, recepción y torneos; resultados y entrenador, no", () => {
+    const canCollect = (role: ClubStaffRole) =>
+      REGISTRATION_PAYMENT_AREAS.some((area) => canAccess([role], area, "write"));
+    for (const role of ["OWNER", "MANAGER", "RECEPTION", "TOURNAMENTS"] as const) {
+      expect(canCollect(role)).toBe(true);
+    }
+    for (const role of ["RESULTS", "COACH"] as const) {
+      expect(canCollect(role)).toBe(false);
+    }
   });
 
   it("todos los roles tienen etiqueta", () => {

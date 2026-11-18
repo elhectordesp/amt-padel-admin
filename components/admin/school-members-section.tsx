@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { BookingCustomerPicker } from "@/components/admin/booking-customer-picker";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { errorText } from "@/components/admin/price-seasons-panel";
+import { SchoolGuardianLine, SchoolMinorBadge } from "@/components/admin/school-minor-info";
 import { Button } from "@/components/ui/button";
 import { invalidateSchool, schoolService } from "@/lib/services/school";
 import { formatInTimeZone } from "@/lib/utils/time-zone";
@@ -100,9 +101,11 @@ export function SchoolMembersSection({
             <li key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
               <span>
                 <span className="font-medium">{m.name ?? "Sin nombre"}</span>
+                <SchoolMinorBadge student={m} />
                 <span className="ml-2 text-xs text-muted-foreground">
                   desde {formatInTimeZone(m.joinedAt, timeZone, DAY_FMT)}
                 </span>
+                <SchoolGuardianLine student={m} />
               </span>
               {editable && (
                 <Button

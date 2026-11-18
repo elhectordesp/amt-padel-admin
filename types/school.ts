@@ -61,6 +61,24 @@ export interface SchoolMember {
   leftAt:         string | null;
 }
 
+/**
+ * Edad y tutor de un alumno de las listas de la escuela: el entrenador avisa
+ * al tutor de un menor. No vienen con un back anterior: sin ellos, es un adulto.
+ */
+export interface SchoolStudentMinor {
+  /** «YYYY-MM-DD»; null si no se conoce. */
+  birthDate?:     string | null;
+  /** Años cumplidos hoy en la zona del club; null sin fecha de nacimiento. */
+  age?:           number | null;
+  /** Menos de 18 años. */
+  isMinor?:       boolean;
+  guardianName?:  string | null;
+  guardianPhone?: string | null;
+}
+
+/** Un alumno en la ficha de su grupo (el alta y la baja devuelven solo SchoolMember). */
+export interface SchoolGroupMember extends SchoolMember, SchoolStudentMinor {}
+
 export interface SchoolSession {
   id:              string;
   groupId:         string;
@@ -78,12 +96,12 @@ export interface SchoolSession {
 export type SchoolGroupSession = Omit<SchoolSession, "groupId">;
 
 export interface SchoolGroupDetail extends SchoolGroup {
-  members:        SchoolMember[];
+  members:        SchoolGroupMember[];
   activeStudents: number;
   sessions:       SchoolGroupSession[];
 }
 
-export interface SchoolAttendanceStudent {
+export interface SchoolAttendanceStudent extends SchoolStudentMinor {
   clubCustomerId: string;
   name:           string | null;
   /** null: aún sin apuntar. */

@@ -47,6 +47,7 @@ import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
 import { useRole } from "@/lib/use-role";
 import { useClubAccess } from "@/lib/use-club-access";
+import { REGISTRATION_PAYMENT_AREAS } from "@/lib/club-permissions";
 import { useRestoreTournament } from "@/lib/use-restore-tournament";
 import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
 import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "@/components/admin/tournament-push-panel";
@@ -1589,11 +1590,11 @@ export default function TorneoDetailPage() {
   // Sin permiso de escritura (rol del club con «torneos», «resultados» o «caja»
   // solo en lectura) no salen los botones que cambian algo: cada acción, con el
   // área que le pide su endpoint (meter y corregir resultados, «results»;
-  // cobrar, «cash»; el resto del torneo, «tournaments»). El back es quien manda
-  // de verdad; esto evita ofrecer lo que dará 403
+  // cobrar, «cash» o «tournaments»; el resto del torneo, «tournaments»). El back
+  // es quien manda de verdad; esto evita ofrecer lo que dará 403
   const canEdit    = access.can("tournaments", "write");
   const canResults = access.can("results", "write");
-  const canCash    = access.can("cash", "write");
+  const canCash    = REGISTRATION_PAYMENT_AREAS.some((area) => access.can(area, "write"));
   const base     = tournamentsBase(tournament?.kind);
   const word     = kindWord(tournament?.kind);
   useEffect(() => {

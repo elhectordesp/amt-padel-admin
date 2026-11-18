@@ -19,6 +19,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
 import { useClubAccess } from "@/lib/use-club-access";
 import { OCCUPATION_KINDS, occupationKindInfo } from "@/lib/utils/court-occupation";
+import { localDayKey } from "@/lib/utils/date-keys";
 import type { Court, CourtBlock, CourtBlockKind } from "@/types";
 
 const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false };
@@ -40,6 +41,13 @@ const EMPTY_BLOCK: {
   reason: "",
 };
 type BlockForm = typeof EMPTY_BLOCK;
+
+/** El mismo día de hace un año. */
+function yearAgo(today: Date): Date {
+  const d = new Date(today);
+  d.setFullYear(d.getFullYear() - 1);
+  return d;
+}
 
 function CourtRow({
   court,
@@ -74,9 +82,13 @@ function CourtRow({
     isCentral: court.isCentral,
   });
 
+  // Por defecto, solo los bloqueos que quedan por delante (la escuela crea uno
+  // por clase de toda la temporada); «Ver también los pasados» los pide desde
+  // hace un año
+  const [pastFrom, setPastFrom] = useState<string | null>(null);
   const { data: blocks = [], isLoading: blocksLoading } = useQuery({
-    queryKey: ["court-blocks", clubId, court.id],
-    queryFn: () => adminService.courts.blocks.list(clubId, court.id),
+    queryKey: ["court-blocks", clubId, court.id, pastFrom],
+    queryFn: () => adminService.courts.blocks.list(clubId, court.id, pastFrom ?? undefined),
     enabled: showBlocks,
   });
 
@@ -327,6 +339,25 @@ function CourtRow({
               ))}
             </div>
           )}
+
+          {!blocksLoading &&
+            (pastFrom === null ? (
+              <button
+                type="button"
+                onClick={() => setPastFrom(localDayKey(yearAgo(new Date())))}
+                className="text-[11px] text-[#D4AF37] hover:underline"
+              >
+                Ver también los pasados
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPastFrom(null)}
+                className="text-[11px] text-[#D4AF37] hover:underline"
+              >
+                Ocultar los pasados
+              </button>
+            ))}
 
           {showAddBlock ? (
             <div className="space-y-1.5 pt-1 border-t border-border">

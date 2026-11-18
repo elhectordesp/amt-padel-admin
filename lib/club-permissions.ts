@@ -48,7 +48,7 @@ export const ROLE_LABEL: Record<ClubStaffRole, string> = {
 export const ROLE_DESCRIPTION: Record<ClubStaffRole, string> = {
   OWNER:       "Todo, también añadir y quitar al equipo. Siempre tiene que haber un propietario.",
   MANAGER:     "Todo el club menos gestionar el equipo (lo ve, pero no lo cambia).",
-  TOURNAMENTS: "Crea y lleva los torneos y sus resultados. Ve reservas y clientes.",
+  TOURNAMENTS: "Crea y lleva los torneos y sus resultados, y cobra sus inscripciones. Ve reservas y clientes.",
   RESULTS:     "Mete los resultados de los partidos. Ve los torneos, nada más.",
   RECEPTION:   "Reservas, clientes, caja y escuela. Ve los torneos y la configuración del club.",
   COACH:       "Ve las reservas y sus grupos de la escuela, y pasa lista. No cambia nada más.",
@@ -70,6 +70,23 @@ const PERMISSIONS: Record<ClubStaffRole, Grant> = {
   // Lee la escuela y pasa lista de sus grupos (el back lo comprueba: solo los suyos)
   COACH:       { club: "read", bookings: "read", school: "read" },
 };
+
+/**
+ * Áreas con las que se cobra una inscripción de torneo o de liga: basta con
+ * escribir en la caja o en los torneos (el organizador de la mesa cobra sin
+ * tener la caja del club). Son las mismas que el back pide en los dos
+ * endpoints de cobro de inscripciones.
+ */
+export const REGISTRATION_PAYMENT_AREAS = ["cash", "tournaments"] as const satisfies readonly ClubArea[];
+
+/**
+ * Las acciones del club sin área propia (como anonimizar a un cliente) solo las
+ * abren el propietario y el gestor, igual que en el back. Sin saber los roles,
+ * no: aquí es mejor no ofrecer que ofrecer algo que dará 403.
+ */
+export function isOwnerOrManager(roles: readonly ClubStaffRole[] | null): boolean {
+  return !!roles && (roles.includes("OWNER") || roles.includes("MANAGER"));
+}
 
 /** Si alguno de los roles da ese nivel en el área (escribir incluye leer). */
 export function canAccess(

@@ -23,7 +23,7 @@ vi.mock("@/lib/use-club-time-zone", () => ({
 vi.mock("@/components/admin/customer-vouchers-section", () => ({ CustomerVouchersSection: () => null }));
 const service = vi.hoisted(() => ({
   detail: vi.fn(), tags: vi.fn(), update: vi.fn(), archive: vi.fn(), unarchive: vi.fn(),
-  markGuardianConsent: vi.fn(), clearGuardianConsent: vi.fn(),
+  markGuardianConsent: vi.fn(), clearGuardianConsent: vi.fn(), anonymize: vi.fn(),
 }));
 vi.mock("@/lib/services/club-customers", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/club-customers")>("@/lib/services/club-customers");
@@ -203,5 +203,81 @@ describe("Ficha de un cliente del club: menores y tutor", () => {
     }
     expect(screen.queryByLabelText("Nombre del tutor")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Fecha de nacimiento")).not.toBeInTheDocument();
+  });
+});
+
+describe("Ficha de un cliente del club: anonimizar (RGPD)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service.detail.mockResolvedValue(ANA);
+    service.tags.mockResolvedValue([]);
+    service.anonymize.mockResolvedValue({ ...ANA, name: "Cliente anonimizado", anonymized: true });
+  });
+
+  it.each(["OWNER", "MANAGER"])("%s ve el botón", async (role) => {
+    await renderPage(asRole(role));
+    expect(await screen.findByRole("button", { name: /Anonimizar cliente/ })).toBeInTheDocument();
+  });
+
+  it.each(["RECEPTION", "TOURNAMENTS", "RESULTS", "COACH"])("%s no lo ve (el back lo cierra a propietario y gestor)", async (role) => {
+    await renderPage(asRole(role));
+    await screen.findByText(/No tiene la app/);
+    expect(screen.queryByRole("button", { name: /Anonimizar cliente/ })).not.toBeInTheDocument();
+  });
+
+  it("pide escribir ANONIMIZAR: sin la palabra exacta el botón no se activa y no se manda nada", async () => {
+    await renderPage(asRole("OWNER"));
+    fireEvent.click(await screen.findByRole("button", { name: /Anonimizar cliente/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("No se puede deshacer");
+    const confirm = within(dialog).getByRole("button", { name: "Anonimizar" });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText("Palabra de confirmación"), { target: { value: "anonimizar" } });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(service.anonymize).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByLabelText("Palabra de confirmación"), { target: { value: "ANONIMIZAR" } });
+    expect(confirm).toBeEnabled();
+  });
+
+  it("con la palabra escrita anonimiza el cliente del club y cierra el diálogo", async () => {
+    await renderPage(asRole("MANAGER"));
+    fireEvent.click(await screen.findByRole("button", { name: /Anonimizar cliente/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Palabra de confirmación"), { target: { value: "ANONIMIZAR" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Anonimizar" }));
+
+    await waitFor(() => expect(service.anonymize).toHaveBeenCalledWith("c1", "cc-1"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("cancelar no manda nada y al volver a abrir la palabra está vacía", async () => {
+    await renderPage(asRole("OWNER"));
+    fireEvent.click(await screen.findByRole("button", { name: /Anonimizar cliente/ }));
+    let dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Palabra de confirmación"), { target: { value: "ANONIMIZAR" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(service.anonymize).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Anonimizar cliente/ }));
+    dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Palabra de confirmación")).toHaveValue("");
+  });
+
+  it("un cliente ya anonimizado se lee, sin botón de anonimizar ni formularios (no se edita)", async () => {
+    service.detail.mockResolvedValue({
+      ...ANA, name: "Cliente anonimizado", phone: null, notes: null, tags: [], anonymized: true, archivedAt: "2026-11-18T10:00:00.000Z",
+    });
+    await renderPage(asRole("OWNER"));
+    expect(await screen.findByRole("status")).toHaveTextContent("Cliente anonimizado");
+    expect(screen.queryByRole("button", { name: /Anonimizar cliente/ })).not.toBeInTheDocument();
+    for (const name of [/Archivar cliente|Recuperar cliente/, /Guardar contacto/, /Guardar socio/, /Guardar notas/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByLabelText("Notas privadas del club")).not.toBeInTheDocument();
   });
 });

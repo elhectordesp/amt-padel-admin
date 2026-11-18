@@ -15,8 +15,9 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, Archive, ArchiveRestore, Loader2, Save } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, Loader2, Save, UserX } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { CustomerVouchersSection } from "@/components/admin/customer-vouchers-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Field, Input } from "@/components/admin/form";
@@ -30,6 +31,7 @@ import {
   type ClubCustomerDetail,
   type UpdateClubCustomerPayload,
 } from "@/lib/services/club-customers";
+import { isOwnerOrManager } from "@/lib/club-permissions";
 import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
@@ -40,6 +42,8 @@ import { formatDayKey, formatInTimeZone } from "@/lib/utils/time-zone";
 
 const BACK = { href: "/mi-club/clientes", label: "Volver a Clientes" };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Lo que se teclea para confirmar que se anonimiza al cliente (no se deshace). */
+const ANONYMIZE_WORD = "ANONIMIZAR";
 
 const BOOKING_STATUS: Record<string, string> = {
   PENDING_INVITES: "Esperando invitaciones",
@@ -108,11 +112,17 @@ function CustomerView({
   clubId, customer: c, timeZone,
 }: { clubId: string; customer: ClubCustomerDetail; timeZone: string | null }) {
   const qc = useQueryClient();
-  const { can } = useClubAccess();
+  const { can, roles } = useClubAccess();
   // Los bonos son dinero: solo los ve quien puede leer la caja
   const canSeeVouchers = can("cash", "read");
+  // Un cliente anonimizado ya no se edita (el back responde 409)
+  const anonymized = !!c.anonymized;
   // Quien solo lee los clientes ve la ficha, sin formularios ni botones
-  const canWrite = can("customers", "write");
+  const canWrite = can("customers", "write") && !anonymized;
+  // Anonimizar no tiene área propia: solo propietario y gestor
+  const canAnonymize = isOwnerOrManager(roles) && !anonymized;
+  const [anonymizeOpen, setAnonymizeOpen] = useState(false);
+  const [anonymizeWord, setAnonymizeWord] = useState("");
   const [tab, setTab] = useState<Tab>("bookings");
   const [notes, setNotes] = useState(c.notes ?? "");
   const [isMember, setIsMember] = useState(c.isMember);
@@ -142,6 +152,20 @@ function CustomerView({
   const archive = useMutation({
     mutationFn: () => (c.archivedAt ? clubCustomersService.unarchive(clubId, c.id) : clubCustomersService.archive(clubId, c.id)),
     onSuccess: () => { toast.success(c.archivedAt ? "Cliente recuperado" : "Cliente archivado"); refresh(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const closeAnonymize = () => {
+    setAnonymizeOpen(false);
+    setAnonymizeWord("");
+  };
+  const anonymize = useMutation({
+    mutationFn: () => clubCustomersService.anonymize(clubId, c.id),
+    onSuccess: () => {
+      toast.success("Cliente anonimizado");
+      closeAnonymize();
+      refresh();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -195,13 +219,29 @@ function CustomerView({
           {c.archivedAt && " · Archivado"}
           {c.messagesOptOutAt && " · No recibe mensajes del club"}
         </div>
-        {canWrite && (
-          <Button variant="outline" size="sm" onClick={() => archive.mutate()} disabled={archive.isPending}>
-            {c.archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-            {c.archivedAt ? "Recuperar cliente" : "Archivar cliente"}
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canWrite && (
+            <Button variant="outline" size="sm" onClick={() => archive.mutate()} disabled={archive.isPending}>
+              {c.archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+              {c.archivedAt ? "Recuperar cliente" : "Archivar cliente"}
+            </Button>
+          )}
+          {canAnonymize && (
+            <Button variant="outline" size="sm" onClick={() => setAnonymizeOpen(true)}>
+              <UserX className="h-3.5 w-3.5" /> Anonimizar cliente
+            </Button>
+          )}
+        </div>
       </div>
+
+      {anonymized && (
+        <div role="status" className="mt-4 rounded-lg border border-border bg-card p-3 text-sm">
+          <p className="font-medium">Cliente anonimizado</p>
+          <p className="text-xs text-muted-foreground">
+            Se borraron sus datos personales y ya no se puede editar. Se conservan sus reservas, cobros, bonos, cuotas y asistencia.
+          </p>
+        </div>
+      )}
 
       {c.guardianConsentMissing && (
         <div
@@ -445,6 +485,29 @@ function CustomerView({
           ))
         )}
       </div>
+
+      <ConfirmModal
+        open={anonymizeOpen}
+        title="Anonimizar cliente"
+        description="Se borran para siempre su nombre, contacto, fecha de nacimiento, tutor, notas y etiquetas, y se suelta su cuenta de la app (la cuenta no se toca). No se puede deshacer. Se conservan sus reservas, cobros, bonos, cuotas y asistencia."
+        confirmLabel="Anonimizar"
+        danger
+        loading={anonymize.isPending}
+        confirmDisabled={anonymizeWord.trim() !== ANONYMIZE_WORD}
+        onClose={() => {
+          if (!anonymize.isPending) closeAnonymize();
+        }}
+        onConfirm={() => anonymize.mutate()}
+      >
+        <Field label={`Para confirmar, escribe ${ANONYMIZE_WORD}`}>
+          <Input
+            aria-label="Palabra de confirmación"
+            value={anonymizeWord}
+            onChange={(e) => setAnonymizeWord(e.target.value)}
+            autoComplete="off"
+          />
+        </Field>
+      </ConfirmModal>
     </ReservasPage>
   );
 }
