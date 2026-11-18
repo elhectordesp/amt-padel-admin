@@ -5,7 +5,7 @@
  */
 import { Suspense } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -21,7 +21,10 @@ vi.mock("@/lib/use-club-time-zone", () => ({
 }));
 // Los bonos tienen sus propios tests: aquí solo importa la ficha
 vi.mock("@/components/admin/customer-vouchers-section", () => ({ CustomerVouchersSection: () => null }));
-const service = vi.hoisted(() => ({ detail: vi.fn(), tags: vi.fn(), update: vi.fn(), archive: vi.fn(), unarchive: vi.fn() }));
+const service = vi.hoisted(() => ({
+  detail: vi.fn(), tags: vi.fn(), update: vi.fn(), archive: vi.fn(), unarchive: vi.fn(),
+  markGuardianConsent: vi.fn(), clearGuardianConsent: vi.fn(),
+}));
 vi.mock("@/lib/services/club-customers", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/club-customers")>("@/lib/services/club-customers");
   return { ...actual, clubCustomersService: service };
@@ -95,5 +98,110 @@ describe("Ficha de un cliente del club", () => {
     service.detail.mockResolvedValue({ ...ANA, notes: null });
     await renderPage(asRole("TOURNAMENTS"));
     expect(await screen.findByText("Sin notas.")).toBeInTheDocument();
+  });
+});
+
+// Un niño de 10 años: menor de 14, necesita el consentimiento de su tutor
+const LEO = {
+  ...ANA, id: "cc-1", name: "Leo Pérez", isMember: false, memberNumber: null, memberSince: null,
+  birthDate: "2016-03-05", age: 10, isMinor: true,
+  guardianName: "Marta Pérez", guardianPhone: "600333444", guardianEmail: "marta@ejemplo.com",
+  guardianConsentAt: null, guardianConsentRequired: true, guardianConsentMissing: true,
+};
+
+describe("Ficha de un cliente del club: menores y tutor", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service.detail.mockResolvedValue(LEO);
+    service.tags.mockResolvedValue([]);
+    service.markGuardianConsent.mockResolvedValue({ ...LEO, guardianConsentAt: "2026-11-18T10:00:00.000Z", guardianConsentMissing: false });
+    service.clearGuardianConsent.mockResolvedValue(LEO);
+    service.update.mockResolvedValue(LEO);
+  });
+
+  it("un menor de 14 sin consentimiento: aviso con el botón para marcarlo, y el tutor en su sección", async () => {
+    await renderPage(asRole("RECEPTION"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Falta el consentimiento del tutor");
+    expect(screen.getByText(/Menor de edad: tiene 10 años/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Nombre del tutor")).toHaveValue("Marta Pérez");
+    expect(screen.getByLabelText("Email del tutor")).toHaveValue("marta@ejemplo.com");
+
+    fireEvent.click(within(alert).getByRole("button", { name: /Marcar consentimiento/ }));
+    await waitFor(() => expect(service.markGuardianConsent).toHaveBeenCalledWith("c1", "cc-1"));
+  });
+
+  it("sin el nombre del tutor guardado no se puede marcar y dice por qué", async () => {
+    service.detail.mockResolvedValue({ ...LEO, guardianName: null, guardianPhone: null, guardianEmail: null });
+    await renderPage(asRole("RECEPTION"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Apunta antes el nombre del tutor");
+    expect(within(alert).getByRole("button", { name: /Marcar consentimiento/ })).toBeDisabled();
+  });
+
+  it("con consentimiento: dice cuándo se dio, sin aviso, y se puede quitar", async () => {
+    service.detail.mockResolvedValue({
+      ...LEO, guardianConsentAt: "2026-11-18T10:00:00.000Z", guardianConsentMissing: false,
+    });
+    await renderPage(asRole("RECEPTION"));
+    expect(await screen.findByText(/Consentimiento del tutor: dado el 18\/11\/2026/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Quitar consentimiento/ }));
+    await waitFor(() => expect(service.clearGuardianConsent).toHaveBeenCalledWith("c1", "cc-1"));
+  });
+
+  it("de 14 a 17 años no hay aviso: el consentimiento es opcional y se puede apuntar desde el tutor", async () => {
+    service.detail.mockResolvedValue({
+      ...LEO, birthDate: "2010-03-05", age: 16, guardianConsentRequired: false, guardianConsentMissing: false,
+    });
+    await renderPage(asRole("RECEPTION"));
+    expect(await screen.findByText(/no es obligatorio desde los 14 años/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Marcar consentimiento/ }));
+    await waitFor(() => expect(service.markGuardianConsent).toHaveBeenCalledWith("c1", "cc-1"));
+  });
+
+  it("un adulto no tiene sección de tutor ni aviso", async () => {
+    service.detail.mockResolvedValue({ ...ANA, birthDate: "1985-05-12", age: 41, isMinor: false });
+    await renderPage(asRole("RECEPTION"));
+    await screen.findByRole("button", { name: /Guardar nacimiento/ });
+    expect(screen.queryByLabelText("Nombre del tutor")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("guarda el nacimiento y el tutor; vaciar un campo lo borra", async () => {
+    await renderPage(asRole("RECEPTION"));
+    fireEvent.change(await screen.findByLabelText("Fecha de nacimiento"), { target: { value: "2016-04-01" } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar nacimiento/ }));
+    await waitFor(() => expect(service.update).toHaveBeenCalledWith("c1", "cc-1", { birthDate: "2016-04-01" }));
+
+    fireEvent.change(screen.getByLabelText("Teléfono del tutor"), { target: { value: " " } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar tutor/ }));
+    await waitFor(() =>
+      expect(service.update).toHaveBeenCalledWith("c1", "cc-1", {
+        guardianName: "Marta Pérez", guardianPhone: null, guardianEmail: "marta@ejemplo.com",
+      }),
+    );
+  });
+
+  it("un email del tutor mal escrito no se manda", async () => {
+    await renderPage(asRole("RECEPTION"));
+    fireEvent.change(await screen.findByLabelText("Email del tutor"), { target: { value: "marta@" } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar tutor/ }));
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it("con un rol de solo lectura (Torneos): ve el aviso y el tutor, sin botones ni formularios", async () => {
+    await renderPage(asRole("TOURNAMENTS"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Falta el consentimiento del tutor");
+    expect(screen.getByText("Marta Pérez")).toBeInTheDocument();
+    expect(screen.getByText("marta@ejemplo.com")).toBeInTheDocument();
+    for (const name of [/Marcar consentimiento/, /Quitar consentimiento/, /Guardar nacimiento/, /Guardar tutor/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByLabelText("Nombre del tutor")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Fecha de nacimiento")).not.toBeInTheDocument();
   });
 });

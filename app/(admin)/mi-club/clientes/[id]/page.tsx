@@ -1,9 +1,13 @@
 /**
- * /mi-club/clientes/[id] — ficha de un cliente del club: contacto, si es
- * socio (número y fecha de alta), etiquetas, notas privadas del club, sus
- * bonos de reservas (vender, cobrar, cancelar; solo con acceso a la caja) y sus
- * reservas y torneos en el club. Con cuenta AMT, el contacto es el de su
- * cuenta y no se edita aquí; sin cuenta, sí.
+ * /mi-club/clientes/[id] — ficha de un cliente del club: contacto, fecha de
+ * nacimiento, si es socio (número y fecha de alta), etiquetas, notas privadas
+ * del club, sus bonos de reservas (vender, cobrar, cancelar; solo con acceso
+ * a la caja) y sus reservas y torneos en el club. Con cuenta AMT, el contacto
+ * es el de su cuenta y no se edita aquí; sin cuenta, sí.
+ *
+ * Si es menor de edad aparece su tutor (padre, madre o tutor legal) y, por
+ * debajo de 14 años, el aviso de que falta su consentimiento, que el club
+ * apunta aquí (quién y cuándo quedan en el historial).
  */
 
 "use client";
@@ -11,7 +15,7 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Archive, ArchiveRestore, Loader2, Save } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerVouchersSection } from "@/components/admin/customer-vouchers-section";
 import { ErrorState } from "@/components/admin/error-state";
@@ -30,9 +34,12 @@ import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { formatCents } from "@/lib/utils/booking-price";
+import { GUARDIAN_CONSENT_AGE } from "@/lib/utils/customer-age";
+import { localDayKey } from "@/lib/utils/date-keys";
 import { formatDayKey, formatInTimeZone } from "@/lib/utils/time-zone";
 
 const BACK = { href: "/mi-club/clientes", label: "Volver a Clientes" };
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const BOOKING_STATUS: Record<string, string> = {
   PENDING_INVITES: "Esperando invitaciones",
@@ -114,6 +121,10 @@ function CustomerView({
   const [name, setName] = useState(c.name ?? "");
   const [phone, setPhone] = useState(c.phone ?? "");
   const [email, setEmail] = useState(c.email ?? "");
+  const [birthDate, setBirthDate] = useState(c.birthDate ?? "");
+  const [guardianName, setGuardianName] = useState(c.guardianName ?? "");
+  const [guardianPhone, setGuardianPhone] = useState(c.guardianPhone ?? "");
+  const [guardianEmail, setGuardianEmail] = useState(c.guardianEmail ?? "");
 
   const tagsQuery = useQuery({
     queryKey: clubCustomersQK.tags(clubId),
@@ -133,6 +144,34 @@ function CustomerView({
     onSuccess: () => { toast.success(c.archivedAt ? "Cliente recuperado" : "Cliente archivado"); refresh(); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Apuntar o quitar el consentimiento del tutor (el servidor guarda quién y cuándo en el historial)
+  const consent = useMutation({
+    mutationFn: (give: boolean) =>
+      give ? clubCustomersService.markGuardianConsent(clubId, c.id) : clubCustomersService.clearGuardianConsent(clubId, c.id),
+    onSuccess: (_data, give) => {
+      toast.success(give ? "Consentimiento del tutor apuntado" : "Consentimiento del tutor quitado");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveBirth = () => {
+    if (birthDate && birthDate > localDayKey(new Date())) return toast.error("La fecha de nacimiento no puede ser futura");
+    save.mutate({ birthDate: birthDate || null });
+  };
+  const saveGuardian = () => {
+    if (guardianEmail.trim() && !EMAIL.test(guardianEmail.trim())) return toast.error("El email del tutor no es válido");
+    save.mutate({
+      guardianName: guardianName.trim() || null,
+      guardianPhone: guardianPhone.trim() || null,
+      guardianEmail: guardianEmail.trim() || null,
+    });
+  };
+  const consentDate =
+    c.guardianConsentAt && timeZone
+      ? formatInTimeZone(c.guardianConsentAt, timeZone, { day: "numeric", month: "numeric", year: "numeric" })
+      : null;
 
   const saveContact = () => {
     if (!name.trim()) return toast.error("El nombre no puede quedar vacío");
@@ -163,6 +202,29 @@ function CustomerView({
           </Button>
         )}
       </div>
+
+      {c.guardianConsentMissing && (
+        <div
+          role="alert"
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3"
+        >
+          <div className="flex min-w-0 flex-1 basis-64 items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div className="text-sm">
+              <p className="font-medium">Falta el consentimiento del tutor</p>
+              <p className="text-xs text-muted-foreground">
+                Es menor de {GUARDIAN_CONSENT_AGE} años: hasta que lo apuntes, el club no le enviará mensajes.
+                {canWrite && !c.guardianName && " Apunta antes el nombre del tutor, abajo."}
+              </p>
+            </div>
+          </div>
+          {canWrite && (
+            <Button size="sm" onClick={() => consent.mutate(true)} disabled={consent.isPending || !c.guardianName}>
+              {consent.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar consentimiento
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Contacto">
@@ -218,6 +280,79 @@ function CustomerView({
             </>
           )}
         </Card>
+
+        <Card title="Nacimiento">
+          {canWrite ? (
+            <>
+              <Field label="Fecha de nacimiento">
+                <Input
+                  type="date"
+                  aria-label="Fecha de nacimiento"
+                  value={birthDate}
+                  max={localDayKey(new Date())}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                />
+              </Field>
+              <Button size="sm" onClick={saveBirth} disabled={save.isPending}><Save className="h-3.5 w-3.5" /> Guardar nacimiento</Button>
+            </>
+          ) : (
+            <Row
+              label="Fecha de nacimiento"
+              value={c.birthDate ? formatDayKey(c.birthDate, { day: "numeric", month: "numeric", year: "numeric" }) : null}
+            />
+          )}
+          {c.isMinor && typeof c.age === "number" && (
+            <p className="text-xs text-muted-foreground">Menor de edad: tiene {c.age} {c.age === 1 ? "año" : "años"}.</p>
+          )}
+        </Card>
+
+        {c.isMinor && (
+          <Card title="Tutor">
+            {canWrite ? (
+              <>
+                <Field label="Nombre del padre, madre o tutor">
+                  <Input aria-label="Nombre del tutor" value={guardianName} onChange={(e) => setGuardianName(e.target.value)} maxLength={120} />
+                </Field>
+                <Field label="Teléfono">
+                  <Input aria-label="Teléfono del tutor" type="tel" value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} maxLength={30} />
+                </Field>
+                <Field label="Email">
+                  <Input aria-label="Email del tutor" type="email" value={guardianEmail} onChange={(e) => setGuardianEmail(e.target.value)} maxLength={254} />
+                </Field>
+                <p className="text-xs text-muted-foreground">
+                  Si es menor de {GUARDIAN_CONSENT_AGE} años, los mensajes del club le llegan a este email. Si quitas el nombre del tutor, se quita también su consentimiento.
+                </p>
+                <Button size="sm" onClick={saveGuardian} disabled={save.isPending}><Save className="h-3.5 w-3.5" /> Guardar tutor</Button>
+              </>
+            ) : (
+              <>
+                <Row label="Nombre" value={c.guardianName ?? null} />
+                <Row label="Teléfono" value={c.guardianPhone ?? null} />
+                <Row label="Email" value={c.guardianEmail ?? null} />
+              </>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
+              {c.guardianConsentAt ? (
+                <span>Consentimiento del tutor: dado{consentDate ? ` el ${consentDate}` : ""}</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Consentimiento del tutor: sin apuntar
+                  {!c.guardianConsentRequired && ` (no es obligatorio desde los ${GUARDIAN_CONSENT_AGE} años)`}
+                </span>
+              )}
+              {canWrite && c.guardianConsentAt && (
+                <Button size="sm" variant="outline" onClick={() => consent.mutate(false)} disabled={consent.isPending}>
+                  Quitar consentimiento
+                </Button>
+              )}
+              {canWrite && !c.guardianConsentAt && !c.guardianConsentRequired && (
+                <Button size="sm" variant="outline" onClick={() => consent.mutate(true)} disabled={consent.isPending || !c.guardianName}>
+                  Marcar consentimiento
+                </Button>
+              )}
+            </div>
+          </Card>
+        )}
 
         <Card title="Etiquetas">
           <TagInput
