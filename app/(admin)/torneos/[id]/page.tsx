@@ -40,10 +40,13 @@ import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { TournamentPreparationChecklist } from "@/components/admin/tournament-preparation-checklist";
 import { AvailabilityHeatmap } from "@/components/admin/availability-heatmap";
 import { LeagueRoundsTab, LeagueStandingsTab, type LeagueStandingsGroup } from "@/components/admin/league-tabs";
+import { LeagueCalendarTab } from "@/components/admin/league-calendar";
+import { LeagueFinalPanel } from "@/components/admin/league-final-panel";
 import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
 import { useRole } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRestoreTournament } from "@/lib/use-restore-tournament";
 import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
 import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "@/components/admin/tournament-push-panel";
@@ -1468,8 +1471,8 @@ function PistasTab({
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-// «jornadas» y «clasificacion» son de las ligas
-type Tab = "resumen" | "inscripciones" | "cuadro" | "jornadas" | "clasificacion" | "horarios" | "mas";
+// «jornadas», «calendario» y «clasificacion» son de las ligas
+type Tab = "resumen" | "inscripciones" | "cuadro" | "jornadas" | "calendario" | "clasificacion" | "horarios" | "mas";
 // El filtro de Inscripciones: por estado o «Sin pagar» (UNPAID: las no
 // canceladas a las que les falta pagar a alguno de sus jugadores)
 type RegFilter = "all" | RegistrationStatus | "UNPAID";
@@ -1479,6 +1482,7 @@ export default function TorneoDetailPage() {
   const router  = useRouter();
   const qc      = useQueryClient();
   const { role } = useRole();
+  const access = useClubAccess();
 
   const [tab,             setTab]           = useState<Tab>("resumen");
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero" | "disponibilidad">("lista");
@@ -1563,6 +1567,11 @@ export default function TorneoDetailPage() {
   // ruta lo sigue (una liga abierta por /torneos/:id pasa a /ligas/:id)
   const pathname = usePathname();
   const league   = tournament?.kind === "LEAGUE";
+  // En la ficha de una liga, sin permiso de escritura (rol del club con
+  // «torneos» o «resultados» solo en lectura) no salen los botones que cambian
+  // algo. El back es quien manda de verdad; esto evita ofrecer lo que dará 403
+  const canEdit    = !league || access.can("tournaments", "write");
+  const canResults = !league || access.can("results", "write");
   const base     = tournamentsBase(tournament?.kind);
   const word     = kindWord(tournament?.kind);
   useEffect(() => {
@@ -2331,36 +2340,42 @@ export default function TorneoDetailPage() {
 
             {/* Action group — sm: inline / mobile: full-width row */}
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-              <button
-                onClick={() => duplicate.mutate()}
-                disabled={duplicate.isPending}
-                title={`Duplicar ${word}`}
-                aria-label={`Duplicar ${word}`}
-                className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
-              >
-                {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
-              </button>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                title={`Eliminar ${word}`}
-                aria-label={`Eliminar ${word}`}
-                className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
-              >
-                <Trash2 size={15} />
-              </button>
+              {canEdit && (
+                <>
+                  <button
+                    onClick={() => duplicate.mutate()}
+                    disabled={duplicate.isPending}
+                    title={`Duplicar ${word}`}
+                    aria-label={`Duplicar ${word}`}
+                    className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+                  >
+                    {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    title={`Eliminar ${word}`}
+                    aria-label={`Eliminar ${word}`}
+                    className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </>
+              )}
               <PublicViewerActions
                 tournamentId={id}
                 isDraft={tournament.status === "DRAFT"}
                 onShare={() => setShowShare(true)}
               />
-              <Link
-                href={`${base}/${id}/editar`}
-                aria-label={`Editar ${word}`}
-                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
-              >
-                <Pencil size={14} className="sm:hidden" />
-                <span className="hidden sm:inline">Editar</span>
-              </Link>
+              {canEdit && (
+                <Link
+                  href={`${base}/${id}/editar`}
+                  aria-label={`Editar ${word}`}
+                  className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
+                >
+                  <Pencil size={14} className="sm:hidden" />
+                  <span className="hidden sm:inline">Editar</span>
+                </Link>
+              )}
             </div>
           </div>
 
@@ -2401,6 +2416,7 @@ export default function TorneoDetailPage() {
               ...(league
                 ? [
                     { key: "jornadas",      label: "Jornadas"      },
+                    { key: "calendario",    label: "Calendario"    },
                     { key: "clasificacion", label: "Clasificación" },
                   ]
                 : []),
@@ -2455,6 +2471,8 @@ export default function TorneoDetailPage() {
               { key: "mensajes", label: "Mensajes a inscritos" },
               { key: "historial", label: "Historial" },
             ] as { key: "estado" | "mensajes" | "historial"; label: string }[]).map(({ key, label }) => {
+              // Mandar mensajes a los inscritos es cambiar algo: sin permiso, no sale
+              if (key === "mensajes" && !canEdit) return null;
               // En borrador no se puede mandar: los jugadores aún no ven el torneo
               const off = key === "mensajes" && tournament?.status === "DRAFT";
               return (
@@ -2483,12 +2501,12 @@ export default function TorneoDetailPage() {
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="lg:col-span-2 empty:hidden">
-              <TournamentPreparationChecklist tournamentId={id} base={base} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} />
+              <TournamentPreparationChecklist tournamentId={id} base={base} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} readOnly={!canEdit} />
             </div>
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">Categorías</h3>
-                {!addCatOpen && (
+                {!addCatOpen && canEdit && (
                   <button
                     onClick={() => setAddCatOpen(true)}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors"
@@ -2651,7 +2669,7 @@ export default function TorneoDetailPage() {
                                   <X size={12} />
                                 </button>
                               </>
-                            ) : (
+                            ) : canEdit ? (
                               <>
                                 <button
                                   onClick={() => {
@@ -2674,7 +2692,7 @@ export default function TorneoDetailPage() {
                                   <Trash2 size={12} />
                                 </button>
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -2723,7 +2741,7 @@ export default function TorneoDetailPage() {
                     <div key={cat.id} className="px-5 py-4">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-foreground">{catLabel}</span>
-                        {!isEditing ? (
+                        {!isEditing ? (!canEdit ? null : (
                           <button
                             onClick={() => {
                               setEditPrizesCatId(cat.id);
@@ -2738,7 +2756,7 @@ export default function TorneoDetailPage() {
                           >
                             Editar
                           </button>
-                        ) : (
+                        )) : (
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => updatePrizesMut.mutate({ catId: cat.id, prizes: prizesForm })}
@@ -2829,7 +2847,7 @@ export default function TorneoDetailPage() {
                 </p>
                 <PaymentTotals pairs={pairs} />
               </div>
-              {(tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
+              {canEdit && (tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
                 <button
                   onClick={() => setEnrollOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
@@ -2927,7 +2945,7 @@ export default function TorneoDetailPage() {
             </div>
 
             {/* Bulk action bar */}
-            {selectedKeys.size > 0 && (
+            {canEdit && selectedKeys.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)]">
                 <span className="text-xs font-medium text-[#D4AF37]">{selectedKeys.size} pareja(s) seleccionada(s)</span>
                 <div className="flex items-center gap-2 ml-auto">
@@ -2982,14 +3000,16 @@ export default function TorneoDetailPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
-                      <th className="px-4 py-3 w-10">
-                        <button onClick={toggleSelectAll} className="text-muted-foreground hover:text-foreground transition-colors">
-                          {allPageSelected
-                            ? <CheckSquare size={15} className="text-[#D4AF37]" />
-                            : <Square size={15} />
-                          }
-                        </button>
-                      </th>
+                      {canEdit && (
+                        <th className="px-4 py-3 w-10">
+                          <button onClick={toggleSelectAll} className="text-muted-foreground hover:text-foreground transition-colors">
+                            {allPageSelected
+                              ? <CheckSquare size={15} className="text-[#D4AF37]" />
+                              : <Square size={15} />
+                            }
+                          </button>
+                        </th>
+                      )}
                       {["Pareja / Jugador", "Nivel SPA", "Categoría", "Estado", "Pago", "Acciones"].map((h) => (
                         <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                       ))}
@@ -3012,14 +3032,16 @@ export default function TorneoDetailPage() {
                           key={pair.pairKey}
                           className={`border-b border-border last:border-0 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : "hover:bg-secondary/30"}`}
                         >
-                          <td className="px-4 py-3.5">
-                            <button onClick={() => toggleSelect(pair.pairKey)} className="text-muted-foreground hover:text-foreground transition-colors">
-                              {isSelected
-                                ? <CheckSquare size={15} className="text-[#D4AF37]" />
-                                : <Square size={15} />
-                              }
-                            </button>
-                          </td>
+                          {canEdit && (
+                            <td className="px-4 py-3.5">
+                              <button onClick={() => toggleSelect(pair.pairKey)} className="text-muted-foreground hover:text-foreground transition-colors">
+                                {isSelected
+                                  ? <CheckSquare size={15} className="text-[#D4AF37]" />
+                                  : <Square size={15} />
+                                }
+                              </button>
+                            </td>
+                          )}
                           <td className="px-5 py-3.5">
                             <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
                             {reg.partner?.name
@@ -3076,7 +3098,7 @@ export default function TorneoDetailPage() {
                               >
                                 <CalendarDays size={14} />
                               </button>
-                              {pair.status !== "CONFIRMED" && (
+                              {canEdit && pair.status !== "CONFIRMED" && (
                                 <button
                                   onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                   disabled={isUpdating}
@@ -3086,7 +3108,7 @@ export default function TorneoDetailPage() {
                                   <Check size={13} /> Confirmar
                                 </button>
                               )}
-                              {pair.status !== "WAITLIST" && (
+                              {canEdit && pair.status !== "WAITLIST" && (
                                 <button
                                   onClick={() => handlePairStatus(pair, "WAITLIST")}
                                   disabled={isUpdating}
@@ -3096,15 +3118,17 @@ export default function TorneoDetailPage() {
                                   <Clock size={14} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => setMovePair(pair)}
-                                disabled={isUpdating}
-                                title="Cambiar categoría"
-                                className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
-                              >
-                                <ArrowLeftRight size={14} />
-                              </button>
-                              {reg.partnerId && (
+                              {canEdit && (
+                                <button
+                                  onClick={() => setMovePair(pair)}
+                                  disabled={isUpdating}
+                                  title="Cambiar categoría"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
+                                >
+                                  <ArrowLeftRight size={14} />
+                                </button>
+                              )}
+                              {canEdit && reg.partnerId && (
                                 <button
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
@@ -3114,7 +3138,7 @@ export default function TorneoDetailPage() {
                                   <Users size={14} />
                                 </button>
                               )}
-                              {!reg.partnerId && pair.status !== "CANCELLED" && (
+                              {canEdit && !reg.partnerId && pair.status !== "CANCELLED" && (
                                 <button
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
@@ -3124,14 +3148,16 @@ export default function TorneoDetailPage() {
                                   <UserPlus size={14} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => handlePairStatus(pair, "CANCELLED")}
-                                disabled={isUpdating}
-                                className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                                title="Cancelar pareja"
-                              >
-                                <X size={14} />
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                  disabled={isUpdating}
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                                  title="Cancelar pareja"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -3261,14 +3287,16 @@ export default function TorneoDetailPage() {
                           onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
-                      <button
-                        onClick={() => setShowGenerateDialog(true)}
-                        disabled={!bracketCatId}
-                        className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <GitBranch size={14} />
-                        Generar cuadro…
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => setShowGenerateDialog(true)}
+                          disabled={!bracketCatId}
+                          className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <GitBranch size={14} />
+                          Generar cuadro…
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3296,7 +3324,7 @@ export default function TorneoDetailPage() {
                     desde cero usa &quot;Generar cuadro…&quot; de arriba.
                   </p>
                 </div>
-                {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
+                {canEdit && bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
                   <div className="flex items-center gap-2 shrink-0">
                     {!groupEditMode ? (
                       <>
@@ -3447,7 +3475,7 @@ export default function TorneoDetailPage() {
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
-                                  <div className="flex items-center gap-1">
+                                  {canEdit && <div className="flex items-center gap-1">
                                     <button
                                       onClick={() => {
                                         const name = window.prompt("Nuevo nombre del grupo:", grp.label);
@@ -3473,7 +3501,7 @@ export default function TorneoDetailPage() {
                                     >
                                       <Trash2 size={12} />
                                     </button>
-                                  </div>
+                                  </div>}
                                 </div>
 
                                 {groupEdit.length === 0 && (
@@ -3553,7 +3581,7 @@ export default function TorneoDetailPage() {
                           })}
 
                           {/* Botón "+ Nuevo grupo" — mini-Bloque 5 */}
-                          <button
+                          {canEdit && <button
                             onClick={() => addEmptyGroupMut.mutate({ catId: bracketCatId })}
                             disabled={addEmptyGroupMut.isPending || catGroups.length >= 16 || groupsLocked(bracketCatId)}
                             className="flex flex-col items-center justify-center gap-2 min-h-[120px] rounded-md border-2 border-dashed border-border bg-background/30 text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -3567,7 +3595,7 @@ export default function TorneoDetailPage() {
                                 <span className="text-xs">Nuevo grupo</span>
                               </>
                             )}
-                          </button>
+                          </button>}
                         </div>
                       </div>
                     );
@@ -3673,7 +3701,7 @@ export default function TorneoDetailPage() {
                         </button>
 
                         {/* Formatos de puntuación por fase */}
-                        <button
+                        {canEdit && <button
                           onClick={() => {
                             if (roundFmtOpen) {
                               setShowRoundFmtCatId(null);
@@ -3692,7 +3720,7 @@ export default function TorneoDetailPage() {
                         >
                           <Star size={13} />
                           <span className="hidden sm:inline">Formatos</span>
-                        </button>
+                        </button>}
                         {hasGroups && (
                           <>
                             {/* En eliminatoria: botón para ver/ocultar clasificación de grupos */}
@@ -3711,7 +3739,7 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">{showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}</span>
                               </button>
                             )}
-                            {cat.currentPhase !== "GROUPS" && (
+                            {canEdit && cat.currentPhase !== "GROUPS" && (
                               <button
                                 onClick={() => setRegenElimCatId(cat.id)}
                                 className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-blue-400/50 transition-colors"
@@ -3722,7 +3750,7 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Regen. eliminatorias</span>
                               </button>
                             )}
-                            {((allStandings as any)[cat.id]?.length ?? 0) > 0 && (
+                            {canEdit && ((allStandings as any)[cat.id]?.length ?? 0) > 0 && (
                               <button
                                 onClick={() => setManualCrossCatId(cat.id)}
                                 className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.5)] transition-colors"
@@ -3733,15 +3761,17 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Cruce manual</span>
                               </button>
                             )}
-                            <button
-                              onClick={() => setCreateMatchCatId(cat.id)}
-                              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-green-400/50 transition-colors"
-                              title="Crear un partido a mano"
-                              aria-label="Crear partido"
-                            >
-                              <Plus size={13} />
-                              <span className="hidden sm:inline">Crear partido</span>
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => setCreateMatchCatId(cat.id)}
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-green-400/50 transition-colors"
+                                title="Crear un partido a mano"
+                                aria-label="Crear partido"
+                              >
+                                <Plus size={13} />
+                                <span className="hidden sm:inline">Crear partido</span>
+                              </button>
+                            )}
                             {groupsLocked(cat.id) && (
                               <span
                                 className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-amber-400/40 bg-amber-400/5 text-xs text-amber-400"
@@ -3751,7 +3781,7 @@ export default function TorneoDetailPage() {
                                 <span className="sr-only sm:not-sr-only">Publicado · bloqueado</span>
                               </span>
                             )}
-                            <button
+                            {canEdit && <button
                               // Con el cuadro publicado, primero se explica cómo desbloquearlo;
                               // «Forzar» lleva a la confirmación, forzado solo esa vez
                               onClick={() =>
@@ -3768,7 +3798,7 @@ export default function TorneoDetailPage() {
                             >
                               <RefreshCw size={13} />
                               <span className="hidden sm:inline">Regenerar todo</span>
-                            </button>
+                            </button>}
                           </>
                         )}
                       </div>
@@ -3884,7 +3914,7 @@ export default function TorneoDetailPage() {
                                         <td className="px-2 py-1.5 text-foreground max-w-[140px]">
                                           <div className="flex items-center gap-1">
                                             <span className="truncate">{row.name}</span>
-                                            <button
+                                            {canEdit && <button
                                               onClick={() => setEditStatsTarget({
                                                 categoryId: cat.id,
                                                 groupId: grp.id,
@@ -3900,7 +3930,7 @@ export default function TorneoDetailPage() {
                                               title="Editar estadísticas (sanción/ajuste)"
                                             >
                                               <Pencil size={10} />
-                                            </button>
+                                            </button>}
                                           </div>
                                         </td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.played}</td>
@@ -3962,6 +3992,7 @@ export default function TorneoDetailPage() {
                                     !m.isResult &&
                                     (m.team1?.length ?? 0) > 0;
                                   const canInitSwap =
+                                    canEdit &&
                                     !swapSourceMatchId &&
                                     !m.isResult &&
                                     (m.team1?.length ?? 0) > 0;
@@ -4042,7 +4073,7 @@ export default function TorneoDetailPage() {
                                               <span aria-hidden>✕</span> Cancelar swap
                                             </button>
                                           )}
-                                          {!m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
+                                          {canResults && !m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(false); }}
                                               className="inline-flex items-center gap-1 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37] transition-colors"
@@ -4051,7 +4082,7 @@ export default function TorneoDetailPage() {
                                               <CheckCircle size={10} /> Meter resultado
                                             </button>
                                           )}
-                                          {m.isResult && (
+                                          {canResults && m.isResult && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
                                               className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
@@ -4108,7 +4139,7 @@ export default function TorneoDetailPage() {
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
                                       ) : <span />}
-                                      {!m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
+                                      {canResults && !m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(false); }}
                                           className="flex items-center gap-1 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37] transition-colors"
@@ -4117,7 +4148,7 @@ export default function TorneoDetailPage() {
                                           <CheckCircle size={10} /> Meter resultado
                                         </button>
                                       )}
-                                      {m.isResult && (
+                                      {canResults && m.isResult && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(true); }}
                                           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
@@ -4173,15 +4204,36 @@ export default function TorneoDetailPage() {
             standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
             onEnterResult={(m) => { setResultMatch(m); setResultCorrection(false); }}
             onCorrectResult={(m) => { setResultMatch(m); setResultCorrection(true); }}
+            canWrite={canResults}
+          />
+        )}
+
+        {/* ── CALENDARIO TAB (liga): fecha, hora y pista de cada partido ── */}
+        {tab === "calendario" && league && (
+          <LeagueCalendarTab
+            tournamentId={id}
+            tournament={tournament}
+            matches={bracketMatches}
+            canWrite={canEdit}
+            onCorrectResult={canResults ? (m) => { setResultMatch(m); setResultCorrection(true); } : undefined}
           />
         )}
 
         {/* ── CLASIFICACIÓN TAB (liga) ── */}
         {tab === "clasificacion" && league && (
-          <LeagueStandingsTab
-            categories={tournament.categories}
-            standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
-          />
+          <div className="space-y-6">
+            <LeagueStandingsTab
+              categories={tournament.categories}
+              standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+            />
+            <LeagueFinalPanel
+              tournamentId={id}
+              categories={tournament.categories}
+              matches={bracketMatches}
+              standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+              canWrite={canEdit}
+            />
+          </div>
         )}
 
         {/* ── HISTORIAL TAB ── */}
@@ -4355,6 +4407,7 @@ export default function TorneoDetailPage() {
         initialDate={createAt?.date}
         initialCourt={createAt?.court}
         timeZone={tournamentTimeZone(tournament)}
+        league={league}
         categoryLabel={
           (catOptions.find((c) => c.value === createMatchCatId)?.label) ?? "Categoría"
         }

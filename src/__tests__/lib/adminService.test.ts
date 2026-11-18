@@ -553,6 +553,25 @@ describe('adminService', () => {
       expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/regenerate', { categoryId: 'c1' });
     });
 
+    it('ligas: programar un partido (fecha y pista, o quitarlas) y sacar el cuadro final', async () => {
+      mockPatch.mockResolvedValueOnce({ data: { match: { id: 'm1', date: null, court: null, courtId: null } } });
+      await adminService.matches.scheduleLeagueMatch('m1', { date: '2026-11-20T18:00:00.000Z', court: 'Pista 1' });
+      expect(mockPatch).toHaveBeenLastCalledWith('/admin/matches/m1/league-schedule', {
+        date: '2026-11-20T18:00:00.000Z',
+        court: 'Pista 1',
+      });
+      await adminService.matches.scheduleLeagueMatch('m1', { date: null, court: null });
+      expect(mockPatch).toHaveBeenLastCalledWith('/admin/matches/m1/league-schedule', { date: null, court: null });
+
+      mockPost.mockResolvedValueOnce({ data: { generated: true, qualifiers: 4 } });
+      await expect(adminService.tournaments.generateLeagueFinal('l1', 'c1', 2)).resolves.toEqual({ generated: true, qualifiers: 4 });
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/l1/categories/c1/league-final', { topNPerGroup: 2 });
+
+      // Un partido manual en un grupo de liga lleva su jornada
+      await adminService.tournaments.createManualMatch('l1', { categoryId: 'c1', groupId: 'g1', round: 3 });
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/l1/matches', { categoryId: 'c1', groupId: 'g1', round: 3 });
+    });
+
     it('partidos de grupos y generar: sin forzar, las peticiones de siempre; forzando, con forceLocked', async () => {
       const team = { userId: 'a', partnerId: 'b' };
       await adminService.tournaments.editMatchPlayers('m1', team, team);

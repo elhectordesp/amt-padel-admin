@@ -59,6 +59,11 @@ interface Props {
    * repite esta petición una vez con forceLocked.
    */
   onGroupsLocked?: (retryForced: () => void) => void;
+  /**
+   * Una liga: en un grupo se elige la jornada (cada partido de grupos lleva la
+   * suya) y no se pone fecha ni pista, que van por el calendario de la liga.
+   */
+  league?: boolean;
 }
 
 const PHASES = [
@@ -86,6 +91,7 @@ export function MatchCreateDialog({
   durations,
   lock,
   onGroupsLocked,
+  league,
 }: Props) {
   const [target, setTarget] = useState<string>(groups[0]?.id ?? "free"); // groupId | "free"
   const [phase, setPhase] = useState("QF");
@@ -93,12 +99,17 @@ export function MatchCreateDialog({
   const [team2, setTeam2] = useState("");
   const [date, setDate] = useState(initialDate ?? "");
   const [court, setCourt] = useState(initialCourt ?? "");
+  const [round, setRound] = useState("1");
   const [saving, setSaving] = useState(false);
 
   if (!open) return null;
 
   const pairBy = (uid: string) => pairs.find((p) => p.userId === uid) ?? null;
   const sameTeam = team1 && team2 && team1 === team2;
+  // La jornada solo se elige en un partido de un grupo de una liga
+  const pickRound = !!league && target !== "free";
+  const roundNumber = Number(round);
+  const invalidRound = pickRound && (!Number.isInteger(roundNumber) || roundNumber < 1 || roundNumber > 99);
   // Fuera de los tramos de la jornada se puede crear (el admin manda), pero
   // avisando: antes se creaba sin decir nada (p. ej. en el hueco de las 22:00)
   const when = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/.exec(date);
@@ -109,7 +120,7 @@ export function MatchCreateDialog({
 
   // forceLocked: solo esta vez, desde el «Forzar» del diálogo de la ficha
   const save = async (forceLocked: boolean) => {
-    if (sameTeam) return;
+    if (sameTeam || invalidRound) return;
     setSaving(true);
     try {
       const t1 = pairBy(team1);
@@ -119,9 +130,11 @@ export function MatchCreateDialog({
         ...(target === "free" ? { phase } : { groupId: target }),
         ...(t1 ? { team1: { userId: t1.userId, partnerId: t1.partnerId } } : {}),
         ...(t2 ? { team2: { userId: t2.userId, partnerId: t2.partnerId } } : {}),
-        // Lo escrito es hora del torneo (con new Date() era la del navegador)
-        ...(date ? { date: zonedDateTimeToIso(date, timeZone) } : {}),
-        ...(court.trim() ? { court: court.trim() } : {}),
+        // Lo escrito es hora del torneo (con new Date() era la del navegador).
+        // Una liga no pide fecha ni pista aquí: van por su calendario
+        ...(!league && date ? { date: zonedDateTimeToIso(date, timeZone) } : {}),
+        ...(!league && court.trim() ? { court: court.trim() } : {}),
+        ...(pickRound ? { round: roundNumber } : {}),
       }, forceLocked ? { forceLocked: true } : lock);
       toast.success("Partido creado");
       onCreated?.();
@@ -206,18 +219,45 @@ export function MatchCreateDialog({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          {pickRound && (
             <label className="block">
-              <span className="text-xs text-muted-foreground">Hora (opcional)</span>
-              <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+              <span className="text-xs text-muted-foreground">Jornada</span>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                step={1}
+                value={round}
+                onChange={(e) => setRound(e.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+              />
             </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">Pista (opcional)</span>
-              <input type="text" value={court} onChange={(e) => setCourt(e.target.value)} placeholder="Pista 1" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
-            </label>
-          </div>
+          )}
 
-          {scheduleIssue && (
+          {league ? (
+            <p className="text-[11px] text-muted-foreground">
+              La fecha, la hora y la pista se ponen después, desde el «Calendario» de la liga.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-xs text-muted-foreground">Hora (opcional)</span>
+                <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+              </label>
+              <label className="block">
+                <span className="text-xs text-muted-foreground">Pista (opcional)</span>
+                <input type="text" value={court} onChange={(e) => setCourt(e.target.value)} placeholder="Pista 1" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+              </label>
+            </div>
+          )}
+
+          {invalidRound && (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">
+              La jornada es un número entre 1 y 99.
+            </div>
+          )}
+
+          {!league && scheduleIssue && (
             <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-amber-400">
               Fuera del horario del torneo: {scheduleIssue} Puedes crearlo igualmente.
             </div>
@@ -232,7 +272,7 @@ export function MatchCreateDialog({
 
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
           <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button size="sm" onClick={submit} disabled={saving || !!sameTeam}>
+          <Button size="sm" onClick={submit} disabled={saving || !!sameTeam || invalidRound}>
             {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
             Crear partido
           </Button>

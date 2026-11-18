@@ -36,6 +36,8 @@ export interface LeagueStandingRow {
 
 export interface LeagueStandingsGroup extends StandingsGroupLike {
   rows: LeagueStandingRow[];
+  /** Cuántos pasan de este grupo al cuadro final (2 si no se ha tocado). */
+  qualifyCount?: number;
 }
 
 type CategoryRef = Pick<TournamentCategory, "id" | "gender" | "level">;
@@ -72,7 +74,7 @@ function CategoryPicker({
   );
 }
 
-const scoreText = (m: MatchResult) =>
+export const scoreText = (m: MatchResult) =>
   m.isWalkover
     ? "W.O."
     : m.isResult && m.sets1 && m.sets2
@@ -91,9 +93,11 @@ interface RoundsProps {
   standings: Record<string, LeagueStandingsGroup[] | undefined>;
   onEnterResult: (match: MatchResult) => void;
   onCorrectResult: (match: MatchResult) => void;
+  /** Sin permiso para meter resultados, las jornadas solo se ven (por defecto, sí). */
+  canWrite?: boolean;
 }
 
-export function LeagueRoundsTab({ startDate, categories, matches, standings, onEnterResult, onCorrectResult }: RoundsProps) {
+export function LeagueRoundsTab({ startDate, categories, matches, standings, onEnterResult, onCorrectResult, canWrite = true }: RoundsProps) {
   const [picked, setPicked] = useState("");
   const categoryId = categories.some((c) => c.id === picked) ? picked : (categories[0]?.id ?? "");
   const groups = leagueRounds(
@@ -143,7 +147,7 @@ export function LeagueRoundsTab({ startDate, categories, matches, standings, onE
                             </span>
                           </div>
                           <div className="flex justify-end">
-                            {m.isResult ? (
+                            {!canWrite ? null : m.isResult ? (
                               <button
                                 type="button"
                                 onClick={() => onCorrectResult(m)}

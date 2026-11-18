@@ -116,3 +116,76 @@ describe("MatchCreateDialog — fuera de los tramos y mensajes del back", () => 
     expect(createManualMatch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("MatchCreateDialog — liga: jornada en lugar de fecha y pista", () => {
+  beforeEach(() => {
+    createManualMatch.mockClear();
+    createManualMatch.mockResolvedValue({ matchId: "m-1" });
+  });
+
+  const renderLeague = (groups = [{ id: "g-1", label: "Grupo A" }]) =>
+    render(
+      <MatchCreateDialog
+        open
+        onClose={vi.fn()}
+        tournamentId="l-1"
+        categoryId="c-1"
+        categoryLabel="Masc. 3ª"
+        groups={groups}
+        pairs={[]}
+        timeZone="Europe/Madrid"
+        league
+      />,
+    );
+
+  it("en un grupo se elige la jornada y se manda; la fecha y la pista no se piden", async () => {
+    renderLeague();
+    expect(screen.queryByLabelText("Hora (opcional)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Pista (opcional)")).not.toBeInTheDocument();
+    expect(screen.getByText(/desde el «Calendario» de la liga/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Jornada"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
+
+    await waitFor(() => expect(createManualMatch).toHaveBeenCalledTimes(1));
+    const payload = createManualMatch.mock.calls[0][1];
+    expect(payload).toMatchObject({ categoryId: "c-1", groupId: "g-1", round: 4 });
+    expect(payload).not.toHaveProperty("date");
+    expect(payload).not.toHaveProperty("court");
+  });
+
+  it("por defecto, la jornada 1 (como hasta ahora)", async () => {
+    renderLeague();
+    expect(screen.getByLabelText("Jornada")).toHaveValue(1);
+    fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
+    await waitFor(() => expect(createManualMatch).toHaveBeenCalledTimes(1));
+    expect(createManualMatch.mock.calls[0][1]).toMatchObject({ round: 1 });
+  });
+
+  it("una jornada que no es un número de 1 a 99 no deja crear", () => {
+    renderLeague();
+    for (const bad of ["0", "100", "2.5", ""]) {
+      fireEvent.change(screen.getByLabelText("Jornada"), { target: { value: bad } });
+      expect(screen.getByRole("alert")).toHaveTextContent("La jornada es un número entre 1 y 99.");
+      expect(screen.getByRole("button", { name: /Crear partido/ })).toBeDisabled();
+    }
+    fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
+    expect(createManualMatch).not.toHaveBeenCalled();
+  });
+
+  it("suelto en la eliminatoria no lleva jornada", async () => {
+    renderLeague();
+    fireEvent.change(screen.getByRole("combobox", { name: /Ubicación/ }), { target: { value: "free" } });
+    expect(screen.queryByLabelText("Jornada")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Crear partido/ }));
+    await waitFor(() => expect(createManualMatch).toHaveBeenCalledTimes(1));
+    expect(createManualMatch.mock.calls[0][1]).not.toHaveProperty("round");
+  });
+
+  it("un torneo sigue como siempre: sin jornada, con hora y pista", () => {
+    renderDialog("Europe/Madrid");
+    expect(screen.queryByLabelText("Jornada")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Hora (opcional)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pista (opcional)")).toBeInTheDocument();
+  });
+});

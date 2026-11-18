@@ -112,6 +112,13 @@ describe("LeagueRoundsTab", () => {
     expect(onCorrectResult).toHaveBeenCalledWith(expect.objectContaining({ id: "m1" }));
   });
 
+  it("sin permiso para meter resultados se ven las jornadas pero no sus botones", () => {
+    renderTab({ canWrite: false });
+    expect(screen.getByText("6-3 / 6-4")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Meter resultado/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Corregir/ })).not.toBeInTheDocument();
+  });
+
   it("un partido sin las dos parejas no ofrece meter resultado", () => {
     renderTab({ matches: [match({ id: "vacio", team1: ["Ana"], team2: [] })] });
     expect(screen.queryByRole("button", { name: /Meter resultado/ })).not.toBeInTheDocument();
