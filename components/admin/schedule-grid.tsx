@@ -38,7 +38,7 @@ interface Props {
   duration:       number;
   tournament:     any;
   onMatchClick:   (m: MatchResult) => void;
-  onCorrectClick: (m: MatchResult) => void;
+  onCorrectClick?: (m: MatchResult) => void;
   // Fase 2 — interactividad (opcionales; si no se pasan, la rejilla es de solo lectura).
   onMove?:        (m: MatchResult, target: ScheduleTarget) => void;
   onDelete?:      (m: MatchResult) => void;
@@ -80,7 +80,7 @@ function MatchCardInner({
   tournament:     any;
   isFinished:     boolean;
   hasSets:        boolean;
-  onCorrectClick: (m: MatchResult) => void;
+  onCorrectClick?: (m: MatchResult) => void;
   onDelete?:      (m: MatchResult) => void;
   overlay?:       boolean;
 }) {
@@ -101,7 +101,7 @@ function MatchCardInner({
         {catLbl && <span className="text-muted-foreground/60 truncate">{catLbl}</span>}
         {!overlay && (
           <div className="ml-auto flex items-center gap-0.5 shrink-0">
-            {isFinished && (
+            {isFinished && onCorrectClick && (
               <button
                 onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
                 onPointerDown={(e) => e.stopPropagation()}
@@ -154,7 +154,7 @@ function DraggableMatch({
   rowSpan:        number;
   draggable:      boolean;
   onMatchClick:   (m: MatchResult) => void;
-  onCorrectClick: (m: MatchResult) => void;
+  onCorrectClick?: (m: MatchResult) => void;
   onDelete?:      (m: MatchResult) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({

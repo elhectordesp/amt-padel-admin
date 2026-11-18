@@ -351,6 +351,13 @@ export const adminService = {
         })
         .then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string, opts?: { topNPerGroup?: number; extraQualifiers?: number; eliminationStartRound?: string; force?: boolean }) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId, ...(opts ?? {}) }).then((r) => r.data),
+    /**
+     * El cuadro final de una liga: la eliminatoria con los N primeros de cada
+     * grupo de la categoría. El back da 409 mientras queden partidos de grupos
+     * sin resultado.
+     */
+    generateLeagueFinal: (id: string, categoryId: string, topNPerGroup: number) =>
+      api.post<{ generated: true; qualifiers: number }>(`/admin/tournaments/${id}/categories/${categoryId}/league-final`, { topNPerGroup }).then((r) => r.data),
     /** Cruce MANUAL de eliminatoria (Frente 3): cada cruce = un partido de 1ª ronda; lado = {groupIdx, pos} o null=bye. */
     generateEliminationManual: (id: string, catId: string, crosses: { a: { groupIdx: number; pos: number } | null; b: { groupIdx: number; pos: number } | null }[]) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/elimination/manual`, { crosses }).then((r) => r.data),
@@ -461,7 +468,7 @@ export const adminService = {
       }).then((r) => r.data),
     createManualMatch: (
       tournamentId: string,
-      payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string },
+      payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string; /** Jornada, en un grupo de una liga */ round?: number },
       lock?: GroupsLockOptions,
     ) => api.post(`/admin/tournaments/${tournamentId}/matches`, lock?.forceLocked ? { ...payload, forceLocked: true } : payload).then((r) => r.data),
     deleteMatch: (matchId: string, force?: boolean, lock?: GroupsLockOptions) =>
@@ -581,6 +588,14 @@ export const adminService = {
         }));
       });
     },
+    /**
+     * Fija, cambia o quita la fecha y la pista de un partido de LIGA. Lo que no
+     * se manda no se toca; null lo quita (una pista necesita fecha). `date` sin
+     * zona es hora de la liga. Si la pista está ocupada (bloqueo, reserva u otro
+     * partido), el back da 409 con lo que la ocupa: no hay «Confirma para…».
+     */
+    scheduleLeagueMatch: (matchId: string, data: { date?: string | null; court?: string | null }) =>
+      api.patch<{ match: { id: string; date: string | null; court: string | null; courtId: string | null } }>(`/admin/matches/${matchId}/league-schedule`, data).then((r) => r.data),
     setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
       // El back espera `winnerTeam`: con `walkoverWinnerTeam` lo descartaba
       // (whitelist) y todo walkover daba 400 «Debes indicar qué equipo gana»

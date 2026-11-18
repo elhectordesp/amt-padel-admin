@@ -134,10 +134,13 @@ export function TournamentPreparationChecklist({
   onNavigate,
   timeZone,
   base = "/torneos",
+  readOnly = false,
 }: {
   tournamentId: string;
   /** Raíz de las pantallas del tipo: `/torneos` o `/ligas`. */
   base?: ReturnType<typeof tournamentsBase>;
+  /** Sin permiso para cambiar el torneo: se ve cómo va, sin los botones que lo cambian. */
+  readOnly?: boolean;
   /** Zona del torneo: la del cierre de inscripciones. */
   timeZone: string;
   /** Ir a la pestaña donde se hace el paso. */
@@ -242,6 +245,8 @@ export function TournamentPreparationChecklist({
       "inline-flex items-center gap-1.5 text-xs font-semibold rounded-md px-3 py-1.5 transition-colors disabled:opacity-50";
     const primary = `${btn} bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]`;
     const secondary = `${btn} border border-border text-foreground hover:bg-secondary`;
+    // Abrir, cerrar y publicar cambian el torneo; ir a otra pestaña, no
+    if (readOnly && (key === "REGISTRATION_OPEN" || key === "REGISTRATION_CLOSED" || key === "PUBLISH")) return null;
     switch (key) {
       case "REGISTRATION_OPEN":
         return status === "DRAFT" ? (
@@ -351,7 +356,7 @@ export function TournamentPreparationChecklist({
               );
             })}
           </ul>
-          {blockedWithConflicts.length > 0 && (
+          {blockedWithConflicts.length > 0 && !readOnly && (
             <button
               onClick={() => setConfirm("publish-force")}
               className="text-xs font-semibold text-amber-400 underline hover:text-amber-300"
@@ -362,12 +367,14 @@ export function TournamentPreparationChecklist({
         </div>
       )}
 
-      <div className="px-5 py-2.5 border-t border-border text-[11px] text-muted-foreground">
-        ¿Hace falta corregir el estado a mano?{" "}
-        <Link href={`${base}/${tournamentId}/editar#avanzado`} className="underline hover:text-foreground">
-          Editar → Avanzado
-        </Link>
-      </div>
+      {!readOnly && (
+        <div className="px-5 py-2.5 border-t border-border text-[11px] text-muted-foreground">
+          ¿Hace falta corregir el estado a mano?{" "}
+          <Link href={`${base}/${tournamentId}/editar#avanzado`} className="underline hover:text-foreground">
+            Editar → Avanzado
+          </Link>
+        </div>
+      )}
 
       <ConfirmModal
         open={confirm === "open"}
