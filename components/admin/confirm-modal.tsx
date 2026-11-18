@@ -14,13 +14,15 @@ interface Props {
   onClose:     () => void;
   onConfirm:   () => void;
   loading?:    boolean;
+  /** Mantiene el botón de confirmar apagado (p. ej. hasta que se teclee la palabra de seguridad). */
+  confirmDisabled?: boolean;
   /** Contenido extra entre la descripción y los botones (p. ej. un campo de motivo). */
   children?:   React.ReactNode;
 }
 
 export function ConfirmModal({
   open, title, description, confirmLabel = "Confirmar", cancelLabel = "Cancelar",
-  danger = false, onClose, onConfirm, loading, children,
+  danger = false, onClose, onConfirm, loading, confirmDisabled, children,
 }: Props) {
   const titleId = useId();
   const descriptionId = useId();
@@ -84,7 +86,7 @@ export function ConfirmModal({
           </button>
           <button
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
             className={`flex-1 py-2 rounded-md text-sm font-semibold disabled:opacity-60 transition-colors ${
               danger ? "bg-destructive text-white hover:bg-destructive/80" : "bg-[#D4AF37] text-[#0C0C0C] hover:bg-[#C49F2A]"
             }`}

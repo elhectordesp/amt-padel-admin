@@ -1,7 +1,7 @@
 /**
  * Inscripciones y Resultados según el rol del equipo del club. Inscripciones
  * cambia con «tournaments» (altas, estados, categoría, pareja, disponibilidad)
- * y se cobra con «cash»; Resultados se mete con «results». Quien solo lee lo ve
+ * y se cobra con «cash» o «tournaments»; Resultados se mete con «results». Quien solo lee lo ve
  * todo, sin los botones que cambian algo.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -107,15 +107,23 @@ describe("Inscripciones según el rol", () => {
     expect(row.getAllByTitle(/^Pago de /).length).toBeGreaterThan(0);
   });
 
-  it("sin permiso en caja: el estado del pago se ve, pero no se abre", async () => {
+  it("sin caja pero con torneos (la mesa del torneo): cobra, que el cobro lo abre cualquiera de las dos", async () => {
     writable.cash = false;
+    renderPage(<InscripcionesPage />);
+    const row = await desktopRow();
+
+    expect(row.getAllByTitle(/^Pago de /).length).toBeGreaterThan(0);
+    expect(row.getByTitle("Confirmar")).toBeInTheDocument();
+  });
+
+  it("sin escribir ni en caja ni en torneos: el estado del pago se ve, pero no se abre", async () => {
+    writable.cash = false;
+    writable.tournaments = false;
     renderPage(<InscripcionesPage />);
     const row = await desktopRow();
 
     expect(row.getAllByText("Pendiente").length).toBeGreaterThan(0);
     expect(row.queryAllByTitle(/^Pago de /)).toHaveLength(0);
-    // Y lo demás sigue siendo suyo
-    expect(row.getByTitle("Confirmar")).toBeInTheDocument();
   });
 });
 

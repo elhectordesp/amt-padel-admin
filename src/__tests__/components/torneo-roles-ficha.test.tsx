@@ -2,7 +2,8 @@
  * Ficha de un torneo según el rol del equipo del club: cada acción pide el área
  * que le pide su endpoint en el back. Cambiar el torneo (editar, duplicar,
  * eliminar, inscripciones, horarios) es «tournaments»; meter, corregir y
- * reabrir resultados, «results»; cobrar, «cash». Sin el permiso, el botón no sale.
+ * reabrir resultados, «results»; cobrar, «cash» o «tournaments». Sin el permiso,
+ * el botón no sale.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -192,6 +193,22 @@ describe("Ficha de un torneo según el rol", { timeout: 30_000 }, () => {
       expect(hasTitle("Corregir resultado")).toBe(false);
       expect(hasTitle("Reabrir partido (deshacer resultado)")).toBe(false);
       expect(screen.queryByRole("button", { name: "Borrar partido" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Torneos: torneos escribe, sin caja", () => {
+    beforeEach(() => {
+      writable.cash = false;
+    });
+
+    it("Inscripciones: la mesa del torneo cobra la pareja y abre el pago de cada jugador", async () => {
+      renderPage();
+      await openTab(/^Inscripciones/);
+      expect(await screen.findByText("Ana López", {}, WAIT)).toBeInTheDocument();
+
+      expect(screen.getByRole("button", { name: /Cobrar pareja/ })).toBeInTheDocument();
+      expect(screen.getAllByTitle(/^Pago de /).length).toBeGreaterThan(0);
+      expect(hasTitle("Confirmar pareja")).toBe(true);
     });
   });
 

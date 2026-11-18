@@ -12,6 +12,8 @@ export interface ClubCustomer {
   clubId:       string;
   userId:       string | null;
   hasAccount:   boolean;
+  /** Anonimizado a petición (RGPD): sin datos personales y sin edición posible. No viene con un back anterior. */
+  anonymized?:  boolean;
   name:         string | null;
   phone:        string | null;
   email:        string | null;
@@ -160,4 +162,7 @@ export const clubCustomersService = {
     api.post<ClubCustomer>(`${base(clubId)}/${id}/archive`).then((r) => r.data),
   unarchive: (clubId: string, id: string) =>
     api.post<ClubCustomer>(`${base(clubId)}/${id}/unarchive`).then((r) => r.data),
+  /** Borra los datos personales del cliente (RGPD). Irreversible; solo propietario y gestor. */
+  anonymize: (clubId: string, id: string) =>
+    api.post<ClubCustomer>(`${base(clubId)}/${id}/anonymize`).then((r) => r.data),
 };
