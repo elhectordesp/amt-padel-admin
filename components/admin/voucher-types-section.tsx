@@ -2,8 +2,9 @@
 
 /**
  * Catálogo de bonos del club: lo que vende («Bono 10 reservas», 120 €, vale
- * 90 días). Cada bono vendido copia su nombre, sesiones y precio: cambiar o
- * borrar un tipo no toca los ya vendidos. Un tipo dado de baja deja de
+ * 90 días). Un bono es de reservas de pista o de clases privadas de la
+ * escuela. Cada bono vendido copia su nombre, tipo, sesiones y precio: cambiar
+ * o borrar un tipo no toca los ya vendidos. Un tipo dado de baja deja de
  * ofrecerse al vender.
  */
 
@@ -18,11 +19,14 @@ import {
   clubVouchersQK,
   clubVouchersService,
   type ClubVoucherType,
+  type VoucherKind,
 } from "@/lib/services/club-vouchers";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
   EMPTY_TYPE_FORM,
+  VOUCHER_KIND_LABEL,
+  VOUCHER_KIND_SESSION,
   VOUCHER_MAX_SESSIONS,
   VOUCHER_MAX_VALID_DAYS,
   checkTypeForm,
@@ -99,7 +103,7 @@ export function VoucherTypesSection({ clubId }: { clubId: string }) {
   return (
     <section aria-label="Bonos">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-medium">Bonos de reservas</h2>
+        <h2 className="text-base font-medium">Bonos</h2>
         {canEdit && (
           <Button
             variant="outline"
@@ -114,9 +118,10 @@ export function VoucherTypesSection({ clubId }: { clubId: string }) {
         )}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Un bono de N reservas de pista (cada sesión es una reserva entera). Se vende desde la ficha
-        del cliente, se cobra a mano y se descuenta al cobrar sus reservas. Cambiar o borrar un bono
-        de aquí no toca los ya vendidos.
+        Un bono de N sesiones: de reservas de pista (cada sesión es una reserva entera) o de clases
+        privadas de la escuela (cada sesión es una clase). Se vende desde la ficha del cliente, se
+        cobra a mano y se descuenta al cobrar sus reservas o sus clases privadas. Cambiar o borrar
+        un bono de aquí no toca los ya vendidos.
       </p>
 
       {types.isLoading ? (
@@ -140,8 +145,8 @@ export function VoucherTypesSection({ clubId }: { clubId: string }) {
                   )}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
-                  {t.sessions} {t.sessions === 1 ? "sesión" : "sesiones"} · {formatCents(t.priceCents)} ·{" "}
-                  {validityLabel(t.validDays)}
+                  {VOUCHER_KIND_LABEL[t.kind]} · {t.sessions} {t.sessions === 1 ? "sesión" : "sesiones"} ·{" "}
+                  {formatCents(t.priceCents)} · {validityLabel(t.validDays)}
                 </div>
               </div>
               {canEdit && (
@@ -222,9 +227,24 @@ export function VoucherTypesSection({ clubId }: { clubId: string }) {
               />
             </label>
 
+            <label className="block text-xs text-muted-foreground">
+              Tipo de bono
+              <select
+                value={form.kind}
+                onChange={(e) => setForm({ ...form, kind: e.target.value as VoucherKind })}
+                className={`${inputCls} mt-1 w-full`}
+              >
+                {(Object.keys(VOUCHER_KIND_LABEL) as VoucherKind[]).map((k) => (
+                  <option key={k} value={k}>
+                    {VOUCHER_KIND_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-xs text-muted-foreground">
-                Sesiones (reservas)
+                Sesiones ({form.kind === "COURT" ? "reservas" : "clases"})
                 <input
                   type="number"
                   min={1}
@@ -261,7 +281,7 @@ export function VoucherTypesSection({ clubId }: { clubId: string }) {
             </label>
             <p className="-mt-2 text-xs text-muted-foreground">
               Caduca al final del día que toque, en la hora del club. Una sesión se puede gastar en
-              una reserva que sea hasta ese día.
+              una {VOUCHER_KIND_SESSION[form.kind]} que sea hasta ese día.
             </p>
 
             <div className="flex justify-end gap-2 pt-1">

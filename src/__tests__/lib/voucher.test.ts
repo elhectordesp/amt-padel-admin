@@ -52,6 +52,13 @@ describe("etiquetas", () => {
 
   it("un tipo para elegir al vender", () => {
     expect(typeOptionLabel({ name: "Bono 10", sessions: 10, priceCents: 12000 })).toBe("Bono 10 · 10 sesiones · 120,00 €");
+    expect(typeOptionLabel({ name: "Bono 10", kind: "COURT", sessions: 10, priceCents: 12000 })).toBe(
+      "Bono 10 · 10 sesiones · 120,00 €",
+    );
+    // Los de clases privadas lo dicen para no confundirlos al vender
+    expect(typeOptionLabel({ name: "Clases", kind: "PRIVATE_CLASS", sessions: 8, priceCents: 20000 })).toBe(
+      "Clases · 8 sesiones · 200,00 € · clases privadas",
+    );
   });
 
   it("solo uno cancelado deja de admitir acciones", () => {
@@ -63,8 +70,9 @@ describe("etiquetas", () => {
 });
 
 describe("checkTypeForm", () => {
-  const form = (over: Partial<typeof EMPTY_TYPE_FORM> = {}) => ({
+  const form = (over: Partial<typeof EMPTY_TYPE_FORM> = {}): typeof EMPTY_TYPE_FORM => ({
     name: "Bono 10",
+    kind: "COURT",
     sessions: "10",
     price: "120",
     validDays: "90",
@@ -74,7 +82,15 @@ describe("checkTypeForm", () => {
   it("un tipo bien escrito sale en céntimos y días", () => {
     expect(checkTypeForm(form())).toEqual({
       ok: true,
-      value: { name: "Bono 10", sessions: 10, priceCents: 12000, validDays: 90 },
+      value: { name: "Bono 10", kind: "COURT", sessions: 10, priceCents: 12000, validDays: 90 },
+    });
+  });
+
+  it("el tipo de bono (pista o clases privadas) va tal cual; por defecto, de pista", () => {
+    expect(EMPTY_TYPE_FORM.kind).toBe("COURT");
+    expect(checkTypeForm(form({ kind: "PRIVATE_CLASS" }))).toMatchObject({
+      ok: true,
+      value: { kind: "PRIVATE_CLASS" },
     });
   });
 
@@ -112,10 +128,10 @@ describe("checkTypeForm", () => {
 
   it("el formulario de un tipo guardado vuelve a escribirse tal cual", () => {
     const t: ClubVoucherType = {
-      id: "t1", clubId: "c1", name: "Bono 10", sessions: 10, priceCents: 12050, validDays: null,
+      id: "t1", clubId: "c1", name: "Bono 10", kind: "PRIVATE_CLASS", sessions: 10, priceCents: 12050, validDays: null,
       active: true, createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-01T00:00:00.000Z",
     };
-    expect(typeFormOf(t)).toEqual({ name: "Bono 10", sessions: "10", price: "120.5", validDays: "" });
+    expect(typeFormOf(t)).toEqual({ name: "Bono 10", kind: "PRIVATE_CLASS", sessions: "10", price: "120.5", validDays: "" });
     expect(checkTypeForm(typeFormOf(t))).toMatchObject({ ok: true, value: { priceCents: 12050, validDays: null } });
   });
 });

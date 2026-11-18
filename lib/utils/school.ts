@@ -13,6 +13,7 @@ import type {
   SchoolSession,
   SchoolSlot,
 } from "@/types/school";
+import { centsToFieldText, checkMonthlyFee } from "@/lib/utils/school-money";
 import { formatInTimeZone, zonedDayKey, zonedMinutes, zonedTime } from "@/lib/utils/time-zone";
 
 export const SCHOOL_MAX_STUDENTS = 40;
@@ -86,6 +87,8 @@ export interface GroupFormValues {
   level:        string;
   coachStaffId: string;
   maxStudents:  string;
+  /** Cuota mensual por alumno, en euros escritos; vacía: el grupo no cobra cuota. */
+  monthlyFee:   string;
   startDate:    string;
   endDate:      string;
   notes:        string;
@@ -111,6 +114,7 @@ export function emptyGroupForm(): GroupFormValues {
     level: "",
     coachStaffId: "",
     maxStudents: "8",
+    monthlyFee: "",
     startDate: "",
     endDate: "",
     notes: "",
@@ -124,6 +128,7 @@ export function groupFormOf(group: SchoolGroup): GroupFormValues {
     level: group.level ?? "",
     coachStaffId: group.coach?.staffId ?? "",
     maxStudents: String(group.maxStudents),
+    monthlyFee: centsToFieldText(group.monthlyFeeCents),
     startDate: group.startDate,
     endDate: group.endDate,
     notes: group.notes ?? "",
@@ -173,6 +178,8 @@ export function checkGroupForm(form: GroupFormValues): CheckedGroupForm {
   if (!Number.isInteger(maxStudents) || maxStudents < 1 || maxStudents > SCHOOL_MAX_STUDENTS) {
     return fail(`Las plazas tienen que ser un número entre 1 y ${SCHOOL_MAX_STUDENTS}`);
   }
+  const fee = checkMonthlyFee(form.monthlyFee);
+  if (!fee.ok) return fail(fee.message);
 
   if (!isRealDay(form.startDate) || !isRealDay(form.endDate)) return fail("Elige el inicio y el fin de la temporada");
   const span = daysBetween(form.startDate, form.endDate);
@@ -219,6 +226,7 @@ export function checkGroupForm(form: GroupFormValues): CheckedGroupForm {
       level: level || null,
       coachStaffId: form.coachStaffId || null,
       maxStudents,
+      monthlyFeeCents: fee.value,
       startDate: form.startDate,
       endDate: form.endDate,
       notes: notes || null,

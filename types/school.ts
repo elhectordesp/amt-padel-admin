@@ -33,6 +33,8 @@ export interface SchoolGroup {
   name:        string;
   level:       string | null;
   maxStudents: number;
+  /** Cuota mensual por alumno, en céntimos; null: el grupo no cobra cuota. */
+  monthlyFeeCents: number | null;
   startDate:   string;
   endDate:     string;
   notes:       string | null;
@@ -99,6 +101,8 @@ export interface SchoolCoach {
   userId:   string;
   name:     string;
   coachBio: string | null;
+  /** Lo que cuesta una hora de clase privada con él (precio total), en céntimos; null: sin tarifa. */
+  privateClassRateCents: number | null;
   groups:   { id: string; name: string }[];
 }
 
@@ -127,6 +131,8 @@ export interface SchoolGroupPayload {
   level?:        string | null;
   coachStaffId?: string | null;
   maxStudents:   number;
+  /** En céntimos; null quita la cuota. */
+  monthlyFeeCents?: number | null;
   startDate:     string;
   endDate:       string;
   notes?:        string | null;

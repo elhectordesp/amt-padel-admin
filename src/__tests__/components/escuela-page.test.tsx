@@ -35,6 +35,19 @@ vi.mock("@/lib/services/school", async () => {
 });
 const adminMock = vi.hoisted(() => ({ courts: { list: vi.fn() } }));
 vi.mock("@/lib/services/admin", () => ({ adminService: adminMock }));
+// Cuotas y clases privadas (A7-2b): sus pestañas leen la zona del club y su propio servicio
+vi.mock("@/lib/use-club-time-zone", () => ({
+  useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
+}));
+const billing = vi.hoisted(() => ({
+  fees: { list: vi.fn() },
+  privateClasses: { list: vi.fn() },
+  coachRate: { update: vi.fn() },
+}));
+vi.mock("@/lib/services/school-billing", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/school-billing")>("@/lib/services/school-billing");
+  return { ...actual, schoolBillingService: { ...actual.schoolBillingService, ...billing } };
+});
 
 import EscuelaPage from "../../../app/(admin)/mi-club/escuela/page";
 
@@ -148,6 +161,8 @@ describe("Escuela: grupos", () => {
     fireEvent.change(within(slot).getByLabelText("Día"), { target: { value: "2" } });
     fireEvent.change(within(slot).getByLabelText("Pista preferida"), { target: { value: "p1" } });
     fireEvent.change(within(dialog).getByLabelText("Entrenador"), { target: { value: "st1" } });
+    // La cuota mensual se escribe en euros y sale en céntimos
+    fireEvent.change(within(dialog).getByLabelText("Cuota mensual por alumno (€, opcional)"), { target: { value: "45" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Crear grupo" }));
 
     await waitFor(() =>
@@ -156,6 +171,7 @@ describe("Escuela: grupos", () => {
         level: null,
         coachStaffId: "st1",
         maxStudents: 8,
+        monthlyFeeCents: 4500,
         startDate: "2026-09-14",
         endDate: "2027-06-18",
         notes: null,
@@ -201,5 +217,67 @@ describe("Escuela: grupos", () => {
 
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/escuela/grupos/g9"), WAIT);
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("no se han podido generar las clases: Fallo al reservar"));
+  });
+});
+
+describe("Escuela: cuotas, clases privadas y tarifa del entrenador", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    access.write = true;
+    school.groups.list.mockResolvedValue([group()]);
+    school.coaches.list.mockResolvedValue([
+      { staffId: "st1", userId: "u-marta", name: "Marta Prueba", coachBio: null, privateClassRateCents: 4000, groups: [] },
+    ]);
+    adminMock.courts.list.mockResolvedValue([]);
+    billing.fees.list.mockResolvedValue([]);
+    billing.privateClasses.list.mockResolvedValue([]);
+    billing.coachRate.update.mockResolvedValue({});
+  });
+
+  it("el gestor tiene las pestañas Clases privadas y Cuotas, cada una con lo suyo", async () => {
+    renderPage();
+    await screen.findByText("Mis grupos", {}, WAIT);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Grupos", "Clases privadas", "Cuotas", "Entrenadores"]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Clases privadas" }));
+    expect(await screen.findByText("No hay clases privadas en estos días.", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nueva clase privada/ })).toBeInTheDocument();
+    // «Nuevo grupo» es de la pestaña de grupos
+    expect(screen.queryByRole("button", { name: /Nuevo grupo/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Cuotas" }));
+    expect(await screen.findByText(/No hay cuotas de este mes/, {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Generar cuotas de/ })).toBeInTheDocument();
+  });
+
+  it("un entrenador no tiene pestañas: no ve cuotas ni clases privadas", async () => {
+    access.write = false;
+    renderPage();
+    await screen.findByText("Mis grupos", {}, WAIT);
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(billing.fees.list).not.toHaveBeenCalled();
+    expect(billing.privateClasses.list).not.toHaveBeenCalled();
+  });
+
+  it("la tarifa de clase privada del entrenador: euros a céntimos, vacía la quita y una mala no se manda", async () => {
+    renderPage();
+    await screen.findByText("Mis grupos", {}, WAIT);
+    fireEvent.click(screen.getByRole("tab", { name: "Entrenadores" }));
+    const rate = await screen.findByLabelText(/Tarifa de clase privada/, {}, WAIT);
+    expect(rate).toHaveValue("40,00");
+
+    fireEvent.change(rate, { target: { value: "45,50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar tarifa" }));
+    await waitFor(() => expect(billing.coachRate.update).toHaveBeenCalledWith("c1", "st1", 4550), WAIT);
+
+    fireEvent.change(rate, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar tarifa" }));
+    await waitFor(() => expect(billing.coachRate.update).toHaveBeenLastCalledWith("c1", "st1", null), WAIT);
+
+    billing.coachRate.update.mockClear();
+    fireEvent.change(rate, { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar tarifa" }));
+    expect(toast.error).toHaveBeenCalledWith("Escribe una tarifa válida (por ejemplo 40 o 40,50)");
+    expect(billing.coachRate.update).not.toHaveBeenCalled();
   });
 });

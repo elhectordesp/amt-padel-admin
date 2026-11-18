@@ -267,4 +267,20 @@ describe("CourtsManager", () => {
     // Solo el bloqueo normal se puede eliminar
     expect(screen.getAllByTitle("Eliminar bloqueo")).toHaveLength(1);
   });
+
+  it("el bloqueo de una clase privada se llama «Clase privada», sin repetir el motivo, y también se gestiona desde Escuela", async () => {
+    listMock.mockResolvedValue([makeCourt({ id: "c1", name: "Pista 1" })]);
+    blocksListMock.mockResolvedValue([
+      { id: "k1", courtId: "c1", kind: "CLASS", startDate: "2026-11-23", endDate: "2026-11-23", startTime: "18:00", endTime: "19:00", reason: "Clase privada", schoolPrivateClassId: "pc-1", createdAt: "" },
+    ]);
+    renderWithClient(<CourtsManager clubId="club-1" />);
+    fireEvent.click(await screen.findByTitle("Gestionar bloqueos"));
+
+    const block = (await screen.findByText("Escuela")).parentElement as HTMLElement;
+    expect(block).toHaveTextContent("Clase privada · 2026-11-23 · 18:00–19:00");
+    // El motivo («Clase privada») no se repite detrás
+    expect(block.textContent?.match(/Clase privada/g)).toHaveLength(1);
+    // Y no se puede borrar desde aquí
+    expect(screen.queryByTitle("Eliminar bloqueo")).not.toBeInTheDocument();
+  });
 });

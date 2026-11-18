@@ -5,10 +5,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard, Loader2 } from "lucide-react";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
+import { SchoolFeePayDialog, SchoolStudentPayDialog } from "@/components/admin/school-pay-dialogs";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService } from "@/lib/services/bookings";
 import { cashQK, cashService, type DebtItem } from "@/lib/services/cash";
+import { invalidateSchoolBilling } from "@/lib/services/school-billing";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
@@ -21,8 +23,22 @@ interface Props {
 
 const DAY: Intl.DateTimeFormatOptions = { day: "numeric", month: "numeric", year: "numeric" };
 
+/** Las deudas que se cobran con el modal de importe: una reserva o un jugador de una inscripción. */
+type CounterDebt = DebtItem & { source: "BOOKING" | "REGISTRATION" };
+
+const isCounterDebt = (item: DebtItem): item is CounterDebt =>
+  item.source === "BOOKING" || item.source === "REGISTRATION";
+
+/** El área que escribe cada cobro en el back: la reserva, «bookings»; la inscripción, «cash»; la escuela, «school». */
+const AREA_OF: Record<DebtItem["source"], "bookings" | "cash" | "school"> = {
+  BOOKING:       "bookings",
+  REGISTRATION:  "cash",
+  SCHOOL_FEE:    "school",
+  PRIVATE_CLASS: "school",
+};
+
 /** Cobra una reserva o un jugador de una inscripción, con el método y el importe elegidos. */
-export function collectDebt(item: DebtItem, method: CounterPaymentMethod, amountCents: number) {
+export function collectDebt(item: CounterDebt, method: CounterPaymentMethod, amountCents: number) {
   return item.source === "BOOKING"
     ? bookingsService.bookings.markPaid(item.refId, { method, amountCents })
     : adminService.registrations.updatePayment(item.refId, {
@@ -38,8 +54,8 @@ export function collectDebt(item: DebtItem, method: CounterPaymentMethod, amount
 export function CajaDebts({ clubId, timeZone }: Props) {
   const qc = useQueryClient();
   const { can } = useClubAccess();
-  // Cada cobro va al área que lo escribe en el back: la reserva, a «bookings»; la inscripción, a «cash»
-  const canCollect = (item: DebtItem) => can(item.source === "BOOKING" ? "bookings" : "cash", "write");
+  // Cada cobro va al área que lo escribe en el back
+  const canCollect = (item: DebtItem) => can(AREA_OF[item.source], "write");
   const [collecting, setCollecting] = useState<{ person: string; item: DebtItem } | null>(null);
 
   const query = useQuery({
@@ -54,7 +70,8 @@ export function CajaDebts({ clubId, timeZone }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Reservas ya empezadas sin pagar e inscripciones de torneo con algún jugador sin pagar.{" "}
+        Reservas y clases privadas ya empezadas sin pagar, inscripciones de torneo con algún jugador sin pagar y
+        cuotas de la escuela sin cobrar.{" "}
         <strong className="text-foreground">Total pendiente: {formatCents(totalCents)}</strong>
       </p>
 
@@ -94,17 +111,39 @@ export function CajaDebts({ clubId, timeZone }: Props) {
         </div>
       )}
 
-      {collecting && (
+      {collecting && isCounterDebt(collecting.item) && (
         <CollectModal
           title="Cobrar"
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
           defaultCents={collecting.item.amountCents}
-          onSubmit={(method, amountCents) => collectDebt(collecting.item, method, amountCents)}
+          onSubmit={(method, amountCents) => collectDebt(collecting.item as CounterDebt, method, amountCents)}
           onDone={() => {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: ["bookings", "list"] });
             qc.invalidateQueries({ queryKey: ["registrations"] });
           }}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "SCHOOL_FEE" && (
+        <SchoolFeePayDialog
+          clubId={clubId}
+          feeId={collecting.item.refId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          amountCents={collecting.item.amountCents}
+          onDone={() => invalidateSchoolBilling(qc, clubId)}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "PRIVATE_CLASS" && collecting.item.privateClassId && (
+        <SchoolStudentPayDialog
+          clubId={clubId}
+          classId={collecting.item.privateClassId}
+          studentId={collecting.item.refId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          priceCents={collecting.item.amountCents}
+          timeZone={timeZone}
+          onDone={() => invalidateSchoolBilling(qc, clubId)}
           onClose={() => setCollecting(null)}
         />
       )}

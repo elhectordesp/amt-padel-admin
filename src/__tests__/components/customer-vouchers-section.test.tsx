@@ -220,6 +220,28 @@ describe("CustomerVouchersSection", () => {
     expect(screen.queryByRole("button", { name: "Quitar el cobro" })).not.toBeInTheDocument();
   });
 
+  it("un bono de clases privadas lo dice y enseña las clases en que se gastó (sin enlace de reserva)", async () => {
+    svc.customer.list.mockResolvedValue([
+      {
+        ...PAID,
+        name: "Bono 8 clases",
+        kind: "PRIVATE_CLASS",
+        uses: [
+          { id: "u-1", bookingId: null, privateClassId: "pc1", usedAt: "2026-11-20T10:00:00.000Z", startsAt: "2026-11-25T17:00:00.000Z", courtName: "Pista 2" },
+          { id: "u-2", bookingId: null, privateClassId: "pc2", usedAt: "2026-11-21T10:00:00.000Z", startsAt: "2026-11-26T17:00:00.000Z", courtName: null },
+        ],
+      },
+    ]);
+    renderSection();
+    await screen.findByText("Bono 8 clases");
+    expect(screen.getByText("Clases privadas")).toBeInTheDocument();
+    expect(screen.getByText("Clases privadas pagadas con este bono (2)")).toBeInTheDocument();
+    expect(screen.getByText("Clase privada · Pista 2 · 25/11/2026, 18:00")).toBeInTheDocument();
+    // Si la clase se quedó sin pista, no se inventa una
+    expect(screen.getByText("Clase privada · 26/11/2026, 18:00")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("sin permiso de escritura en la caja, se lee pero no hay botones", async () => {
     accessMock.can.mockImplementation((_area: string, level = "read") => level === "read");
     renderSection();
