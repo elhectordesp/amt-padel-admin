@@ -38,22 +38,32 @@ describe("canAccess", () => {
     expect(rw(r, "bookings")).toEqual([false, false]);
   });
 
-  it("recepción: escribe reservas, clientes y caja; lee torneos y ajustes", () => {
+  it("recepción: escribe reservas, clientes, caja y escuela; lee torneos y ajustes", () => {
     const r: ClubStaffRole[] = ["RECEPTION"];
     expect(rw(r, "bookings")).toEqual([true, true]);
     expect(rw(r, "customers")).toEqual([true, true]);
     expect(rw(r, "cash")).toEqual([true, true]);
+    expect(rw(r, "school")).toEqual([true, true]);
     expect(rw(r, "tournaments")).toEqual([true, false]);
     expect(rw(r, "settings")).toEqual([true, false]);
     expect(rw(r, "results")).toEqual([false, false]);
   });
 
-  it("entrenador: solo lee reservas", () => {
+  it("entrenador: lee reservas y escuela, nada más", () => {
     const r: ClubStaffRole[] = ["COACH"];
     expect(rw(r, "bookings")).toEqual([true, false]);
-    for (const area of CLUB_AREAS.filter((a) => a !== "bookings" && a !== "club")) {
+    expect(rw(r, "school")).toEqual([true, false]);
+    for (const area of CLUB_AREAS.filter((a) => a !== "bookings" && a !== "school" && a !== "club")) {
       expect(rw(r, area)).toEqual([false, false]);
     }
+  });
+
+  it("escuela: torneos y resultados no la ven; propietario y gestor la escriben", () => {
+    for (const role of ["TOURNAMENTS", "RESULTS"] as const) {
+      expect(rw([role], "school")).toEqual([false, false]);
+    }
+    expect(rw(["OWNER"], "school")).toEqual([true, true]);
+    expect(rw(["MANAGER"], "school")).toEqual([true, true]);
   });
 
   it("los roles se combinan: gana el nivel más alto de cada área", () => {
@@ -97,6 +107,9 @@ describe("areaForPath", () => {
     ["/mi-club/reservas/calendario", "bookings"],
     ["/mi-club/reservas/bookings/b1", "bookings"],
     ["/mi-club/reservas/precios", "settings"],
+    ["/mi-club/escuela", "school"],
+    ["/mi-club/escuela/grupos/g1", "school"],
+    ["/mi-club/escuela/clases/s1", "school"],
     ["/mi-club", "settings"],
     ["/patrocinadores", "settings"],
     ["/dashboard", null],

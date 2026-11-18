@@ -152,6 +152,8 @@ export interface CourtBlock {
   startTime?: string | null; // "HH:MM"
   endTime?:   string | null;
   reason?:    string | null;
+  /** Solo si es la pista de una clase de la escuela: no se borra desde los bloqueos. */
+  schoolSessionId?: string | null;
   createdAt:  string;
 }
 

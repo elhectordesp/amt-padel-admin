@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History, Contact, CalendarDays, Wallet, UsersRound, Megaphone, Medal,
+  History, Contact, CalendarDays, Wallet, UsersRound, Megaphone, Medal, GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
@@ -46,7 +46,8 @@ const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubA
   { href: "/caja",                         icon: Wallet,          label: "Caja",           area: "cash"      },
   { href: "/mi-club/clientes",             icon: Contact,         label: "Clientes",       area: "customers" },
   { href: "/mi-club/mensajes",             icon: Megaphone,       label: "Mensajes",       area: "customers" },
-  { href: "/torneos",                      icon: Trophy,          label: "Torneos",        area: "tournaments" },
+  { href: "/mi-club/escuela",              icon: GraduationCap,   label: "Escuela",        area: "school"    },
+  { href: "/torneos",                     icon: Trophy,          label: "Torneos",        area: "tournaments" },
   { href: "/ligas",                        icon: Medal,           label: "Ligas",          area: "tournaments" },
   { href: "/mi-club",                      icon: Landmark,        label: "Mi club",        area: "settings"  },
   { href: "/mi-club/equipo",               icon: UsersRound,      label: "Equipo",         area: "staff"     },

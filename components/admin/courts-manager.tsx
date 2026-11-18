@@ -299,7 +299,15 @@ function CourtRow({
                     {b.startTime && b.endTime && ` · ${b.startTime}–${b.endTime}`}
                     {b.reason && ` · ${b.reason}`}
                   </span>
-                  {canEditBlocks && (
+                  {b.schoolSessionId ? (
+                    // La pista de una clase de la escuela se cambia o libera desde Escuela
+                    <span
+                      className="shrink-0 text-muted-foreground"
+                      title="Es una clase de la escuela: se cambia o se cancela desde Escuela"
+                    >
+                      Escuela
+                    </span>
+                  ) : canEditBlocks ? (
                     <button
                       onClick={() => setConfirmDeleteBlock(b)}
                       disabled={removeBlock.isPending}
@@ -312,7 +320,7 @@ function CourtRow({
                         <X size={12} />
                       )}
                     </button>
-                  )}
+                  ) : null}
                 </div>
               ))}
             </div>
