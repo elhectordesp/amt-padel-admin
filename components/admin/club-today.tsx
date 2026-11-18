@@ -103,8 +103,10 @@ const hours1 = (minutes: number) => Math.round((minutes / 60) * 10) / 10;
 /** «Hoy en el club»: reservas de hoy, sin pagar, ocupación y las próximas. */
 export function ClubToday({ clubId }: { clubId: string }) {
   // La cuota con AMT solo se avisa al propietario
-  const { roles } = useClubAccess();
+  const { roles, can } = useClubAccess();
   const isOwner = !!roles?.includes("OWNER");
+  // Quien solo lee las reservas no las crea: sin el atajo de «Nueva reserva»
+  const canCreateBooking = can("bookings", "write");
   const amtPlan = useAmtPlan(clubId, isOwner);
   const club = useQuery({
     queryKey: ["my-club", clubId],
@@ -187,9 +189,11 @@ export function ClubToday({ clubId }: { clubId: string }) {
           <Link href="/mi-club/reservas/calendario" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
             <CalendarDays className="mr-1.5 h-4 w-4" />Abrir calendario
           </Link>
-          <Link href="/mi-club/reservas/calendario?nueva=1" className={cn(buttonVariants({ size: "sm" }))}>
-            <Plus className="mr-1.5 h-4 w-4" />Nueva reserva
-          </Link>
+          {canCreateBooking && (
+            <Link href="/mi-club/reservas/calendario?nueva=1" className={cn(buttonVariants({ size: "sm" }))}>
+              <Plus className="mr-1.5 h-4 w-4" />Nueva reserva
+            </Link>
+          )}
           <Link href="/caja" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
             <Wallet className="mr-1.5 h-4 w-4" />Caja del día
           </Link>

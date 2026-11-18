@@ -38,6 +38,7 @@ import { BookingCreateDialog, type BookingCreateInitial } from "@/components/adm
 import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { cn } from "@/lib/utils";
@@ -209,11 +210,15 @@ function DayView({
   const goToDay = (key: string) => showDay(key === todayKey ? null : key);
   const choosePeriod = (p: DayPeriod) => window.history.replaceState(null, "", calendarHref(p, pickedDay));
 
+  // Quien solo lee las reservas no crea: ni botón, ni huecos que pulsar, ni alta
+  const canCreate = useClubAccess().can("bookings", "write");
+
   // Abierto: con qué se abre el alta (null: cerrado)
   // «Nueva reserva» de la portada llega con ?nueva=1: el alta se abre sola
-  const [createInitial, setCreateInitial] = useState<BookingCreateInitial | null>(() =>
+  const [openedInitial, setCreateInitial] = useState<BookingCreateInitial | null>(() =>
     searchParams.get("nueva") === "1" ? {} : null,
   );
+  const createInitial = canCreate ? openedInitial : null;
 
   // La vista del día y el botón que abre y cierra el modo mostrador (el foco va y vuelve)
   const viewRef = useRef<HTMLDivElement>(null);
@@ -353,9 +358,11 @@ function DayView({
               </ViewTab>
             ))}
           </div>
-          <Button size="sm" className={tapText} onClick={() => setCreateInitial({ date: dateStr })}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
-          </Button>
+          {canCreate && (
+            <Button size="sm" className={tapText} onClick={() => setCreateInitial({ date: dateStr })}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
+            </Button>
+          )}
           <Button
             ref={counterButtonRef}
             variant="outline"
@@ -401,8 +408,10 @@ function DayView({
             bookings={bookingsQuery.data ?? []}
             occupations={occupationsQuery.data ?? []}
             window={dayWindow}
-            onSlotClick={({ courtId, startsAtISO }) =>
-              setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
+            onSlotClick={
+              canCreate
+                ? ({ courtId, startsAtISO }) => setCreateInitial({ courtId, date: dateStr, startsAt: startsAtISO })
+                : undefined
             }
             period={period}
             nowMinutes={isToday ? zonedMinutes(now, timeZone) : null}
@@ -707,13 +716,20 @@ function isEditableField(target: EventTarget | null): boolean {
 }
 
 function EmptyCourts() {
+  // Las pistas se crean en la configuración del club: quien no la escribe no tiene a dónde ir
+  const canCreateCourts = useClubAccess().can("settings", "write");
   return (
     <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-      Sin pistas activas. Crea pistas en{" "}
-      <Link href="/mi-club" className="text-primary underline">
-        Mi club
-      </Link>
-      .
+      Sin pistas activas.
+      {canCreateCourts && (
+        <>
+          {" "}Crea pistas en{" "}
+          <Link href="/mi-club" className="text-primary underline">
+            Mi club
+          </Link>
+          .
+        </>
+      )}
     </div>
   );
 }

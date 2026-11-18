@@ -421,14 +421,15 @@ describe("Detalle de reserva", () => {
       await waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("Bono quitado")));
     });
 
-    it("sin acceso de escritura a la caja (Entrenador): ni pagar con bono ni quitarlo", async () => {
+    it("un Entrenador (solo lee las reservas, sin caja): ni cobrar ni pagar con bono", async () => {
       meMock.data = {
         id: "coach", name: "Profe", activeClubId: "c1",
         clubs: [{ clubId: "c1", clubName: "Club Centro", roles: ["COACH"] }],
       } as unknown as typeof meMock.data;
       svc.bookings.detail.mockResolvedValue(WITH_CUSTOMER);
       await renderDetail();
-      await screen.findByRole("button", { name: /Cobrar/ });
+      await screen.findByText("Lunes, 2 de noviembre de 2026");
+      expect(screen.queryByRole("button", { name: /Cobrar/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Pagar con bono/ })).not.toBeInTheDocument();
     });
   });
@@ -463,6 +464,8 @@ describe("Detalle de reserva — resultado (R2-7)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    // Sin rol de equipo conocido (como el resto de describes): el test del Entrenador de arriba no se arrastra
+    meMock.data = { id: "club-admin", name: "Gestor" };
     svc.bookings.setResult.mockResolvedValue({});
   });
 
@@ -696,5 +699,93 @@ describe("Zona del club (B1): un club en Canarias", () => {
     await waitFor(() => expect(svc.bookings.detail).toHaveBeenCalled());
     expect(screen.queryByText(/2 de noviembre/)).not.toBeInTheDocument();
     expect(screen.queryByText(/18:30/)).not.toBeInTheDocument();
+  });
+});
+
+// ── Quien solo lee las reservas (Entrenador) no ve los botones que escriben ─────
+
+describe("Reservas con un rol de solo lectura", () => {
+  const asRole = (role: string) =>
+    ({
+      id: "staff", name: "Equipo", activeClubId: "c1",
+      clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+    }) as unknown as typeof meMock.data;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    svc.bookings.list.mockResolvedValue({ items: [BOOKING], total: 1 });
+    svc.bookings.detail.mockResolvedValue({ ...BOOKING, clubCustomerId: "cc1" });
+  });
+
+  it("listado, Entrenador: ni «Crear reserva», ni casillas, ni «Cancelar», ni su columna", async () => {
+    meMock.data = asRole("COACH");
+    wrap(<BookingsListPage />);
+    await screen.findByText(/AMT-XP9W/);
+    expect(screen.queryByRole("button", { name: /Crear reserva/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Seleccionar todas/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Seleccionar la reserva/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cancelar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
+    // Lo que sí ve: la reserva
+    expect(screen.getByText("18:00 - 19:30")).toBeInTheDocument();
+  });
+
+  it("listado, Recepción (escribe las reservas): «Crear reserva», casilla y «Cancelar»", async () => {
+    meMock.data = asRole("RECEPTION");
+    wrap(<BookingsListPage />);
+    await screen.findByText(/AMT-XP9W/);
+    expect(screen.getByRole("button", { name: /Crear reserva/ })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Seleccionar la reserva/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Cancelar/ })).toBeInTheDocument();
+  });
+
+  it("ficha, Entrenador: ni cambiar hora, ni cancelar, ni cobrar, ni pagar con bono", async () => {
+    meMock.data = asRole("COACH");
+    await renderDetail();
+    await screen.findByText("Lunes, 2 de noviembre de 2026");
+    for (const name of [/Cambiar hora o pista/, /Cancelar reserva/, /Cobrar/, /Pagar con bono/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("ficha, Recepción: cambiar hora, cancelar, cobrar y pagar con bono", async () => {
+    meMock.data = asRole("RECEPTION");
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING,
+      clubCustomerId: "cc1",
+      startsAt: "2099-01-01T17:00:00.000Z",
+      endsAt: "2099-01-01T18:30:00.000Z",
+    });
+    await renderDetail();
+    for (const name of [/Cambiar hora o pista/, /Cancelar reserva/, /Cobrar/, /Pagar con bono/]) {
+      expect(await screen.findByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("ficha de una cobrada, Entrenador: sin «Marcar como no pagada»", async () => {
+    meMock.data = asRole("COACH");
+    svc.bookings.detail.mockResolvedValue({ ...BOOKING, paymentMethod: "CASH_AT_VENUE", paidAt: "2026-10-27T10:00:00.000Z" });
+    await renderDetail();
+    expect(await screen.findByText("(En el club)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
+  });
+
+  it("ficha con resultado, Entrenador: lo ve, pero no «Corregir resultado»", async () => {
+    meMock.data = asRole("COACH");
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING,
+      status: "COMPLETED",
+      isCompetitive: true,
+      resultAdminDeadlineAt: "2099-01-01T00:00:00.000Z",
+      resultEntryDeadlineAt: "2099-01-01T00:00:00.000Z",
+      result: {
+        set1Home: 6, set1Away: 4, set2Home: 6, set2Away: 3, set3Home: null, set3Away: null, winnerTeam: 1,
+        enteredByUserId: "u1", enteredAt: "", finalizedAt: null, processedLspaAt: null,
+      },
+    });
+    await renderDetail();
+    expect(await screen.findByText(/6-4/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Corregir resultado|Poner resultado/ })).not.toBeInTheDocument();
   });
 });
