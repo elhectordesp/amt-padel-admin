@@ -59,4 +59,16 @@ describe('PairPayment', () => {
       'Ana Ruiz: Pendiente',
     ]);
   });
+
+  it('con readOnly (sin permiso de caja) el estado de cada uno se ve, pero no es un botón ni abre el pago', () => {
+    const onEdit = vi.fn();
+    render(<PairPayment registration={registration()} onEdit={onEdit} readOnly />);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByText('Pagado')).toBeInTheDocument();
+    expect(screen.getByText('Pendiente')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Pendiente'));
+    expect(onEdit).not.toHaveBeenCalled();
+    // Lo pagado de la pareja sigue a la vista
+    expect(screen.getByTitle('Pagado / total de la pareja')).toHaveTextContent('15,00 € / 30,00 €');
+  });
 });

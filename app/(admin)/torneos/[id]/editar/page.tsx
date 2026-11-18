@@ -10,6 +10,7 @@ import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog"
 import { adminService } from "@/lib/services/admin";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import { hasDate } from "@/lib/utils/match-status";
 import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
@@ -150,6 +151,9 @@ export default function EditarTorneoPage() {
   // 403earía igualmente). El campo Club es read-only para CLUB.
   const { role, clubId: myClubId } = useRole();
   const isClubUser = isClub(role);
+  // Sin escribir «tournaments» el formulario se ve entero, con los campos
+  // deshabilitados y sin guardar (el back rechazaría el cambio)
+  const canEdit = useClubAccess().can("tournaments", "write");
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
@@ -366,6 +370,7 @@ export default function EditarTorneoPage() {
           })}
           className="space-y-6"
         >
+          <fieldset disabled={!canEdit} className="min-w-0 space-y-6">
           {/* Basic info */}
           <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
             <div>
@@ -659,6 +664,7 @@ export default function EditarTorneoPage() {
               </p>
             </div>
           </details>
+          </fieldset>
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">
@@ -666,16 +672,18 @@ export default function EditarTorneoPage() {
               href={`${base}/${id}`}
               className="px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             >
-              Cancelar
+              {canEdit ? "Cancelar" : "Volver"}
             </Link>
-            <button
-              type="submit"
-              disabled={save.isPending || !isDirty}
-              className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
-            >
-              {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {save.isPending ? "Guardando..." : "Guardar cambios"}
-            </button>
+            {canEdit && (
+              <button
+                type="submit"
+                disabled={save.isPending || !isDirty}
+                className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
+              >
+                {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {save.isPending ? "Guardando..." : "Guardar cambios"}
+              </button>
+            )}
           </div>
         </form>
       </div>

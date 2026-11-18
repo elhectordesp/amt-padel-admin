@@ -18,6 +18,7 @@ import { PairPayment } from "@/components/admin/pair-payment";
 import { PaymentTotals } from "@/components/admin/payment-totals";
 import { TournamentSelectOptions } from "@/components/admin/tournament-select-options";
 import { adminService, invalidateRegistrations, registrationsQK } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { kindWord, tournamentsBase } from "@/lib/league";
 import { CATEGORY_LABEL_SHORT as CATEGORY_LABEL, REGISTRATION_STATUS_CONFIG as STATUS_CFG, registrationStatusLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
@@ -95,6 +96,11 @@ function InscripcionesRoute() {
 
 function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
   const qc = useQueryClient();
+  // Sin escribir «tournaments» (altas, estados, categoría, pareja, disponibilidad)
+  // ni «cash» (cobros) no salen los botones que cambian algo; el back manda
+  const access  = useClubAccess();
+  const canEdit = access.can("tournaments", "write");
+  const canCash = access.can("cash", "write");
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [catFilter,    setCatFilter]    = useState("all");
@@ -255,6 +261,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
           registrationId={availRegId}
           editMode={availEditMode}
           onClose={() => { setAvailRegId(null); setAvailEditMode(false); }}
+          canEdit={canEdit}
         />
       )}
 
@@ -368,7 +375,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
             </Link>
           )}
 
-          {selectedTournament && (
+          {selectedTournament && canEdit && (
             <button
               onClick={() => setEnrollOpen(true)}
               className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
@@ -463,7 +470,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
             </div>
 
             {/* Bulk action bar */}
-            {selected.size > 0 && (
+            {canEdit && selected.size > 0 && (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center px-3 py-2.5 sm:px-4 sm:py-3 bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.3)] rounded-lg">
                 <div className="flex items-center gap-2">
                   <Users size={14} className="text-[#D4AF37] shrink-0" />
@@ -536,17 +543,19 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                   {/* Mobile: cards */}
                   <div className="sm:hidden space-y-2">
                     {/* Select-all toggle */}
-                    <label className="flex items-center gap-2 px-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={allPageSelected}
-                        onChange={() => toggleAll(pageKeys)}
-                        className="rounded border-border accent-[#D4AF37]"
-                      />
-                      <span className="text-[11px] text-muted-foreground">
-                        {allPageSelected ? "Deseleccionar página" : "Seleccionar página"}
-                      </span>
-                    </label>
+                    {canEdit && (
+                      <label className="flex items-center gap-2 px-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={allPageSelected}
+                          onChange={() => toggleAll(pageKeys)}
+                          className="rounded border-border accent-[#D4AF37]"
+                        />
+                        <span className="text-[11px] text-muted-foreground">
+                          {allPageSelected ? "Deseleccionar página" : "Seleccionar página"}
+                        </span>
+                      </label>
+                    )}
                     {pageItems.map((pair) => {
                       const reg        = pair.primary;
                       const scfg       = STATUS_CFG[pair.status];
@@ -565,12 +574,14 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                         >
                           {/* Top row: checkbox + names + status */}
                           <div className="flex items-start gap-2.5">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSelect(pair.pairKey)}
-                              className="mt-1 rounded border-border accent-[#D4AF37] cursor-pointer"
-                            />
+                            {canEdit && (
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelect(pair.pairKey)}
+                                className="mt-1 rounded border-border accent-[#D4AF37] cursor-pointer"
+                              />
+                            )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <p className="text-sm font-medium text-foreground truncate">{reg.user.name}</p>
@@ -608,10 +619,11 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                               registration={reg}
                               onEdit={(player) => setPaymentOf({ reg, player })}
                               withNames
+                              readOnly={!canCash}
                             />
                             <div className="flex items-center gap-1 shrink-0">
                               <button
-                                onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
+                                onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail && canEdit); }}
                                 title={noAvail ? "Sin disponibilidad" : "Disponibilidad"}
                                 className={`relative p-2 rounded-md ${
                                   noAvail
@@ -622,7 +634,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                 <CalendarDays size={14} />
                                 {noAvail && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-400" />}
                               </button>
-                              {pair.status !== "CONFIRMED" && (
+                              {canEdit && pair.status !== "CONFIRMED" && (
                                 <button
                                   onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                   disabled={isUpdating}
@@ -632,7 +644,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   <Check size={14} />
                                 </button>
                               )}
-                              {pair.status !== "WAITLIST" && (
+                              {canEdit && pair.status !== "WAITLIST" && (
                                 <button
                                   onClick={() => handlePairStatus(pair, "WAITLIST")}
                                   disabled={isUpdating}
@@ -642,15 +654,17 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   <Clock size={14} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => setMovePair(pair)}
-                                disabled={isUpdating}
-                                title="Cambiar categoría"
-                                className="p-2 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40"
-                              >
-                                <ArrowLeftRight size={14} />
-                              </button>
-                              {reg.partnerId && (
+                              {canEdit && (
+                                <button
+                                  onClick={() => setMovePair(pair)}
+                                  disabled={isUpdating}
+                                  title="Cambiar categoría"
+                                  className="p-2 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40"
+                                >
+                                  <ArrowLeftRight size={14} />
+                                </button>
+                              )}
+                              {canEdit && reg.partnerId && (
                                 <button
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
@@ -660,7 +674,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   <Users size={14} />
                                 </button>
                               )}
-                              {!reg.partnerId && pair.status !== "CANCELLED" && (
+                              {canEdit && !reg.partnerId && pair.status !== "CANCELLED" && (
                                 <button
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
@@ -670,14 +684,16 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   <UserPlus size={14} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => handlePairStatus(pair, "CANCELLED")}
-                                disabled={isUpdating}
-                                title="Cancelar"
-                                className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
-                              >
-                                <X size={14} />
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                  disabled={isUpdating}
+                                  title="Cancelar"
+                                  className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -692,14 +708,16 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-border bg-secondary/50">
-                            <th className="px-4 py-3 w-10">
-                              <input
-                                type="checkbox"
-                                checked={allPageSelected}
-                                onChange={() => toggleAll(pageKeys)}
-                                className="rounded border-border accent-[#D4AF37] cursor-pointer"
-                              />
-                            </th>
+                            {canEdit && (
+                              <th className="px-4 py-3 w-10">
+                                <input
+                                  type="checkbox"
+                                  checked={allPageSelected}
+                                  onChange={() => toggleAll(pageKeys)}
+                                  className="rounded border-border accent-[#D4AF37] cursor-pointer"
+                                />
+                              </th>
+                            )}
                             {["Pareja", "Nivel SPA", "Categoría", "Fecha", "Estado", "Pago", "Acciones"].map((h) => (
                               <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 {h}
@@ -719,14 +737,16 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                 key={pair.pairKey}
                                 className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : ""}`}
                               >
-                                <td className="px-4 py-3.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => toggleSelect(pair.pairKey)}
-                                    className="rounded border-border accent-[#D4AF37] cursor-pointer"
-                                  />
-                                </td>
+                                {canEdit && (
+                                  <td className="px-4 py-3.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleSelect(pair.pairKey)}
+                                      className="rounded border-border accent-[#D4AF37] cursor-pointer"
+                                    />
+                                  </td>
+                                )}
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center gap-1.5">
                                     <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
@@ -782,6 +802,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                   <PairPayment
                                     registration={reg}
                                     onEdit={(player) => setPaymentOf({ reg, player })}
+                                    readOnly={!canCash}
                                   />
                                 </td>
                                 <td className="px-5 py-3.5">
@@ -790,8 +811,12 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                       const noAvail = tournamentHasSchedule && !reg.hasAvailability;
                                       return (
                                         <button
-                                          onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail); }}
-                                          title={noAvail ? "Sin disponibilidad — click para establecer" : "Ver / editar disponibilidad"}
+                                          onClick={() => { setAvailRegId(reg.id); setAvailEditMode(noAvail && canEdit); }}
+                                          title={
+                                            noAvail
+                                              ? (canEdit ? "Sin disponibilidad — click para establecer" : "Sin disponibilidad")
+                                              : (canEdit ? "Ver / editar disponibilidad" : "Ver disponibilidad")
+                                          }
                                           className={`relative p-2 sm:p-1.5 rounded-md transition-colors ${
                                             noAvail
                                               ? "text-orange-400 hover:bg-orange-400/10"
@@ -805,7 +830,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                         </button>
                                       );
                                     })()}
-                                    {pair.status !== "CONFIRMED" && (
+                                    {canEdit && pair.status !== "CONFIRMED" && (
                                       <button
                                         onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                         disabled={isUpdating}
@@ -815,7 +840,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                         <Check size={14} />
                                       </button>
                                     )}
-                                    {pair.status !== "WAITLIST" && (
+                                    {canEdit && pair.status !== "WAITLIST" && (
                                       <button
                                         onClick={() => handlePairStatus(pair, "WAITLIST")}
                                         disabled={isUpdating}
@@ -825,15 +850,17 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                         <Clock size={14} />
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => setMovePair(pair)}
-                                      disabled={isUpdating}
-                                      title="Cambiar categoría"
-                                      className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40 transition-colors"
-                                    >
-                                      <ArrowLeftRight size={14} />
-                                    </button>
-                                    {reg.partnerId && (
+                                    {canEdit && (
+                                      <button
+                                        onClick={() => setMovePair(pair)}
+                                        disabled={isUpdating}
+                                        title="Cambiar categoría"
+                                        className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] disabled:opacity-40 transition-colors"
+                                      >
+                                        <ArrowLeftRight size={14} />
+                                      </button>
+                                    )}
+                                    {canEdit && reg.partnerId && (
                                       <button
                                         onClick={() => setReplaceReg(reg)}
                                         disabled={isUpdating}
@@ -843,7 +870,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                         <Users size={14} />
                                       </button>
                                     )}
-                                    {!reg.partnerId && pair.status !== "CANCELLED" && (
+                                    {canEdit && !reg.partnerId && pair.status !== "CANCELLED" && (
                                       <button
                                         onClick={() => setReplaceReg(reg)}
                                         disabled={isUpdating}
@@ -853,14 +880,16 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
                                         <UserPlus size={14} />
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => handlePairStatus(pair, "CANCELLED")}
-                                      disabled={isUpdating}
-                                      title="Cancelar pareja"
-                                      className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
-                                    >
-                                      <X size={14} />
-                                    </button>
+                                    {canEdit && (
+                                      <button
+                                        onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                        disabled={isUpdating}
+                                        title="Cancelar pareja"
+                                        className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

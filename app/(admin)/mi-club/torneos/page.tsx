@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { adminService, clubTournamentConfigQK } from "@/lib/services/admin";
 import { SCORING_FORMAT_OPTIONS, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import {
   TOURNAMENT_DESCRIPTION_MAX,
   TOURNAMENT_RULES_MAX,
@@ -35,6 +36,9 @@ export default function MiClubTorneosPage() {
   const { role, clubId } = useRole();
   const qc = useQueryClient();
   const enabled = !!clubId && isClub(role);
+  // El back lee estas opciones con «tournaments» pero las guarda con «settings»
+  // (son la configuración del club): sin ese permiso se ven, sin guardar
+  const canWrite = useClubAccess().can("settings", "write");
 
   const query = useQuery({
     queryKey: clubTournamentConfigQK(clubId ?? ""),
@@ -115,13 +119,16 @@ export default function MiClubTorneosPage() {
         </p>
 
         {/* Guardar, en el contenido: la cabecera del panel va sola y a todo el ancho */}
-        <div className="flex justify-end">
-          <Button onClick={onSave} disabled={save.isPending} size="sm">
-            {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Guardar
-          </Button>
-        </div>
+        {canWrite && (
+          <div className="flex justify-end">
+            <Button onClick={onSave} disabled={save.isPending} size="sm">
+              {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Guardar
+            </Button>
+          </div>
+        )}
 
+        <fieldset disabled={!canWrite} className="min-w-0 space-y-6">
         <Section title="Sobre el torneo y normas" description="Texto plano, sin formato: se enseña tal cual, con sus saltos de línea, en el visor público del torneo.">
           <PlainTextField
             label="Sobre el torneo"
@@ -247,6 +254,7 @@ export default function MiClubTorneosPage() {
             </Field>
           </div>
         </Section>
+        </fieldset>
       </div>
     </>
   );

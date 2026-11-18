@@ -12,6 +12,8 @@ import { TIER_LABEL } from "@/lib/constants";
 import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
 import { SCORING_FORMAT_OPTIONS, isScoringFormat, scoringFormatLabel, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
+import { CLUB_ROLE_FORBIDDEN_MESSAGE } from "@/lib/club-permissions";
 import { tournamentsBase, useRouteKind } from "@/lib/league";
 import { leagueDaysIssue, leagueDaysPayload, weekdayLabel, type LeagueDayForm } from "@/lib/utils/league-days";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
@@ -43,7 +45,8 @@ import {
 import type { CategoryGender, CategoryLevel, ScoringFormat } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Loader2, Lock, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -234,6 +237,7 @@ export default function NuevoTorneoPage() {
   // 403earía igualmente).
   const { role, clubId: myClubId } = useRole();
   const isClubUser = isClub(role);
+  const canCreate = useClubAccess().can("tournaments", "write");
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
@@ -589,6 +593,25 @@ export default function NuevoTorneoPage() {
     if (step === 5 && scheduleData) scheduleForm.reset(scheduleData);
     setStep((s) => s - 1);
   };
+
+  // Crear es escribir «tournaments»: sin permiso no hay nada que rellenar (el
+  // back rechazaría el alta), así que el asistente no se abre
+  if (!canCreate) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <Header title={league ? "Nueva liga" : "Nuevo torneo"} />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-sm text-center space-y-3">
+            <Lock size={28} className="mx-auto text-muted-foreground" />
+            <p className="text-sm text-foreground">{CLUB_ROLE_FORBIDDEN_MESSAGE}</p>
+            <Link href={base} className="inline-block text-xs text-[#D4AF37] hover:underline">
+              Volver a {league ? "Ligas" : "Torneos"}
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-full">
