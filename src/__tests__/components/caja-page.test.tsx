@@ -27,9 +27,17 @@ vi.mock("@/lib/services/admin", () => ({ adminService: { registrations: { update
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import CajaPage from "../../../app/(admin)/caja/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
-function renderPage() {
+const asRole = (role: string) => ({
+  id: "staff", name: "Equipo", activeClubId: "club-1",
+  clubs: [{ clubId: "club-1", clubName: "Club Centro", roles: [role] }],
+});
+
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage(me?: object) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   render(
     <QueryClientProvider client={qc}>
       <CajaPage />
@@ -120,6 +128,21 @@ describe("CajaPage", () => {
         paid: true, paymentMethod: "CASH", paidAmountCents: 1000, player: "partner", playerId: "u-eva",
       }),
     );
+  });
+
+  it("pendiente de cobro con un rol sin escritura en caja ni reservas (Entrenador): ve lo que se debe, sin «Cobrar»", async () => {
+    renderPage(asRole("COACH"));
+    fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+    expect(await screen.findByText("Reserva Pista 2")).toBeInTheDocument();
+    expect(screen.getByText("Inscripción Open")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cobrar/ })).not.toBeInTheDocument();
+  });
+
+  it("pendiente de cobro con Recepción: un «Cobrar» por cada deuda", async () => {
+    renderPage(asRole("RECEPTION"));
+    fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+    await screen.findByText("Reserva Pista 2");
+    expect(screen.getAllByRole("button", { name: /Cobrar/ })).toHaveLength(2);
   });
 
   it("nadie debe nada: lo dice", async () => {
