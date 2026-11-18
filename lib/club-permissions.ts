@@ -95,10 +95,14 @@ export function areaForPath(pathname: string): ClubArea | null {
   if (under("/mi-club/equipo") || under("/historial")) return "staff";
   if (under("/mi-club/escuela")) return "school";
   if (under("/mi-club/clientes") || under("/mi-club/mensajes")) return "customers";
-  if (under("/mi-club/torneos") || under("/torneos") || under("/ligas") || under("/inscripciones")) return "tournaments";
+  // Patrocinadores: el back los lee y los escribe con «tournaments»
+  if (
+    under("/mi-club/torneos") || under("/torneos") || under("/ligas") || under("/inscripciones") ||
+    under("/patrocinadores")
+  ) return "tournaments";
   if (under("/resultados")) return "results";
   if (under("/caja")) return "cash";
   if (under("/mi-club/reservas/calendario") || under("/mi-club/reservas/bookings")) return "bookings";
-  if (under("/mi-club") || under("/patrocinadores")) return "settings";
+  if (under("/mi-club")) return "settings";
   return null;
 }

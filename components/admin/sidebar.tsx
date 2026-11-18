@@ -52,7 +52,7 @@ const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubA
   { href: "/mi-club",                      icon: Landmark,        label: "Mi club",        area: "settings"  },
   { href: "/mi-club/equipo",               icon: UsersRound,      label: "Equipo",         area: "staff"     },
   { href: "/historial",                    icon: History,         label: "Historial",      area: "staff"     },
-  { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores", area: "settings"  },
+  { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores", area: "tournaments" },
 ];
 
 /** El menú que ve cada rol: el del club, el suyo; el resto (AMT), el completo. */

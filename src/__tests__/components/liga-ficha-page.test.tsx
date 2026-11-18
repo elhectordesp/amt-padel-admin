@@ -22,12 +22,12 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 const state = vi.hoisted(() => ({ kind: "LEAGUE" as "LEAGUE" | "TOURNAMENT", status: "ONGOING" }));
 const setResult = vi.hoisted(() => vi.fn());
 // Qué áreas del club puede escribir quien tiene la sesión (por defecto, todas)
-const writable = vi.hoisted(() => ({ tournaments: true, results: true }));
+const writable = vi.hoisted(() => ({ tournaments: true, results: true, cash: true }));
 vi.mock("@/lib/use-club-access", () => ({
   useClubAccess: () => ({
     roles: null,
-    can: (area: "tournaments" | "results", level: "read" | "write" = "read") =>
-      level === "read" || (area === "tournaments" && writable.tournaments) || (area === "results" && writable.results),
+    can: (area: "tournaments" | "results" | "cash", level: "read" | "write" = "read") =>
+      level === "read" || writable[area],
   }),
 }));
 
@@ -122,6 +122,7 @@ describe("Ficha de una liga", { timeout: 30_000 }, () => {
     nav.pathname = "/ligas/l-1";
     writable.tournaments = true;
     writable.results = true;
+    writable.cash = true;
     setResult.mockReset();
     setResult.mockResolvedValue({});
   });
@@ -232,12 +233,14 @@ describe("Ficha de una liga", { timeout: 30_000 }, () => {
       for (const name of GROUP_ACTIONS) expect(await screen.findByRole("button", { name }, WAIT)).toBeInTheDocument();
     });
 
-    it("un torneo con el rol en solo lectura conserva sus botones: el recorte es de la ficha de liga", async () => {
+    it("un torneo con el rol en solo lectura recorta sus botones igual que una liga", async () => {
       state.kind = "TOURNAMENT";
       nav.pathname = "/torneos/l-1";
       writable.tournaments = false;
       renderPage();
-      expect(await screen.findByRole("button", { name: "Duplicar torneo" }, WAIT)).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Horarios" }, WAIT)).toBeInTheDocument();
+      for (const name of ["Duplicar torneo", "Eliminar torneo", "Editar torneo"])
+        expect(screen.queryByRole("button", { name }) ?? screen.queryByRole("link", { name })).toBeNull();
     });
   });
 

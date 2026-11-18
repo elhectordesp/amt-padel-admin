@@ -111,7 +111,10 @@ describe("areaForPath", () => {
     ["/mi-club/escuela/grupos/g1", "school"],
     ["/mi-club/escuela/clases/s1", "school"],
     ["/mi-club", "settings"],
-    ["/patrocinadores", "settings"],
+    // El back pide «tournaments» para leer y escribir patrocinadores
+    ["/patrocinadores", "tournaments"],
+    ["/patrocinadores/abc", "tournaments"],
+    ["/inscripciones", "tournaments"],
     ["/dashboard", null],
     ["/perfil", null],
   ] as const)("%s → %s", (path, area) => {

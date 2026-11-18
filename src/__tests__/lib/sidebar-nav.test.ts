@@ -17,7 +17,11 @@ describe("navForRole", () => {
   it("el equipo solo ve lo que su rol puede leer", () => {
     const can = (roles: ClubStaffRole[]) => ({ can: (a: ClubArea, l: "read" | "write" = "read") => canAccess(roles, a, l) });
     expect(navForRole("club", can(["COACH"])).map((i) => i.label)).toEqual(["Hoy", "Calendario", "Reservas", "Escuela"]);
-    expect(navForRole("club", can(["RESULTS"])).map((i) => i.label)).toEqual(["Hoy", "Torneos", "Ligas"]);
+    // Patrocinadores sigue al área de torneos (la que pide el back), no a la de ajustes:
+    // Resultados, que lee los torneos pero no los ajustes, los ve
+    expect(navForRole("club", can(["RESULTS"])).map((i) => i.label)).toEqual(["Hoy", "Torneos", "Ligas", "Patrocinadores"]);
+    expect(navForRole("club", can(["TOURNAMENTS"])).map((i) => i.label)).toContain("Patrocinadores");
+    expect(navForRole("club", can(["COACH"])).map((i) => i.label)).not.toContain("Patrocinadores");
     // La escuela la ven recepción y el entrenador; torneos no
     expect(navForRole("club", can(["RECEPTION"])).map((i) => i.label)).toContain("Escuela");
     expect(navForRole("club", can(["TOURNAMENTS"])).map((i) => i.label)).not.toContain("Escuela");

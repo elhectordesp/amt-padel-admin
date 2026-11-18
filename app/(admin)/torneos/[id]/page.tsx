@@ -227,7 +227,7 @@ function ConflictModal({
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
   matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, onEditPairs, tournament, tournamentId,
-  scheduleWarnings, onClearWarnings, onCreateAt,
+  scheduleWarnings, onClearWarnings, onCreateAt, canEdit, canResults,
 }: {
   matches:          MatchResult[];
   loading:          boolean;
@@ -242,6 +242,10 @@ function CalendarTab({
   scheduleWarnings: { pair: string; phase: string; category: string }[];
   onClearWarnings:  () => void;
   onCreateAt?:      (target: { date: string; court: string }) => void;
+  /** Cambiar el calendario del torneo (horarios, publicar, parejas, borrar partidos): área «tournaments». */
+  canEdit:          boolean;
+  /** Meter, corregir y reabrir resultados: área «results». */
+  canResults:       boolean;
 }) {
   const qc = useQueryClient();
   // Las horas se enseñan y se mandan en la zona del torneo, no en la del navegador
@@ -536,6 +540,7 @@ function CalendarTab({
             <Trophy size={13} />
             <span className="hidden sm:inline">Informe PDF</span>
           </button>
+          {canEdit && (<>
           <button
             onClick={() => autoSchedule.mutate(false)}
             disabled={autoSchedule.isPending || matches.length === 0}
@@ -565,6 +570,7 @@ function CalendarTab({
             {publishAllMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
             <span className="hidden sm:inline">Publicar todo</span>
           </button>
+          </>)}
         </div>
       </div>
 
@@ -620,10 +626,10 @@ function CalendarTab({
           matches={matches}
           duration={tournament?.matchDuration ?? 60}
           tournament={tournament}
-          onMatchClick={onMatchClick}
-          onCorrectClick={onCorrectClick}
-          onMove={(m, target) => moveMut.mutate({ matchId: m.id, data: { date: zonedDateTimeToIso(target.date, tz), court: target.court } })}
-          onDelete={(m) => {
+          onMatchClick={(m) => { if (canResults) onMatchClick(m); }}
+          onCorrectClick={canResults ? onCorrectClick : undefined}
+          onMove={canEdit ? (m, target) => moveMut.mutate({ matchId: m.id, data: { date: zonedDateTimeToIso(target.date, tz), court: target.court } }) : undefined}
+          onDelete={canEdit ? (m) => {
             const finished = !!(m as { isResult?: boolean }).isResult;
             if (typeof window !== "undefined" &&
                 window.confirm(finished
@@ -631,8 +637,8 @@ function CalendarTab({
                   : "¿Borrar este partido?")) {
               deleteMatchMut.mutate({ matchId: m.id, force: finished, categoryId: m.categoryId });
             }
-          }}
-          onCreateAt={onCreateAt}
+          } : undefined}
+          onCreateAt={canEdit ? onCreateAt : undefined}
         />
       ) : (
         // Per-category sections (lista)
@@ -672,7 +678,7 @@ function CalendarTab({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                {canEdit && <div className="flex items-center gap-2">
                   {isPublished && (
                     <button
                       onClick={() => setUnpublishCatId(cat.id)}
@@ -693,7 +699,7 @@ function CalendarTab({
                     {isPublishing ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
                     {isPublished ? "Republicar" : "Publicar horario"}
                   </button>
-                </div>
+                </div>}
               </div>
 
               {/* Matches grouped by date */}
@@ -732,8 +738,8 @@ function CalendarTab({
                           <div key={m.id}>
                             {/* Match row — mobile: stacked card, desktop: single horizontal row */}
                             <div
-                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing && hasBothTeams(m) ? "cursor-pointer" : ""}`}
-                              onClick={() => !m.isResult && !isEditing && hasBothTeams(m) && onMatchClick(m)}
+                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${canResults && !m.isResult && !isEditing && hasBothTeams(m) ? "cursor-pointer" : ""}`}
+                              onClick={() => canResults && !m.isResult && !isEditing && hasBothTeams(m) && onMatchClick(m)}
                             >
                               <span className="text-xs font-mono text-muted-foreground sm:w-12 shrink-0">{time}</span>
                               <span className="text-xs text-muted-foreground sm:w-16 shrink-0 truncate">{m.court || "—"}</span>
@@ -755,7 +761,7 @@ function CalendarTab({
                                     </span>
                                   </div>
                                   {/* Un bye (una sola pareja) no se corrige ni se reabre: el back lo rechaza */}
-                                  {hasBothPairs(m) && (<>
+                                  {canResults && hasBothPairs(m) && (<>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
                                     className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
@@ -783,7 +789,7 @@ function CalendarTab({
                                   <Clock size={12} /> Pendiente
                                 </span>
                               )}
-                              {m.categoryId && (
+                              {canEdit && m.categoryId && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onEditPairs(m); }}
                                   className="p-2 sm:p-1.5 rounded-md border border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors shrink-0"
@@ -793,6 +799,7 @@ function CalendarTab({
                                   <Users size={12} />
                                 </button>
                               )}
+                              {canEdit && (<>
                               <button
                                 onClick={(e) => { e.stopPropagation(); if (isEditing) { cancelEdit(); } else { startEdit(m); } }}
                                 className={`p-2 sm:p-1.5 rounded-md border transition-colors shrink-0 ${
@@ -823,6 +830,7 @@ function CalendarTab({
                               >
                                 <Trash2 size={12} />
                               </button>
+                              </>)}
                             </div>
 
                             {/* Inline edit form */}
@@ -1121,11 +1129,14 @@ function CourtBoard({
   tournamentId,
   categories,
   timeZone,
+  canWrite,
 }: {
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
   /** Zona del torneo: la de los días y horas del tablero. */
   timeZone:     string;
+  /** Cambiar la pista de un partido: área «tournaments». Sin ella, el tablero solo se ve. */
+  canWrite:     boolean;
 }) {
   const qc = useQueryClient();
   const [selectedDay,  setSelectedDay]  = useState("");
@@ -1302,8 +1313,9 @@ function CourtBoard({
                     <td key={courtName} className="px-2 py-2 align-top border-l border-border">
                       {match ? (
                         <div
-                          className={`rounded-md border p-2 space-y-1 cursor-pointer transition-all hover:brightness-110 ${style}`}
+                          className={`rounded-md border p-2 space-y-1 transition-all ${canWrite ? "cursor-pointer hover:brightness-110" : ""} ${style}`}
                           onClick={() => {
+                            if (!canWrite) return;
                             if (editingId === match.id) { setEditingId(null); setBoardConflicts([]); return; }
                             setEditingId(match.id);
                             setNewCourt((match.court as string) ?? "");
@@ -1390,10 +1402,13 @@ function PistasTab({
   tournamentId,
   categories,
   timeZone,
+  canWrite,
 }: {
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
   timeZone:     string;
+  /** Sincronizar las pistas y cambiar la de un partido: área «tournaments». */
+  canWrite:     boolean;
 }) {
   const qc = useQueryClient();
 
@@ -1424,14 +1439,16 @@ function PistasTab({
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <LayoutGrid size={36} className="text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">No hay pistas asociadas a este torneo.</p>
-        <button
-          onClick={() => sync.mutate()}
-          disabled={sync.isPending}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
-        >
-          {sync.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Sincronizar con club
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+          >
+            {sync.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Sincronizar con club
+          </button>
+        )}
       </div>
     );
   }
@@ -1441,7 +1458,7 @@ function PistasTab({
       {/* Board */}
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">Tablero del día</h3>
-        <CourtBoard tournamentId={tournamentId} categories={categories} timeZone={timeZone} />
+        <CourtBoard tournamentId={tournamentId} categories={categories} timeZone={timeZone} canWrite={canWrite} />
       </div>
 
       {/* Court list */}
@@ -1450,14 +1467,16 @@ function PistasTab({
           <p className="text-xs text-muted-foreground">
             {courts.length} pista{courts.length !== 1 ? "s" : ""} · Los bloqueos se gestionan desde el panel del club
           </p>
-          <button
-            onClick={() => sync.mutate()}
-            disabled={sync.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 disabled:opacity-50 transition-colors"
-          >
-            {sync.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            Sincronizar con club
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 disabled:opacity-50 transition-colors"
+            >
+              {sync.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Sincronizar con club
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {courts.map((tc) => (
@@ -1567,11 +1586,14 @@ export default function TorneoDetailPage() {
   // ruta lo sigue (una liga abierta por /torneos/:id pasa a /ligas/:id)
   const pathname = usePathname();
   const league   = tournament?.kind === "LEAGUE";
-  // En la ficha de una liga, sin permiso de escritura (rol del club con
-  // «torneos» o «resultados» solo en lectura) no salen los botones que cambian
-  // algo. El back es quien manda de verdad; esto evita ofrecer lo que dará 403
-  const canEdit    = !league || access.can("tournaments", "write");
-  const canResults = !league || access.can("results", "write");
+  // Sin permiso de escritura (rol del club con «torneos», «resultados» o «caja»
+  // solo en lectura) no salen los botones que cambian algo: cada acción, con el
+  // área que le pide su endpoint (meter y corregir resultados, «results»;
+  // cobrar, «cash»; el resto del torneo, «tournaments»). El back es quien manda
+  // de verdad; esto evita ofrecer lo que dará 403
+  const canEdit    = access.can("tournaments", "write");
+  const canResults = access.can("results", "write");
+  const canCash    = access.can("cash", "write");
   const base     = tournamentsBase(tournament?.kind);
   const word     = kindWord(tournament?.kind);
   useEffect(() => {
@@ -3078,11 +3100,12 @@ export default function TorneoDetailPage() {
                             <PairPayment
                               registration={reg}
                               onEdit={(player) => setPaymentOf({ reg, player })}
+                              readOnly={!canCash}
                             />
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
-                              {pair.status !== "CANCELLED" && (
+                              {canCash && pair.status !== "CANCELLED" && (
                                 <button
                                   onClick={() => setPayPairOf(reg)}
                                   disabled={isUpdating}
@@ -3209,6 +3232,8 @@ export default function TorneoDetailPage() {
             tournamentId={id}
             scheduleWarnings={scheduleWarnings}
             onClearWarnings={() => setScheduleWarnings([])}
+            canEdit={canEdit}
+            canResults={canResults}
             onCreateAt={(target) => {
               const cats = tournament.categories;
               if (cats.length === 1) {
@@ -3303,7 +3328,8 @@ export default function TorneoDetailPage() {
               );
             })()}
 
-            {bracketCatId && (
+            {/* El aviso solo sirve para poder cambiar los grupos: sin permiso, no sale */}
+            {canEdit && bracketCatId && (
               <GroupsLockBanner
                 tournamentId={id}
                 categoryId={bracketCatId}
@@ -4188,7 +4214,7 @@ export default function TorneoDetailPage() {
 
         {/* ── PISTAS TAB ── */}
         {tab === "horarios" && !league && horariosView === "tablero" && (
-          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} timeZone={tournamentTimeZone(tournament)} />
+          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} timeZone={tournamentTimeZone(tournament)} canWrite={canEdit} />
         )}
 
         {tab === "horarios" && (league || horariosView === "disponibilidad") && (
@@ -4614,7 +4640,7 @@ export default function TorneoDetailPage() {
     />
 
     {availRegId && (
-      <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+      <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} canEdit={canEdit} />
     )}
 
     {enrollOpen && tournament && (

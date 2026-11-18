@@ -14,6 +14,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ResultModal } from "@/components/admin/result-modal";
 import { TournamentSelectOptions } from "@/components/admin/tournament-select-options";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { phaseLabel } from "@/lib/constants";
 import { hasBothPairs } from "@/lib/utils/match-status";
 import { isActiveTournamentStatus } from "@/lib/utils/dashboard-tournaments";
@@ -28,6 +29,8 @@ const scoreText = (m: MatchResult) => {
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function ResultadosPage() {
   const qc = useQueryClient();
+  // Meter y corregir resultados es escribir «results»; sin ese permiso solo se ven
+  const canResults = useClubAccess().can("results", "write");
   const [search,        setSearch]        = useState("");
   const { page, setPage, pageSize, setPageSize } = usePagination();
   const [pickedId,      setPickedId]      = useState<string>("");
@@ -248,7 +251,7 @@ export default function ResultadosPage() {
                             <span className="text-[11px] text-muted-foreground italic">
                               {match.isResult ? "Pase directo" : "Faltan parejas"}
                             </span>
-                          ) : (
+                          ) : canResults ? (
                             <button
                               onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
                               className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
@@ -259,7 +262,7 @@ export default function ResultadosPage() {
                             >
                               {match.isResult ? "Editar" : "Introducir"}
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -312,7 +315,7 @@ export default function ResultadosPage() {
                                 <span className="text-xs text-muted-foreground italic">
                                   {match.isResult ? "Pase directo" : "Faltan parejas"}
                                 </span>
-                              ) : (
+                              ) : canResults ? (
                                 <button
                                   onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
                                   className={`text-xs font-medium transition-colors hover:underline ${
@@ -321,7 +324,7 @@ export default function ResultadosPage() {
                                 >
                                   {match.isResult ? "Editar" : "Introducir"}
                                 </button>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
                         ))}

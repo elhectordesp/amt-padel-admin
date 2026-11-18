@@ -20,6 +20,7 @@ import { clampPage } from "@/lib/utils/pagination";
 import { Pagination, usePagination } from "@/components/admin/pagination";
 import { DeletedTournaments } from "@/components/admin/deleted-tournaments";
 import { useRole } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import { kindWord, tournamentsBase, useRouteKind } from "@/lib/league";
 
 type FilterStatus = "all" | TournamentStatus;
@@ -149,6 +150,8 @@ export default function TorneosPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [cloning, setCloning] = useState<Tournament | null>(null);
   const { role } = useRole();
+  // Crear y clonar son de quien escribe «tournaments»; el resto del equipo solo lo ve
+  const canEdit = useClubAccess().can("tournaments", "write");
 
   const { data: all = [], isLoading } = useQuery({
     queryKey: isLeague ? ["tournaments", "leagues"] : ["tournaments"],
@@ -267,13 +270,15 @@ export default function TorneosPage() {
       id:   "actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <button
-            onClick={(e) => { e.stopPropagation(); setCloning(row.original); }}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title={`Clonar ${word}`}
-          >
-            <Copy size={13} />
-          </button>
+          {canEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setCloning(row.original); }}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              title={`Clonar ${word}`}
+            >
+              <Copy size={13} />
+            </button>
+          )}
           <Link
             href={`${base}/${row.original.id}`}
             onClick={(e) => e.stopPropagation()}
@@ -349,15 +354,17 @@ export default function TorneosPage() {
               ))}
             </div>
 
-            {/* Create button — always visible */}
-            <Link
-              href={`${base}/nuevo`}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors shrink-0"
-            >
-              <Plus size={15} />
-              <span className="hidden sm:inline">{isLeague ? "Nueva liga" : "Nuevo torneo"}</span>
-              <span className="sm:hidden">Nuevo</span>
-            </Link>
+            {/* Create button — visible para quien puede crear */}
+            {canEdit && (
+              <Link
+                href={`${base}/nuevo`}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors shrink-0"
+              >
+                <Plus size={15} />
+                <span className="hidden sm:inline">{isLeague ? "Nueva liga" : "Nuevo torneo"}</span>
+                <span className="sm:hidden">Nuevo</span>
+              </Link>
+            )}
           </div>
 
           {/* Search */}
@@ -422,13 +429,15 @@ export default function TorneosPage() {
                           <p className="text-xs text-muted-foreground mt-0.5">{t.club?.name ?? ""}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setCloning(t); }}
-                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title={`Clonar ${word}`}
-                          >
-                            <Copy size={13} />
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setCloning(t); }}
+                              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                              title={`Clonar ${word}`}
+                            >
+                              <Copy size={13} />
+                            </button>
+                          )}
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TOURNAMENT_STATUS_COLOR[t.status]}`}>
                             {TOURNAMENT_STATUS_LABEL[t.status]}
                           </span>

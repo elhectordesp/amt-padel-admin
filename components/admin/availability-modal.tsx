@@ -16,11 +16,13 @@ interface Props {
   onClose: () => void;
   /** Abre en modo edición directamente (ej: desde post-enroll toast) */
   editMode?: boolean;
+  /** Puede cambiar la disponibilidad (área «tournaments»); sin permiso, solo se ve. */
+  canEdit?: boolean;
 }
 
-export function AvailabilityModal({ registrationId, onClose, editMode = false }: Props) {
+export function AvailabilityModal({ registrationId, onClose, editMode = false, canEdit = true }: Props) {
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(editMode);
+  const [editing, setEditing] = useState(editMode && canEdit);
   const [days,    setDays]    = useState<AvailabilityDayState[]>([]);
 
   const { data, isLoading } = useQuery({
@@ -117,7 +119,7 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
                   {data.tournamentDays && baseline.length === 0
                     ? "El torneo no tiene horario definido."
                     : data.tournamentDays
-                      ? "Para el horario cuenta como disponible todo el día. Puedes meterla con «Editar disponibilidad»."
+                      ? `Para el horario cuenta como disponible todo el día.${canEdit ? " Puedes meterla con «Editar disponibilidad»." : ""}`
                       : data.days.length === 0 && "El torneo no tiene horario definido, o la disponibilidad está vacía."}
                 </p>
               )}
@@ -229,14 +231,16 @@ export function AvailabilityModal({ registrationId, onClose, editMode = false }:
         <div className="px-5 py-3 border-t border-border flex items-center justify-between shrink-0">
           {!editing ? (
             <>
-              <button
-                onClick={() => { setEditing(true); setDays(baseline); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-xs font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors"
-              >
-                <CalendarDays size={12} />
-                Editar disponibilidad
-              </button>
-              <button onClick={onClose} className="px-4 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">
+              {canEdit && (
+                <button
+                  onClick={() => { setEditing(true); setDays(baseline); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-xs font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors"
+                >
+                  <CalendarDays size={12} />
+                  Editar disponibilidad
+                </button>
+              )}
+              <button onClick={onClose} className="ml-auto px-4 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">
                 Cerrar
               </button>
             </>
