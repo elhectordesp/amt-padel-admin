@@ -28,6 +28,7 @@ import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import type { Court } from "@/types";
 import type { CourtAvailableDuration } from "@/types/bookings";
@@ -36,6 +37,7 @@ const COMMON_DURATIONS = [60, 75, 90, 120];
 
 export default function PistasPage() {
   const { role, clubId } = useRole();
+  const canWrite = useClubAccess().can("settings", "write");
 
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
@@ -77,11 +79,16 @@ export default function PistasPage() {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : (courtsQuery.data ?? []).length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            Este club aún no tiene pistas.{" "}
-            <Link href="/mi-club" className="text-primary underline">
-              Crea pistas primero
-            </Link>
-            .
+            Este club aún no tiene pistas.
+            {canWrite && (
+              <>
+                {" "}
+                <Link href="/mi-club" className="text-primary underline">
+                  Crea pistas primero
+                </Link>
+                .
+              </>
+            )}
           </div>
         ) : (
           (courtsQuery.data ?? []).map((court) => (
@@ -95,6 +102,7 @@ export default function PistasPage() {
 
 function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   const [expanded, setExpanded] = useState(false);
   const [form, setForm] = useState({
     type: (court.type ?? "DOUBLES") as "SINGLES" | "DOUBLES",
@@ -166,7 +174,7 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
           {/* Atributos booking-specific */}
           <section>
             <h3 className="mb-3 text-sm font-medium">Atributos de reserva</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <fieldset disabled={!canWrite} className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Ubicación">
                 <select
                   value={form.isIndoor ? "indoor" : "outdoor"}
@@ -220,21 +228,23 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
                   Permitir
                 </label>
               </Field>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => saveAttrs.mutate()}
-                disabled={saveAttrs.isPending}
-              >
-                {saveAttrs.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                Guardar atributos
-              </Button>
-            </div>
+            </fieldset>
+            {canWrite && (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => saveAttrs.mutate()}
+                  disabled={saveAttrs.isPending}
+                >
+                  {saveAttrs.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Guardar atributos
+                </Button>
+              </div>
+            )}
           </section>
 
           {/* Duraciones */}
@@ -249,6 +259,7 @@ function CourtCard({ court, clubId }: { court: Court; clubId: string }) {
 
 function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   const [rows, setRows] = useState<{ minutes: number; isDefault: boolean }[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -317,6 +328,13 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
 
   const [customDuration, setCustomDuration] = useState("");
 
+  // Quien solo lee ve las duraciones guardadas, no la lista de edición (que sugiere 60 y 90 sin guardar)
+  const listed = canWrite
+    ? rows
+    : [...(query.data ?? [])]
+        .sort((a, b) => a.minutes - b.minutes)
+        .map((d) => ({ minutes: d.minutes, isDefault: d.isDefault }));
+
   const addCustom = () => {
     const n = parseInt(customDuration, 10);
     if (!n || n < 30 || n > 240) {
@@ -348,80 +366,90 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
           <div className="text-sm">
             <p className="font-medium">Esta pista no tiene duraciones guardadas</p>
             <p className="text-muted-foreground">
-              Mientras tanto no ofrece huecos a los jugadores. Los 60 y 90 min
-              de abajo son solo una sugerencia: no valen hasta que los guardes.
+              Mientras tanto no ofrece huecos a los jugadores.
+              {canWrite && " Los 60 y 90 min de abajo son solo una sugerencia: no valen hasta que los guardes."}
             </p>
-            <Button
-              size="sm"
-              className="mt-2"
-              onClick={() => save.mutate()}
-              disabled={save.isPending || rows.length === 0}
-            >
-              {save.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              Guardar ahora
-            </Button>
+            {canWrite && (
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={() => save.mutate()}
+                disabled={save.isPending || rows.length === 0}
+              >
+                {save.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                Guardar ahora
+              </Button>
+            )}
           </div>
         </div>
       )}
 
       {/* Toggles de duraciones comunes */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {COMMON_DURATIONS.map((mins) => {
-          const active = rows.some((r) => r.minutes === mins);
-          return (
-            <button
-              key={mins}
-              type="button"
-              onClick={() => toggleDuration(mins)}
-              className={`rounded-full border px-3 py-1 text-xs ${
-                active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-muted-foreground hover:border-foreground/30"
-              }`}
-            >
-              {mins} min
-            </button>
-          );
-        })}
-      </div>
+      {canWrite && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {COMMON_DURATIONS.map((mins) => {
+            const active = rows.some((r) => r.minutes === mins);
+            return (
+              <button
+                key={mins}
+                type="button"
+                onClick={() => toggleDuration(mins)}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground hover:border-foreground/30"
+                }`}
+              >
+                {mins} min
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tabla de duraciones seleccionadas */}
-      {rows.length > 0 && (
+      {listed.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Duración</th>
                 <th className="px-3 py-2 text-left font-medium">Por defecto</th>
-                <th className="px-3 py-2"></th>
+                {canWrite && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {listed.map((r) => (
                 <tr key={r.minutes} className="border-t border-border">
                   <td className="px-3 py-2">{r.minutes} min</td>
                   <td className="px-3 py-2">
-                    <input
-                      type="radio"
-                      name={`default-${courtId}`}
-                      checked={r.isDefault}
-                      onChange={() => setDefault(r.minutes)}
-                      className="h-4 w-4 accent-primary"
-                    />
+                    {canWrite ? (
+                      <input
+                        type="radio"
+                        name={`default-${courtId}`}
+                        checked={r.isDefault}
+                        onChange={() => setDefault(r.minutes)}
+                        className="h-4 w-4 accent-primary"
+                      />
+                    ) : (
+                      r.isDefault ? "Sí" : "—"
+                    )}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => removeDuration(r.minutes)}
-                    >
-                      <Trash2 className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                  </td>
+                  {canWrite && (
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => removeDuration(r.minutes)}
+                      >
+                        <Trash2 className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -430,29 +458,31 @@ function DurationsEditor({ clubId, courtId }: { clubId: string; courtId: string 
       )}
 
       {/* Custom duration input */}
-      <div className="mt-3 flex items-center gap-2">
-        <input
-          type="number"
-          min={30}
-          max={240}
-          placeholder="Otra (ej. 75 min)"
-          value={customDuration}
-          onChange={(e) => setCustomDuration(e.target.value)}
-          className="w-32 rounded border border-border bg-background px-2 py-1 text-sm"
-        />
-        <Button variant="outline" size="sm" onClick={addCustom}>
-          <Plus className="h-3.5 w-3.5" /> Añadir
-        </Button>
-        <span className="ml-auto" />
-        <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
-          {save.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-          Guardar duraciones
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="number"
+            min={30}
+            max={240}
+            placeholder="Otra (ej. 75 min)"
+            value={customDuration}
+            onChange={(e) => setCustomDuration(e.target.value)}
+            className="w-32 rounded border border-border bg-background px-2 py-1 text-sm"
+          />
+          <Button variant="outline" size="sm" onClick={addCustom}>
+            <Plus className="h-3.5 w-3.5" /> Añadir
+          </Button>
+          <span className="ml-auto" />
+          <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+            {save.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            Guardar duraciones
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

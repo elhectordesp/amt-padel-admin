@@ -45,7 +45,15 @@ vi.mock("sonner", () => ({
   },
 }));
 
+// La sesión (rol y club): sin esto el panel no sabe si es de un club, y el rol del equipo no cuenta
+const useRoleMock = vi.hoisted(() => vi.fn(() => ({ role: null as string | null, clubId: null as string | null })));
+vi.mock("@/lib/use-role", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/use-role")>("@/lib/use-role");
+  return { ...actual, useRole: () => useRoleMock() };
+});
+
 import { CourtsManager } from "../../../components/admin/courts-manager";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
 function makeCourt(overrides: Record<string, unknown> = {}) {
   return {
@@ -69,6 +77,8 @@ function renderWithClient(ui: React.ReactElement) {
 describe("CourtsManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // AMT (sin rol de club): ve y hace todo, como cuando el componente va en /clubes
+    useRoleMock.mockReturnValue({ role: null, clubId: null });
     listMock.mockResolvedValue([]);
     createMock.mockResolvedValue(makeCourt());
     updateMock.mockResolvedValue(makeCourt());
@@ -182,5 +192,65 @@ describe("CourtsManager", () => {
     await waitFor(() =>
       expect(blocksCreateMock).toHaveBeenCalledWith("club-1", "c1", expect.objectContaining({ kind: "EVENT", startDate: "2026-12-01" })),
     );
+  });
+
+  describe("según el rol del equipo", () => {
+    // Pistas = «settings»; bloqueos = «bookings». Recepción lee la configuración y escribe las
+    // reservas: no toca las pistas, pero sí sus bloqueos. El Entrenador solo lee las reservas.
+    const asRole = (role: string) => ({
+      id: "staff", name: "Equipo", activeClubId: "club-1",
+      clubs: [{ clubId: "club-1", clubName: "Club Centro", roles: [role] }],
+    });
+    function renderAs(role: string) {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      qc.setQueryData(ME_QUERY_KEY, asRole(role));
+      return render(
+        <QueryClientProvider client={qc}>
+          <CourtsManager clubId="club-1" />
+        </QueryClientProvider>,
+      );
+    }
+    // El rol solo cuenta si la sesión es de un club
+    beforeEach(() => {
+      useRoleMock.mockReturnValue({ role: "club", clubId: "club-1" });
+      listMock.mockResolvedValue([makeCourt({ id: "c1", name: "Pista 1" })]);
+      blocksListMock.mockResolvedValue([
+        { id: "k1", courtId: "c1", kind: "CLASS", startDate: "2026-11-20", endDate: "2026-11-20", reason: "Iniciación", createdAt: "" },
+      ]);
+    });
+
+    it("Recepción: ni añadir, ni editar, ni borrar, ni subir/bajar pistas; sí gestionar sus bloqueos", async () => {
+      renderAs("RECEPTION");
+      await screen.findByText("Pista 1");
+      for (const name of [/Añadir pista/i]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      }
+      for (const title of ["Editar pista", "Eliminar pista", "Subir pista", "Bajar pista"]) {
+        expect(screen.queryByTitle(title)).not.toBeInTheDocument();
+      }
+      fireEvent.click(screen.getByTitle("Gestionar bloqueos"));
+      expect(await screen.findByText("Clase")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Añadir bloqueo/i })).toBeInTheDocument();
+      expect(screen.getByTitle("Eliminar bloqueo")).toBeInTheDocument();
+    });
+
+    it("Entrenador: ve las pistas y sus bloqueos, sin poder cambiar nada", async () => {
+      renderAs("COACH");
+      await screen.findByText("Pista 1");
+      expect(screen.queryByRole("button", { name: /Añadir pista/i })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTitle("Ver bloqueos"));
+      expect(await screen.findByText("Clase")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Añadir bloqueo/i })).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Eliminar bloqueo")).not.toBeInTheDocument();
+    });
+
+    it("Propietario: todo", async () => {
+      renderAs("OWNER");
+      await screen.findByText("Pista 1");
+      expect(screen.getByRole("button", { name: /Añadir pista/i })).toBeInTheDocument();
+      for (const title of ["Editar pista", "Eliminar pista", "Subir pista", "Bajar pista", "Gestionar bloqueos"]) {
+        expect(screen.getByTitle(title)).toBeInTheDocument();
+      }
+    });
   });
 });

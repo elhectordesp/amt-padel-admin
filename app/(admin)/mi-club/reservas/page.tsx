@@ -28,12 +28,15 @@ import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 
 export default function MiClubReservasPage() {
   const router = useRouter();
   const { role, clubId } = useRole();
+  // Pedir la activación o gestionar testers es de quien escribe la configuración
+  const canWrite = useClubAccess().can("settings", "write");
 
   // Datos básicos del club para mostrar nombre en el header
   const myClubQuery = useQuery({
@@ -110,6 +113,7 @@ export default function MiClubReservasPage() {
             loading={activationQuery.isLoading || myClubQuery.isLoading}
             state={activation}
             timeZone={myClubQuery.data ? tournamentTimeZone(myClubQuery.data) : null}
+            canWrite={canWrite}
             onAction={() => router.push("/mi-club/reservas/activacion")}
           />
         )}
@@ -182,6 +186,7 @@ function ActivationBanner({
   loading,
   state,
   timeZone,
+  canWrite,
   onAction,
 }: {
   loading: boolean;
@@ -195,6 +200,8 @@ function ActivationBanner({
     | undefined;
   /** La del club; null si no llegó (la fecha no se pinta con otra). */
   timeZone: string | null;
+  /** Sin escritura no hay botón para pedir la activación ni para gestionar testers. */
+  canWrite: boolean;
   onAction: () => void;
 }) {
   if (loading) {
@@ -239,9 +246,11 @@ function ActivationBanner({
               </p>
             </div>
           </div>
-          <Button onClick={onAction} size="sm">
-            Solicitar activación <ArrowRight className="ml-1 h-3 w-3" />
-          </Button>
+          {canWrite && (
+            <Button onClick={onAction} size="sm">
+              Solicitar activación <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -260,9 +269,11 @@ function ActivationBanner({
               </p>
             </div>
           </div>
-          <Button onClick={onAction} size="sm">
-            Gestionar testers <ArrowRight className="ml-1 h-3 w-3" />
-          </Button>
+          {canWrite && (
+            <Button onClick={onAction} size="sm">
+              Gestionar testers <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     );

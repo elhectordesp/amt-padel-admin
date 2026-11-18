@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { OCCUPATION_KINDS, occupationKindInfo } from "@/lib/utils/court-occupation";
 import type { Court, CourtBlock, CourtBlockKind } from "@/types";
 
@@ -56,6 +57,10 @@ function CourtRow({
   onMoveDown: () => void;
 }) {
   const qc = useQueryClient();
+  const { can } = useClubAccess();
+  // Las pistas son configuración del club; sus bloqueos puntuales, de las reservas
+  const canEditCourt = can("settings", "write");
+  const canEditBlocks = can("bookings", "write");
   const [edit, setEdit] = useState(false);
   const [showBlocks, setShowBlocks] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
@@ -199,60 +204,68 @@ function CourtRow({
           )}
         </div>
         <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
-          <button
-            onClick={onMoveUp}
-            disabled={!canMoveUp}
-            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
-            title="Subir pista"
-          >
-            <ChevronUp size={14} className="sm:hidden" />
-            <ChevronUp size={12} className="hidden sm:block" />
-          </button>
-          <button
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
-            title="Bajar pista"
-          >
-            <ChevronDown size={14} className="sm:hidden" />
-            <ChevronDown size={12} className="hidden sm:block" />
-          </button>
+          {canEditCourt && (
+            <>
+              <button
+                onClick={onMoveUp}
+                disabled={!canMoveUp}
+                className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+                title="Subir pista"
+              >
+                <ChevronUp size={14} className="sm:hidden" />
+                <ChevronUp size={12} className="hidden sm:block" />
+              </button>
+              <button
+                onClick={onMoveDown}
+                disabled={!canMoveDown}
+                className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+                title="Bajar pista"
+              >
+                <ChevronDown size={14} className="sm:hidden" />
+                <ChevronDown size={12} className="hidden sm:block" />
+              </button>
+            </>
+          )}
           <button
             onClick={() => {
               setShowBlocks((v) => !v);
               setShowAddBlock(false);
             }}
             className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-            title="Gestionar bloqueos"
+            title={canEditBlocks ? "Gestionar bloqueos" : "Ver bloqueos"}
           >
             <CalendarOff size={14} className="sm:hidden" />
             <CalendarOff size={12} className="hidden sm:block" />
           </button>
-          <button
-            onClick={() => setEdit(true)}
-            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-            title="Editar pista"
-          >
-            <Pencil size={14} className="sm:hidden" />
-            <Pencil size={12} className="hidden sm:block" />
-          </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            disabled={remove.isPending}
-            className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-            title="Eliminar pista"
-          >
-            {remove.isPending ? (
-              <Loader2 size={14} className="animate-spin sm:hidden" />
-            ) : (
-              <Trash2 size={14} className="sm:hidden" />
-            )}
-            {remove.isPending ? (
-              <Loader2 size={12} className="animate-spin hidden sm:block" />
-            ) : (
-              <Trash2 size={12} className="hidden sm:block" />
-            )}
-          </button>
+          {canEditCourt && (
+            <>
+              <button
+                onClick={() => setEdit(true)}
+                className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                title="Editar pista"
+              >
+                <Pencil size={14} className="sm:hidden" />
+                <Pencil size={12} className="hidden sm:block" />
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                disabled={remove.isPending}
+                className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                title="Eliminar pista"
+              >
+                {remove.isPending ? (
+                  <Loader2 size={14} className="animate-spin sm:hidden" />
+                ) : (
+                  <Trash2 size={14} className="sm:hidden" />
+                )}
+                {remove.isPending ? (
+                  <Loader2 size={12} className="animate-spin hidden sm:block" />
+                ) : (
+                  <Trash2 size={12} className="hidden sm:block" />
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -286,18 +299,20 @@ function CourtRow({
                     {b.startTime && b.endTime && ` · ${b.startTime}–${b.endTime}`}
                     {b.reason && ` · ${b.reason}`}
                   </span>
-                  <button
-                    onClick={() => setConfirmDeleteBlock(b)}
-                    disabled={removeBlock.isPending}
-                    className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
-                    title="Eliminar bloqueo"
-                  >
-                    {removeBlock.isPending ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <X size={12} />
-                    )}
-                  </button>
+                  {canEditBlocks && (
+                    <button
+                      onClick={() => setConfirmDeleteBlock(b)}
+                      disabled={removeBlock.isPending}
+                      className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
+                      title="Eliminar bloqueo"
+                    >
+                      {removeBlock.isPending ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <X size={12} />
+                      )}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -417,12 +432,14 @@ function CourtRow({
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAddBlock(true)}
-              className="w-full flex items-center justify-center gap-1 py-1 text-[11px] rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/40 transition-colors"
-            >
-              <Plus size={10} /> Añadir bloqueo
-            </button>
+            canEditBlocks && (
+              <button
+                onClick={() => setShowAddBlock(true)}
+                className="w-full flex items-center justify-center gap-1 py-1 text-[11px] rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/40 transition-colors"
+              >
+                <Plus size={10} /> Añadir bloqueo
+              </button>
+            )
           )}
         </div>
       )}
@@ -474,10 +491,12 @@ interface CourtsManagerProps {
  * UI inline de gestión de pistas + bloqueos de un club. Sirve tanto a ADMIN
  * (embebido en el modal de /clubes) como a CLUB (embebido en /mi-club como
  * card). El backend ya enforce que solo el dueño del club pueda tocar sus
- * pistas (assertClubAccess), así que aquí no hay gating extra.
+ * pistas (assertClubAccess); aquí solo se ocultan los botones que el rol del
+ * equipo no puede usar (pistas: «settings»; bloqueos: «bookings»).
  */
 export function CourtsManager({ clubId }: CourtsManagerProps) {
   const qc = useQueryClient();
+  const canEditCourts = useClubAccess().can("settings", "write");
   const [showAdd, setShowAdd] = useState(false);
   const [newForm, setNewForm] = useState<CourtForm>({ ...EMPTY_COURT });
 
@@ -625,7 +644,7 @@ export function CourtsManager({ clubId }: CourtsManagerProps) {
         </div>
       )}
 
-      {!showAdd && (
+      {canEditCourts && !showAdd && (
         <button
           onClick={() => setShowAdd(true)}
           className="w-full flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 transition-colors"

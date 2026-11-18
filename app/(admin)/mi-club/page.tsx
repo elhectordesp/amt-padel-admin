@@ -86,8 +86,10 @@ export default function MiClubPage() {
   const enabled = !!clubId && isClub(role);
 
   // Los datos fiscales los abren propietario y gestor; sin saber los roles, el back decide
-  const { roles } = useClubAccess();
+  const { roles, can } = useClubAccess();
   const canSeeFiscal = roles === null || roles.includes("OWNER") || roles.includes("MANAGER");
+  // Quien solo lee la configuración ve los datos del club, sin guardar ni cambiar el logo
+  const canWrite = can("settings", "write");
 
   const { data: club, isLoading } = useQuery({
     queryKey: ["my-club", clubId],
@@ -224,7 +226,7 @@ export default function MiClubPage() {
             onSubmit={handleSubmit}
             className="bg-card border border-border rounded-xl p-6 space-y-5"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
               <label className="space-y-1.5">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Nombre del club <span className="text-destructive">*</span>
@@ -403,50 +405,54 @@ export default function MiClubPage() {
                       <ImagePlus size={22} className="text-muted-foreground" />
                     )}
                   </div>
-                  <div className="space-y-1.5">
-                    <input
-                      ref={logoInput}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleLogoFile}
-                      className="hidden"
-                      aria-label="Elegir logo"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => logoInput.current?.click()}
-                      disabled={uploadLogo.isPending}
-                      className="flex items-center gap-2 h-10 max-[1024px]:h-11 px-4 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors disabled:opacity-60"
-                    >
-                      {uploadLogo.isPending ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <ImagePlus size={14} />
-                      )}
-                      {club?.logoUrl ? "Cambiar logo" : "Subir logo"}
-                    </button>
-                    <span className="text-xs text-muted-foreground block">
-                      JPEG, PNG o WEBP de hasta 2 MB. Se guarda al subirlo.
-                    </span>
-                  </div>
+                  {canWrite && (
+                    <div className="space-y-1.5">
+                      <input
+                        ref={logoInput}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handleLogoFile}
+                        className="hidden"
+                        aria-label="Elegir logo"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => logoInput.current?.click()}
+                        disabled={uploadLogo.isPending}
+                        className="flex items-center gap-2 h-10 max-[1024px]:h-11 px-4 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors disabled:opacity-60"
+                      >
+                        {uploadLogo.isPending ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <ImagePlus size={14} />
+                        )}
+                        {club?.logoUrl ? "Cambiar logo" : "Subir logo"}
+                      </button>
+                      <span className="text-xs text-muted-foreground block">
+                        JPEG, PNG o WEBP de hasta 2 MB. Se guarda al subirlo.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            </fieldset>
 
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={save.isPending}
-                className="flex items-center gap-2 px-5 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-60"
-              >
-                {save.isPending ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                Guardar cambios
-              </button>
-            </div>
+            {canWrite && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={save.isPending}
+                  className="flex items-center gap-2 px-5 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-60"
+                >
+                  {save.isPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
+                  Guardar cambios
+                </button>
+              </div>
+            )}
           </form>
         )}
 

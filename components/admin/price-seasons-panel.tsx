@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { dateOnlyKey, formatDayKey } from "@/lib/utils/time-zone";
 import type { ClubSeason } from "@/types/bookings";
 
@@ -45,6 +46,8 @@ export function PriceSeasonsPanel({
   onSelect: (id: string | null) => void;
 }) {
   const qc = useQueryClient();
+  // Quien solo lee la configuración elige la temporada que mira, sin crearla, editarla ni borrarla
+  const canWrite = useClubAccess().can("settings", "write");
   // "new" = alta; un id = edición de esa temporada; null = formulario cerrado
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [form, setForm] = useState({ name: "", startDate: "", endDate: "" });
@@ -126,9 +129,11 @@ export function PriceSeasonsPanel({
             {s.name}
           </button>
         ))}
-        <Button variant="outline" size="sm" onClick={openNew}>
-          <Plus className="h-3.5 w-3.5" /> Nueva temporada
-        </Button>
+        {canWrite && (
+          <Button variant="outline" size="sm" onClick={openNew}>
+            <Plus className="h-3.5 w-3.5" /> Nueva temporada
+          </Button>
+        )}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Los precios base valen todo el año. Una temporada (verano, invierno…) tiene los suyos para sus
@@ -143,30 +148,32 @@ export function PriceSeasonsPanel({
                 <span className="font-medium">{s.name}</span>{" "}
                 <span className="text-muted-foreground">{seasonRange(s)}</span>
               </span>
-              <span className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => openEdit(s)}
-                  aria-label={`Editar ${s.name}`}
-                >
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setToDelete(s)}
-                  aria-label={`Borrar ${s.name}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </span>
+              {canWrite && (
+                <span className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => openEdit(s)}
+                    aria-label={`Editar ${s.name}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setToDelete(s)}
+                    aria-label={`Borrar ${s.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </span>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      {editing && (
+      {canWrite && editing && (
         <form
           onSubmit={onSubmit}
           className="mt-3 space-y-3 rounded-lg border border-border bg-card p-4"

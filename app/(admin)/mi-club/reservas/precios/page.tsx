@@ -26,6 +26,7 @@ import { VoucherTypesSection } from "@/components/admin/voucher-types-section";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { eurosToCents } from "@/lib/utils/booking-price";
 import {
@@ -187,17 +188,24 @@ function CourtSelector({
   selectedId: string | null;
   onChange: (id: string) => void;
 }) {
+  // Las pistas se crean en la configuración del club: sin escribirla no hay a dónde ir
+  const canCreateCourts = useClubAccess().can("settings", "write");
   if (loading) {
     return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
   }
   if (courts.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Sin pistas. Crea pistas en{" "}
-        <Link href="/mi-club" className="text-primary underline">
-          Mi club
-        </Link>
-        .
+        Sin pistas.
+        {canCreateCourts && (
+          <>
+            {" "}Crea pistas en{" "}
+            <Link href="/mi-club" className="text-primary underline">
+              Mi club
+            </Link>
+            .
+          </>
+        )}
       </p>
     );
   }
@@ -302,6 +310,8 @@ function GridEditor({
   hours: ClubOperatingHours[] | undefined;
 }) {
   const qc = useQueryClient();
+  // Quien solo lee la configuración ve los precios, sin guardar ni cambiar la cuadrícula
+  const canWrite = useClubAccess().can("settings", "write");
   const [rows, setRows] = useState<GridRow[]>(() => slotsToRows(initialSlots));
 
   // Columnas: las duraciones de la pista y, para no perder nada, las que ya
@@ -407,39 +417,43 @@ function GridEditor({
           Precios {seasonId ? `de ${seasonName ?? "la temporada"}` : "base"} de{" "}
           {court?.name ?? "la pista"} (por pista, toda la reserva)
         </h3>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={addRow}>
-            <Plus className="h-3.5 w-3.5" /> Añadir franja
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onApplyAll}
-            disabled={applyAll.isPending || allCourts.length < 2}
-          >
-            {applyAll.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-            Aplicar a todas las pistas
-          </Button>
-          <Button size="sm" onClick={onSave} disabled={save.isPending}>
-            {save.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            Guardar
-          </Button>
-        </div>
+        {canWrite && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={addRow}>
+              <Plus className="h-3.5 w-3.5" /> Añadir franja
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onApplyAll}
+              disabled={applyAll.isPending || allCourts.length < 2}
+            >
+              {applyAll.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              Aplicar a todas las pistas
+            </Button>
+            <Button size="sm" onClick={onSave} disabled={save.isPending}>
+              {save.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              Guardar
+            </Button>
+          </div>
+        )}
       </div>
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
           {seasonId
-            ? "Esta pista no tiene precios en esta temporada: en sus fechas se cobran los precios base. Añade una franja para darle precios propios."
-            : "Sin precios definidos. Añade una franja (p. ej. «Valle» y «Punta») con el botón de arriba."}
+            ? `Esta pista no tiene precios en esta temporada: en sus fechas se cobran los precios base.${canWrite ? " Añade una franja para darle precios propios." : ""}`
+            : canWrite
+              ? "Sin precios definidos. Añade una franja (p. ej. «Valle» y «Punta») con el botón de arriba."
+              : "Sin precios definidos."}
         </div>
       ) : (
         // En el móvil la tabla no cabe: se desplaza de lado en vez de cortarse
@@ -462,7 +476,7 @@ function GridEditor({
                     )}
                   </th>
                 ))}
-                <th className="px-3 py-2"></th>
+                {canWrite && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
             <tbody>
@@ -476,6 +490,7 @@ function GridEditor({
                       value={r.label}
                       onChange={(e) => updateRow(r.id, { label: e.target.value })}
                       aria-label={`Nombre de la franja ${i + 1}`}
+                      disabled={!canWrite}
                       className={`${inputCls} w-40`}
                     />
                     <div className="mt-1 flex items-center gap-1">
@@ -484,6 +499,7 @@ function GridEditor({
                         value={r.startTime}
                         onChange={(e) => updateRow(r.id, { startTime: e.target.value })}
                         aria-label={`Desde (franja ${i + 1})`}
+                        disabled={!canWrite}
                         className={inputCls}
                       />
                       <span className="text-muted-foreground">-</span>
@@ -492,32 +508,36 @@ function GridEditor({
                         value={r.endTime}
                         onChange={(e) => updateRow(r.id, { endTime: e.target.value })}
                         aria-label={`Hasta (franja ${i + 1})`}
+                        disabled={!canWrite}
                         className={inputCls}
                       />
                     </div>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="mb-1 flex gap-1 text-xs">
-                      {presets.map(([short, name, days]) => (
-                        <button
-                          key={name}
-                          type="button"
-                          onClick={() => updateRow(r.id, { days: [...days] })}
-                          className={`rounded border px-1.5 py-0.5 ${
-                            daysLabel(r.days) === name
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border hover:bg-muted"
-                          }`}
-                        >
-                          {short}
-                        </button>
-                      ))}
-                    </div>
+                    {canWrite && (
+                      <div className="mb-1 flex gap-1 text-xs">
+                        {presets.map(([short, name, days]) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => updateRow(r.id, { days: [...days] })}
+                            className={`rounded border px-1.5 py-0.5 ${
+                              daysLabel(r.days) === name
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border hover:bg-muted"
+                            }`}
+                          >
+                            {short}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex gap-0.5">
                       {ALL_DAYS.map((d) => (
                         <button
                           key={d}
                           type="button"
+                          disabled={!canWrite}
                           onClick={() => toggleDay(r, d)}
                           aria-pressed={r.days.includes(d)}
                           title={DAY_SHORT[d]}
@@ -548,6 +568,7 @@ function GridEditor({
                             }
                             aria-label={`Precio ${m} min, franja ${i + 1} (€)`}
                             aria-invalid={text.trim() !== "" && eurosToCents(text) === null}
+                            disabled={!canWrite}
                             className={`${inputCls} w-20`}
                           />
                           <span className="text-muted-foreground">€</span>
@@ -558,16 +579,18 @@ function GridEditor({
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setRows((prev) => prev.filter((x) => x.id !== r.id))}
-                      title="Eliminar franja"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  </td>
+                  {canWrite && (
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setRows((prev) => prev.filter((x) => x.id !== r.id))}
+                        title="Eliminar franja"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

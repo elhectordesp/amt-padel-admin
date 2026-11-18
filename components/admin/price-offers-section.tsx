@@ -14,6 +14,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { errorText } from "@/components/admin/price-seasons-panel";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { ALL_DAYS, DAY_SHORT, daysLabel } from "@/lib/utils/price-grid";
 import { dateOnlyKey, formatDayKey } from "@/lib/utils/time-zone";
 import type { Court } from "@/types";
@@ -65,6 +66,7 @@ function formOf(o: ClubPriceOffer): OfferForm {
 
 export function PriceOffersSection({ clubId, courts }: { clubId: string; courts: Court[] }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   const offers = useQuery({
     queryKey: bookingsQK.priceOffers(clubId),
     queryFn: () => bookingsService.priceOffers.list(clubId),
@@ -156,16 +158,18 @@ export function PriceOffersSection({ clubId, courts }: { clubId: string; courts:
     <section aria-label="Ofertas">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-medium">Ofertas</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setForm(EMPTY_FORM);
-            setEditing("new");
-          }}
-        >
-          <Plus className="h-3.5 w-3.5" /> Nueva oferta
-        </Button>
+        {canWrite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setForm(EMPTY_FORM);
+              setEditing("new");
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" /> Nueva oferta
+          </Button>
+        )}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Un descuento por fechas, días y horas (p. ej. «-20 % las mañanas de agosto»). El jugador ve
@@ -200,33 +204,35 @@ export function PriceOffersSection({ clubId, courts }: { clubId: string; courts:
                   {o.startTime}–{o.endTime} · {courtsText(o)}
                 </div>
               </div>
-              <span className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => {
-                    setForm(formOf(o));
-                    setEditing(o.id);
-                  }}
-                  aria-label={`Editar ${o.name}`}
-                >
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setToDelete(o)}
-                  aria-label={`Borrar ${o.name}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </span>
+              {canWrite && (
+                <span className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => {
+                      setForm(formOf(o));
+                      setEditing(o.id);
+                    }}
+                    aria-label={`Editar ${o.name}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setToDelete(o)}
+                    aria-label={`Borrar ${o.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </span>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      {editing && (
+      {canWrite && editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"

@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Header } from "@/components/admin/header";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { AUTONOMOUS_COMMUNITIES } from "@/lib/constants/spain";
 import { IMAGE_URL_MESSAGE, isWebUrl, WEB_URL_MESSAGE } from "@/lib/utils/web-url";
@@ -612,9 +613,11 @@ function SponsorModal({
 // ── SortableSponsorRow ──────────────────────────────────────────────────────
 
 function SortableSponsorRow({
-  sponsor, onEdit, onDelete, onToggle,
+  sponsor, canWrite, onEdit, onDelete, onToggle,
 }: {
   sponsor:  Sponsor;
+  /** Sin escritura: ni arrastrar, ni activar/desactivar, ni editar, ni eliminar. */
+  canWrite: boolean;
   onEdit:   (s: Sponsor) => void;
   onDelete: (s: Sponsor) => void;
   onToggle: (s: Sponsor) => void;
@@ -635,14 +638,16 @@ function SortableSponsorRow({
       {/* Patrocinador */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0"
-            title="Arrastrar para reordenar"
-          >
-            <GripVertical size={14} />
-          </button>
+          {canWrite && (
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0"
+              title="Arrastrar para reordenar"
+            >
+              <GripVertical size={14} />
+            </button>
+          )}
           <ImagePreview url={sponsor.imageUrl} name={sponsor.name} />
           <div>
             <p className="text-sm font-medium text-foreground">{sponsor.name}</p>
@@ -691,37 +696,51 @@ function SortableSponsorRow({
       </td>
       {/* Estado */}
       <td className="px-4 py-3">
-        <button
-          onClick={() => onToggle(sponsor)}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all ${
-            sponsor.active
-              ? "text-green-400 bg-green-400/10 border-green-400/30"
-              : "text-muted-foreground bg-secondary border-border"
-          }`}
-        >
-          {sponsor.active ? <ToggleRight size={10} /> : <ToggleLeft size={10} />}
-          {sponsor.active ? "Activo" : "Inactivo"}
-        </button>
+        {canWrite ? (
+          <button
+            onClick={() => onToggle(sponsor)}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all ${
+              sponsor.active
+                ? "text-green-400 bg-green-400/10 border-green-400/30"
+                : "text-muted-foreground bg-secondary border-border"
+            }`}
+          >
+            {sponsor.active ? <ToggleRight size={10} /> : <ToggleLeft size={10} />}
+            {sponsor.active ? "Activo" : "Inactivo"}
+          </button>
+        ) : (
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+              sponsor.active
+                ? "text-green-400 bg-green-400/10 border-green-400/30"
+                : "text-muted-foreground bg-secondary border-border"
+            }`}
+          >
+            {sponsor.active ? "Activo" : "Inactivo"}
+          </span>
+        )}
       </td>
       {/* Acciones */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
-          <button
-            onClick={() => onEdit(sponsor)}
-            className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-            title="Editar"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={() => onDelete(sponsor)}
-            className="p-2 sm:p-1.5 rounded hover:bg-red-400/10 text-muted-foreground hover:text-red-400 transition-colors"
-            title="Eliminar"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      </td>
+      {canWrite && (
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
+            <button
+              onClick={() => onEdit(sponsor)}
+              className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              title="Editar"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              onClick={() => onDelete(sponsor)}
+              className="p-2 sm:p-1.5 rounded hover:bg-red-400/10 text-muted-foreground hover:text-red-400 transition-colors"
+              title="Eliminar"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        </td>
+      )}
     </tr>
   );
 }
@@ -732,6 +751,9 @@ export default function PatrocinadoresPage() {
   const qc = useQueryClient();
   const { role } = useRole();
   const isClubUser = isClub(role);
+  // El back pide escribir en «tournaments» para crear, editar, activar, reordenar y borrar
+  // patrocinadores (admin.controller.ts, @ClubArea('tournaments')); quien solo lee los ve
+  const canWrite = useClubAccess().can("tournaments", "write");
 
   // CLUB solo gestiona sponsors TOURNAMENT; las tabs CIRCUIT y REGIONAL
   // se ocultan + el tab por defecto deja de ser ALL.
@@ -837,13 +859,15 @@ export default function PatrocinadoresPage() {
             ))}
           </div>
 
-          <button
-            onClick={() => setModal({ open: true })}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-black text-sm font-semibold hover:bg-[#c9a52e] transition-colors"
-          >
-            <Plus size={15} />
-            Nuevo patrocinador
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => setModal({ open: true })}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-black text-sm font-semibold hover:bg-[#c9a52e] transition-colors"
+            >
+              <Plus size={15} />
+              Nuevo patrocinador
+            </button>
+          )}
         </div>
 
         {/* Scope info cards */}
@@ -880,12 +904,14 @@ export default function PatrocinadoresPage() {
               <p className="text-sm">
                 {activeTab === "ALL" ? "No hay patrocinadores todavía" : `No hay patrocinadores de tipo ${SCOPE_CONFIG[activeTab as SponsorScope]?.label}`}
               </p>
-              <button
-                onClick={() => setModal({ open: true })}
-                className="text-xs text-[#D4AF37] hover:underline"
-              >
-                Añadir el primero
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => setModal({ open: true })}
+                  className="text-xs text-[#D4AF37] hover:underline"
+                >
+                  Añadir el primero
+                </button>
+              )}
             </div>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -893,7 +919,7 @@ export default function PatrocinadoresPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
-                      {["Patrocinador", "Alcance", "Enlace", "Clics", "Estado", ""].map((h) => (
+                      {["Patrocinador", "Alcance", "Enlace", "Clics", "Estado", ...(canWrite ? [""] : [])].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                           {h}
                         </th>
@@ -906,6 +932,7 @@ export default function PatrocinadoresPage() {
                         <SortableSponsorRow
                           key={sponsor.id}
                           sponsor={sponsor}
+                          canWrite={canWrite}
                           onEdit={(s)   => setModal({ open: true, editing: s })}
                           onDelete={(s) => setDeleting(s)}
                           onToggle={(s) => toggleMutation.mutate(s)}

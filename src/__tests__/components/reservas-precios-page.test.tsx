@@ -40,7 +40,8 @@ vi.mock("@/lib/services/club-vouchers", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/club-vouchers")>("@/lib/services/club-vouchers");
   return { ...actual, clubVouchersService: voucherSvc };
 });
-vi.mock("@/lib/use-club-access", () => ({ useClubAccess: () => ({ roles: null, can: () => true }) }));
+const accessMock = vi.hoisted(() => ({ can: vi.fn() }));
+vi.mock("@/lib/use-club-access", () => ({ useClubAccess: () => ({ roles: null, can: accessMock.can }) }));
 
 import PreciosPage from "../../../app/(admin)/mi-club/reservas/precios/page";
 
@@ -58,6 +59,7 @@ function renderPage() {
 describe("Precios de las pistas", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    accessMock.can.mockReturnValue(true);
     pricing.list.mockResolvedValue([{ ...SLOT, priceCents: 1250 }]);
     pricing.replace.mockResolvedValue([]);
     svc.courtDurations.list.mockResolvedValue([{ id: "d1", courtId: "p1", minutes: 90, isDefault: true }]);
@@ -217,5 +219,46 @@ describe("Precios de las pistas", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar oferta" }));
     expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining("entre 1 y 100"));
     expect(svc.priceOffers.create).not.toHaveBeenCalled();
+  });
+
+  describe("con un rol de solo lectura (Recepción lee la configuración)", () => {
+    beforeEach(() => {
+      accessMock.can.mockImplementation((_area: string, level = "read") => level === "read");
+      svc.seasons.list.mockResolvedValue([
+        { id: "s1", clubId: "c1", name: "Verano", startDate: "2027-06-01", endDate: "2027-09-15" },
+      ]);
+      svc.priceOffers.list.mockResolvedValue([
+        { id: "o1", clubId: "c1", name: "Mañanas de agosto", startDate: "2027-08-01", endDate: "2027-08-31",
+          daysOfWeek: [1, 2, 3], startTime: "09:00", endTime: "14:00", courtIds: [], discountPercent: 20, membersOnly: false },
+      ]);
+    });
+
+    it("ve los precios, las temporadas y las ofertas, sin botones de guardar, añadir, editar ni borrar", async () => {
+      renderPage();
+      const price = await screen.findByLabelText("Precio 90 min, franja 1 (€)");
+      expect(price).toHaveValue("12.5");
+      expect(price).toBeDisabled();
+      expect(await screen.findByText("Mañanas de agosto")).toBeInTheDocument();
+      // En el selector y en la lista de temporadas
+      expect(screen.getAllByText("Verano").length).toBeGreaterThan(0);
+
+      for (const name of [
+        /Guardar/, /Añadir franja/, /Aplicar a todas las pistas/, /Nueva temporada/, /Nueva oferta/,
+        /Editar Verano/, /Borrar Verano/, /Editar Mañanas de agosto/, /Borrar Mañanas de agosto/, /Eliminar franja/,
+      ]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      }
+      // Los botones «L-V / S-D / Todos» de cada franja tampoco
+      expect(screen.queryByRole("button", { name: "L-V" })).not.toBeInTheDocument();
+    });
+
+    it("con escritura están todos", async () => {
+      accessMock.can.mockReturnValue(true);
+      renderPage();
+      await screen.findByLabelText("Precio 90 min, franja 1 (€)");
+      for (const name of [/^Guardar$/, /Añadir franja/, /Nueva temporada/, /Nueva oferta/, /Editar Verano/, /Borrar Mañanas de agosto/]) {
+        expect(await screen.findByRole("button", { name })).toBeInTheDocument();
+      }
+    });
   });
 });
