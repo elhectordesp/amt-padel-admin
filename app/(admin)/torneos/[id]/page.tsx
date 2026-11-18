@@ -403,8 +403,12 @@ function CalendarTab({
   const unfinishMatchMut = useMutation({
     mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
       adminService.tournaments.unfinishMatch(matchId, force),
-    onSuccess: () => {
-      toast.success("Partido reabierto (resultado deshecho)");
+    onSuccess: (saved) => {
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Partido reabierto (resultado deshecho). El SPA se actualizará esta noche."
+          : "Partido reabierto (resultado deshecho)",
+      );
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });

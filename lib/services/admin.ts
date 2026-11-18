@@ -478,9 +478,13 @@ export const adminService = {
           ...(lock?.forceLocked ? { forceLocked: true } : {}),
         },
       }).then((r) => r.data),
-    /** Des-finalizar un partido: revierte su resultado y lo deja pendiente. */
+    /**
+     * Des-finalizar un partido: revierte su resultado y lo deja pendiente.
+     * `spaRecalcScheduled`: el resultado ya contaba para el SPA, que se
+     * recalcula esa noche.
+     */
     unfinishMatch: (matchId: string, force?: boolean) =>
-      api.post(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),
+      api.post<{ success: boolean; spaRecalcScheduled?: boolean }>(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),
   },
 
   registrations: {
