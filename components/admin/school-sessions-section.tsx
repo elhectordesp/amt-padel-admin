@@ -14,6 +14,7 @@ import { Ban, CalendarClock, ClipboardCheck, Loader2, Pencil, RefreshCw } from "
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { errorText } from "@/components/admin/price-seasons-panel";
+import { SchoolCancelSessionModal } from "@/components/admin/school-cancel-session-modal";
 import { SchoolSessionDialog } from "@/components/admin/school-session-dialog";
 import { Button } from "@/components/ui/button";
 import { invalidateSchool, schoolService } from "@/lib/services/school";
@@ -38,7 +39,6 @@ export function SchoolSessionsSection({
   const [filter, setFilter] = useState<Filter>("upcoming");
   const [editing, setEditing] = useState<SchoolGroupSession | null>(null);
   const [toCancel, setToCancel] = useState<SchoolGroupSession | null>(null);
-  const [reason, setReason] = useState("");
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
   const editable = canWrite && !group.archivedAt;
@@ -61,17 +61,6 @@ export function SchoolSessionsSection({
       toast.error(errorText(err));
       setConfirmRegenerate(false);
     },
-  });
-
-  const cancel = useMutation({
-    mutationFn: (sessionId: string) => schoolService.sessions.cancel(clubId, sessionId, reason.trim() || undefined),
-    onSuccess: () => {
-      invalidateSchool(qc, clubId);
-      toast.success("Clase cancelada: su pista queda libre");
-      setToCancel(null);
-      setReason("");
-    },
-    onError: (err: unknown) => toast.error(errorText(err)),
   });
 
   const hasSessions = group.sessions.length > 0;
@@ -198,10 +187,7 @@ export function SchoolSessionsSection({
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              onClick={() => {
-                                setReason("");
-                                setToCancel(s);
-                              }}
+                              onClick={() => setToCancel(s)}
                               aria-label={`Cancelar la clase del ${sessionLabel(s, timeZone)}`}
                             >
                               <Ban className="h-3.5 w-3.5 text-muted-foreground" />
@@ -234,35 +220,9 @@ export function SchoolSessionsSection({
         onConfirm={() => generate.mutate()}
       />
 
-      <ConfirmModal
-        open={!!toCancel}
-        danger
-        title="Cancelar la clase"
-        description={
-          toCancel
-            ? `${sessionLabel(toCancel, timeZone)}. La clase queda cancelada y se libera su pista. Lo que se apunte como motivo lo verá todo el equipo.`
-            : ""
-        }
-        confirmLabel="Cancelar clase"
-        cancelLabel="Volver"
-        loading={cancel.isPending}
-        onClose={() => {
-          if (!cancel.isPending) setToCancel(null);
-        }}
-        onConfirm={() => toCancel && cancel.mutate(toCancel.id)}
-      >
-        <label className="block text-xs text-muted-foreground">
-          Motivo (opcional)
-          <input
-            type="text"
-            maxLength={200}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Lluvia, festivo, obras..."
-            className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-          />
-        </label>
-      </ConfirmModal>
+      {toCancel && (
+        <SchoolCancelSessionModal clubId={clubId} session={toCancel} timeZone={timeZone} onClose={() => setToCancel(null)} />
+      )}
     </section>
   );
 }

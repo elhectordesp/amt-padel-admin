@@ -16,16 +16,20 @@ import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
 import { SchoolCoachesSection } from "@/components/admin/school-coaches-section";
 import { SchoolGroupDialog } from "@/components/admin/school-group-dialog";
+import { SchoolInboxSection } from "@/components/admin/school-inbox-section";
+import { SchoolRecoveriesSection } from "@/components/admin/school-recoveries-section";
 import { Button } from "@/components/ui/button";
 import { schoolQK, schoolService } from "@/lib/services/school";
+import { schoolRecoveryQK, schoolRecoveryService } from "@/lib/services/school-recovery";
 import { useClubAccess } from "@/lib/use-club-access";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
 import { slotsSummary } from "@/lib/utils/school";
 import { formatDayKey } from "@/lib/utils/time-zone";
 import type { SchoolGroupListItem } from "@/types/school";
 
-type Tab = "groups" | "coaches";
+type Tab = "groups" | "inbox" | "recoveries" | "coaches";
 
 const SEASON_FMT: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
 
@@ -74,17 +78,26 @@ export default function EscuelaPage() {
   const enabled = !!clubId && isClub(role);
   const { can } = useClubAccess();
   const canWrite = can("school", "write");
+  const canPickCustomer = can("customers", "read");
   // «Mis grupos» depende de quién es: sin saberlo no se reparten (así no saltan de sitio)
   const { data: me, isLoading: meLoading } = useMe();
   const [tab, setTab] = useState<Tab>("groups");
   const [showArchived, setShowArchived] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const { timeZone, isError: timeZoneError, refetch: refetchTimeZone } = useClubTimeZone(clubId, enabled);
 
   const groups = useQuery({
     queryKey: schoolQK.groups(clubId ?? "", showArchived),
     queryFn: () => schoolService.groups.list(clubId!, showArchived),
     enabled,
   });
+  // Las solicitudes pendientes, para el contador de la pestaña (la bandeja usa la misma consulta)
+  const pendingRequests = useQuery({
+    queryKey: schoolRecoveryQK.requests(clubId ?? "", "PENDING"),
+    queryFn: () => schoolRecoveryService.requests.list(clubId!, "PENDING"),
+    enabled,
+  });
+  const pendingCount = pendingRequests.data?.length ?? 0;
 
   if (role === null) {
     return (
@@ -123,34 +136,52 @@ export default function EscuelaPage() {
           )}
         </div>
 
-        {canWrite && (
-          <div role="tablist" aria-label="Escuela" className="flex gap-1 text-sm">
-            {(
-              [
-                ["groups", "Grupos"],
-                ["coaches", "Entrenadores"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={tab === value}
-                onClick={() => setTab(value)}
-                className={`rounded-md px-3 py-1.5 transition-colors ${
-                  tab === value
-                    ? "bg-[rgba(212,175,55,0.12)] font-semibold text-[#D4AF37]"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div role="tablist" aria-label="Escuela" className="flex flex-wrap gap-1 text-sm">
+          {(
+            [
+              ["groups", "Grupos"],
+              ["inbox", pendingCount > 0 ? `Bandeja (${pendingCount})` : "Bandeja"],
+              ...(canWrite ? ([["recoveries", "Recuperaciones"], ["coaches", "Entrenadores"]] as const) : []),
+            ] as readonly (readonly [Tab, string])[]
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => setTab(value)}
+              className={`rounded-md px-3 py-1.5 transition-colors ${
+                tab === value
+                  ? "bg-[rgba(212,175,55,0.12)] font-semibold text-[#D4AF37]"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {tab === "coaches" && canWrite ? (
           <SchoolCoachesSection clubId={clubId!} canWrite={canWrite} />
+        ) : (tab === "inbox" || (tab === "recoveries" && canWrite)) && !timeZone ? (
+          timeZoneError ? (
+            <ErrorState
+              title="No se ha podido cargar la zona horaria del club"
+              message="Sin ella no se pueden enseñar las horas de las clases."
+              onRetry={() => void refetchTimeZone()}
+            />
+          ) : (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          )
+        ) : tab === "inbox" && timeZone ? (
+          <SchoolInboxSection
+            clubId={clubId!}
+            timeZone={timeZone}
+            canWrite={canWrite}
+            canPickCustomer={canPickCustomer}
+          />
+        ) : tab === "recoveries" && canWrite && timeZone ? (
+          <SchoolRecoveriesSection clubId={clubId!} timeZone={timeZone} />
         ) : groups.isLoading || meLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : groups.isError ? (

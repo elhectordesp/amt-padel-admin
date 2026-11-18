@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import type { CancelRecoveries } from "@/types/school-recovery";
 import type {
   AttendanceEntryPayload,
   GenerateSessionsResult,
@@ -75,8 +76,17 @@ export const schoolService = {
       api.get<SchoolAttendanceSheet>(`${base(clubId)}/sessions/${sessionId}`).then((r) => r.data),
     update: (clubId: string, sessionId: string, payload: UpdateSchoolSessionPayload) =>
       api.patch<SchoolSession>(`${base(clubId)}/sessions/${sessionId}`, payload).then((r) => r.data),
-    cancel: (clubId: string, sessionId: string, reason?: string) =>
-      api.post<SchoolSession>(`${base(clubId)}/sessions/${sessionId}/cancel`, { reason }).then((r) => r.data),
+    /**
+     * Cancela la clase. Con `grantRecovery` (por defecto, sí) cada alumno gana una
+     * recuperación; a quien recuperaba en ella se le devuelve el crédito siempre.
+     */
+    cancel: (clubId: string, sessionId: string, reason?: string, grantRecovery = true) =>
+      api
+        .post<SchoolSession & { recoveries: CancelRecoveries }>(`${base(clubId)}/sessions/${sessionId}/cancel`, {
+          reason,
+          grantRecovery,
+        })
+        .then((r) => r.data),
     setAttendance: (clubId: string, sessionId: string, entries: AttendanceEntryPayload[]) =>
       api.put<SchoolAttendanceSheet>(`${base(clubId)}/sessions/${sessionId}/attendance`, { entries }).then((r) => r.data),
   },

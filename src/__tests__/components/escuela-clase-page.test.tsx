@@ -17,6 +17,15 @@ vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "c1" }),
   isClub: (r: string) => r === "club",
 }));
+const access = vi.hoisted(() => ({ write: false }));
+vi.mock("@/lib/use-club-access", () => ({
+  useClubAccess: () => ({ roles: null, can: (_a: string, level = "read") => level === "read" || access.write }),
+}));
+const recovery = vi.hoisted(() => ({ config: { get: vi.fn() } }));
+vi.mock("@/lib/services/school-recovery", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/school-recovery")>("@/lib/services/school-recovery");
+  return { ...actual, schoolRecoveryService: { ...actual.schoolRecoveryService, ...recovery } };
+});
 vi.mock("@/lib/use-club-time-zone", () => ({
   useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
 }));
@@ -33,6 +42,11 @@ import ClaseEscuelaPage from "../../../app/(admin)/mi-club/escuela/clases/[id]/p
 // «Ahora»: miércoles 18 de noviembre de 2026, 11:00 en Madrid
 const NOW = new Date("2026-11-18T10:00:00.000Z");
 
+/** Un alumno de la hoja, sin aviso de ausencia ni recuperación. */
+const student0 = (clubCustomerId: string, name: string, status: string | null, over: Record<string, unknown> = {}) => ({
+  clubCustomerId, name, status, noticedAt: null, earnedCreditId: null, recovery: false, usedCreditId: null, ...over,
+});
+
 const sheet = (over: Record<string, unknown> = {}, sessionOver: Record<string, unknown> = {}) => ({
   session: {
     id: "ses1", groupId: "g1", slotId: "s1", startsAt: "2026-11-18T17:00:00.000Z", endsAt: "2026-11-18T18:00:00.000Z",
@@ -40,10 +54,11 @@ const sheet = (over: Record<string, unknown> = {}, sessionOver: Record<string, u
   },
   group: { id: "g1", name: "Iniciación" },
   students: [
-    { clubCustomerId: "cc1", name: "Ana Prueba", status: null },
-    { clubCustomerId: "cc2", name: "Beto Prueba", status: "PRESENT" },
-    { clubCustomerId: "cc3", name: "Carla Prueba", status: null },
+    student0("cc1", "Ana Prueba", null),
+    student0("cc2", "Beto Prueba", "PRESENT"),
+    student0("cc3", "Carla Prueba", null),
   ],
+  capacity: { maxStudents: 8, freeSpots: 5 },
   ...over,
 });
 
@@ -73,6 +88,8 @@ const student = (name: string) => screen.getByRole("group", { name: `Asistencia 
 describe("Escuela: pasar lista", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    access.write = false;
+    recovery.config.get.mockResolvedValue({ recoveryNoticeHours: 24, recoveryValidDays: 60 });
     school.sessions.sheet.mockResolvedValue(sheet());
   });
 
@@ -90,9 +107,9 @@ describe("Escuela: pasar lista", () => {
     school.sessions.setAttendance.mockResolvedValue(
       sheet({
         students: [
-          { clubCustomerId: "cc1", name: "Ana Prueba", status: "ABSENT" },
-          { clubCustomerId: "cc2", name: "Beto Prueba", status: "PRESENT" },
-          { clubCustomerId: "cc3", name: "Carla Prueba", status: "EXCUSED" },
+          student0("cc1", "Ana Prueba", "ABSENT"),
+          student0("cc2", "Beto Prueba", "PRESENT"),
+          student0("cc3", "Carla Prueba", "EXCUSED"),
         ],
       }),
     );
