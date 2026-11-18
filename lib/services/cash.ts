@@ -4,13 +4,18 @@ import { api } from "@/lib/api";
  * Caja del día y deudas del club (B9). Los importes van en céntimos. El método
  * de cada movimiento es del catálogo único (CASH, CARD, BIZUM, TRANSFER,
  * ONLINE, OTHER) o, en reservas antiguas, CASH_AT_VENUE / PAID_MANUAL. Una
- * reserva pagada con bono lleva VOUCHER y suma 0: el dinero entró con la venta
- * del bono.
+ * reserva o una clase privada pagadas con bono llevan VOUCHER y suman 0: el
+ * dinero entró con la venta del bono. Las cuotas de la escuela y las clases
+ * privadas cobradas también salen aquí (y las sin cobrar, en las deudas).
  */
 
 export interface CashMovement {
-  /** VOUCHER: la venta de un bono (el día de su cobro) o, en negativo, su devolución. */
-  source:      "BOOKING" | "REGISTRATION" | "VOUCHER";
+  /**
+   * VOUCHER: la venta de un bono (el día de su cobro) o, en negativo, su devolución.
+   * SCHOOL_FEE: una cuota de la escuela. PRIVATE_CLASS: un alumno de una clase privada
+   * (con bono, método VOUCHER e importe 0).
+   */
+  source:      "BOOKING" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS";
   refId:       string;
   /** Cuándo se cobró (ISO). */
   at:          string;
@@ -30,15 +35,18 @@ export interface CashOfDay {
 }
 
 export interface DebtItem {
-  source:      "BOOKING" | "REGISTRATION";
+  source:      "BOOKING" | "REGISTRATION" | "SCHOOL_FEE" | "PRIVATE_CLASS";
+  /** La reserva, la inscripción, la cuota o, en una clase privada, el alumno de la clase. */
   refId:       string;
   concept:     string;
-  /** Inicio de la reserva o del torneo (ISO). */
+  /** Inicio de la reserva, de la clase privada o del torneo, o el día 1 del mes de la cuota (ISO). */
   date:        string;
   amountCents: number;
   /** Solo inscripciones: de qué jugador es la deuda. */
   slot?:       "titular" | "partner";
   playerId?:   string;
+  /** Solo clases privadas: la clase del alumno. */
+  privateClassId?: string;
 }
 
 export interface DebtPerson {

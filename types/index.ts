@@ -154,6 +154,8 @@ export interface CourtBlock {
   reason?:    string | null;
   /** Solo si es la pista de una clase de la escuela: no se borra desde los bloqueos. */
   schoolSessionId?: string | null;
+  /** Lo mismo, si es la pista de una clase privada de la escuela. */
+  schoolPrivateClassId?: string | null;
   createdAt:  string;
 }
 

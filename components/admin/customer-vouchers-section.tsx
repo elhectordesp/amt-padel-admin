@@ -26,6 +26,7 @@ import { formatCents } from "@/lib/utils/booking-price";
 import { centsToEurosInput, eurosToCents, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
 import { formatInTimeZone } from "@/lib/utils/time-zone";
 import {
+  VOUCHER_KIND_LABEL,
   VOUCHER_STATUS_LABEL,
   checkRefund,
   expiryLabel,
@@ -115,6 +116,11 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
                   <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[v.status]}`}>
                     {VOUCHER_STATUS_LABEL[v.status]}
                   </span>
+                  {v.kind === "PRIVATE_CLASS" && (
+                    <span className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                      {VOUCHER_KIND_LABEL.PRIVATE_CLASS}
+                    </span>
+                  )}
                 </div>
                 <span className="text-sm font-medium">{sessionsLabel(v)}</span>
               </div>
@@ -135,16 +141,26 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
               {v.uses.length > 0 && (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                    Reservas pagadas con este bono ({v.uses.length})
+                    {`${v.kind === "PRIVATE_CLASS" ? "Clases privadas pagadas" : "Reservas pagadas"} con este bono (${v.uses.length})`}
                   </summary>
                   <ul className="mt-1 space-y-1">
-                    {v.uses.map((u) => (
-                      <li key={u.id} className="text-xs">
-                        <Link href={`/mi-club/reservas/bookings/${u.bookingId}`} className="text-primary hover:underline">
-                          {u.courtName} · {formatInTimeZone(u.startsAt, timeZone, DAY_TIME)}
-                        </Link>
-                      </li>
-                    ))}
+                    {v.uses.map((u) => {
+                      const when = u.startsAt ? formatInTimeZone(u.startsAt, timeZone, DAY_TIME) : "";
+                      return (
+                        <li key={u.id} className="text-xs">
+                          {u.bookingId ? (
+                            <Link href={`/mi-club/reservas/bookings/${u.bookingId}`} className="text-primary hover:underline">
+                              {u.courtName} · {when}
+                            </Link>
+                          ) : (
+                            // Una clase privada de la escuela: se ve en Escuela · Clases privadas
+                            <span>
+                              Clase privada{u.courtName ? ` · ${u.courtName}` : ""} · {when}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </details>
               )}
@@ -361,7 +377,7 @@ function CancelVoucherDialog({
       title={`Cancelar el bono «${voucher.name}»`}
       description={
         voucher.usedSessions > 0
-          ? `Las ${voucher.usedSessions} ${voucher.usedSessions === 1 ? "sesión ya gastada se queda" : "sesiones ya gastadas se quedan"} (sus reservas siguen pagadas). Las ${voucher.remainingSessions} que quedan se pierden.`
+          ? `Las ${voucher.usedSessions} ${voucher.usedSessions === 1 ? "sesión ya gastada se queda" : "sesiones ya gastadas se quedan"} (${voucher.kind === "PRIVATE_CLASS" ? "sus clases siguen pagadas" : "sus reservas siguen pagadas"}). Las ${voucher.remainingSessions} que quedan se pierden.`
           : "Se pierden todas sus sesiones."
       }
       confirmLabel="Cancelar bono"

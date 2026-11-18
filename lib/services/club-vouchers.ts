@@ -5,19 +5,24 @@ import type { Booking } from "@/types/bookings";
 /**
  * Bonos de reservas del club: el catálogo de lo que vende, los bonos vendidos
  * a cada cliente (se cobran a mano) y el gasto de sus sesiones al cobrar
- * reservas. Una sesión es una reserva de pista entera. Los importes van en
- * céntimos.
+ * reservas o clases privadas de la escuela. Una sesión es una reserva de pista
+ * entera (bono de pista) o una clase privada (bono de clases privadas). Los
+ * importes van en céntimos.
  */
 
 /** Cómo está un bono hoy: con sesiones, sin ellas, pasado de fecha o cancelado. */
 export type VoucherStatus = "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "CANCELLED";
+
+/** Para qué se gasta un bono: reservas de pista o clases privadas de la escuela. */
+export type VoucherKind = "COURT" | "PRIVATE_CLASS";
 
 /** Un tipo del catálogo del club. Cambiarlo no toca los bonos ya vendidos. */
 export interface ClubVoucherType {
   id:         string;
   clubId:     string;
   name:       string;
-  /** 1-100: cada sesión es una reserva de pista entera. */
+  kind:       VoucherKind;
+  /** 1-100: cada sesión es una reserva de pista entera o una clase privada. */
   sessions:   number;
   priceCents: number;
   /** Días de validez desde la venta; null: sin caducidad. */
@@ -29,6 +34,7 @@ export interface ClubVoucherType {
 
 export interface ClubVoucherTypePayload {
   name:       string;
+  kind:       VoucherKind;
   sessions:   number;
   priceCents: number;
   validDays?: number | null;
@@ -38,15 +44,19 @@ export interface UpdateClubVoucherTypePayload extends Partial<ClubVoucherTypePay
   active?: boolean;
 }
 
-/** Una sesión gastada: la reserva a la que se descontó. */
+/** Una sesión gastada: la reserva o la clase privada a la que se descontó (una de las dos). */
 export interface ClubVoucherUse {
-  id:        string;
-  bookingId: string;
+  id:             string;
+  /** La reserva; null si fue una clase privada. */
+  bookingId:      string | null;
+  /** La clase privada; null si fue una reserva. */
+  privateClassId: string | null;
   /** Cuándo se descontó (ISO). */
-  usedAt:    string;
-  /** Inicio de la reserva (ISO). */
-  startsAt:  string;
-  courtName: string;
+  usedAt:         string;
+  /** Inicio de la reserva o de la clase (ISO). */
+  startsAt:       string | null;
+  /** La pista; null si la clase privada se quedó sin ella. */
+  courtName:      string | null;
 }
 
 /** Un bono vendido a un cliente, con su saldo y su estado ya calculados por el back. */
@@ -57,6 +67,7 @@ export interface ClubVoucher {
   typeId:            string | null;
   clubCustomerId:    string;
   name:              string;
+  kind:              VoucherKind;
   sessions:          number;
   priceCents:        number;
   /** Método con el que se cobró (los del mostrador); null: pendiente de cobro. */

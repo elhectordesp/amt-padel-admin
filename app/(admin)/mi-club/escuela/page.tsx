@@ -1,6 +1,7 @@
 /**
  * /mi-club/escuela — la escuela del club: los grupos con su entrenador y su
- * horario semanal, y los entrenadores. El gestor da de alta el grupo, mete a
+ * horario semanal, las clases privadas, las cuotas mensuales de los grupos
+ * (todo se cobra en el mostrador) y los entrenadores. El gestor da de alta el grupo, mete a
  * los alumnos y el sistema reserva las pistas de todas las clases de la
  * temporada. Un entrenador ve primero «Mis grupos» y solo puede pasar lista.
  */
@@ -15,7 +16,9 @@ import { GraduationCap, Loader2, Plus } from "lucide-react";
 import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
 import { SchoolCoachesSection } from "@/components/admin/school-coaches-section";
+import { SchoolFeesSection } from "@/components/admin/school-fees-section";
 import { SchoolGroupDialog } from "@/components/admin/school-group-dialog";
+import { SchoolPrivateClassesSection } from "@/components/admin/school-private-classes-section";
 import { Button } from "@/components/ui/button";
 import { schoolQK, schoolService } from "@/lib/services/school";
 import { useClubAccess } from "@/lib/use-club-access";
@@ -25,7 +28,7 @@ import { slotsSummary } from "@/lib/utils/school";
 import { formatDayKey } from "@/lib/utils/time-zone";
 import type { SchoolGroupListItem } from "@/types/school";
 
-type Tab = "groups" | "coaches";
+type Tab = "groups" | "privateClasses" | "fees" | "coaches";
 
 const SEASON_FMT: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
 
@@ -116,7 +119,7 @@ export default function EscuelaPage() {
               ? "Los grupos de tu escuela con su entrenador y su horario semanal. Al generar las clases, el sistema reserva la pista de cada una."
               : "Tus grupos de la escuela. Desde cada clase puedes pasar lista."}
           </p>
-          {canWrite && (
+          {canWrite && tab === "groups" && (
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="h-3.5 w-3.5" /> Nuevo grupo
             </Button>
@@ -128,6 +131,8 @@ export default function EscuelaPage() {
             {(
               [
                 ["groups", "Grupos"],
+                ["privateClasses", "Clases privadas"],
+                ["fees", "Cuotas"],
                 ["coaches", "Entrenadores"],
               ] as const
             ).map(([value, label]) => (
@@ -149,7 +154,11 @@ export default function EscuelaPage() {
           </div>
         )}
 
-        {tab === "coaches" && canWrite ? (
+        {tab === "privateClasses" && canWrite ? (
+          <SchoolPrivateClassesSection clubId={clubId!} canWrite={canWrite} />
+        ) : tab === "fees" && canWrite ? (
+          <SchoolFeesSection clubId={clubId!} canWrite={canWrite} />
+        ) : tab === "coaches" && canWrite ? (
           <SchoolCoachesSection clubId={clubId!} canWrite={canWrite} />
         ) : groups.isLoading || meLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

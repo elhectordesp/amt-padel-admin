@@ -2,7 +2,7 @@
 
 /**
  * Alta y edición de un grupo de la escuela: nombre, nivel, entrenador (del
- * equipo con rol de entrenador), plazas, temporada y horario semanal con la
+ * equipo con rol de entrenador), plazas, cuota mensual, temporada y horario semanal con la
  * pista preferida de cada franja. Al guardar puede generar (o regenerar) las
  * clases de la temporada: el sistema reserva la pista de cada una.
  */
@@ -159,6 +159,17 @@ export function SchoolGroupDialog({
               max={40}
               value={form.maxStudents}
               onChange={(e) => setForm({ ...form, maxStudents: e.target.value })}
+              className={`${schoolInputCls} mt-1 w-full`}
+            />
+          </label>
+          <label className="block text-xs text-muted-foreground">
+            Cuota mensual por alumno (€, opcional)
+            <input
+              type="text"
+              inputMode="decimal"
+              value={form.monthlyFee}
+              onChange={(e) => setForm({ ...form, monthlyFee: e.target.value })}
+              placeholder="Vacío: el grupo no cobra cuota"
               className={`${schoolInputCls} mt-1 w-full`}
             />
           </label>

@@ -3,7 +3,7 @@
  * cobro por persona, con el cobro que guarda método e importe.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/use-role", () => ({
@@ -24,6 +24,18 @@ const markPaid = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/bookings", () => ({ bookingsService: { bookings: { markPaid } } }));
 const updatePayment = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/admin", () => ({ adminService: { registrations: { updatePayment } } }));
+const school = vi.hoisted(() => ({ feePay: vi.fn(), classPay: vi.fn(), classVouchers: vi.fn() }));
+vi.mock("@/lib/services/school-billing", async (orig) => {
+  const actual = await orig<typeof import("@/lib/services/school-billing")>();
+  return {
+    ...actual,
+    schoolBillingService: {
+      ...actual.schoolBillingService,
+      fees: { ...actual.schoolBillingService.fees, pay: school.feePay },
+      privateClasses: { ...actual.schoolBillingService.privateClasses, pay: school.classPay, vouchers: school.classVouchers },
+    },
+  };
+});
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import CajaPage from "../../../app/(admin)/caja/page";
@@ -143,6 +155,104 @@ describe("CajaPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
     await screen.findByText("Reserva Pista 2");
     expect(screen.getAllByRole("button", { name: /Cobrar/ })).toHaveLength(2);
+  });
+
+  describe("escuela", () => {
+    const SCHOOL_DEBTS = {
+      totalCents: 7500,
+      people: [
+        {
+          key: "customer:cc9", name: "Marta", userId: null, customerId: "cc9", totalCents: 7500,
+          items: [
+            { source: "SCHOOL_FEE", refId: "f9", concept: "Cuota Iniciación · 2026-11", date: "2026-10-31T23:00:00.000Z", amountCents: 4500 },
+            { source: "PRIVATE_CLASS", refId: "st9", concept: "Clase privada Pista 2", date: "2026-11-09T16:00:00.000Z", amountCents: 3000, privateClassId: "pc9" },
+          ],
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      cashMock.debts.mockResolvedValue(SCHOOL_DEBTS);
+      school.feePay.mockResolvedValue({});
+      school.classPay.mockResolvedValue({});
+      school.classVouchers.mockResolvedValue([]);
+    });
+
+    it("las cuotas y las clases privadas sin cobrar salen en lo pendiente de su persona", async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      expect(await screen.findByText("Cuota Iniciación · 2026-11")).toBeInTheDocument();
+      expect(screen.getByText("Clase privada Pista 2")).toBeInTheDocument();
+      expect(screen.getAllByText(/75,00/).length).toBeGreaterThan(0);
+    });
+
+    it("la caja del día enseña lo cobrado en la escuela, con bono a 0", async () => {
+      cashMock.day.mockResolvedValue({
+        ...DAY,
+        movements: [
+          { source: "SCHOOL_FEE", refId: "f1", at: "2026-11-10T09:30:00.000Z", concept: "Cuota Iniciación · 2026-11", person: "Marta", method: "CASH", amountCents: 4500 },
+          { source: "PRIVATE_CLASS", refId: "st1", at: "2026-11-10T10:00:00.000Z", concept: "Clase privada · 2026-11-10 17:00", person: "Pablo", method: "VOUCHER", amountCents: 0 },
+        ],
+        totalsByMethod: { CASH: 4500, VOUCHER: 0 },
+        totalCents: 4500,
+      });
+      renderPage();
+      expect(await screen.findByText("Cuota Iniciación · 2026-11")).toBeInTheDocument();
+      const row = screen.getByText("Clase privada · 2026-11-10 17:00").closest("tr") as HTMLElement;
+      // Pagada con bono: método «Bono» e importe 0 (el dinero entró con la venta del bono)
+      expect(within(row).getByText("Bono")).toBeInTheDocument();
+      expect(row).toHaveTextContent("0,00");
+      expect(screen.getByText("Total del día").nextElementSibling).toHaveTextContent("45,00");
+    });
+
+    it("cobrar una cuota: solo el método (el importe es el de la cuota), en el servicio de la escuela", async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Cuota Iniciación · 2026-11");
+      fireEvent.click(screen.getAllByRole("button", { name: /Cobrar/ })[0]);
+      const dialog = await screen.findByRole("dialog", { name: "Cobrar cuota" });
+      expect(dialog.querySelector('input[type="text"]')).toBeNull();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Efectivo" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cobrar" }));
+      await waitFor(() => expect(school.feePay).toHaveBeenCalledWith("club-1", "f9", "CASH"));
+      expect(markPaid).not.toHaveBeenCalled();
+      expect(updatePayment).not.toHaveBeenCalled();
+    });
+
+    it("cobrar a un alumno de una clase privada: con su clase y su alumno, en el servicio de la escuela", async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Clase privada Pista 2");
+      fireEvent.click(screen.getAllByRole("button", { name: /Cobrar/ })[1]);
+      const dialog = await screen.findByRole("dialog", { name: "Cobrar clase privada" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Tarjeta" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cobrar" }));
+      await waitFor(() =>
+        expect(school.classPay).toHaveBeenCalledWith("club-1", "pc9", "st9", { paymentMethod: "CARD" }),
+      );
+      expect(markPaid).not.toHaveBeenCalled();
+    });
+
+    it("el cobro de la escuela es del área «school»: la Recepción (con escritura) cobra las dos", async () => {
+      renderPage(asRole("RECEPTION"));
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Cuota Iniciación · 2026-11");
+      expect(screen.getAllByRole("button", { name: /Cobrar/ })).toHaveLength(2);
+    });
+
+    it("un rol sin la escuela (Torneos) ve lo que se debe sin «Cobrar»", async () => {
+      renderPage(asRole("TOURNAMENTS"));
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Cuota Iniciación · 2026-11");
+      expect(screen.queryByRole("button", { name: /Cobrar/ })).not.toBeInTheDocument();
+    });
+
+    it("un entrenador (lee la escuela, no la escribe) ve lo que se debe sin «Cobrar»", async () => {
+      renderPage(asRole("COACH"));
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Cuota Iniciación · 2026-11");
+      expect(screen.queryByRole("button", { name: /Cobrar/ })).not.toBeInTheDocument();
+    });
   });
 
   it("nadie debe nada: lo dice", async () => {

@@ -11,6 +11,7 @@ import type {
   ClubVoucher,
   ClubVoucherType,
   ClubVoucherTypePayload,
+  VoucherKind,
   VoucherStatus,
 } from "@/lib/services/club-vouchers";
 
@@ -23,6 +24,18 @@ export const VOUCHER_STATUS_LABEL: Record<VoucherStatus, string> = {
   EXHAUSTED: "Agotado",
   EXPIRED:   "Caducado",
   CANCELLED: "Cancelado",
+};
+
+/** Para qué se gasta cada tipo de bono. */
+export const VOUCHER_KIND_LABEL: Record<VoucherKind, string> = {
+  COURT:         "Reservas de pista",
+  PRIVATE_CLASS: "Clases privadas",
+};
+
+/** Lo que gasta una sesión de cada tipo: «reserva» o «clase privada». */
+export const VOUCHER_KIND_SESSION: Record<VoucherKind, string> = {
+  COURT:         "reserva de pista",
+  PRIVATE_CLASS: "clase privada",
 };
 
 /** «7 de 10 sesiones» (las que quedan, de las que tiene). */
@@ -47,14 +60,19 @@ export function expiryLabel(expiresAt: string | null, timeZone: string): string 
   return `Caduca el ${formatInTimeZone(expiresAt, timeZone, { day: "numeric", month: "numeric", year: "numeric" })}`;
 }
 
-/** Un tipo para elegirlo al vender: «Bono 10 · 10 sesiones · 120,00 €». */
-export function typeOptionLabel(t: Pick<ClubVoucherType, "name" | "sessions" | "priceCents">): string {
-  return `${t.name} · ${t.sessions} ${t.sessions === 1 ? "sesión" : "sesiones"} · ${formatCents(t.priceCents)}`;
+/**
+ * Un tipo para elegirlo al vender: «Bono 10 · 10 sesiones · 120,00 €». Los de
+ * clases privadas lo dicen al final (los de pista, el caso de siempre, no).
+ */
+export function typeOptionLabel(t: Pick<ClubVoucherType, "name" | "sessions" | "priceCents"> & { kind?: VoucherKind }): string {
+  const base = `${t.name} · ${t.sessions} ${t.sessions === 1 ? "sesión" : "sesiones"} · ${formatCents(t.priceCents)}`;
+  return t.kind === "PRIVATE_CLASS" ? `${base} · ${VOUCHER_KIND_LABEL.PRIVATE_CLASS.toLowerCase()}` : base;
 }
 
 /** El formulario de un tipo tal como se escribe (todo texto). */
 export interface TypeFormValues {
   name:       string;
+  kind:       VoucherKind;
   sessions:   string;
   /** En euros, como se escribe («120», «12,50»). */
   price:      string;
@@ -62,11 +80,12 @@ export interface TypeFormValues {
   validDays:  string;
 }
 
-export const EMPTY_TYPE_FORM: TypeFormValues = { name: "", sessions: "", price: "", validDays: "" };
+export const EMPTY_TYPE_FORM: TypeFormValues = { name: "", kind: "COURT", sessions: "", price: "", validDays: "" };
 
 export function typeFormOf(t: ClubVoucherType): TypeFormValues {
   return {
     name:      t.name,
+    kind:      t.kind,
     sessions:  String(t.sessions),
     price:     centsToEurosText(t.priceCents),
     validDays: t.validDays === null ? "" : String(t.validDays),
@@ -90,7 +109,7 @@ export function checkTypeForm(f: TypeFormValues): Checked<ClubVoucherTypePayload
     if (!Number.isInteger(validDays) || validDays < 1 || validDays > VOUCHER_MAX_VALID_DAYS)
       return { ok: false, message: `Los días de validez son un número entero entre 1 y ${VOUCHER_MAX_VALID_DAYS}, o vacío si no caduca` };
   }
-  return { ok: true, value: { name, sessions, priceCents, validDays } };
+  return { ok: true, value: { name, kind: f.kind, sessions, priceCents, validDays } };
 }
 
 /**

@@ -291,16 +291,18 @@ function CourtRow({
                     className="text-muted-foreground shrink-0"
                   />
                   <span className="flex-1 min-w-0 truncate">
-                    <span className="font-medium">{occupationKindInfo(b.kind).label}</span>
+                    <span className="font-medium">
+                      {b.schoolPrivateClassId ? "Clase privada" : occupationKindInfo(b.kind).label}
+                    </span>
                     {" · "}
                     {b.startDate === b.endDate
                       ? b.startDate
                       : `${b.startDate} – ${b.endDate}`}
                     {b.startTime && b.endTime && ` · ${b.startTime}–${b.endTime}`}
-                    {b.reason && ` · ${b.reason}`}
+                    {b.reason && !b.schoolPrivateClassId && ` · ${b.reason}`}
                   </span>
-                  {b.schoolSessionId ? (
-                    // La pista de una clase de la escuela se cambia o libera desde Escuela
+                  {b.schoolSessionId || b.schoolPrivateClassId ? (
+                    // La pista de una clase de la escuela (de un grupo o privada) se cambia o libera desde Escuela
                     <span
                       className="shrink-0 text-muted-foreground"
                       title="Es una clase de la escuela: se cambia o se cancela desde Escuela"
