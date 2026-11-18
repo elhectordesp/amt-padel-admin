@@ -137,6 +137,36 @@ describe("Escuela: ficha del grupo", () => {
     expect(within(sessions).queryByText("Pasar lista")).not.toBeInTheDocument();
   });
 
+  it("un alumno menor lleva el distintivo «Menor» y el nombre y el teléfono de su tutor; el mayor, nada de eso", async () => {
+    school.groups.get.mockResolvedValue({
+      ...GROUP,
+      members: [
+        { ...member("m1", "Ana Prueba"), birthDate: "1990-05-05", age: 36, isMinor: false, guardianName: null, guardianPhone: null },
+        {
+          ...member("m2", "Beto Prueba"),
+          birthDate: "2014-06-30", age: 12, isMinor: true, guardianName: "Marta Tutora", guardianPhone: "600 000 001",
+        },
+        { ...member("m4", "Dani Sin Tutor"), birthDate: "2016-01-10", age: 10, isMinor: true, guardianName: null, guardianPhone: null },
+      ],
+    });
+    await renderPage();
+    await screen.findByText("Marta Prueba", {}, WAIT);
+
+    const students = screen.getByRole("region", { name: "Alumnos" });
+    const rowOf = (name: string) => within(within(students).getByText(name).closest("li") as HTMLElement);
+
+    expect(rowOf("Ana Prueba").queryByText("Menor")).not.toBeInTheDocument();
+    expect(rowOf("Ana Prueba").queryByText(/Tutor:/)).not.toBeInTheDocument();
+
+    expect(rowOf("Beto Prueba").getByText("Menor")).toHaveAttribute("title", "12 años");
+    expect(rowOf("Beto Prueba").getByText(/Tutor: Marta Tutora/)).toBeInTheDocument();
+    expect(rowOf("Beto Prueba").getByRole("link", { name: "600 000 001" })).toHaveAttribute("href", "tel:600000001");
+
+    // Un menor sin tutor apuntado lo avisa, no calla
+    expect(rowOf("Dani Sin Tutor").getByText("Menor")).toBeInTheDocument();
+    expect(rowOf("Dani Sin Tutor").getByText(/Sin tutor apuntado/)).toBeInTheDocument();
+  });
+
   it("las pasadas llevan a pasar lista (o a ver la ya pasada)", async () => {
     await renderPage();
     await screen.findByText("Marta Prueba", {}, WAIT);

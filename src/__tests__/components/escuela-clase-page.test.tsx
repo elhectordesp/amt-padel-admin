@@ -103,6 +103,41 @@ describe("Escuela: pasar lista", () => {
     expect(screen.getByRole("link", { name: /Volver a Iniciación/ })).toHaveAttribute("href", "/mi-club/escuela/grupos/g1");
   });
 
+  it("el alumno menor lleva «Menor» y el nombre y teléfono del tutor para avisarle; también quien recupera", async () => {
+    school.sessions.sheet.mockResolvedValue(
+      sheet({
+        students: [
+          student0("cc1", "Ana Prueba", null, { birthDate: "1990-05-05", age: 36, isMinor: false, guardianName: null, guardianPhone: null }),
+          student0("cc2", "Beto Prueba", null, {
+            birthDate: "2014-06-30", age: 12, isMinor: true, guardianName: "Marta Tutora", guardianPhone: "600000001",
+          }),
+          student0("cc3", "Carla Prueba", null, {
+            recovery: true, usedCreditId: "cr1",
+            birthDate: "2012-01-05", age: 14, isMinor: true, guardianName: "Pedro Tutor", guardianPhone: "600000002",
+          }),
+          student0("cc4", "Dani Prueba", null, { birthDate: "2016-01-10", age: 10, isMinor: true, guardianName: null, guardianPhone: null }),
+        ],
+      }),
+    );
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    const rowOf = (name: string) => within(screen.getByRole("group", { name: `Asistencia de ${name}` }).closest("li") as HTMLElement);
+
+    expect(rowOf("Ana Prueba").queryByText("Menor")).not.toBeInTheDocument();
+    expect(rowOf("Ana Prueba").queryByText(/Tutor:/)).not.toBeInTheDocument();
+
+    expect(rowOf("Beto Prueba").getByText("Menor")).toHaveAttribute("title", "12 años");
+    expect(rowOf("Beto Prueba").getByText(/Tutor: Marta Tutora/)).toBeInTheDocument();
+    expect(rowOf("Beto Prueba").getByRole("link", { name: "600000001" })).toHaveAttribute("href", "tel:600000001");
+
+    expect(rowOf("Carla Prueba").getByText("Recupera")).toBeInTheDocument();
+    expect(rowOf("Carla Prueba").getByText("Menor")).toBeInTheDocument();
+    expect(rowOf("Carla Prueba").getByText(/Tutor: Pedro Tutor/)).toBeInTheDocument();
+
+    expect(rowOf("Dani Prueba").getByText("Menor")).toBeInTheDocument();
+    expect(rowOf("Dani Prueba").getByText(/Sin tutor apuntado/)).toBeInTheDocument();
+  });
+
   it("guarda solo lo que se ha cambiado", async () => {
     school.sessions.setAttendance.mockResolvedValue(
       sheet({

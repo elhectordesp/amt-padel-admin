@@ -20,6 +20,7 @@ import { Header } from "@/components/admin/header";
 import { errorText } from "@/components/admin/price-seasons-panel";
 import { SchoolAbsenceDialog } from "@/components/admin/school-absence-dialog";
 import { SchoolCancelSessionModal } from "@/components/admin/school-cancel-session-modal";
+import { SchoolGuardianLine, SchoolMinorBadge } from "@/components/admin/school-minor-info";
 import { SchoolRecoveryDialog } from "@/components/admin/school-recovery-dialog";
 import { Button } from "@/components/ui/button";
 import { invalidateSchool, schoolQK, schoolService } from "@/lib/services/school";
@@ -242,6 +243,7 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                               Recupera
                             </span>
                           )}
+                          <SchoolMinorBadge student={s} />
                         </span>
                         <div role="group" aria-label={`Asistencia de ${s.name ?? "alumno"}`} className="flex gap-1">
                           {OPTIONS.map((option) => (
@@ -267,6 +269,7 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                         </div>
                       </div>
 
+                      <SchoolGuardianLine student={s} />
                       {!s.recovery && s.noticedAt && (
                         <p className="text-xs text-muted-foreground">
                           Avisó de que falta el {dateTimeText(s.noticedAt, timeZone)}
