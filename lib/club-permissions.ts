@@ -22,6 +22,8 @@ export const CLUB_AREAS = [
   // horarios y excepciones, su config de reservas): lo lee todo el equipo. No es
   // un área de menú ni de página (areaForPath nunca la devuelve).
   "club", "tournaments", "results", "bookings", "customers", "cash", "settings", "staff",
+  // Escuela del club: grupos, alumnos, clases y asistencia
+  "school",
 ] as const;
 export type ClubArea = (typeof CLUB_AREAS)[number];
 
@@ -48,15 +50,15 @@ export const ROLE_DESCRIPTION: Record<ClubStaffRole, string> = {
   MANAGER:     "Todo el club menos gestionar el equipo (lo ve, pero no lo cambia).",
   TOURNAMENTS: "Crea y lleva los torneos y sus resultados. Ve reservas y clientes.",
   RESULTS:     "Mete los resultados de los partidos. Ve los torneos, nada más.",
-  RECEPTION:   "Reservas, clientes y caja. Ve los torneos y la configuración del club.",
-  COACH:       "Ve las reservas (para saber cuándo da clase). No cambia nada.",
+  RECEPTION:   "Reservas, clientes, caja y escuela. Ve los torneos y la configuración del club.",
+  COACH:       "Ve las reservas y sus grupos de la escuela, y pasa lista. No cambia nada más.",
 };
 
 type Grant = Partial<Record<ClubArea, AccessLevel>>;
 
 const ALL_WRITE: Grant = {
   club: "write", tournaments: "write", results: "write", bookings: "write", customers: "write",
-  cash: "write", settings: "write", staff: "write",
+  cash: "write", settings: "write", staff: "write", school: "write",
 };
 
 const PERMISSIONS: Record<ClubStaffRole, Grant> = {
@@ -64,8 +66,9 @@ const PERMISSIONS: Record<ClubStaffRole, Grant> = {
   MANAGER:     { ...ALL_WRITE, staff: "read" },
   TOURNAMENTS: { club: "read", tournaments: "write", results: "write", bookings: "read", customers: "read" },
   RESULTS:     { club: "read", tournaments: "read", results: "write" },
-  RECEPTION:   { club: "read", bookings: "write", customers: "write", cash: "write", tournaments: "read", settings: "read" },
-  COACH:       { club: "read", bookings: "read" },
+  RECEPTION:   { club: "read", bookings: "write", customers: "write", cash: "write", tournaments: "read", settings: "read", school: "write" },
+  // Lee la escuela y pasa lista de sus grupos (el back lo comprueba: solo los suyos)
+  COACH:       { club: "read", bookings: "read", school: "read" },
 };
 
 /** Si alguno de los roles da ese nivel en el área (escribir incluye leer). */
@@ -84,11 +87,13 @@ export function canAccess(
  * El área de una página del panel del club, o null si es de libre acceso
  * (portada, perfil...). Reservas: calendario y listado son del área
  * «bookings»; el resto de ajustes de reservas (pistas, precios, horarios...)
- * son configuración del club.
+ * son configuración del club. La escuela (`/mi-club/escuela`) es la suya, antes
+ * del comodín de `/mi-club`.
  */
 export function areaForPath(pathname: string): ClubArea | null {
   const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
   if (under("/mi-club/equipo") || under("/historial")) return "staff";
+  if (under("/mi-club/escuela")) return "school";
   if (under("/mi-club/clientes") || under("/mi-club/mensajes")) return "customers";
   if (under("/mi-club/torneos") || under("/torneos") || under("/ligas") || under("/inscripciones")) return "tournaments";
   if (under("/resultados")) return "results";

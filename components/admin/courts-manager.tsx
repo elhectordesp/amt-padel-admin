@@ -286,18 +286,28 @@ function CourtRow({
                     {b.startTime && b.endTime && ` · ${b.startTime}–${b.endTime}`}
                     {b.reason && ` · ${b.reason}`}
                   </span>
-                  <button
-                    onClick={() => setConfirmDeleteBlock(b)}
-                    disabled={removeBlock.isPending}
-                    className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
-                    title="Eliminar bloqueo"
-                  >
-                    {removeBlock.isPending ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <X size={12} />
-                    )}
-                  </button>
+                  {b.schoolSessionId ? (
+                    // La pista de una clase de la escuela se cambia o libera desde Escuela
+                    <span
+                      className="shrink-0 text-muted-foreground"
+                      title="Es una clase de la escuela: se cambia o se cancela desde Escuela"
+                    >
+                      Escuela
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteBlock(b)}
+                      disabled={removeBlock.isPending}
+                      className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
+                      title="Eliminar bloqueo"
+                    >
+                      {removeBlock.isPending ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <X size={12} />
+                      )}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

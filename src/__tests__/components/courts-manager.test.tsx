@@ -183,4 +183,18 @@ describe("CourtsManager", () => {
       expect(blocksCreateMock).toHaveBeenCalledWith("club-1", "c1", expect.objectContaining({ kind: "EVENT", startDate: "2026-12-01" })),
     );
   });
+
+  it("el bloqueo de una clase de la escuela es de solo lectura: se gestiona desde Escuela", async () => {
+    listMock.mockResolvedValue([makeCourt({ id: "c1", name: "Pista 1" })]);
+    blocksListMock.mockResolvedValue([
+      { id: "k1", courtId: "c1", kind: "CLASS", startDate: "2026-11-23", endDate: "2026-11-23", startTime: "18:00", endTime: "19:00", reason: "Iniciación", schoolSessionId: "ses-1", createdAt: "" },
+      { id: "k2", courtId: "c1", kind: "MAINTENANCE", startDate: "2026-11-24", endDate: "2026-11-24", reason: "Obras", createdAt: "" },
+    ]);
+    renderWithClient(<CourtsManager clubId="club-1" />);
+    fireEvent.click(await screen.findByTitle("Gestionar bloqueos"));
+
+    expect(await screen.findByText("Escuela")).toBeInTheDocument();
+    // Solo el bloqueo normal se puede eliminar
+    expect(screen.getAllByTitle("Eliminar bloqueo")).toHaveLength(1);
+  });
 });
