@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { phaseLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
-import { isByeMatch } from "@/lib/utils/match-status";
+import { hasBothPairs, isByeMatch } from "@/lib/utils/match-status";
 import { dateOnlyKey, formatDayKey, tournamentTimeZone, zonedDayKey, zonedMinutes } from "@/lib/utils/time-zone";
 import { fitsInWindows, phaseDuration, windowsForDay } from "@/lib/utils/schedule-windows";
 import type { MatchResult } from "@/types";
@@ -165,13 +165,16 @@ function DraggableMatch({
 
   const isFinished = !!(m as any).isResult;
   const hasSets    = isFinished && (m as any).sets1 && (m as any).sets2;
+  // Un partido con una pareja «por definir» no admite resultado (el back lo
+  // rechaza): no se ofrece. Sigue pudiéndose mover por la rejilla.
+  const canClick   = !isFinished && hasBothPairs(m);
 
   return (
     <div
       ref={setNodeRef}
       {...(draggable ? { ...listeners, ...attributes } : {})}
-      onClick={() => !isFinished && onMatchClick(m)}
-      className={`p-0.5 ${!isFinished ? "cursor-pointer" : ""}`}
+      onClick={() => canClick && onMatchClick(m)}
+      className={`p-0.5 ${canClick ? "cursor-pointer" : ""}`}
       style={{
         gridColumn: colIdx + 2,
         gridRow: `${rowStart} / span ${rowSpan}`,
