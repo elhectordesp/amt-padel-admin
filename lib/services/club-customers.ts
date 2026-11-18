@@ -26,6 +26,22 @@ export interface ClubCustomer {
   /** Cuándo se dio de baja de los mensajes del club (lo hace la persona desde el email; el club no puede quitarlo). */
   messagesOptOutAt?: string | null;
   createdAt:    string;
+  // Menores. No vienen con un back anterior: sin ellos, es un adulto.
+  /** AAAA-MM-DD */
+  birthDate?:         string | null;
+  /** Años cumplidos hoy en el reloj del club; null sin fecha de nacimiento. */
+  age?:               number | null;
+  /** Menos de 18 años. */
+  isMinor?:           boolean;
+  guardianName?:      string | null;
+  guardianPhone?:     string | null;
+  guardianEmail?:     string | null;
+  /** Cuándo apuntó el club que el tutor consintió; quién, en el historial. */
+  guardianConsentAt?: string | null;
+  /** Menor de 14: necesita el consentimiento del tutor. */
+  guardianConsentRequired?: boolean;
+  /** Menor de 14 sin el consentimiento apuntado: no se le escribe. */
+  guardianConsentMissing?: boolean;
 }
 
 export interface ClubCustomerBooking {
@@ -68,7 +84,16 @@ export interface ClubCustomersPage {
   pageSize: number;
 }
 
-export interface CreateClubCustomerPayload {
+/** Nacimiento y tutor de un menor; null borra el dato al editar. El consentimiento se apunta aparte. */
+export interface GuardianPayload {
+  /** AAAA-MM-DD, no futura. */
+  birthDate?:     string | null;
+  guardianName?:  string | null;
+  guardianPhone?: string | null;
+  guardianEmail?: string | null;
+}
+
+export interface CreateClubCustomerPayload extends GuardianPayload {
   /** Con cuenta AMT: nada más (el contacto sale de la cuenta). */
   userId?: string;
   name?:   string;
@@ -76,7 +101,7 @@ export interface CreateClubCustomerPayload {
   email?:  string;
 }
 
-export interface UpdateClubCustomerPayload {
+export interface UpdateClubCustomerPayload extends GuardianPayload {
   name?:         string;
   phone?:        string | null;
   email?:        string | null;
@@ -126,6 +151,11 @@ export const clubCustomersService = {
       })
       .then((r) => r.data);
   },
+  /** Apunta que el tutor ha consentido (necesita su nombre guardado). */
+  markGuardianConsent: (clubId: string, id: string) =>
+    api.post<ClubCustomer>(`${base(clubId)}/${id}/guardian-consent`).then((r) => r.data),
+  clearGuardianConsent: (clubId: string, id: string) =>
+    api.delete<ClubCustomer>(`${base(clubId)}/${id}/guardian-consent`).then((r) => r.data),
   archive: (clubId: string, id: string) =>
     api.post<ClubCustomer>(`${base(clubId)}/${id}/archive`).then((r) => r.data),
   unarchive: (clubId: string, id: string) =>

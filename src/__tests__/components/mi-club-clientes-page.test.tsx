@@ -22,6 +22,7 @@ const service = vi.hoisted(() => ({
   list: vi.fn(),
   tags: vi.fn(),
   create: vi.fn(),
+  markGuardianConsent: vi.fn(),
 }));
 vi.mock("@/lib/services/club-customers", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/club-customers")>("@/lib/services/club-customers");
@@ -91,6 +92,100 @@ describe("Clientes del club", () => {
     fireEvent.change(phone, { target: { value: " 699000111 " } });
     submit();
     await waitFor(() => expect(service.create).toHaveBeenCalledWith("c1", { name: "Luis Gómez", phone: "699000111", email: undefined }), WAIT);
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/clientes/cc-2"), WAIT);
+  });
+
+  it("marca a los menores y avisa de los menores de 14 a los que falta el consentimiento del tutor", async () => {
+    service.list.mockResolvedValue({
+      items: [
+        ANA,
+        { ...ANA, id: "cc-3", name: "Leo Pérez", isMinor: true, guardianConsentMissing: true },
+        { ...ANA, id: "cc-4", name: "Nico Gil", isMinor: true, guardianConsentMissing: false },
+      ],
+      total: 3, page: 1, pageSize: 50,
+    });
+    renderPage();
+    const leo = (await screen.findByText("Leo Pérez", {}, WAIT)).closest("tr")!;
+    expect(within(leo).getByText("Menor")).toBeInTheDocument();
+    expect(within(leo).getByText("Falta el consentimiento del tutor")).toBeInTheDocument();
+
+    const nico = screen.getByText("Nico Gil").closest("tr")!;
+    expect(within(nico).getByText("Menor")).toBeInTheDocument();
+    expect(within(nico).queryByText("Falta el consentimiento del tutor")).not.toBeInTheDocument();
+
+    const ana = screen.getByText("Ana Pérez").closest("tr")!;
+    expect(within(ana).queryByText("Menor")).not.toBeInTheDocument();
+  });
+
+  it("Nuevo cliente con fecha de nacimiento de menor: pide el tutor y deja constancia de su consentimiento", async () => {
+    renderPage();
+    await screen.findByText("Ana Pérez", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: /Nuevo cliente/ }));
+    const dialog = screen.getByRole("dialog", { name: "Nuevo cliente" });
+    const submit = () => fireEvent.click(within(dialog).getByRole("button", { name: "Añadir cliente" }));
+
+    // Sin fecha de nacimiento (o adulto) no hay sección de tutor
+    expect(within(dialog).queryByLabelText("Nombre del tutor")).not.toBeInTheDocument();
+    const [name] = within(dialog).getAllByRole("textbox");
+    fireEvent.change(name, { target: { value: "Leo Pérez" } });
+    fireEvent.change(within(dialog).getByLabelText("Fecha de nacimiento"), { target: { value: "1990-01-01" } });
+    expect(within(dialog).queryByLabelText("Nombre del tutor")).not.toBeInTheDocument();
+
+    // Un niño de 8 años (con margen para cualquier día del año)
+    const born = new Date();
+    born.setFullYear(born.getFullYear() - 8, born.getMonth() - 6, 15);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const day = `${born.getFullYear()}-${pad(born.getMonth() + 1)}-${pad(born.getDate())}`;
+    fireEvent.change(within(dialog).getByLabelText("Fecha de nacimiento"), { target: { value: day } });
+    expect(await within(dialog).findByLabelText("Nombre del tutor")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("Es obligatorio por debajo de 14 años");
+
+    // Sin teléfono ni email suyos ni del tutor, no se manda
+    submit();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("el suyo o el de su tutor");
+    expect(service.create).not.toHaveBeenCalled();
+
+    // El consentimiento sin nombre del tutor tampoco
+    fireEvent.change(within(dialog).getByLabelText("Email del tutor"), { target: { value: "marta@ejemplo.com" } });
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    submit();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("nombre del tutor");
+    expect(service.create).not.toHaveBeenCalled();
+
+    service.markGuardianConsent.mockResolvedValue({ ...ANA, id: "cc-2" });
+    fireEvent.change(within(dialog).getByLabelText("Nombre del tutor"), { target: { value: " Marta Pérez " } });
+    submit();
+    await waitFor(
+      () =>
+        expect(service.create).toHaveBeenCalledWith("c1", {
+          name: "Leo Pérez", birthDate: day, guardianName: "Marta Pérez", guardianEmail: "marta@ejemplo.com",
+        }),
+      WAIT,
+    );
+    await waitFor(() => expect(service.markGuardianConsent).toHaveBeenCalledWith("c1", "cc-2"), WAIT);
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/clientes/cc-2"), WAIT);
+  });
+
+  it("si falla apuntar el consentimiento al dar de alta, el cliente queda creado y se avisa", async () => {
+    service.markGuardianConsent.mockRejectedValue(new Error("Sin conexión"));
+    renderPage();
+    await screen.findByText("Ana Pérez", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: /Nuevo cliente/ }));
+    const dialog = screen.getByRole("dialog", { name: "Nuevo cliente" });
+    const [name, phone] = within(dialog).getAllByRole("textbox");
+    fireEvent.change(name, { target: { value: "Leo Pérez" } });
+    fireEvent.change(phone, { target: { value: "699000111" } });
+    const born = new Date();
+    born.setFullYear(born.getFullYear() - 8, born.getMonth() - 6, 15);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    fireEvent.change(within(dialog).getByLabelText("Fecha de nacimiento"), {
+      target: { value: `${born.getFullYear()}-${pad(born.getMonth() + 1)}-${pad(born.getDate())}` },
+    });
+    fireEvent.change(await within(dialog).findByLabelText("Nombre del tutor"), { target: { value: "Marta Pérez" } });
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Añadir cliente" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("no se pudo apuntar el consentimiento")), WAIT);
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/clientes/cc-2"), WAIT);
   });
 

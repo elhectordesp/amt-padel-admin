@@ -185,6 +185,14 @@ export default function ClientesPage() {
                       </Link>
                       {!c.hasAccount && <span className="ml-2 text-xs text-muted-foreground">sin app</span>}
                       {c.archivedAt && <span className="ml-2 text-xs text-muted-foreground">archivado</span>}
+                      {c.isMinor && (
+                        <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Menor</span>
+                      )}
+                      {c.guardianConsentMissing && (
+                        <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                          Falta el consentimiento del tutor
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{c.phone ?? "—"}</td>
                     <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">{c.email ?? "—"}</td>

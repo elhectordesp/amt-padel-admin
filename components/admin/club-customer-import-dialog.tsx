@@ -21,9 +21,9 @@ const MAX_BYTES = 1024 * 1024;
 
 // BOM y «;» para que Excel en español lo abra bien y lo lea por columnas
 const TEMPLATE =
-  "﻿nombre;email;telefono;socio;numero_socio;fecha_alta;etiquetas;notas\r\n" +
-  "Ana García;ana@ejemplo.com;600112233;sí;A-001;15/03/2023;Profe|Zurdo;Prefiere pistas por la tarde\r\n" +
-  "Luis Pérez;;611223344;no;;;;\r\n";
+  "﻿nombre;email;telefono;socio;numero_socio;fecha_alta;fecha_nacimiento;etiquetas;notas\r\n" +
+  "Ana García;ana@ejemplo.com;600112233;sí;A-001;15/03/2023;12/05/1985;Profe|Zurdo;Prefiere pistas por la tarde\r\n" +
+  "Luis Pérez;;611223344;no;;;;;\r\n";
 
 function downloadTemplate() {
   const url = URL.createObjectURL(new Blob([TEMPLATE], { type: "text/csv;charset=utf-8" }));
@@ -108,6 +108,7 @@ export function ClubCustomerImportDialog({ open, clubId, onClose }: Props) {
               <p className="text-muted-foreground">
                 Sube un CSV con tu lista de clientes y socios (máximo 2.000 filas y 1 MB). En Excel: Guardar como «CSV UTF-8».
                 Solo es obligatorio el nombre y, para localizar a cada persona, un teléfono o un email.
+                La columna fecha_nacimiento (dd/mm/aaaa) es opcional: con ella se sabe quién es menor.
                 Antes de guardar nada verás qué entra y qué no.
               </p>
               <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>

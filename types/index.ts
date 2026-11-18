@@ -177,6 +177,11 @@ export interface Court {
   isCentral: boolean;
   order:     number;
   active:    boolean;
+  /**
+   * Bloqueos de la pista. El listado del club trae solo los que acaban hoy o
+   * después (`GET /admin/clubs/:id/courts?from=&to=` pide otro rango): la
+   * lista completa de una pista, en `courts.blocks.list`.
+   */
   blocks?:   CourtBlock[];
   // Atributos del módulo Reservas (Sprint 1)
   type?:             "SINGLES" | "DOUBLES";
