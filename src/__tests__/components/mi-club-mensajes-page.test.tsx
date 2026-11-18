@@ -28,6 +28,12 @@ vi.mock("@/lib/services/club-messages", async () => {
 });
 
 import MensajesPage from "../../../app/(admin)/mi-club/mensajes/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
+
+const asRole = (role: string) => ({
+  id: "staff", name: "Equipo", activeClubId: "c1",
+  clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+});
 
 const SENT = {
   id: "m1", title: "Cerramos el sábado", body: "Torneo", sendPush: true, sendEmail: true,
@@ -35,8 +41,10 @@ const SENT = {
   sentBy: { id: "u1", name: "Gestor Club" }, createdAt: "2026-11-10T09:30:00.000Z",
 };
 
-function renderPage() {
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage(me?: object) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <MensajesPage />
@@ -111,5 +119,20 @@ describe("Mensajes del club", () => {
       WAIT,
     );
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Mensaje enviado a 30 clientes"), WAIT);
+  });
+
+  it("con un rol de solo lectura (Torneos) se ve lo enviado, pero no el formulario ni «Enviar»", async () => {
+    renderPage(asRole("TOURNAMENTS"));
+    expect(await screen.findByText("Cerramos el sábado", {}, WAIT)).toBeTruthy();
+    expect(screen.queryByLabelText("Título")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enviar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ver a cuántos llega/ })).toBeNull();
+  });
+
+  it("con escritura (Recepción) están el formulario y «Enviar»", async () => {
+    renderPage(asRole("RECEPTION"));
+    await screen.findByText("Cerramos el sábado", {}, WAIT);
+    expect(screen.getByLabelText("Título")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enviar" })).toBeTruthy();
   });
 });

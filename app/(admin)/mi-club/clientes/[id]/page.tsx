@@ -30,7 +30,7 @@ import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { formatCents } from "@/lib/utils/booking-price";
-import { formatInTimeZone } from "@/lib/utils/time-zone";
+import { formatDayKey, formatInTimeZone } from "@/lib/utils/time-zone";
 
 const BACK = { href: "/mi-club/clientes", label: "Volver a Clientes" };
 
@@ -101,8 +101,11 @@ function CustomerView({
   clubId, customer: c, timeZone,
 }: { clubId: string; customer: ClubCustomerDetail; timeZone: string | null }) {
   const qc = useQueryClient();
+  const { can } = useClubAccess();
   // Los bonos son dinero: solo los ve quien puede leer la caja
-  const canSeeVouchers = useClubAccess().can("cash", "read");
+  const canSeeVouchers = can("cash", "read");
+  // Quien solo lee los clientes ve la ficha, sin formularios ni botones
+  const canWrite = can("customers", "write");
   const [tab, setTab] = useState<Tab>("bookings");
   const [notes, setNotes] = useState(c.notes ?? "");
   const [isMember, setIsMember] = useState(c.isMember);
@@ -153,22 +156,26 @@ function CustomerView({
           {c.archivedAt && " · Archivado"}
           {c.messagesOptOutAt && " · No recibe mensajes del club"}
         </div>
-        <Button variant="outline" size="sm" onClick={() => archive.mutate()} disabled={archive.isPending}>
-          {c.archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-          {c.archivedAt ? "Recuperar cliente" : "Archivar cliente"}
-        </Button>
+        {canWrite && (
+          <Button variant="outline" size="sm" onClick={() => archive.mutate()} disabled={archive.isPending}>
+            {c.archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+            {c.archivedAt ? "Recuperar cliente" : "Archivar cliente"}
+          </Button>
+        )}
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Contacto">
-          {c.hasAccount ? (
+          {c.hasAccount || !canWrite ? (
             <>
               <Row label="Nombre" value={c.name} />
               <Row label="Teléfono" value={c.phone} />
               <Row label="Email" value={c.email} />
-              <p className="text-xs text-muted-foreground">
-                Es el contacto de su cuenta de AMT. Si lo cambia en su perfil, aquí se actualiza solo.
-              </p>
+              {c.hasAccount && (
+                <p className="text-xs text-muted-foreground">
+                  Es el contacto de su cuenta de AMT. Si lo cambia en su perfil, aquí se actualiza solo.
+                </p>
+              )}
             </>
           ) : (
             <>
@@ -181,20 +188,35 @@ function CustomerView({
         </Card>
 
         <Card title="Socio del club">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={isMember} onChange={(e) => setIsMember(e.target.checked)} />
-            Es socio
-          </label>
-          {isMember && (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Número de socio"><Input value={memberNumber} onChange={(e) => setMemberNumber(e.target.value)} maxLength={30} /></Field>
-              <Field label="Fecha de alta"><Input type="date" value={memberSince} onChange={(e) => setMemberSince(e.target.value)} /></Field>
-            </div>
+          {canWrite ? (
+            <>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={isMember} onChange={(e) => setIsMember(e.target.checked)} />
+                Es socio
+              </label>
+              {isMember && (
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Número de socio"><Input value={memberNumber} onChange={(e) => setMemberNumber(e.target.value)} maxLength={30} /></Field>
+                  <Field label="Fecha de alta"><Input type="date" value={memberSince} onChange={(e) => setMemberSince(e.target.value)} /></Field>
+                </div>
+              )}
+              {isMember && !c.isMember && (
+                <p className="text-xs text-muted-foreground">Si no pones fecha de alta, se apunta la de hoy.</p>
+              )}
+              <Button size="sm" onClick={saveMember} disabled={save.isPending}><Save className="h-3.5 w-3.5" /> Guardar socio</Button>
+            </>
+          ) : (
+            <>
+              <Row label="Socio" value={c.isMember ? "Sí" : "No"} />
+              {c.isMember && <Row label="Número de socio" value={c.memberNumber} />}
+              {c.isMember && (
+                <Row
+                  label="Fecha de alta"
+                  value={c.memberSince ? formatDayKey(c.memberSince, { day: "numeric", month: "numeric", year: "numeric" }) : null}
+                />
+              )}
+            </>
           )}
-          {isMember && !c.isMember && (
-            <p className="text-xs text-muted-foreground">Si no pones fecha de alta, se apunta la de hoy.</p>
-          )}
-          <Button size="sm" onClick={saveMember} disabled={save.isPending}><Save className="h-3.5 w-3.5" /> Guardar socio</Button>
         </Card>
 
         <Card title="Etiquetas">
@@ -202,23 +224,32 @@ function CustomerView({
             tags={c.tags}
             suggestions={tagsQuery.data ?? []}
             disabled={save.isPending}
+            readOnly={!canWrite}
             onChange={(tags) => save.mutate({ tags })}
           />
         </Card>
 
         <Card title="Notas privadas del club">
-          <textarea
-            aria-label="Notas privadas del club"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            maxLength={2000}
-            rows={5}
-            placeholder="Lo que quieras recordar de esta persona. Solo lo ve tu club."
-            className="w-full rounded-md bg-input border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
-          />
-          <Button size="sm" onClick={() => save.mutate({ notes: notes.trim() || null })} disabled={save.isPending}>
-            <Save className="h-3.5 w-3.5" /> Guardar notas
-          </Button>
+          {canWrite ? (
+            <>
+              <textarea
+                aria-label="Notas privadas del club"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                maxLength={2000}
+                rows={5}
+                placeholder="Lo que quieras recordar de esta persona. Solo lo ve tu club."
+                className="w-full rounded-md bg-input border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+              />
+              <Button size="sm" onClick={() => save.mutate({ notes: notes.trim() || null })} disabled={save.isPending}>
+                <Save className="h-3.5 w-3.5" /> Guardar notas
+              </Button>
+            </>
+          ) : c.notes ? (
+            <p className="whitespace-pre-wrap text-sm">{c.notes}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin notas.</p>
+          )}
         </Card>
       </div>
 
