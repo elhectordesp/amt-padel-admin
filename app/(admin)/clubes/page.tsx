@@ -100,8 +100,8 @@ function ClubModal({
       : { ...EMPTY_FORM }
   );
   // Alta de un club nuevo en dos pasos: datos del club y email de su primer
-  // propietario. Si el club se crea y la invitación falla, el club ya existe:
-  // se reintenta solo la invitación.
+  // propietario. El club se crea inactivo y se activa al salir la invitación;
+  // si falla, queda oculto y se reintenta solo la invitación.
   const [step,         setStep]         = useState<1 | 2>(1);
   const [ownerEmail,   setOwnerEmail]   = useState("");
   const [created,      setCreated]      = useState<Club | null>(null);
@@ -161,12 +161,16 @@ function ClubModal({
     setInviteError(null);
     let target = created;
     if (!target) {
-      target = await adminService.clubs.create(payload);
+      // Nace «por configurar» (fuera de la app): solo se activa cuando la
+      // invitación al propietario ha salido, para no dejar un club vacío visible
+      target = await adminService.clubs.create({ ...payload, active: false });
       setCreated(target);
       qc.invalidateQueries({ queryKey: ["admin-clubs"] });
     }
     try {
       await adminService.clubs.inviteStaff(target.id, ownerEmail.trim(), ["OWNER"]);
+      target = await adminService.clubs.update(target.id, { active: true });
+      setCreated(target);
     } catch (e) {
       inviteFailed.current = true;
       setInviteError(e instanceof Error ? e.message : "No se pudo enviar la invitación");
