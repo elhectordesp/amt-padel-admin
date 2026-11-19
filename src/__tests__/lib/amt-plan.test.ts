@@ -35,7 +35,12 @@ describe("feeText", () => {
   });
   it("sin importe: null", () => {
     expect(feeText(plan({ bookingPlan: "FREE", bookingMonthlyFeeCents: null }))).toBeNull();
-    expect(feeText(plan({ bookingPlan: "CUSTOM" }))).toBeNull();
+    expect(feeText(plan({ bookingPlan: "CUSTOM", bookingMonthlyFeeCents: null, bookingCommissionRate: null }))).toBeNull();
+  });
+  it("acuerdo especial: enseña la cuota y/o la comisión si vienen", () => {
+    expect(feeText(plan({ bookingPlan: "CUSTOM", bookingMonthlyFeeCents: 3000, bookingCommissionRate: null }))).toBe("30 €/mes");
+    expect(feeText(plan({ bookingPlan: "CUSTOM", bookingMonthlyFeeCents: null, bookingCommissionRate: 0.05 }))).toBe("5 % de comisión");
+    expect(feeText(plan({ bookingPlan: "CUSTOM", bookingMonthlyFeeCents: 3000, bookingCommissionRate: 0.05 }))).toBe("30 €/mes · 5 % de comisión");
   });
 });
 
