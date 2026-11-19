@@ -4,11 +4,15 @@
  */
 import type { CancelManyResult } from "@/types/bookings";
 
+/** Código propio: el lote falló (red o servidor) y esta reserva no llegó a procesarse. */
+export const CANCEL_NOT_PROCESSED = "NOT_PROCESSED";
+
 const FAILURE_REASONS: Record<string, string> = {
   BOOKING_ALREADY_CANCELLED: "ya estaba cancelada",
   BOOKING_CANNOT_CANCEL_COMPLETED: "ya se jugó",
   BOOKING_ALREADY_PLAYED: "ya se jugó",
   BOOKING_NOT_FOUND: "no se ha encontrado",
+  [CANCEL_NOT_PROCESSED]: "no se llegó a procesar por un error: sigue sin cancelar",
 };
 
 export function cancelFailureReason(code: string): string {

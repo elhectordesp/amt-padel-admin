@@ -492,6 +492,24 @@ describe("ClubesPage — ficha del club", () => {
   });
 });
 
+describe("ClubesPage — vaciar datos de un club", () => {
+  it("vaciar web, teléfono, logo y email manda null, no undefined", async () => {
+    vi.clearAllMocks();
+    const full = { ...ACTIVE, website: "https://a.es", phone: "911111111", logoUrl: "https://a.es/l.png", contactEmail: "a@a.es" };
+    clubsMock.list.mockResolvedValue([full]);
+    clubsMock.update.mockResolvedValue(full);
+    renderPage();
+    fireEvent.click(within(await cardOf("Club Activo")).getByRole("button", { name: "Editar club" }));
+    for (const v of ["https://a.es", "911111111", "https://a.es/l.png", "a@a.es"])
+      fireEvent.change(screen.getByDisplayValue(v), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar/ }));
+    await waitFor(() => expect(clubsMock.update).toHaveBeenCalledWith(
+      "c-activo",
+      expect.objectContaining({ website: null, phone: null, logoUrl: null, contactEmail: null }),
+    ));
+  });
+});
+
 describe("ClubesPage — alta guiada: club y primer propietario", () => {
   beforeEach(() => {
     vi.clearAllMocks();

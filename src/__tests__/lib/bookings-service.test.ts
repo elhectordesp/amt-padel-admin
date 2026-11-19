@@ -85,6 +85,24 @@ describe("bookingsService.bookings", () => {
       ]);
     });
 
+    it("si falla un lote intermedio, conserva lo ya cancelado y marca el resto sin procesar", async () => {
+      postMock
+        .mockResolvedValueOnce({ data: { cancelled: ids(100), failed: [] } })
+        .mockRejectedValueOnce(new Error("Network Error"));
+
+      const result = await bookingsService.bookings.cancelMany(ids(250));
+
+      expect(postMock).toHaveBeenCalledTimes(2);
+      expect(result.cancelled).toHaveLength(100);
+      expect(result.failed).toHaveLength(150);
+      expect(result.failed[0]).toEqual({ id: "b100", code: "NOT_PROCESSED" });
+    });
+
+    it("si falla el primer lote, el error sale tal cual", async () => {
+      postMock.mockRejectedValueOnce(new Error("Network Error"));
+      await expect(bookingsService.bookings.cancelMany(ids(250))).rejects.toThrow("Network Error");
+    });
+
     it("hasta 100, una sola petición", async () => {
       respondByBatch();
       await bookingsService.bookings.cancelMany(ids(100));
