@@ -16,6 +16,7 @@ import { PaymentMethodPicker } from "@/components/admin/payment-fields";
 import { errorText } from "@/components/admin/price-seasons-panel";
 import { SchoolDialog } from "@/components/admin/school-dialog";
 import { Button } from "@/components/ui/button";
+import { clubVouchersService } from "@/lib/services/club-vouchers";
 import { schoolBillingQK, schoolBillingService } from "@/lib/services/school-billing";
 import { formatCents } from "@/lib/utils/booking-price";
 import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
@@ -51,6 +52,42 @@ export function SchoolFeePayDialog({
 
   return (
     <SchoolDialog title="Cobrar cuota" onClose={close} busy={pay.isPending}>
+      <p className="text-sm text-muted-foreground">
+        {subtitle} · <strong className="text-foreground">{formatCents(amountCents)}</strong>
+      </p>
+      <PaymentMethodPicker value={method} onChange={setMethod} disabled={pay.isPending} />
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={close} disabled={pay.isPending}>
+          Cancelar
+        </Button>
+        <Button type="button" size="sm" disabled={method === "" || pay.isPending} onClick={() => pay.mutate()}>
+          {pay.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+          Cobrar
+        </Button>
+      </div>
+    </SchoolDialog>
+  );
+}
+
+/** Cobrar un bono vendido y pendiente: el método del mostrador; el importe es su precio. */
+export function VoucherPayDialog({
+  clubId, voucherId, subtitle, amountCents, onDone, onClose,
+}: Common & { voucherId: string; amountCents: number }) {
+  const [method, setMethod] = useState<CounterPaymentMethod | "">("");
+
+  const pay = useMutation({
+    mutationFn: () => clubVouchersService.setPayment(clubId, voucherId, method as CounterPaymentMethod),
+    onSuccess: () => {
+      toast.success("Bono cobrado");
+      onDone();
+      onClose();
+    },
+    onError: (err: unknown) => toast.error(errorText(err)),
+  });
+  const close = () => { if (!pay.isPending) onClose(); };
+
+  return (
+    <SchoolDialog title="Cobrar bono" onClose={close} busy={pay.isPending}>
       <p className="text-sm text-muted-foreground">
         {subtitle} · <strong className="text-foreground">{formatCents(amountCents)}</strong>
       </p>

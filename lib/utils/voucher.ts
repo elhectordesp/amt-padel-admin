@@ -125,6 +125,32 @@ export function checkRefund(text: string, priceCents: number): Checked<number> {
   return { ok: true, value: cents };
 }
 
+/**
+ * Sesiones de un bono que aún no han empezado y se devuelven al bono al
+ * cancelarlo (el back las libera): reservas y clases con inicio posterior a
+ * `now`. Las que ya empezaron se quedan pagadas.
+ */
+export function futureSessionCount(
+  v: Pick<ClubVoucher, "uses">,
+  now: Date = new Date(),
+): number {
+  return v.uses.filter((u) => u.startsAt !== null && new Date(u.startsAt) > now).length;
+}
+
+/**
+ * La devolución que se propone al cancelar un bono cobrado: proporcional a las
+ * sesiones que quedan sin gastar, contando las que se devuelven al bono por no
+ * haber empezado. Redondeada al céntimo. El club puede cambiarla.
+ */
+export function proportionalRefundCents(
+  v: Pick<ClubVoucher, "priceCents" | "sessions" | "remainingSessions" | "uses">,
+  now: Date = new Date(),
+): number {
+  if (v.sessions <= 0) return 0;
+  const left = Math.min(v.sessions, v.remainingSessions + futureSessionCount(v, now));
+  return Math.round((v.priceCents * left) / v.sessions);
+}
+
 /** Si el bono admite todavía cobrarlo, gastarlo o cancelarlo (no está cancelado). */
 export function isVoucherOpen(v: Pick<ClubVoucher, "status">): boolean {
   return v.status !== "CANCELLED";

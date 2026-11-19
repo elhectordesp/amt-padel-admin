@@ -102,6 +102,8 @@ export interface Club {
   status?:              "active" | "pending" | "deactivated";
   // Aún con el nombre o la ciudad de relleno del alta rápida (lo calcula el back)
   pendingSetup?:        boolean;
+  // false: el único propietario borró su cuenta y el club no tiene a quién se le pueda pedir nada (lo calcula el back)
+  hasOwner?:            boolean;
   tournamentCount?:     number;
   lat?:                 number | null;
   lng?:                 number | null;

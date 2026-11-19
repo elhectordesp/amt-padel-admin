@@ -20,6 +20,11 @@ vi.mock("@/lib/services/cash", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/cash")>()),
   cashService: cashMock,
 }));
+const setVoucherPayment = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/services/club-vouchers", async (orig) => ({
+  ...(await orig<typeof import("@/lib/services/club-vouchers")>()),
+  clubVouchersService: { setPayment: setVoucherPayment },
+}));
 const markPaid = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/bookings", () => ({ bookingsService: { bookings: { markPaid } } }));
 const updatePayment = vi.hoisted(() => vi.fn());
@@ -203,6 +208,25 @@ describe("CajaPage", () => {
       expect(within(row).getByText("Bono")).toBeInTheDocument();
       expect(row).toHaveTextContent("0,00");
       expect(screen.getByText("Total del día").nextElementSibling).toHaveTextContent("45,00");
+    });
+
+    it("D3: un bono vendido sin cobrar sale en lo pendiente y se cobra con su método", async () => {
+      cashMock.debts.mockResolvedValue({
+        totalCents: 9000,
+        people: [{
+          key: "customer:cc9", name: "Marta", userId: null, customerId: "cc9", totalCents: 9000,
+          items: [{ source: "VOUCHER", refId: "v9", concept: "Bono Bono 10", date: "2026-11-01T10:00:00.000Z", amountCents: 9000 }],
+        }],
+      });
+      setVoucherPayment.mockResolvedValue({});
+      renderPage();
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Bono Bono 10");
+      fireEvent.click(screen.getByRole("button", { name: /Cobrar/ }));
+      const dialog = await screen.findByRole("dialog", { name: "Cobrar bono" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Tarjeta" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cobrar" }));
+      await waitFor(() => expect(setVoucherPayment).toHaveBeenCalledWith("club-1", "v9", "CARD"));
     });
 
     it("cobrar una cuota: solo el método (el importe es el de la cuota), en el servicio de la escuela", async () => {

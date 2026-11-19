@@ -169,11 +169,16 @@ describe("CustomerVouchersSection", () => {
       return within(await screen.findByRole("dialog"));
     }
 
-    it("propone devolver lo que costó, avisa de que lo gastado se queda y manda el importe en céntimos", async () => {
-      const dialog = await openCancel();
+    // Fechas fijas lejos de hoy: lo gastado ya empezó (2020) o aún no ha empezado (2099)
+    const PAST_USE = { id: "u-1", bookingId: "b1", usedAt: "2020-11-20T10:00:00.000Z", startsAt: "2020-11-25T17:00:00.000Z", courtName: "Pista 2" };
+    const FUTURE_USE = { ...PAST_USE, id: "u-2", bookingId: "b2", startsAt: "2099-11-25T17:00:00.000Z" };
+
+    it("propone devolver lo proporcional a las sesiones que quedan, avisa de que lo gastado se queda y manda el importe en céntimos", async () => {
+      const dialog = await openCancel({ ...PAID, uses: [PAST_USE] });
       expect(dialog.getByText(/La sesión ya gastada se queda|Las 3 sesiones ya gastadas se quedan/)).toBeInTheDocument();
       const amount = dialog.getByLabelText("Importe devuelto (a mano)");
-      expect(amount).toHaveValue("120,00");
+      // 7 de 10 sesiones sin gastar: 70 % de 120 €
+      expect(amount).toHaveValue("84,00");
 
       fireEvent.change(amount, { target: { value: "60" } });
       fireEvent.change(dialog.getByLabelText("Notas de la cancelación"), { target: { value: "Se lesionó" } });
@@ -182,6 +187,15 @@ describe("CustomerVouchersSection", () => {
       await waitFor(() =>
         expect(svc.cancel).toHaveBeenCalledWith("c1", "v1", { refundAmountCents: 6000, notes: "Se lesionó" }),
       );
+    });
+
+    it("las reservas que aún no han empezado vuelven al bono: el texto lo dice y la devolución las cuenta como sin gastar", async () => {
+      const dialog = await openCancel({ ...PAID, usedSessions: 3, remainingSessions: 7, uses: [PAST_USE, PAST_USE, FUTURE_USE] });
+      expect(dialog.getByText(/Las 2 sesiones ya gastadas se quedan/)).toBeInTheDocument();
+      expect(dialog.getByText(/La reserva que aún no ha empezado vuelve al bono y queda pendiente de cobro/)).toBeInTheDocument();
+      expect(dialog.getByText(/Las 8 sesiones sin gastar se pierden/)).toBeInTheDocument();
+      // 7 sin gastar + 1 que vuelve = 8 de 10: 96 €
+      expect(dialog.getByLabelText("Importe devuelto (a mano)")).toHaveValue("96,00");
     });
 
     it("una devolución mayor que el precio no se manda y dice por qué", async () => {

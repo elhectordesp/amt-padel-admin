@@ -30,7 +30,9 @@ import {
   VOUCHER_STATUS_LABEL,
   checkRefund,
   expiryLabel,
+  futureSessionCount,
   isVoucherOpen,
+  proportionalRefundCents,
   sessionsLabel,
   typeOptionLabel,
   voucherPaymentLabel,
@@ -213,7 +215,7 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
       <ConfirmModal
         open={!!uncollecting}
         title="Quitar el cobro del bono"
-        description={`«${uncollecting?.name ?? ""}» volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, esa caja no se reescribe: úsalo solo si lo marcaste por error.`}
+        description={`«${uncollecting?.name ?? ""}» volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, ese cobro dejará de salir en ella (la caja se calcula con los cobros apuntados, no se guarda): úsalo solo si lo marcaste por error.`}
         confirmLabel="Quitar el cobro"
         loading={unCollect.isPending}
         onClose={() => {
@@ -341,6 +343,38 @@ function CollectVoucherDialog({
   );
 }
 
+/** Qué pasa con las sesiones del bono al cancelarlo, dicho tal cual hace el back. */
+function cancelDescription(voucher: ClubVoucher): string {
+  const future = futureSessionCount(voucher);
+  const past = voucher.usedSessions - future;
+  const what = voucher.kind === "PRIVATE_CLASS" ? "clases" : "reservas";
+  const parts: string[] = [];
+  if (past > 0)
+    parts.push(
+      `Las ${past} ${past === 1 ? "sesión ya gastada se queda" : "sesiones ya gastadas se quedan"} (sus ${what} siguen pagadas).`,
+    );
+  if (future === 1)
+    parts.push(
+      `${what === "clases" ? "La clase" : "La reserva"} que aún no ha empezado vuelve al bono y queda pendiente de cobro.`,
+    );
+  else if (future > 1)
+    parts.push(`Las ${future} ${what} que aún no han empezado vuelven al bono y quedan pendientes de cobro.`);
+  const lost = voucher.remainingSessions + future;
+  parts.push(
+    lost === 0
+      ? "No quedan sesiones sin gastar."
+      : lost === 1
+        ? "La sesión sin gastar se pierde."
+        : `Las ${lost} sesiones sin gastar se pierden.`,
+  );
+  parts.push(
+    voucher.paid
+      ? "La devolución que se propone es proporcional a las sesiones sin gastar; cámbiala si el club decide otra cosa."
+      : "",
+  );
+  return parts.filter(Boolean).join(" ");
+}
+
 /**
  * Cancelar un bono: devolución manual. Solo se puede devolver de uno cobrado y
  * hasta lo que costó; lo ya gastado se queda.
@@ -348,7 +382,7 @@ function CollectVoucherDialog({
 function CancelVoucherDialog({
   clubId, voucher, onDone, onClose,
 }: { clubId: string; voucher: ClubVoucher; onDone: () => void; onClose: () => void }) {
-  const [refund, setRefund] = useState(voucher.paid ? centsToEurosInput(voucher.priceCents) : "");
+  const [refund, setRefund] = useState(voucher.paid ? centsToEurosInput(proportionalRefundCents(voucher)) : "");
   const [notes, setNotes] = useState("");
   const checked = checkRefund(refund, voucher.priceCents);
   // Mal escrito: lo dice el propio campo. Bien escrito pero de más: lo dice el aviso de debajo
@@ -375,11 +409,7 @@ function CancelVoucherDialog({
       open
       danger
       title={`Cancelar el bono «${voucher.name}»`}
-      description={
-        voucher.usedSessions > 0
-          ? `Las ${voucher.usedSessions} ${voucher.usedSessions === 1 ? "sesión ya gastada se queda" : "sesiones ya gastadas se quedan"} (${voucher.kind === "PRIVATE_CLASS" ? "sus clases siguen pagadas" : "sus reservas siguen pagadas"}). Las ${voucher.remainingSessions} que quedan se pierden.`
-          : "Se pierden todas sus sesiones."
-      }
+      description={cancelDescription(voucher)}
       confirmLabel="Cancelar bono"
       cancelLabel="Volver"
       loading={cancel.isPending}

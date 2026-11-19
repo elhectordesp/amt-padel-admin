@@ -253,7 +253,7 @@ function PrivateClassesList({ clubId, timeZone, canWrite }: { clubId: string; ti
         description={
           unpaying?.student.paymentMethod === "VOUCHER"
             ? `${unpaying.student.name ?? "El alumno"} volverá a estar pendiente y la sesión vuelve a su bono.`
-            : `${unpaying?.student.name ?? "El alumno"} volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, esa caja no se reescribe: úsalo solo si lo cobraste por error.`
+            : `${unpaying?.student.name ?? "El alumno"} volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, ese cobro dejará de salir en ella (la caja se calcula con los cobros apuntados, no se guarda): úsalo solo si lo cobraste por error.`
         }
         confirmLabel="Quitar el cobro"
         loading={unpay.isPending}

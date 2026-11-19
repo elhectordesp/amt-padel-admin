@@ -651,9 +651,14 @@ function ClubCard({
               <span className="truncate">{club.city}{club.autonomousCommunity ? ` · ${club.autonomousCommunity}` : ""}</span>
             </p>
             {/* Las etiquetas, debajo del nombre: a la derecha solo los botones */}
-            {(status === "deactivated" || status === "pending" || club.isAmtPartner) && (
+            {(status === "deactivated" || status === "pending" || club.isAmtPartner || club.hasOwner === false) && (
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 <ClubStatusBadge status={status} />
+                {club.hasOwner === false && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 border border-destructive/30 text-destructive whitespace-nowrap">
+                    Sin propietario
+                  </span>
+                )}
                 {club.isAmtPartner && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] text-[#D4AF37]">
                     AMT

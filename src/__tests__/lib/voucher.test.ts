@@ -9,7 +9,9 @@ import {
   checkRefund,
   checkTypeForm,
   expiryLabel,
+  futureSessionCount,
   isVoucherOpen,
+  proportionalRefundCents,
   sessionsLabel,
   typeFormOf,
   typeOptionLabel,
@@ -156,5 +158,38 @@ describe("checkRefund", () => {
   it("mal escrito: no vale", () => {
     expect(checkRefund("doce", 12000)).toMatchObject({ ok: false });
     expect(checkRefund("-5", 12000)).toMatchObject({ ok: false });
+  });
+});
+
+describe("devolución proporcional al cancelar", () => {
+  const now = new Date("2026-11-19T10:00:00.000Z");
+  const use = (startsAt: string | null) => ({
+    id: "u", bookingId: null, privateClassId: null, usedAt: "2026-11-01T10:00:00.000Z", startsAt, courtName: null,
+  });
+  const voucher = (uses: ReturnType<typeof use>[], remainingSessions: number) => ({
+    priceCents: 12000, sessions: 10, remainingSessions, uses,
+  });
+
+  it("cuenta como futuras solo las sesiones que empiezan después de ahora", () => {
+    expect(
+      futureSessionCount({ uses: [use("2026-11-18T10:00:00.000Z"), use("2026-11-20T10:00:00.000Z"), use(null)] }, now),
+    ).toBe(1);
+  });
+
+  it("proporcional a lo que queda sin gastar", () => {
+    expect(proportionalRefundCents(voucher([use("2026-11-01T10:00:00.000Z")], 7), now)).toBe(8400);
+    expect(proportionalRefundCents(voucher([], 10), now)).toBe(12000);
+    expect(proportionalRefundCents(voucher([], 0), now)).toBe(0);
+  });
+
+  it("las sesiones que aún no han empezado vuelven al bono y cuentan como sin gastar", () => {
+    expect(
+      proportionalRefundCents(voucher([use("2026-11-01T10:00:00.000Z"), use("2026-11-25T10:00:00.000Z")], 7), now),
+    ).toBe(9600);
+  });
+
+  it("redondea al céntimo y nunca pasa del precio", () => {
+    expect(proportionalRefundCents({ priceCents: 1000, sessions: 3, remainingSessions: 1, uses: [] }, now)).toBe(333);
+    expect(proportionalRefundCents({ priceCents: 1000, sessions: 3, remainingSessions: 3, uses: [use("2026-11-25T10:00:00.000Z")] }, now)).toBe(1000);
   });
 });
