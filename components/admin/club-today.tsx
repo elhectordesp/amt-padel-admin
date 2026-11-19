@@ -16,6 +16,7 @@ import {
 import { useClubAccess } from "@/lib/use-club-access";
 import { AmtFeeOverdueNotice, useAmtPlan } from "@/components/admin/club-amt-plan-card";
 import { overdueNotice } from "@/lib/utils/amt-plan";
+import { ClubSetupCard } from "@/components/admin/club-setup-card";
 import { formatInTimeZone, tournamentTimeZone, zonedDayKey } from "@/lib/utils/time-zone";
 
 const REFRESH_MS = 60_000;
@@ -183,6 +184,7 @@ export function ClubToday({ clubId }: { clubId: string }) {
   return (
     <section className="space-y-3">
       {isOwner && <AmtFeeOverdueNotice notice={overdueNotice(amtPlan.data)} />}
+      {isOwner && <ClubSetupCard clubId={clubId} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-heading text-lg text-foreground">Hoy en el club</h3>
         <div className="flex flex-wrap gap-2">
