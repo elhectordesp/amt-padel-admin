@@ -17,10 +17,16 @@ export const api = axios.create({
 /**
  * Con lo que se rechazan las peticiones que fallan: el mensaje del back y,
  * si los hay, el estado HTTP y su código de error (`code`), para distinguir
- * un error concreto sin comparar textos.
+ * un error concreto sin comparar textos, y los datos estructurados con que el
+ * back acompaña a algunos 409 (`details`, p. ej. lo que choca con un bloqueo).
  */
 export class ApiError extends Error {
-  constructor(message: string, readonly status?: number, readonly code?: string) {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -193,6 +199,7 @@ api.interceptors.response.use(
         Array.isArray(message) ? message[0] : message,
         err.response?.status,
         typeof code === "string" ? code : undefined,
+        err.response?.data?.details,
       ),
     );
   },

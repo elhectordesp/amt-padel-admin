@@ -336,9 +336,12 @@ export const bookingsService = {
     create: (payload: CreateBookingPayload) =>
       api.post<Booking>(`/bookings`, payload).then((r) => r.data),
 
-    cancel: (id: string, reason?: string) =>
+    /** `refundAmountCents`: lo que el club devuelve de una reserva cobrada (como mucho lo cobrado). */
+    cancel: (id: string, reason?: string, refundAmountCents?: number) =>
       api
-        .delete<Booking>(`/bookings/${id}`, { data: { reason } })
+        .delete<Booking>(`/bookings/${id}`, {
+          data: { reason, ...(refundAmountCents ? { refundAmountCents } : {}) },
+        })
         .then((r) => r.data),
 
     /** Cambia la reserva de hora, pista o duración; avisa a los jugadores. */
@@ -357,13 +360,15 @@ export const bookingsService = {
      * Cancela varias: el back admite 100 por petición, así que de 100 en 100.
      * Cada una va por su cuenta; las que no se pueden vuelven con su código.
      */
-    cancelMany: async (ids: string[], reason?: string): Promise<CancelManyResult> => {
+    cancelMany: async (ids: string[], reason?: string, refundPaid?: boolean): Promise<CancelManyResult> => {
       const result: CancelManyResult = { cancelled: [], failed: [] };
       for (let i = 0; i < ids.length; i += CANCEL_MANY_MAX) {
         const part = await api
           .post<CancelManyResult>(`/bookings/cancel-many`, {
             ids: ids.slice(i, i + CANCEL_MANY_MAX),
             reason,
+            // A cada cobrada, se le devuelve todo lo cobrado
+            ...(refundPaid ? { refundPaid: true } : {}),
           })
           .then((r) => r.data);
         result.cancelled.push(...part.cancelled);
@@ -441,6 +446,6 @@ export const bookingsQK = {
   bookingDetail: (id: string) => ["bookings", "detail", id] as const,
   occupations: (clubId: string, from: string, to: string) =>
     ["bookings", "occupations", clubId, from, to] as const,
-  availability: (clubId: string, courtId: string, date: string, duration: number) =>
-    ["bookings", "availability", clubId, courtId, date, duration] as const,
+  availability: (clubId: string, courtId: string, date: string, duration: number, clubCustomerId?: string) =>
+    ["bookings", "availability", clubId, courtId, date, duration, clubCustomerId ?? ""] as const,
 };

@@ -18,7 +18,7 @@
 "use client";
 
 import { Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -62,7 +62,7 @@ import {
   zonedTime,
 } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
-import type { Court, CourtOccupation } from "@/types";
+import type { CourtOccupation } from "@/types";
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 type View = "day" | "week";
@@ -95,17 +95,6 @@ export default function CalendarioPage() {
   const { role, clubId } = useRole();
   const [view, setView] = useState<View>("day");
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
-
-  const courtsQuery = useQuery({
-    queryKey: ["admin-courts", clubId],
-    queryFn: () => adminService.courts.list(clubId!),
-    enabled: !!clubId && isClub(role),
-  });
-  // En el orden del club (el que da el back)
-  const courts = useMemo(
-    () => (courtsQuery.data ?? []).filter((c) => c.active),
-    [courtsQuery.data],
-  );
 
   if (role === null) {
     return (
@@ -149,46 +138,39 @@ export default function CalendarioPage() {
       ) : view === "day" ? (
         // La franja sale de la URL (useSearchParams): sin Suspense, el build no prerenderiza la página
         <Suspense fallback={<Loader2 className="mt-4 h-5 w-5 animate-spin text-muted-foreground" />}>
-          <DayView
-            clubId={clubId}
-            timeZone={clubTimeZone.timeZone}
-            courts={courts}
-            courtsLoading={courtsQuery.isLoading}
-            courtsError={courtsQuery.isLoadingError}
-            courtsRefreshError={courtsQuery.isRefetchError}
-          />
+          <DayView clubId={clubId} timeZone={clubTimeZone.timeZone} />
         </Suspense>
       ) : (
-        <WeekView
-          clubId={clubId}
-          timeZone={clubTimeZone.timeZone}
-          courts={courts}
-          courtsLoading={courtsQuery.isLoading}
-          courtsError={courtsQuery.isLoadingError}
-          courtsRefreshError={courtsQuery.isRefetchError}
-        />
+        <WeekView clubId={clubId} timeZone={clubTimeZone.timeZone} />
       )}
     </ReservasPage>
   );
 }
 
+/**
+ * Las pistas del club, en su orden (el que da el back), con los bloqueos de los
+ * días que enseña la vista: la escuela crea uno por clase de toda la
+ * temporada, y sin el rango llegarían todos. Al pasar de día o de semana se
+ * quedan las de antes mientras llegan las nuevas (las pistas no cambian).
+ */
+function useCalendarCourts(clubId: string, fromDay: string, toDay: string) {
+  const query = useQuery({
+    queryKey: ["admin-courts", clubId, fromDay, toDay],
+    queryFn: () => adminService.courts.list(clubId, { from: fromDay, to: toDay }),
+    placeholderData: keepPreviousData,
+  });
+  const courts = useMemo(() => (query.data ?? []).filter((c) => c.active), [query.data]);
+  return {
+    courts,
+    courtsLoading: query.isLoading,
+    courtsError: query.isLoadingError,
+    courtsRefreshError: query.isRefetchError,
+  };
+}
+
 // ── Vista DÍA ────────────────────────────────────────────────────────────────
 
-function DayView({
-  clubId,
-  timeZone,
-  courts,
-  courtsLoading,
-  courtsError,
-  courtsRefreshError,
-}: {
-  clubId: string;
-  timeZone: string;
-  courts: Court[];
-  courtsLoading: boolean;
-  courtsError: boolean;
-  courtsRefreshError: boolean;
-}) {
+function DayView({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const now = useNow(CLOCK_TICK_MS);
   const todayKey = zonedDayKey(now, timeZone);
   // null: hoy, y lo sigue siendo pasada la medianoche (la tablet de recepción se queda abierta)
@@ -229,6 +211,7 @@ function DayView({
   const tapText = counter.on ? "h-11 px-4" : undefined;
 
   const range = useMemo(() => dayRangeIso(dateStr, dateStr, timeZone), [dateStr, timeZone]);
+  const { courts, courtsLoading, courtsError, courtsRefreshError } = useCalendarCourts(clubId, dateStr, dateStr);
 
   const hoursQuery = useQuery({
     queryKey: bookingsQK.operatingHours(clubId),
@@ -442,21 +425,7 @@ function DayView({
 
 // ── Vista SEMANA (resumen) ───────────────────────────────────────────────────
 
-function WeekView({
-  clubId,
-  timeZone,
-  courts,
-  courtsLoading,
-  courtsError,
-  courtsRefreshError,
-}: {
-  clubId: string;
-  timeZone: string;
-  courts: Court[];
-  courtsLoading: boolean;
-  courtsError: boolean;
-  courtsRefreshError: boolean;
-}) {
+function WeekView({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const [weekOffset, setWeekOffset] = useState(0);
 
   // Lunes a domingo de la semana, en días del club
@@ -465,6 +434,7 @@ function WeekView({
     [weekOffset, timeZone],
   );
   const range = useMemo(() => dayRangeIso(weekKeys[0], weekKeys[6], timeZone), [weekKeys, timeZone]);
+  const { courts, courtsLoading, courtsError, courtsRefreshError } = useCalendarCourts(clubId, weekKeys[0], weekKeys[6]);
 
   const bookingsFilters = { clubId, ...range };
   const bookingsQuery = useQuery({

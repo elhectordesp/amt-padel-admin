@@ -159,6 +159,15 @@ export interface CourtBlock {
   createdAt:  string;
 }
 
+/**
+ * Lo que un bloqueo manual taparía: va en `details` del 409
+ * COURT_BLOCK_HAS_CONFLICTS al crearlo sin `force`.
+ */
+export interface CourtBlockConflicts {
+  bookings: { id: string; shortCode: string; startsAt: string; endsAt: string }[];
+  matches:  { id: string; label: string; startsAt: string; endsAt: string; tournamentId: string | null }[];
+}
+
 /** Lo que ocupa una pista en un tramo: un bloqueo del club o un partido de torneo. */
 export interface CourtOccupation {
   kind:         CourtBlockKind;

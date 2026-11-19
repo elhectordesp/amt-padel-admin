@@ -303,6 +303,21 @@ describe("Alta de reserva — mostrador", () => {
     );
   });
 
+  it("al elegir un cliente, los huecos se piden con su clubCustomerId (el precio de socio es el que guarda el back); al quitarlo, sin él", async () => {
+    await open();
+    // Sin cliente elegido, la consulta de siempre
+    expect(svc.availability).toHaveBeenLastCalledWith({ clubId: "c1", date: "2026-11-02", duration: 90 });
+
+    fireEvent.change(screen.getByLabelText("Buscar cliente"), { target: { value: "Marta" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Marta Ruiz/ }));
+
+    await waitFor(() =>
+      expect(svc.availability).toHaveBeenLastCalledWith({
+        clubId: "c1", date: "2026-11-02", duration: 90, clubCustomerId: "cc1",
+      }),
+    );
+  });
+
   it("sin marcar «Cobrada ahora» ni elegir cliente, no manda ni payNow ni clubCustomerId", async () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
