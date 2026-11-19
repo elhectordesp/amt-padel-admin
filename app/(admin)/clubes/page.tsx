@@ -182,16 +182,18 @@ function ClubModal({
     mutationFn: () => {
       const latN = form.lat.trim() !== "" ? Number(form.lat) : undefined;
       const lngN = form.lng.trim() !== "" ? Number(form.lng) : undefined;
+      // Al editar, vaciar un campo manda null (el back lo borra); undefined no cambiaría nada
+      const empty = isEditing ? null : undefined;
       const payload = {
         name:         form.name.trim(),
         city:         form.city.trim(),
-        province:     form.province.trim()     || undefined,
-        address:      form.address.trim()      || undefined,
-        phone:        form.phone.trim()        || undefined,
-        website:      form.website.trim()      || undefined,
-        instagram:    form.instagram.trim()    || undefined,
-        logoUrl:      form.logoUrl.trim()      || undefined,
-        contactEmail: form.contactEmail.trim() || undefined,
+        province:     form.province.trim()     || empty,
+        address:      form.address.trim()      || empty,
+        phone:        form.phone.trim()        || empty,
+        website:      form.website.trim()      || empty,
+        instagram:    form.instagram.trim()    || empty,
+        logoUrl:      form.logoUrl.trim()      || empty,
+        contactEmail: form.contactEmail.trim() || empty,
         isAmtPartner: form.isAmtPartner,
         lat:          latN != null && !isNaN(latN) ? latN : undefined,
         lng:          lngN != null && !isNaN(lngN) ? lngN : undefined,
