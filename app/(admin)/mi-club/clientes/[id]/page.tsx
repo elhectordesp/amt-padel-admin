@@ -303,7 +303,7 @@ function CustomerView({
                 </div>
               )}
               {isMember && !c.isMember && (
-                <p className="text-xs text-muted-foreground">Si no pones fecha de alta, se apunta la de hoy.</p>
+                <p className="text-xs text-muted-foreground">Si lo marcas socio ahora y no pones fecha de alta, se apunta la de hoy. A quien ya era socio no se le inventa una.</p>
               )}
               <Button size="sm" onClick={saveMember} disabled={save.isPending}><Save className="h-3.5 w-3.5" /> Guardar socio</Button>
             </>

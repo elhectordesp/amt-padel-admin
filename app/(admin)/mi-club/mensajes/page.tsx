@@ -382,7 +382,7 @@ export default function MensajesPage() {
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums">{m.recipientCount}</td>
                       <td className="px-2 py-2 text-right tabular-nums">{m.sendPush ? m.pushCount : "—"}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{m.sendEmail ? m.emailCount : "—"}</td>
+                      <td className="px-2 py-2 text-right tabular-nums">{m.sendEmail ? m.emailCount : "—"}{m.sendEmail && m.emailPendingCount > 0 ? <span className="ml-1 text-xs text-muted-foreground">(+{m.emailPendingCount} pendientes)</span> : null}</td>
                       <td className={`px-2 py-2 text-right tabular-nums ${m.emailFailedCount > 0 ? "text-destructive" : ""}`}>
                         {m.sendEmail ? m.emailFailedCount : "—"}
                       </td>

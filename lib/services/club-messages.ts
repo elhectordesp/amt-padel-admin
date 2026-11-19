@@ -32,6 +32,8 @@ export interface ClubMessage {
   pushCount:        number;
   emailCount:       number;
   emailFailedCount: number;
+  /** Emails que aún no han salido ni han fallado (el trabajador los está mandando o los retomará). */
+  emailPendingCount: number;
   sentBy:           { id: string; name: string };
   /** ISO 8601 */
   createdAt:        string;

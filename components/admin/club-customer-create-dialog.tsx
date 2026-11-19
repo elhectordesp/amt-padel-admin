@@ -6,6 +6,7 @@ import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Field, Input } from "@/components/admin/form";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import {
   clubCustomersQK,
@@ -45,6 +46,8 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
   const [consent, setConsent] = useState(false);
   const [picked, setPicked] = useState<Player | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // El back no enlaza una cuenta sin trato previo con el club (409): se propone el alta sin cuenta
+  const [noRelation, setNoRelation] = useState(false);
 
   // Solo un aviso para el formulario: el servidor cuenta la edad con la zona del club
   const age = birthDate ? ageOn(birthDate, localDayKey(new Date())) : null;
@@ -76,7 +79,10 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
       toast.success("Cliente añadido");
       onDone(customer);
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => {
+      setNoRelation(e instanceof ApiError && e.code === "CLUB_CUSTOMER_NO_RELATION");
+      setError(e.message);
+    },
   });
 
   if (!open) return null;
@@ -84,6 +90,7 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNoRelation(false);
     const hasGuardianContact = isMinor && (!!guardianPhone.trim() || !!guardianEmail.trim());
     if (withAccount) {
       if (!picked) return setError("Elige a la persona de la lista");
@@ -173,6 +180,21 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
           )}
 
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {noRelation && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setWithAccount(false);
+                setPicked(null);
+                setError(null);
+                setNoRelation(false);
+              }}
+            >
+              Darlo de alta sin cuenta
+            </Button>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
             <Button type="submit" size="sm" disabled={create.isPending}>
