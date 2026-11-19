@@ -591,6 +591,69 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
     await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined));
   });
 
+  describe("reserva cobrada: devolución al cancelar", () => {
+    const PAID = {
+      ...BOOKING,
+      paymentMethod: "CASH_AT_VENUE",
+      paidAt: "2026-10-27T10:00:00.000Z",
+      paidAmountCents: 1800,
+      priceCents: 2000,
+    };
+    const openDialog = async (booking: object) => {
+      svc.bookings.detail.mockResolvedValue(booking);
+      await renderDetail();
+      fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    };
+
+    it("pide el importe a devolver (opcional) y dice lo cobrado, no el precio", async () => {
+      await openDialog(PAID);
+      expect(within(dialog()).getByLabelText("Importe a devolver")).toHaveValue("");
+      expect(within(dialog()).getByText(/Cobrado: 18,00 €/)).toBeInTheDocument();
+    });
+
+    it("lo devuelto va en céntimos junto al motivo", async () => {
+      await openDialog(PAID);
+      fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Lluvia" } });
+      fireEvent.change(within(dialog()).getByLabelText("Importe a devolver"), { target: { value: "12,50" } });
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+      await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", "Lluvia", 1250));
+    });
+
+    it("sin escribir nada, cancela sin devolución (como siempre)", async () => {
+      await openDialog(PAID);
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+      await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined));
+    });
+
+    it("más de lo cobrado: avisa y no cancela", async () => {
+      await openDialog(PAID);
+      fireEvent.change(within(dialog()).getByLabelText("Importe a devolver"), { target: { value: "18,01" } });
+
+      expect(within(dialog()).getByRole("alert")).toHaveTextContent("No puedes devolver más de lo cobrado (18,00 €)");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+      expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    });
+
+    it("un importe que no es un importe: avisa y no cancela", async () => {
+      await openDialog(PAID);
+      fireEvent.change(within(dialog()).getByLabelText("Importe a devolver"), { target: { value: "doce" } });
+
+      expect(within(dialog()).getByRole("alert")).toHaveTextContent("Escribe un importe válido");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+      expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["sin cobrar", BOOKING],
+      ["pagada con una sesión de bono (no hay dinero que devolver)", { ...PAID, paymentMethod: "VOUCHER", paidAmountCents: 0 }],
+    ])("%s: no pide devolución", async (_label, booking) => {
+      await openDialog(booking);
+      expect(within(dialog()).queryByLabelText("Importe a devolver")).not.toBeInTheDocument();
+    });
+  });
+
   it("si el back la rechaza, enseña su mensaje y el diálogo sigue abierto", async () => {
     svc.bookings.cancel.mockRejectedValue({ response: { data: { message: "La reserva ya estaba cancelada" } } });
     await renderDetail();

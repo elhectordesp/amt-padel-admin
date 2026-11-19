@@ -161,11 +161,25 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   }, [durations, duration]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Huecos libres para pista + fecha + duración
+  // Huecos libres para pista + fecha + duración, con el precio del cliente
+  // elegido (si es socio): el mismo que guarda el back al crear la reserva
+  const availabilityKey = bookingsQK.availability(clubId, courtId, date, duration, customer?.id);
   const availabilityQuery = useQuery({
-    queryKey: bookingsQK.availability(clubId, courtId, date, duration),
+    queryKey: availabilityKey,
+    // Al elegir o quitar el cliente solo cambia el precio: los huecos de antes siguen
+    // a la vista mientras llegan los nuevos (con otra pista, fecha o duración, no)
+    placeholderData: (previous, previousQuery) =>
+      previousQuery &&
+      previousQuery.queryKey.slice(0, -1).join("|") === availabilityKey.slice(0, -1).join("|")
+        ? previous
+        : undefined,
     queryFn: () =>
-      bookingsService.availability({ clubId, date, duration }),
+      bookingsService.availability({
+        clubId,
+        date,
+        duration,
+        ...(customer ? { clubCustomerId: customer.id } : {}),
+      }),
     enabled: open && !!clubId && !!courtId && !!date,
   });
   const slots = useMemo(

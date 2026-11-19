@@ -6,6 +6,10 @@
  * recepcionista creía que el botón no hacía nada. Sirve a la ficha y al
  * listado; se monta solo mientras está abierta, así que el motivo empieza
  * vacío cada vez.
+ *
+ * Una reserva cobrada en dinero deja apuntar lo que se devuelve al cliente
+ * (opcional, como mucho lo cobrado): la caja lo resta el día de hoy y deja el
+ * cobro en su día.
  */
 
 import { useState } from "react";
@@ -15,6 +19,8 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useMe } from "@/lib/use-me";
 import { cancellationNoticeCount } from "@/lib/utils/booking-participants";
+import { eurosToCents, formatCents } from "@/lib/utils/booking-price";
+import { collectedCents } from "@/lib/utils/booking-refund";
 import { formatInTimeZone, zonedTime } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
 
@@ -29,9 +35,26 @@ export function CancelBookingDialog({ booking: b, timeZone, onClose }: Props) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const [reason, setReason] = useState("");
+  // Lo que se devuelve, en euros escritos; vacío, nada
+  const [refund, setRefund] = useState("");
+  // Sin cobro (o pagada con bono), 0: nada que devolver
+  const collected = collectedCents(b) ?? 0;
+  const canRefund = collected > 0;
+  const refundCents = refund.trim() === "" ? 0 : eurosToCents(refund);
+  const refundError =
+    !canRefund || refundCents === 0
+      ? null
+      : refundCents === null
+        ? "Escribe un importe válido, p. ej. 12,50"
+        : refundCents > collected
+          ? `No puedes devolver más de lo cobrado (${formatCents(collected)})`
+          : null;
 
   const cancel = useMutation({
-    mutationFn: () => bookingsService.bookings.cancel(b.id, reason || undefined),
+    mutationFn: () =>
+      refundCents
+        ? bookingsService.bookings.cancel(b.id, reason || undefined, refundCents)
+        : bookingsService.bookings.cancel(b.id, reason || undefined),
     onSuccess: () => {
       toast.success("Reserva cancelada — jugadores notificados");
       qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(b.id) });
@@ -70,7 +93,10 @@ export function CancelBookingDialog({ booking: b, timeZone, onClose }: Props) {
       cancelLabel="No, volver"
       loading={cancel.isPending}
       onClose={onClose}
-      onConfirm={() => cancel.mutate()}
+      onConfirm={() => {
+        if (refundError) return;
+        cancel.mutate();
+      }}
     >
       <p className="text-sm font-medium text-foreground">
         {b.court?.name ?? "Pista"} · {day} · {time}
@@ -83,6 +109,28 @@ export function CancelBookingDialog({ booking: b, timeZone, onClose }: Props) {
         onChange={(e) => setReason(e.target.value)}
         className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
       />
+      {canRefund && (
+        <div className="space-y-1">
+          <label htmlFor="cancel-refund" className="block text-xs text-muted-foreground">
+            Devolver al cliente (opcional). Cobrado: {formatCents(collected)}
+          </label>
+          <input
+            id="cancel-refund"
+            type="text"
+            inputMode="decimal"
+            aria-label="Importe a devolver"
+            placeholder="0,00 €"
+            value={refund}
+            onChange={(e) => setRefund(e.target.value)}
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+          />
+          {refundError && (
+            <p role="alert" className="text-xs text-destructive">
+              {refundError}
+            </p>
+          )}
+        </div>
+      )}
     </ConfirmModal>
   );
 }

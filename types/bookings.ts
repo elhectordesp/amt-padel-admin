@@ -439,6 +439,8 @@ export interface AvailabilityQuery {
   duration?: number;
   courtType?: CourtType;
   indoor?: boolean;
+  /** Solo el personal del club o de AMT: el precio es el de este cliente (socio o no). */
+  clubCustomerId?: string;
 }
 
 export interface AvailableSlot {

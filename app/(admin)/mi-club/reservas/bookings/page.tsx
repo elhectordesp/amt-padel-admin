@@ -39,6 +39,7 @@ import { bookingHolder, isUnpaid, MODE_LABELS } from "@/lib/utils/booking-labels
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
 import { paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
+import { refundableOf } from "@/lib/utils/booking-refund";
 import {
   formatInTimeZone,
   zonedDayKey,
@@ -436,6 +437,7 @@ export default function BookingsListPage() {
       {showCancelMany && (
         <CancelManyBookingsDialog
           ids={[...selected.keys()]}
+          refundable={refundableOf([...selected.values()])}
           onClose={() => setShowCancelMany(false)}
           onDone={(result) => {
             setCancelResult({ result, byId: selected });
