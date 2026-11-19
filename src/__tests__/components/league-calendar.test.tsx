@@ -176,6 +176,60 @@ describe("LeagueCalendarTab", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     });
 
+    describe("un día en que la liga no juega (aviso «Confirma para…»)", () => {
+      const WARNING = "El sábado no es un día de juego de la liga (se juega: viernes). Confirma para programarlo igualmente.";
+
+      const openAndSave = async () => {
+        renderTab();
+        const sinFecha = screen.getByRole("region", { name: "Sin fecha" });
+        fireEvent.click(within(sinFecha).getAllByRole("button", { name: /Programar/ })[0]);
+        const dialog = await screen.findByRole("dialog", { name: "Programar partido" });
+        fireEvent.change(within(dialog).getByLabelText("Fecha y hora"), { target: { value: "2026-11-21T19:00" } });
+        await within(dialog).findByRole("option", { name: "Pista 2" });
+        fireEvent.change(within(dialog).getByLabelText(/^Pista/), { target: { value: "Pista 2" } });
+        fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+        return dialog;
+      };
+
+      it("se pregunta y, si se acepta, se repite la petición con force", async () => {
+        svc.scheduleLeagueMatch.mockRejectedValueOnce(new Error(WARNING)).mockResolvedValue({ match: {} });
+        const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+        await openAndSave();
+
+        await waitFor(() => expect(svc.scheduleLeagueMatch).toHaveBeenCalledTimes(2));
+        expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Confirma para programarlo igualmente"));
+        expect(svc.scheduleLeagueMatch).toHaveBeenNthCalledWith(1, "sin1", { date: "2026-11-21T18:00:00.000Z", court: "Pista 2" });
+        expect(svc.scheduleLeagueMatch).toHaveBeenNthCalledWith(2, "sin1", { date: "2026-11-21T18:00:00.000Z", court: "Pista 2", force: true });
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+        expect(toast.success).toHaveBeenCalledWith("Partido programado");
+        confirm.mockRestore();
+      });
+
+      it("si no se acepta, no se repite y el aviso se queda en el diálogo", async () => {
+        svc.scheduleLeagueMatch.mockRejectedValue(new Error(WARNING));
+        const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+        const dialog = await openAndSave();
+
+        expect(await within(dialog).findByRole("alert")).toHaveTextContent("no es un día de juego de la liga");
+        expect(svc.scheduleLeagueMatch).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole("dialog", { name: "Programar partido" })).toBeInTheDocument();
+        confirm.mockRestore();
+      });
+
+      it("un error que no se confirma (pista ocupada, jugador con otro partido) no pregunta", async () => {
+        svc.scheduleLeagueMatch.mockRejectedValue(new Error("No se puede programar ahí: Ana ya tiene otro partido"));
+        const confirm = vi.spyOn(window, "confirm");
+
+        const dialog = await openAndSave();
+
+        expect(await within(dialog).findByRole("alert")).toHaveTextContent("Ana ya tiene otro partido");
+        expect(confirm).not.toHaveBeenCalled();
+        confirm.mockRestore();
+      });
+    });
+
     it("cambiar un partido ya programado parte de su hora y su pista, y se puede quitar", async () => {
       renderTab();
       const dia20 = screen.getByRole("region", { name: "2026-11-20" });

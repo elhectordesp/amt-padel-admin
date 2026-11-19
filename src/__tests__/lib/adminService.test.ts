@@ -122,6 +122,15 @@ describe('adminService', () => {
 
   // ── Matches — lógica de transformación ──────────────────────────────
 
+  describe('tournaments.unfinishMatch', () => {
+    it('devuelve spaRecalcScheduled cuando el resultado ya contaba para el SPA (se recalcula esa noche)', async () => {
+      mockPost.mockResolvedValueOnce({ data: { success: true, spaRecalcScheduled: true } });
+      const res = await adminService.tournaments.unfinishMatch('m1', true);
+      expect(mockPost).toHaveBeenCalledWith('/admin/matches/m1/unfinish', { force: true });
+      expect(res.spaRecalcScheduled).toBe(true);
+    });
+  });
+
   describe('matches.setResult', () => {
     it('un walkover manda la pareja ganadora como winnerTeam (con walkoverWinnerTeam, el back la descartaba y daba 400)', async () => {
       mockPatch.mockResolvedValueOnce({ data: {} });

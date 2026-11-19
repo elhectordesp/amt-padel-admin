@@ -60,6 +60,7 @@ import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status
 import { groupByPair, pairsSummary, paymentCsvColumns, pendingInviteLabel, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { isUnpaidPair } from "@/lib/utils/registration-amounts";
 import { needsForce } from "@/lib/utils/registration-force";
+import { leftMatchesNotice } from "@/lib/utils/registration-left-matches";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
 import { CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
 import { DEFAULT_SCORING_FORMAT, SCORING_FORMAT_OPTIONS, scoringFormatLabel } from "@/lib/scoring-format";
@@ -404,8 +405,12 @@ function CalendarTab({
   const unfinishMatchMut = useMutation({
     mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
       adminService.tournaments.unfinishMatch(matchId, force),
-    onSuccess: () => {
-      toast.success("Partido reabierto (resultado deshecho)");
+    onSuccess: (saved) => {
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Partido reabierto (resultado deshecho). El SPA se actualizará esta noche."
+          : "Partido reabierto (resultado deshecho)",
+      );
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
@@ -1699,6 +1704,9 @@ export default function TorneoDetailPage() {
       setUpdatingIds(new Set());
       const updated = res?.count ?? res?.updated ?? ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
+      // Cancelar con el sorteo hecho deja partidos sin jugar
+      const left = leftMatchesNotice(res?.leftMatches);
+      if (left) toast.warning(left, { duration: 20_000 });
     },
     onError: (err: Error, vars) => {
       setUpdatingIds(new Set());

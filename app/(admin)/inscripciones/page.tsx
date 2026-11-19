@@ -26,6 +26,7 @@ import { categoryLabel } from "@/lib/category-gender";
 import { compareWaitlist, groupByPair, paymentCsvColumns, pendingInviteLabel, waitlistPositions, type PairRegistration, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { isUnpaidPair } from "@/lib/utils/registration-amounts";
 import { needsForce } from "@/lib/utils/registration-force";
+import { leftMatchesNotice, type LeftMatch } from "@/lib/utils/registration-left-matches";
 import { matchesSearch } from "@/lib/utils/search";
 import { paginate } from "@/lib/utils/pagination";
 import { Pagination, usePagination } from "@/components/admin/pagination";
@@ -145,10 +146,13 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
   const bulkStatus = useMutation({
     mutationFn: ({ ids, status, force }: { ids: string[]; status: string; force?: boolean }) =>
       adminService.registrations.bulkStatus(ids, status, force),
-    onSuccess: (res: { count?: number; updated?: number }, vars) => {
+    onSuccess: (res: { count?: number; updated?: number; leftMatches?: LeftMatch[] }, vars) => {
       invalidateRegistrations(qc, tournamentId);
       const updated = res?.count ?? res?.updated ?? vars.ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
+      // Cancelar con el sorteo hecho deja partidos sin jugar
+      const left = leftMatchesNotice(res?.leftMatches);
+      if (left) toast.warning(left, { duration: 20_000 });
       setSelected(new Set());
       setUpdatingIds(new Set());
     },

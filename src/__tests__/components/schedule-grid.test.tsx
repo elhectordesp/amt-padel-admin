@@ -46,6 +46,34 @@ describe('ScheduleGrid — sin programar', () => {
   });
 });
 
+describe('ScheduleGrid — resultado solo con las dos parejas', () => {
+  const renderGrid = (m: Partial<MatchResult>, onMatchClick = vi.fn()) =>
+    render(
+      <ScheduleGrid
+        matches={[match({ id: 'sf', phase: 'SF', date: '2026-11-20T18:00:00.000Z', court: 'Pista 1', ...m })]}
+        duration={60}
+        tournament={{ categories: [], courts: ['Pista 1'] }}
+        onMatchClick={onMatchClick}
+        onCorrectClick={vi.fn()}
+      />,
+    );
+
+  it('un partido con una pareja «por definir» no abre el resultado al pulsarlo', () => {
+    const onMatchClick = vi.fn();
+    renderGrid({ team1: ['Ana', 'Bea'], team2: [] }, onMatchClick);
+    fireEvent.click(screen.getByText('Ana / Bea'));
+    expect(onMatchClick).not.toHaveBeenCalled();
+    expect(screen.getByText('Por definir')).toBeInTheDocument();
+  });
+
+  it('con las dos parejas sí lo abre', () => {
+    const onMatchClick = vi.fn();
+    renderGrid({ team1: ['Ana', 'Bea'], team2: ['Eva', 'Fe'] }, onMatchClick);
+    fireEvent.click(screen.getByText('Ana / Bea'));
+    expect(onMatchClick).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ScheduleGrid — zona del torneo (P8)', () => {
   const renderGrid = (timezone: string | undefined, date: string, onCreateAt = vi.fn()) =>
     render(
