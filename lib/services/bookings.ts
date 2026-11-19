@@ -9,6 +9,7 @@
  */
 
 import { api } from "@/lib/api";
+import { CANCEL_NOT_PROCESSED } from "@/lib/utils/booking-cancel-many";
 import type {
   ActivationState,
   Booking,
@@ -363,14 +364,24 @@ export const bookingsService = {
     cancelMany: async (ids: string[], reason?: string, refundPaid?: boolean): Promise<CancelManyResult> => {
       const result: CancelManyResult = { cancelled: [], failed: [] };
       for (let i = 0; i < ids.length; i += CANCEL_MANY_MAX) {
-        const part = await api
-          .post<CancelManyResult>(`/bookings/cancel-many`, {
-            ids: ids.slice(i, i + CANCEL_MANY_MAX),
-            reason,
-            // A cada cobrada, se le devuelve todo lo cobrado
-            ...(refundPaid ? { refundPaid: true } : {}),
-          })
-          .then((r) => r.data);
+        let part: CancelManyResult;
+        try {
+          part = await api
+            .post<CancelManyResult>(`/bookings/cancel-many`, {
+              ids: ids.slice(i, i + CANCEL_MANY_MAX),
+              reason,
+              // A cada cobrada, se le devuelve todo lo cobrado
+              ...(refundPaid ? { refundPaid: true } : {}),
+            })
+            .then((r) => r.data);
+        } catch (err) {
+          // Sin nada cancelado aún, el error sale tal cual. Si ya hay lotes
+          // cancelados, no se pierden: el lote que falló y los siguientes
+          // vuelven como «sin procesar» y el listado enseña todo.
+          if (i === 0) throw err;
+          result.failed.push(...ids.slice(i).map((id) => ({ id, code: CANCEL_NOT_PROCESSED })));
+          return result;
+        }
         result.cancelled.push(...part.cancelled);
         result.failed.push(...part.failed);
       }
