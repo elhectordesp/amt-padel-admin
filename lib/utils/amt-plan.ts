@@ -13,17 +13,23 @@ export const planLabel = (plan: ClubAmtPlan["bookingPlan"]): string => PLAN_LABE
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
 
-/** Lo que paga el club: «49 €/mes», «5 % de comisión» o null si no hay importe. */
+/**
+ * Lo que paga el club: «49 €/mes», «5 % de comisión», las dos con «·» en un
+ * acuerdo especial que lleve cuota y comisión, o null si no hay importe.
+ */
 export function feeText(plan: ClubAmtPlan): string | null {
-  if (plan.bookingPlan === "SUBSCRIPTION" && plan.bookingMonthlyFeeCents != null) {
+  const parts: string[] = [];
+  const hasFee = plan.bookingPlan === "SUBSCRIPTION" || plan.bookingPlan === "CUSTOM";
+  const hasRate = plan.bookingPlan === "COMMISSION" || plan.bookingPlan === "CUSTOM";
+  if (hasFee && plan.bookingMonthlyFeeCents != null) {
     const euros = plan.bookingMonthlyFeeCents / 100;
-    return `${euros.toLocaleString("es-ES", { maximumFractionDigits: 2 })} €/mes`;
+    parts.push(`${euros.toLocaleString("es-ES", { maximumFractionDigits: 2 })} €/mes`);
   }
-  if (plan.bookingPlan === "COMMISSION" && plan.bookingCommissionRate != null) {
+  if (hasRate && plan.bookingCommissionRate != null) {
     const pct = Math.round(plan.bookingCommissionRate * 10000) / 100;
-    return `${pct.toLocaleString("es-ES", { maximumFractionDigits: 2 })} % de comisión`;
+    parts.push(`${pct.toLocaleString("es-ES", { maximumFractionDigits: 2 })} % de comisión`);
   }
-  return null;
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 /** «15 de noviembre de 2026» para un día «YYYY-MM-DD». */

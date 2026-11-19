@@ -10,7 +10,7 @@ import type {
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
-  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan,
+  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan, ClubSetupProgress,
   ClubAmtPlanInternal, UpdateClubAmtPlanPayload,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
@@ -701,7 +701,7 @@ export const adminService = {
       api.get<Club[]>("/clubs").then((r) => r.data ?? []),
     findOne:    (id: string) =>
       api.get<Club>(`/admin/clubs/${id}`).then((r) => r.data),
-    create:     (data: Omit<Club, "id" | "active" | "tournamentCount">) =>
+    create:     (data: Omit<Club, "id" | "active" | "tournamentCount"> & { active?: boolean }) =>
       api.post<Club>("/admin/clubs", data).then((r) => r.data),
     update:     (id: string, data: Partial<Omit<Club, "id" | "tournamentCount">>) =>
       api.patch<Club>(`/admin/clubs/${id}`, data).then((r) => r.data),
@@ -720,6 +720,9 @@ export const adminService = {
       api.get<ClubFiscal>(`/admin/clubs/${id}/fiscal`).then((r) => r.data),
     updateFiscal: (id: string, data: ClubFiscal) =>
       api.put<ClubFiscal>(`/admin/clubs/${id}/fiscal`, data).then((r) => r.data),
+    // Puesta en marcha: qué pasos tiene hechos el club, según sus datos reales
+    setupProgress: (id: string) =>
+      api.get<ClubSetupProgress>(`/admin/clubs/${id}/setup-progress`).then((r) => r.data),
     // Plan con AMT (solo propietario, gestor y AMT); sin notas internas
     amtPlan: (id: string) =>
       api.get<ClubAmtPlan>(`/admin/clubs/${id}/amt-plan`).then((r) => r.data),
