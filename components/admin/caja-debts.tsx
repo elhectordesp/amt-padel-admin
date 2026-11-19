@@ -5,11 +5,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard, Loader2 } from "lucide-react";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
-import { SchoolFeePayDialog, SchoolStudentPayDialog } from "@/components/admin/school-pay-dialogs";
+import { SchoolFeePayDialog, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService } from "@/lib/services/bookings";
 import { cashQK, cashService, type DebtItem } from "@/lib/services/cash";
+import { clubVouchersQK } from "@/lib/services/club-vouchers";
 import { invalidateSchoolBilling } from "@/lib/services/school-billing";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -33,6 +34,7 @@ const isCounterDebt = (item: DebtItem): item is CounterDebt =>
 const AREA_OF: Record<DebtItem["source"], "bookings" | "cash" | "school"> = {
   BOOKING:       "bookings",
   REGISTRATION:  "cash",
+  VOUCHER:       "cash",
   SCHOOL_FEE:    "school",
   PRIVATE_CLASS: "school",
 };
@@ -70,8 +72,8 @@ export function CajaDebts({ clubId, timeZone }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Reservas y clases privadas ya empezadas sin pagar, inscripciones de torneo con algún jugador sin pagar y
-        cuotas de la escuela sin cobrar.{" "}
+        Reservas y clases privadas ya empezadas sin pagar, inscripciones de torneo con algún jugador sin pagar,
+        bonos vendidos sin cobrar y cuotas de la escuela sin cobrar.{" "}
         <strong className="text-foreground">Total pendiente: {formatCents(totalCents)}</strong>
       </p>
 
@@ -121,6 +123,19 @@ export function CajaDebts({ clubId, timeZone }: Props) {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: ["bookings", "list"] });
             qc.invalidateQueries({ queryKey: ["registrations"] });
+          }}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "VOUCHER" && (
+        <VoucherPayDialog
+          clubId={clubId}
+          voucherId={collecting.item.refId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          amountCents={collecting.item.amountCents}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
+            qc.invalidateQueries({ queryKey: clubVouchersQK.all(clubId) });
           }}
           onClose={() => setCollecting(null)}
         />

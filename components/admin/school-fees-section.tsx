@@ -257,7 +257,7 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
       <ConfirmModal
         open={!!unpaying}
         title="Quitar el cobro de la cuota"
-        description={`La cuota de ${unpaying?.customerName ?? "este alumno"} volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, esa caja no se reescribe: úsalo solo si la cobraste por error.`}
+        description={`La cuota de ${unpaying?.customerName ?? "este alumno"} volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, ese cobro dejará de salir en ella (la caja se calcula con los cobros apuntados, no se guarda): úsalo solo si la cobraste por error.`}
         confirmLabel="Quitar el cobro"
         loading={unpay.isPending}
         onClose={() => {

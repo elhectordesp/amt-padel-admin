@@ -35,7 +35,7 @@ export interface CashOfDay {
 }
 
 export interface DebtItem {
-  source:      "BOOKING" | "REGISTRATION" | "SCHOOL_FEE" | "PRIVATE_CLASS";
+  source:      "BOOKING" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS";
   /** La reserva, la inscripción, la cuota o, en una clase privada, el alumno de la clase. */
   refId:       string;
   concept:     string;
