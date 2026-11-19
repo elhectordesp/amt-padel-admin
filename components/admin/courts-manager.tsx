@@ -16,10 +16,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
 import { useClubAccess } from "@/lib/use-club-access";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { OCCUPATION_KINDS, occupationKindInfo } from "@/lib/utils/court-occupation";
-import type { Court, CourtBlock, CourtBlockKind } from "@/types";
+import { formatInTimeZone, zonedTime } from "@/lib/utils/time-zone";
+import type { Court, CourtBlock, CourtBlockConflicts, CourtBlockKind } from "@/types";
 
 const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false };
 type CourtForm = typeof EMPTY_COURT;
@@ -40,6 +43,45 @@ const EMPTY_BLOCK: {
   reason: "",
 };
 type BlockForm = typeof EMPTY_BLOCK;
+
+/** El 409 COURT_BLOCK_HAS_CONFLICTS lleva en `details` lo que el bloqueo taparía. */
+function conflictsOf(error: unknown): CourtBlockConflicts | null {
+  if (!(error instanceof ApiError) || error.code !== "COURT_BLOCK_HAS_CONFLICTS") return null;
+  const d = error.details as Partial<CourtBlockConflicts> | undefined;
+  if (!d || !Array.isArray(d.bookings) || !Array.isArray(d.matches)) return null;
+  return { bookings: d.bookings, matches: d.matches };
+}
+
+/** Las reservas y los partidos que chocan con el bloqueo, con su día y hora en la zona del club. */
+function BlockConflictsList({ clubId, conflicts }: { clubId: string; conflicts: CourtBlockConflicts }) {
+  const { timeZone } = useClubTimeZone(clubId);
+  const when = (startsAt: string, endsAt: string) =>
+    timeZone
+      ? `${formatInTimeZone(startsAt, timeZone, { weekday: "short", day: "numeric", month: "short" })} · ${zonedTime(startsAt, timeZone)}–${zonedTime(endsAt, timeZone)}`
+      : "";
+  return (
+    <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs" aria-label="Lo que choca con el bloqueo">
+      {conflicts.bookings.map((b) => (
+        <li key={b.id} className="rounded bg-secondary/60 px-2 py-1">
+          <span className="font-medium">Reserva {b.shortCode}</span> {when(b.startsAt, b.endsAt)}
+        </li>
+      ))}
+      {conflicts.matches.map((m) => (
+        <li key={m.id} className="rounded bg-secondary/60 px-2 py-1">
+          <span className="font-medium">{m.label}</span> {when(m.startsAt, m.endsAt)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function conflictsSummary(c: CourtBlockConflicts): string {
+  const parts = [
+    c.bookings.length > 0 ? `${c.bookings.length} ${c.bookings.length === 1 ? "reserva" : "reservas"}` : null,
+    c.matches.length > 0 ? `${c.matches.length} ${c.matches.length === 1 ? "partido" : "partidos"}` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.join(" y ");
+}
 
 function CourtRow({
   court,
@@ -68,6 +110,8 @@ function CourtRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteBlock, setConfirmDeleteBlock] =
     useState<CourtBlock | null>(null);
+  // Lo que el bloqueo que se intenta crear taparía (el back lo dice con un 409)
+  const [blockConflicts, setBlockConflicts] = useState<CourtBlockConflicts | null>(null);
   const [form, setForm] = useState<CourtForm>({
     name: court.name,
     isIndoor: court.isIndoor,
@@ -105,7 +149,8 @@ function CourtRow({
   });
 
   const addBlock = useMutation({
-    mutationFn: () =>
+    // `force`: bloquear aunque haya reservas o partidos (no se cancelan)
+    mutationFn: (force: boolean) =>
       adminService.courts.blocks.create(clubId, court.id, {
         kind: blockForm.kind,
         startDate: blockForm.startDate,
@@ -113,14 +158,20 @@ function CourtRow({
         startTime: blockForm.startTime || undefined,
         endTime: blockForm.endTime || undefined,
         reason: blockForm.reason.trim() || undefined,
+        ...(force ? { force: true } : {}),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["court-blocks", clubId, court.id] });
       setBlockForm({ ...EMPTY_BLOCK });
+      setBlockConflicts(null);
       setShowAddBlock(false);
       toast.success("Bloqueo añadido");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      const conflicts = conflictsOf(e);
+      if (conflicts) setBlockConflicts(conflicts);
+      else toast.error(e.message);
+    },
   });
 
   const removeBlock = useMutation({
@@ -429,7 +480,7 @@ function CourtRow({
                       toast.error("La fecha de inicio es obligatoria");
                       return;
                     }
-                    addBlock.mutate();
+                    addBlock.mutate(false);
                   }}
                   disabled={addBlock.isPending}
                   className="px-2 py-1 text-[11px] rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-1"
@@ -467,6 +518,24 @@ function CourtRow({
           setConfirmDelete(false);
         }}
       />
+
+      <ConfirmModal
+        open={!!blockConflicts}
+        title="La pista tiene reservas o partidos en ese tramo"
+        description={
+          blockConflicts
+            ? `En ese tramo hay ${conflictsSummary(blockConflicts)}. Bloquear la pista no los cancela: siguen ahí y hay que avisar a quien juega.`
+            : ""
+        }
+        confirmLabel="Bloquear igualmente"
+        cancelLabel="No bloquear"
+        danger
+        loading={addBlock.isPending}
+        onClose={() => setBlockConflicts(null)}
+        onConfirm={() => addBlock.mutate(true)}
+      >
+        {blockConflicts && <BlockConflictsList clubId={clubId} conflicts={blockConflicts} />}
+      </ConfirmModal>
 
       <ConfirmModal
         open={!!confirmDeleteBlock}

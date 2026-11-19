@@ -767,8 +767,9 @@ export const adminService = {
   },
 
   courts: {
-    list:   (clubId: string) =>
-      api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
+    // `range` (días AAAA-MM-DD, del club): solo los bloqueos que tocan esos días; sin él, los que acaban hoy o después
+    list:   (clubId: string, range?: { from?: string; to?: string }) =>
+      api.get<Court[]>(`/admin/clubs/${clubId}/courts`, range ? { params: range } : undefined).then((r) => r.data ?? []),
     create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean }) =>
       api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
     update: (clubId: string, courtId: string, data: Partial<{
@@ -782,7 +783,8 @@ export const adminService = {
     blocks: {
       list:   (clubId: string, courtId: string) =>
         api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`).then((r) => r.data ?? []),
-      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string; kind?: CourtBlockKind }) =>
+      // `force`: bloquear aunque haya reservas o partidos en el tramo (el back, sin él, da 409 con la lista)
+      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string; kind?: CourtBlockKind; force?: boolean }) =>
         api.post<CourtBlock>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, data).then((r) => r.data),
       remove: (clubId: string, courtId: string, blockId: string) =>
         api.delete(`/admin/clubs/${clubId}/courts/${courtId}/blocks/${blockId}`).then((r) => r.data),

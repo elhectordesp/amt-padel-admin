@@ -19,9 +19,12 @@ const createMock = vi.fn();
 const updateMock = vi.fn();
 const blocksListMock = vi.fn();
 const blocksCreateMock = vi.fn();
+const clubFindOneMock = vi.fn();
 
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
+    // La zona del club, para las horas de lo que choca con un bloqueo
+    clubs: { findOne: (...a: unknown[]) => clubFindOneMock(...a) },
     courts: {
       list: (...a: unknown[]) => listMock(...a),
       create: (...a: unknown[]) => createMock(...a),
@@ -53,6 +56,7 @@ vi.mock("@/lib/use-role", async () => {
 });
 
 import { CourtsManager } from "../../../components/admin/courts-manager";
+import { ApiError } from "@/lib/api";
 import { ME_QUERY_KEY } from "@/lib/use-me";
 
 function makeCourt(overrides: Record<string, unknown> = {}) {
@@ -84,6 +88,7 @@ describe("CourtsManager", () => {
     updateMock.mockResolvedValue(makeCourt());
     blocksListMock.mockResolvedValue([]);
     blocksCreateMock.mockResolvedValue({});
+    clubFindOneMock.mockResolvedValue({ id: "club-1", timezone: "Europe/Madrid" });
   });
 
   it("muestra empty state cuando no hay pistas", async () => {
@@ -192,6 +197,73 @@ describe("CourtsManager", () => {
     await waitFor(() =>
       expect(blocksCreateMock).toHaveBeenCalledWith("club-1", "c1", expect.objectContaining({ kind: "EVENT", startDate: "2026-12-01" })),
     );
+  });
+
+  describe("un bloqueo que tapa reservas o partidos", () => {
+    const conflicts = {
+      bookings: [{ id: "b1", shortCode: "AMT-K7M2", startsAt: "2026-12-01T09:00:00.000Z", endsAt: "2026-12-01T10:30:00.000Z" }],
+      matches: [{ id: "m1", label: "Liga del Club · Partido de grupos", startsAt: "2026-12-01T11:00:00.000Z", endsAt: "2026-12-01T12:15:00.000Z", tournamentId: "t1" }],
+    };
+    const conflictError = () =>
+      new ApiError("En ese tramo la pista tiene 1 reserva y 1 partido", 409, "COURT_BLOCK_HAS_CONFLICTS", conflicts);
+
+    async function openFormAndSubmit() {
+      listMock.mockResolvedValue([makeCourt({ id: "c1", name: "Pista 1" })]);
+      renderWithClient(<CourtsManager clubId="club-1" />);
+      fireEvent.click(await screen.findByTitle("Gestionar bloqueos"));
+      fireEvent.click(await screen.findByRole("button", { name: /Añadir bloqueo/i }));
+      const [from] = document.querySelectorAll('input[type="date"]');
+      fireEvent.change(from, { target: { value: "2026-12-01" } });
+      fireEvent.click(screen.getByRole("button", { name: /^Añadir$/ }));
+    }
+
+    it("enseña la lista de reservas y partidos con su hora (la del club) y no da el bloqueo por creado", async () => {
+      blocksCreateMock.mockRejectedValueOnce(conflictError());
+      await openFormAndSubmit();
+
+      expect(await screen.findByText("La pista tiene reservas o partidos en ese tramo")).toBeInTheDocument();
+      expect(screen.getByText(/1 reserva y 1 partido/)).toBeInTheDocument();
+      const list = screen.getByRole("list", { name: "Lo que choca con el bloqueo" });
+      // 09:00Z y 11:00Z son las 10:00 y las 12:00 en Madrid (CET)
+      await waitFor(() => expect(list).toHaveTextContent("Reserva AMT-K7M2"));
+      await waitFor(() => expect(list).toHaveTextContent("10:00–11:30"));
+      expect(list).toHaveTextContent("Liga del Club · Partido de grupos");
+      expect(list).toHaveTextContent("12:00–13:15");
+      expect(toastSuccessMock).not.toHaveBeenCalled();
+      expect(toastErrorMock).not.toHaveBeenCalled();
+      expect(blocksCreateMock).toHaveBeenCalledTimes(1);
+      expect(blocksCreateMock.mock.calls[0][2]).not.toHaveProperty("force");
+    });
+
+    it("«Bloquear igualmente» lo manda otra vez con force y lo da por creado", async () => {
+      blocksCreateMock.mockRejectedValueOnce(conflictError());
+      await openFormAndSubmit();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Bloquear igualmente" }));
+
+      await waitFor(() => expect(blocksCreateMock).toHaveBeenCalledTimes(2));
+      expect(blocksCreateMock.mock.calls[1][2]).toMatchObject({ startDate: "2026-12-01", force: true });
+      await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith("Bloqueo añadido"));
+      expect(screen.queryByText("La pista tiene reservas o partidos en ese tramo")).not.toBeInTheDocument();
+    });
+
+    it("«No bloquear» cierra el aviso sin crear nada", async () => {
+      blocksCreateMock.mockRejectedValueOnce(conflictError());
+      await openFormAndSubmit();
+
+      fireEvent.click(await screen.findByRole("button", { name: "No bloquear" }));
+
+      expect(screen.queryByText("La pista tiene reservas o partidos en ese tramo")).not.toBeInTheDocument();
+      expect(blocksCreateMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("cualquier otro error sigue siendo un aviso, sin la lista", async () => {
+      blocksCreateMock.mockRejectedValueOnce(new ApiError("Pista no encontrada", 404, "COURT_NOT_FOUND"));
+      await openFormAndSubmit();
+
+      await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith("Pista no encontrada"));
+      expect(screen.queryByRole("button", { name: "Bloquear igualmente" })).not.toBeInTheDocument();
+    });
   });
 
   describe("según el rol del equipo", () => {

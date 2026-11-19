@@ -330,6 +330,19 @@ describe("Calendario de reservas — vista Semana", () => {
     expect(within(sunday).getByText("23:30")).toBeInTheDocument();
   });
 
+  it("pide las pistas con los bloqueos de la semana que enseña (lunes a domingo), no los de toda la temporada", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
+    await screen.findByRole("columnheader", { name: "Pista" });
+
+    expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-19", to: "2026-10-25" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Semana siguiente" }));
+    await waitFor(() =>
+      expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-26", to: "2026-11-01" }),
+    );
+  });
+
   it("si fallan las pistas es un fallo de carga, no «Sin pistas activas»", async () => {
     courtsMock.list.mockRejectedValue(new Error("500"));
     renderPage();
@@ -343,6 +356,19 @@ describe("Calendario de reservas — vista Semana", () => {
 const firstSlot = () => screen.findByLabelText("Crear reserva en Pista 1 a las 09:00");
 
 describe("Recepción — navegar por fechas", () => {
+  it("pide las pistas con los bloqueos del día que enseña, y al cambiar de día, con los de ese día", async () => {
+    renderPage();
+    await firstSlot();
+    expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-25", to: "2026-10-25" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    await waitFor(() =>
+      expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-26", to: "2026-10-26" }),
+    );
+    // La rejilla no pasa por «cargando» por pedir las pistas del día nuevo
+    expect(await firstSlot()).toBeInTheDocument();
+  });
+
   it("día siguiente y anterior piden ese día del club; «Hoy» solo sale fuera de hoy y vuelve", async () => {
     renderPage();
     await firstSlot();
@@ -886,13 +912,14 @@ describe("Zona del club (B1): un club en Canarias", () => {
     expect(within(sunday).getByText("23:30")).toBeInTheDocument();
   });
 
-  it("sin saber aún la zona del club no se pinta ninguna hora ni se piden reservas", async () => {
+  it("sin saber aún la zona del club no se pinta ninguna hora ni se piden reservas ni pistas (su día depende de la zona)", async () => {
     clubsMock.findOne.mockReturnValue(new Promise(() => {}));
     renderPage({ club: null });
-    await waitFor(() => expect(courtsMock.list).toHaveBeenCalled());
+    await waitFor(() => expect(clubsMock.findOne).toHaveBeenCalled());
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
     expect(svc.bookings.listAll).not.toHaveBeenCalled();
+    expect(courtsMock.list).not.toHaveBeenCalled();
   });
 
   it("si no llegan los datos del club, lo dice y se puede reintentar", async () => {
