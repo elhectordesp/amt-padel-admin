@@ -11,6 +11,7 @@ import { AccountsDebtsSection } from "@/components/admin/accounts-debts-section"
 import { AccountsConfigSection } from "@/components/admin/accounts-config-section";
 import { AccountsPartPricesSection } from "@/components/admin/accounts-part-prices-section";
 import { AccountsPartnersSection } from "@/components/admin/accounts-partners-section";
+import { AccountsShopSection } from "@/components/admin/accounts-shop-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
 import { useClubAccounts } from "@/lib/use-accounts-enabled";
@@ -55,6 +56,7 @@ export default function CuentasPage() {
             <AccountsPartPricesSection clubId={clubId} />
             <AccountsConfigSection clubId={clubId} />
             <AccountsDebtsSection clubId={clubId} />
+            <AccountsShopSection clubId={clubId} />
           </>
         )}
       </div>
