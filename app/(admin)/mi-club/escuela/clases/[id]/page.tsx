@@ -246,6 +246,8 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                           )}
                           <SchoolMinorBadge student={s} />
                         </span>
+                        {/* De un día que aún no ha llegado no se pasa lista: sin botones que no se pueden pulsar */}
+                        {!(scheduled && !open) && (
                         <div role="group" aria-label={`Asistencia de ${s.name ?? "alumno"}`} className="flex gap-1">
                           {OPTIONS.map((option) => (
                             <button
@@ -268,6 +270,7 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                             </button>
                           ))}
                         </div>
+                        )}
                       </div>
 
                       <SchoolGuardianLine student={s} />

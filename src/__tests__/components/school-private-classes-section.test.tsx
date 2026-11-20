@@ -27,6 +27,11 @@ vi.mock("@/components/admin/booking-customer-picker", () => ({
   ),
 }));
 
+const access = vi.hoisted(() => ({ cash: true }));
+vi.mock("@/lib/use-club-access", () => ({
+  useClubAccess: () => ({ roles: null, can: (area: string) => (area === "cash" ? access.cash : true) }),
+}));
+
 const school = vi.hoisted(() => ({ coaches: { list: vi.fn() } }));
 vi.mock("@/lib/services/school", async (orig) => {
   const actual = await orig<typeof import("@/lib/services/school")>();
@@ -77,6 +82,7 @@ const WAIT = { timeout: 5000 };
 describe("SchoolPrivateClassesSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    access.cash = true;
     // «Hoy» es el 18 de noviembre de 2026
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-18T10:00:00Z"));
@@ -102,6 +108,14 @@ describe("SchoolPrivateClassesSection", () => {
     expect(screen.getByText(/Entrenador: Luis · 1 de 2 cobrados/)).toBeInTheDocument();
     expect(screen.getByText(/20,00 € · Pendiente/)).toBeInTheDocument();
     expect(screen.getByText(/20,00 € · Cobrado · Efectivo/)).toBeInTheDocument();
+  });
+
+  it("sin acceso a la caja (el entrenador) no se ve lo que paga cada alumno", async () => {
+    access.cash = false;
+    renderSection(false);
+    expect(await screen.findByText("Marta", {}, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(/20,00 €/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pendiente/)).not.toBeInTheDocument();
   });
 
   it("cambiar el rango pide esos días; un rango del revés no pide nada", async () => {
