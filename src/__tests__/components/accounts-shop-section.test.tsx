@@ -103,6 +103,15 @@ describe("AccountsShopSection", () => {
     }));
   });
 
+  it("compra, recuento e historial llevan texto visible, no solo un tooltip", async () => {
+    wrap(<AccountsShopSection clubId="c1" />);
+    const stock = await screen.findByLabelText("Stock de Bolas");
+    const row = stock.closest("li") as HTMLElement;
+    expect(within(row).getByText("Comprar cajas")).toBeVisible();
+    expect(within(row).getByText("Recuento")).toBeVisible();
+    expect(within(row).getByText("Historial")).toBeVisible();
+  });
+
   it("desactivar manda el producto entero con active al revés", async () => {
     wrap(<AccountsShopSection clubId="c1" />);
     await screen.findByLabelText("Stock de Bolas");

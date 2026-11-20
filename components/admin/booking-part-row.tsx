@@ -4,6 +4,7 @@ import { useState } from "react";
 import { GraduationCap, Pencil } from "lucide-react";
 import { BizumReceiverDialog } from "@/components/admin/bizum-receiver";
 import { BookingCustomerPicker } from "@/components/admin/booking-customer-picker";
+import type { ClubCustomer } from "@/lib/services/club-customers";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import type { ClubPartner } from "@/lib/services/accounts";
 import type {
@@ -83,6 +84,7 @@ export function BookingPartRow({
   const [dialog, setDialog] = useState<null | "bizum" | "invite" | "debt" | "undo" | "refund">(null);
   const [inviteReason, setInviteReason] = useState("");
   const [debtName, setDebtName] = useState("");
+  const [debtCustomer, setDebtCustomer] = useState<ClubCustomer | null>(null);
   const [refundText, setRefundText] = useState("");
   const [refundReason, setRefundReason] = useState("");
 
@@ -116,7 +118,7 @@ export function BookingPartRow({
   };
 
   const inviteReasonValid = inviteReason.trim().length >= 3 && inviteReason.trim().length <= 200;
-  const debtValid = debtName.trim().length > 0;
+  const debtValid = debtCustomer !== null || debtName.trim().length > 0;
 
   const namedKnown = part.partPriceId !== null && view.priceOptions.some((o) => o.partPriceId === part.partPriceId);
 
@@ -329,23 +331,23 @@ export function BookingPartRow({
       <ConfirmModal
         open={dialog === "debt"}
         title="¿Quién debe esta parte?"
-        description={`${label} no tiene a nadie. Elige al cliente o escribe un nombre para apuntar la deuda.`}
+        description={`${label} no tiene a nadie. Elige al cliente o escribe un nombre y confirma para apuntar la deuda.`}
         confirmLabel="Apuntar la deuda"
         confirmDisabled={!debtValid}
         onClose={closeDialog}
         onConfirm={() => {
           closeDialog();
-          onDebt(part.id, { personName: debtName.trim() });
+          onDebt(part.id, debtCustomer ? { clubCustomerId: debtCustomer.id } : { personName: debtName.trim() });
           setDebtName("");
+          setDebtCustomer(null);
         }}
       >
         <BookingCustomerPicker
           clubId={clubId}
-          value={null}
+          value={debtCustomer}
           onChange={(c) => {
-            if (!c) return;
-            closeDialog();
-            onDebt(part.id, { clubCustomerId: c.id });
+            setDebtCustomer(c);
+            if (c) setDebtName("");
           }}
         />
         <input
@@ -354,8 +356,11 @@ export function BookingPartRow({
           placeholder="O escribe un nombre"
           value={debtName}
           maxLength={120}
-          onChange={(e) => setDebtName(e.target.value)}
-          className={FIELD}
+          onChange={(e) => {
+            setDebtName(e.target.value);
+            if (e.target.value) setDebtCustomer(null);
+          }}
+          className={`${FIELD} mt-3`}
         />
       </ConfirmModal>
 

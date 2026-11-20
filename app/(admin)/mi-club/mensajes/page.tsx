@@ -75,7 +75,7 @@ function describeSegment(s: ClubMessageSegment): string {
   if (s.members) parts.push("socios");
   if (s.tags?.length) parts.push(`etiqueta ${s.tags.join(" o ")}`);
   if (s.levels?.length) parts.push(`nivel ${s.levels.map((l) => CATEGORY_LABEL[l as CategoryLevel] ?? l).join(" o ")}`);
-  if (s.inactiveDays) parts.push(`sin reservar en ${s.inactiveDays} días`);
+  if (s.inactiveDays) parts.push(`sin reservar en ${s.inactiveDays} ${s.inactiveDays === 1 ? "día" : "días"}`);
   return parts.length ? parts.join(" · ") : "todos los clientes";
 }
 

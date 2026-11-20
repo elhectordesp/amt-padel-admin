@@ -37,6 +37,7 @@ import {
   type DayWindow,
 } from "@/lib/utils/booking-day-grid";
 import { bookingHolder, isUnpaid } from "@/lib/utils/booking-labels";
+import { partsDebtLabel, partsOpenDebtCents } from "@/lib/utils/booking-parts";
 import { occupationKindInfo } from "@/lib/utils/court-occupation";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import { zonedTime, zonedToDate } from "@/lib/utils/time-zone";
@@ -274,6 +275,11 @@ function Legend({ showParts }: { showParts: boolean }) {
       <li className="flex items-center gap-1.5">
         <CircleAlert className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden /> Sin cobrar
       </li>
+      {showParts && (
+        <li className="flex items-center gap-1.5">
+          <CircleAlert className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" aria-hidden /> Cobrada con partes a deber
+        </li>
+      )}
       {showParts && <PartsLegendItems />}
       <OccupationLegendItems />
     </ul>
@@ -313,7 +319,8 @@ function BookingBlock({
   const holder = bookingHolder(b);
   const unpaid = isUnpaid(b);
   // Cobrada: con método de cobro y no pendiente (null: datos de cobro ya borrados)
-  const paid = b.paymentMethod !== null && b.paymentMethod !== "PENDING" && b.priceCents > 0;
+  const owed = partsOpenDebtCents(b.partsSummary) > 0;
+  const paid = !owed && b.paymentMethod !== null && b.paymentMethod !== "PENDING" && b.priceCents > 0;
   const people = isOpen ? `Abierta · ${players.length}/${bookingCapacity(b)}` : `${players.length} jug.`;
   const bg = isOpen
     ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
@@ -335,6 +342,12 @@ function BookingBlock({
           <span title="Sin cobrar" className="text-red-600 dark:text-red-400">
             <CircleAlert className="h-3.5 w-3.5" aria-hidden />
             <span className="sr-only">Sin cobrar</span>
+          </span>
+        )}
+        {owed && b.partsSummary && (
+          <span title={partsDebtLabel(b.partsSummary)} className="text-orange-600 dark:text-orange-400">
+            <CircleAlert className="h-3.5 w-3.5" aria-hidden />
+            <span className="sr-only">{partsDebtLabel(b.partsSummary)}</span>
           </span>
         )}
         {paid && (

@@ -17,7 +17,7 @@ const FIELD =
   "min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:border-[#D4AF37]";
 const LABEL = "mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 const NAME_MAX = 60;
-const ICON_BTN = "inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:opacity-50";
+const ICON_BTN = "inline-flex min-h-11 min-w-11 items-center px-3 justify-center rounded-md border border-border hover:bg-secondary disabled:opacity-50";
 
 interface Draft {
   name:        string;
@@ -141,9 +141,9 @@ export function AccountsShopSection({ clubId }: { clubId: string }) {
                 {p.active ? "Activo" : "Desactivado"}
               </span>
               <div className="ml-auto flex flex-wrap gap-2">
-                <button type="button" aria-label={`Compra de cajas de ${p.name}`} title="Compra de cajas" onClick={() => setPurchase(p)} className={ICON_BTN}><PackagePlus className="h-4 w-4" /></button>
-                <button type="button" aria-label={`Recuento de ${p.name}`} title="Recuento" onClick={() => setCount(p)} className={ICON_BTN}><ClipboardList className="h-4 w-4" /></button>
-                <button type="button" aria-label={`Historial de ${p.name}`} title="Historial" onClick={() => setHistory(p)} className={ICON_BTN}><History className="h-4 w-4" /></button>
+                <button type="button" aria-label={`Compra de cajas de ${p.name}`} title="Compra de cajas" onClick={() => setPurchase(p)} className={ICON_BTN}><PackagePlus className="h-4 w-4" /><span className="ml-1.5 text-sm">Comprar cajas</span></button>
+                <button type="button" aria-label={`Recuento de ${p.name}`} title="Recuento" onClick={() => setCount(p)} className={ICON_BTN}><ClipboardList className="h-4 w-4" /><span className="ml-1.5 text-sm">Recuento</span></button>
+                <button type="button" aria-label={`Historial de ${p.name}`} title="Historial" onClick={() => setHistory(p)} className={ICON_BTN}><History className="h-4 w-4" /><span className="ml-1.5 text-sm">Historial</span></button>
                 <button type="button" aria-label={`Editar ${p.name}`} title="Editar" disabled={busy} onClick={() => setEditing({ id: p.id, draft: draftOf(p) })} className={ICON_BTN}><Pencil className="h-4 w-4" /></button>
                 <button type="button" disabled={busy} onClick={() => toggle.mutate(p)} className="min-h-11 rounded-md border border-border px-4 text-sm hover:bg-secondary disabled:opacity-50">
                   {p.active ? "Desactivar" : "Activar"}

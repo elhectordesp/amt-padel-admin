@@ -879,7 +879,7 @@ describe("Detalle de reserva con el módulo Cuentas", () => {
   const PARTS_VIEW = {
     bookingId: "b1", priceCents: 2000, courtType: "DOUBLES", defaultCount: 4, status: "CONFIRMED",
     startsAt: "2026-11-02T17:00:00.000Z", parts: [],
-    totals: { partsCents: 0, discountCents: 0, collectedCents: 0, pendingCents: 0, debtCents: 0, invitedCents: 0 },
+    totals: { partsCents: 0, discountCents: 0, collectedCents: 0, pendingCents: 0, debtCents: 0, invitedCents: 0, adjustmentCents: 0 },
     priceOptions: [], member: { discountPercent: 0, offered: false },
   };
 
@@ -941,6 +941,25 @@ describe("Detalle de reserva con el módulo Cuentas", () => {
     expect(screen.getByText(/3 cobradas, 1 debe/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Pagar con bono|Marcar como no pagada/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Cobrar$/ })).not.toBeInTheDocument();
+  });
+
+  it("con algo a deber no pone «pagada»: dice «Cobrada · 5,50 € a deber»; sin deuda, sigue «pagada»", async () => {
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING, clubCustomerId: "cc1", paymentMethod: "MIXED", paidAt: "2026-11-02T18:00:00.000Z", paidAmountCents: 1500,
+      partsSummary: { count: 4, paid: 3, pending: 0, debt: 1, invited: 0, debtCents: 550 },
+    });
+    partsSvc.view.mockResolvedValue({ ...PARTS_VIEW, parts: [] });
+    await renderDetail();
+    expect(await screen.findByText(/Cobrada · 5,50 € a deber/)).toBeInTheDocument();
+    expect(screen.queryByText(/· pagada/)).not.toBeInTheDocument();
+  });
+
+  it("una reserva cobrada entera por Bizum dice a qué móvil llegó", async () => {
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING, paymentMethod: "BIZUM", paidAt: "2026-11-02T18:00:00.000Z", bizumPartnerName: "Socio B",
+    });
+    await renderDetail();
+    expect(await screen.findByText("(Bizum · Socio B)")).toBeInTheDocument();
   });
 
   it("un rol sin caja (Recepción sí; Entrenador no) no ve la hoja", async () => {

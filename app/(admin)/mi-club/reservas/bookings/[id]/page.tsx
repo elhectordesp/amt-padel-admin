@@ -35,7 +35,7 @@ import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { MODE_LABELS } from "@/lib/utils/booking-labels";
 import { bookingCapacity } from "@/lib/utils/booking-participants";
-import { partsDescription } from "@/lib/utils/booking-parts";
+import { partsDebtLabel, partsDescription, partsOpenDebtCents } from "@/lib/utils/booking-parts";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
@@ -312,15 +312,24 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
         <Row icon={CreditCard} label="Precio">
           {formatCents(b.priceCents)}
           <span className="ml-2 text-xs text-muted-foreground">
-            ({paymentMethodLabel(b.paymentMethod)})
+            ({paymentMethodLabel(b.paymentMethod)}
+            {/* Una reserva cobrada entera por Bizum dice a qué móvil llegó («Club» si no guarda socio) */}
+            {b.paymentMethod === "BIZUM" && !b.partsSummary ? ` · ${b.bizumPartnerName ?? "Club"}` : ""})
           </span>
           {b.partsSummary && (
             <span className="ml-2 text-xs text-muted-foreground">· {partsDescription(b.partsSummary)}</span>
           )}
-          {b.paidAt && (
-            <span className="ml-2 text-xs text-green-500">
-              · pagada {formatInTimeZone(b.paidAt, tz, DATE)}
+          {b.partsSummary && partsOpenDebtCents(b.partsSummary) > 0 ? (
+            // Con algo a deber no está «pagada»: se dice cuánto falta
+            <span className="ml-2 text-xs font-medium text-orange-600 dark:text-orange-400">
+              · {partsDebtLabel(b.partsSummary)}
             </span>
+          ) : (
+            b.paidAt && (
+              <span className="ml-2 text-xs text-green-500">
+                · pagada {formatInTimeZone(b.paidAt, tz, DATE)}
+              </span>
+            )
           )}
         </Row>
         {(showCollectBtn || showVoucherBtn || showRemoveVoucherBtn || showUnpaidBtn) && (

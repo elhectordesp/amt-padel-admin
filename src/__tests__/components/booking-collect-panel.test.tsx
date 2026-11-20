@@ -23,6 +23,11 @@ vi.mock("@/lib/services/booking-parts", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/booking-parts")>()),
   bookingPartsService: parts,
 }));
+const customers = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn() }));
+vi.mock("@/lib/services/club-customers", async (orig) => ({
+  ...(await orig<typeof import("@/lib/services/club-customers")>()),
+  clubCustomersService: customers,
+}));
 const accounts = vi.hoisted(() => ({ partners: { list: vi.fn() } }));
 vi.mock("@/lib/services/accounts", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/accounts")>()),
@@ -43,7 +48,7 @@ const part = (n: number, patch: Partial<BookingPart> = {}): BookingPart => ({
   refundedAt: null, refundAmountCents: null, debtId: null, debtStatus: null, ...patch,
 });
 
-const TOTALS = { partsCents: 2000, discountCents: 0, collectedCents: 0, pendingCents: 2000, debtCents: 0, invitedCents: 0 };
+const TOTALS = { partsCents: 2000, discountCents: 0, collectedCents: 0, pendingCents: 2000, debtCents: 0, invitedCents: 0, adjustmentCents: 0 };
 
 const view = (patch: Partial<BookingPartsView> = {}): BookingPartsView => ({
   bookingId: "b1", priceCents: 2000, courtType: "DOUBLES", defaultCount: 4, status: "CONFIRMED",
@@ -91,19 +96,23 @@ describe("BookingCollectPanel", () => {
 
   it("con partes, enseña una fila por parte y los totales de la reserva", async () => {
     parts.view.mockResolvedValue(view({
-      totals: { partsCents: 1800, discountCents: 200, collectedCents: 500, pendingCents: 1000, debtCents: 200, invitedCents: 100 },
+      totals: { partsCents: 1800, discountCents: 200, collectedCents: 500, pendingCents: 1000, debtCents: 200, invitedCents: 100, adjustmentCents: -200 },
     }));
     renderPanel();
     await screen.findByRole("listitem", { name: "Parte 1" });
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
     const totals = screen.getByLabelText("Totales de la reserva");
-    expect(within(totals).getByText("Precio de la reserva").nextSibling).toHaveTextContent("20,00 €");
-    expect(within(totals).getByText("Suma de las partes").nextSibling).toHaveTextContent("18,00 €");
-    expect(within(totals).getByText("Descuento").nextSibling).toHaveTextContent("2,00 €");
+    expect(within(totals).getByText("Precio de la pista").nextSibling).toHaveTextContent("20,00 €");
+    expect(within(totals).getByText("Invitaciones").nextSibling).toHaveTextContent("1,00 €");
+    expect(within(totals).getByText("Otros precios").nextSibling).toHaveTextContent("−2,00 €");
+    expect(within(totals).getByText("A cobrar").nextSibling).toHaveTextContent("17,00 €");
     expect(within(totals).getByText("Cobrado").nextSibling).toHaveTextContent("5,00 €");
     expect(within(totals).getByText("Pendiente").nextSibling).toHaveTextContent("10,00 €");
     expect(within(totals).getByText("A deber").nextSibling).toHaveTextContent("2,00 €");
-    expect(within(totals).getByText("Invitado").nextSibling).toHaveTextContent("1,00 €");
+    // Cuadra: 20,00 = 17,00 a cobrar + 1,00 invitaciones + 2,00 de otros precios
+    expect(screen.getByTestId("totals-equation")).toHaveTextContent(
+      "Precio 20,00 € = a cobrar 17,00 € + invitaciones 1,00 € + otros precios 2,00 €",
+    );
   });
 
   it("«Todos efectivo» y «Todos tarjeta» cobran todas las pendientes de golpe", async () => {
@@ -261,6 +270,25 @@ describe("BookingCollectPanel", () => {
     fireEvent.change(within(dialog).getByLabelText("Nombre de quien debe"), { target: { value: "Pepe" } });
     fireEvent.click(confirm);
     await waitFor(() => expect(parts.debt).toHaveBeenCalledWith("c1", "b1", "p1", { personName: "Pepe" }));
+  });
+
+  it("«Debe»: elegir un cliente de la lista no apunta la deuda hasta pulsar «Apuntar la deuda»", async () => {
+    customers.list.mockResolvedValue({ items: [{ id: "cc9", name: "Marta Ruiz", phone: "600" }], total: 1 });
+    renderPanel();
+    await screen.findByRole("listitem", { name: "Parte 1" });
+    fireEvent.click(within(row(1)).getByRole("button", { name: "Debe" }));
+    const dialog = await screen.findByRole("dialog", { name: "¿Quién debe esta parte?" });
+    const confirm = within(dialog).getByRole("button", { name: "Apuntar la deuda" });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByPlaceholderText(/Buscar|nombre o teléfono/i), { target: { value: "Marta" } });
+    fireEvent.click(await within(dialog).findByText("Marta Ruiz"));
+    // Elegido, pero aún sin apuntar
+    expect(parts.debt).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", { name: "Apuntar la deuda" })).toBeEnabled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apuntar la deuda" }));
+    await waitFor(() => expect(parts.debt).toHaveBeenCalledWith("c1", "b1", "p1", { clubCustomerId: "cc9" }));
   });
 
   it("«Invitado» pide el motivo (3 caracteres como mínimo)", async () => {

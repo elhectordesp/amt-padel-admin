@@ -95,6 +95,14 @@ export function ShopSellDialog({ clubId, bookingId, bookingHasCustomer = false, 
   const needsReceiver = way === "BIZUM" && (receiver === undefined || partners.data === undefined);
   const canSell = product !== null && way !== "" && !needsPerson && !needsReceiver && !sell.isPending;
 
+  // Por qué «Cobrar» está apagado, a la vista (no solo un botón gris)
+  const blockedReason =
+    product === null ? null
+    : way === "" ? "Elige cómo paga"
+    : needsPerson ? "Falta indicar quién debe"
+    : needsReceiver ? "Elige a qué móvil llegó el Bizum"
+    : null;
+
   const submitLabel = way === "DEBT" ? "Dejar a deber" : way === "PENDING" ? "Dejar pendiente" : "Cobrar";
 
   return (
@@ -221,7 +229,12 @@ export function ShopSellDialog({ clubId, bookingId, bookingHasCustomer = false, 
           )}
         </div>
 
-        <div className="flex gap-3 border-t border-border px-5 py-4">
+        {blockedReason && (
+          <p aria-live="polite" className="border-t border-border px-5 pt-3 text-sm font-medium text-amber-600 dark:text-amber-400">
+            {blockedReason}
+          </p>
+        )}
+        <div className={`flex gap-3 px-5 py-4 ${blockedReason ? "" : "border-t border-border"}`}>
           <button
             onClick={close}
             disabled={sell.isPending}

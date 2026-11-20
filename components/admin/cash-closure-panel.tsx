@@ -55,6 +55,8 @@ function CloseDialog({
     previous?.cardTerminalCents != null ? centsToEurosInput(previous.cardTerminalCents) : "",
   );
   const [notes, setNotes] = useState(previous?.notes ?? "");
+  // Con diferencia, el cierre pide confirmación antes de guardarse
+  const [confirmingDiff, setConfirmingDiff] = useState(false);
 
   const countedCents = eurosToCents(counted);
   const terminalCents = terminal.trim() === "" ? null : eurosToCents(terminal);
@@ -83,6 +85,17 @@ function CloseDialog({
   });
 
   const canSave = countedCents !== null && !terminalInvalid && !save.isPending;
+  const diffs = [
+    countedCents === null ? null : { what: "efectivo", cents: countedCents - expectedCashCents },
+    terminalCents === null ? null : { what: "tarjeta", cents: terminalCents - expectedCardCents },
+  ].filter((d): d is { what: string; cents: number } => d !== null && d.cents !== 0);
+  const diffQuestion = `${diffs
+    .map((d, i) => {
+      const text = diffResult(d.cents).label;
+      return `${i === 0 ? text : text.toLowerCase()} en ${d.what}`;
+    })
+    .join(" y ")}. ¿Cerrar igualmente?`;
+  const confirmDiff = confirmingDiff && diffs.length > 0;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !save.isPending && onClose()} />
@@ -127,7 +140,7 @@ function CloseDialog({
                 aria-label="Efectivo contado"
                 autoFocus
                 value={counted}
-                onChange={(e) => setCounted(e.target.value)}
+                onChange={(e) => { setCounted(e.target.value); setConfirmingDiff(false); }}
                 placeholder="0,00"
                 className="h-14 w-full rounded-md border border-border bg-secondary pl-4 pr-10 text-2xl font-semibold text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
@@ -147,7 +160,7 @@ function CloseDialog({
                 aria-label="Total del datáfono"
                 aria-invalid={terminalInvalid}
                 value={terminal}
-                onChange={(e) => setTerminal(e.target.value)}
+                onChange={(e) => { setTerminal(e.target.value); setConfirmingDiff(false); }}
                 placeholder="0,00"
                 className={`h-12 w-full rounded-md border bg-secondary pl-4 pr-10 text-xl font-semibold text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37] ${
                   terminalInvalid ? "border-red-500" : "border-border"
@@ -173,25 +186,37 @@ function CloseDialog({
               maxLength={500}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              placeholder={diffs.length > 0 ? "Anota el motivo de la diferencia (por ejemplo, un cambio mal dado)" : undefined}
               className="w-full resize-none rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
           </label>
+
+          {confirmDiff && (
+            <div role="alert" className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <p className="flex items-center gap-2 font-medium text-amber-500">
+                <AlertTriangle size={14} /> {diffQuestion}
+              </p>
+              {notes.trim() === "" && (
+                <p className="text-xs text-muted-foreground">Te sugerimos anotar el motivo en la nota antes de cerrar.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 px-5 pb-5">
           <button
-            onClick={onClose}
+            onClick={confirmDiff ? () => setConfirmingDiff(false) : onClose}
             disabled={save.isPending}
             className="flex-1 rounded-md border border-border py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
           >
-            Cancelar
+            {confirmDiff ? "Volver a contar" : "Cancelar"}
           </button>
           <button
-            onClick={() => save.mutate()}
+            onClick={() => (diffs.length > 0 && !confirmingDiff ? setConfirmingDiff(true) : save.mutate())}
             disabled={!canSave}
             className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#D4AF37] py-2 text-sm font-semibold text-[#0C0C0C] transition-colors hover:bg-[#C49F2A] disabled:opacity-60"
           >
-            {save.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando…</> : <><Lock size={14} /> Confirmar cierre</>}
+            {save.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando…</> : <><Lock size={14} /> {confirmDiff ? "Cerrar igualmente" : "Confirmar cierre"}</>}
           </button>
         </div>
       </div>

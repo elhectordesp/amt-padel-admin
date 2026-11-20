@@ -52,6 +52,10 @@ export function ShopSalePayDialog({ clubId, saleId, subtitle, amountCents, onDon
 
   const close = () => { if (!pay.isPending) onClose(); };
   const askReceiver = method === "BIZUM";
+  const blockedReason =
+    method === "" ? "Elige cómo paga"
+    : askReceiver && (receiver === undefined || partners.data === undefined) ? "Elige a qué móvil llegó el Bizum"
+    : null;
   const canSave = method !== "" && (!askReceiver || (receiver !== undefined && partners.data !== undefined)) && !pay.isPending;
 
   return (
@@ -78,6 +82,9 @@ export function ShopSalePayDialog({ clubId, saleId, subtitle, amountCents, onDon
             />
           )}
         </div>
+        {blockedReason && (
+          <p aria-live="polite" className="px-5 pb-3 text-sm font-medium text-amber-600 dark:text-amber-400">{blockedReason}</p>
+        )}
         <div className="flex gap-3 px-5 pb-5">
           <button
             onClick={close}

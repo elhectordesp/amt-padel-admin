@@ -49,6 +49,8 @@ export interface BookingPartsSummary {
   pending: number;
   debt:    number;
   invited: number;
+  /** Lo que suman las partes a deber, en céntimos. No viene con un back anterior. */
+  debtCents?: number;
 }
 export type BookingParticipantStatus =
   | "INVITED"
@@ -320,6 +322,8 @@ export interface Booking {
   refundAmountCents: number | null;
   /** Sus partes por estado; null: sin partes (se cobra entera). No viene con un back anterior. */
   partsSummary?: BookingPartsSummary | null;
+  /** A qué móvil llegó un cobro por Bizum: el nombre del socio; null, el del club. Solo en el detalle y para el personal. */
+  bizumPartnerName?: string | null;
   amtCommissionCents: number | null;
   clubPayoutCents: number | null;
   cancellationFeeChargedCents: number | null;
