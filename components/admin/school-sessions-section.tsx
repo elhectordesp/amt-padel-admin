@@ -173,6 +173,16 @@ export function SchoolSessionsSection({
                           {s.attendanceCount > 0 ? "Ver lista" : "Pasar lista"}
                         </Link>
                       )}
+                      {/* De un día que aún no ha llegado no se pasa lista, pero sí se abre
+                          la ficha: avisar una ausencia o apuntar una recuperación */}
+                      {!canList && !cancelled && (
+                        <Link
+                          href={`/mi-club/escuela/clases/${s.id}`}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2.5 text-[0.8rem] hover:bg-muted max-[1024px]:h-11"
+                        >
+                          Abrir clase
+                        </Link>
+                      )}
                       {editable && !cancelled && (
                         <>
                           <Button
