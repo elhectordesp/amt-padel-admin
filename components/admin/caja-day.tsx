@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, Loader2, Printer } from "lucide-react";
+import { CashClosurePanel } from "@/components/admin/cash-closure-panel";
 import { ErrorState } from "@/components/admin/error-state";
 import { Button } from "@/components/ui/button";
 import { cashQK, cashService } from "@/lib/services/cash";
@@ -22,6 +23,13 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
   // null = sin tocar: hoy, en la zona del club
   const [picked, setPicked] = useState<string | null>(null);
   const date = picked ?? zonedDayKey(new Date(), timeZone);
+
+  // El aviso «Días sin cerrar» de la portada llega con ?dia=AAAA-MM-DD
+  useEffect(() => {
+    const day = new URLSearchParams(window.location.search).get("dia");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setPicked(day);
+  }, []);
 
   const query = useQuery({
     queryKey: cashQK.day(clubId, date),
@@ -55,6 +63,8 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
           <Printer className="h-3.5 w-3.5" /> Imprimir
         </Button>
       </div>
+
+      <CashClosurePanel clubId={clubId} date={date} timeZone={timeZone} />
 
       {query.isError && !cash ? (
         <ErrorState title="No se pudo cargar la caja" onRetry={() => query.refetch()} />
