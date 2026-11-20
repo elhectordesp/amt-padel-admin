@@ -803,7 +803,7 @@ export default function ClubesPage() {
   const { page, setPage, pageSize, setPageSize } = usePagination();
 
   const { data: clubs = [], isLoading } = useQuery({
-    queryKey:  ["admin-clubs"],
+    queryKey:  ["admin-clubs", "all"],
     queryFn:   () => adminService.clubs.list(true),
   });
 

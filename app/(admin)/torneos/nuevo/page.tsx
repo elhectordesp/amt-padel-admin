@@ -245,7 +245,9 @@ export default function NuevoTorneoPage() {
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
     queryFn:  () => adminService.clubs.list(),
-    enabled:  !isClubUser,
+    // Hasta conocer el rol (sale del token tras el primer pintado) no se pide:
+    // un club recibía un 403 del listado de AMT
+    enabled:  role !== null && !isClubUser,
   });
 
   const { data: myClub } = useQuery({
