@@ -3,7 +3,7 @@
  * torneos) y los partidos de grupos de una liga dicen su jornada.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/components/admin/header", () => ({ Header: ({ title }: { title: string }) => <h1>{title}</h1> }));
@@ -11,10 +11,11 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const listAll = vi.fn();
 const matchesList = vi.fn();
+const setResult = vi.fn();
 vi.mock("@/lib/services/admin", () => ({
   adminService: {
     tournaments: { listAll: () => listAll() },
-    matches: { list: (...args: unknown[]) => matchesList(...args), setResult: vi.fn() },
+    matches: { list: (...args: unknown[]) => matchesList(...args), setResult: (...args: unknown[]) => setResult(...args) },
   },
 }));
 
@@ -69,5 +70,36 @@ describe("Resultados con ligas", () => {
 
     expect((await screen.findAllByText("Grupos")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Jornada/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Resultados: torneo que no está en curso (F17)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listAll.mockResolvedValue([TOURNAMENT]);
+    matchesList.mockResolvedValue([match("m1", "GROUPS", 1)]);
+  });
+
+  it("el «Confirma para…» del back se ofrece en un diálogo del panel y reintenta con force", async () => {
+    setResult
+      .mockRejectedValueOnce(new Error("El torneo no está «Programado». Confirma para registrar el resultado de todas formas."))
+      .mockResolvedValueOnce({});
+    const nativeConfirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderPage();
+    await screen.findByRole("option", { name: "Open de otoño" });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "t1" } });
+    fireEvent.click((await screen.findAllByRole("button", { name: /Introducir|Registrar|Resultado/ }))[0]);
+    fireEvent.change(await screen.findByLabelText("Set 1 pareja 1"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("Set 1 pareja 2"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Set 2 pareja 1"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("Set 2 pareja 2"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar resultado" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "¿Registrar el resultado igualmente?" });
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Registrar igualmente")!);
+    await waitFor(() => expect(setResult).toHaveBeenCalledTimes(2));
+    expect(setResult.mock.calls[1][5]).toBe(true);
+    nativeConfirm.mockRestore();
   });
 });
