@@ -6,7 +6,7 @@
  * cargan y se guardan; borrar una temporada avisa de que se borran sus precios.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -43,6 +43,7 @@ vi.mock("@/lib/services/club-vouchers", async () => {
 const accessMock = vi.hoisted(() => ({ can: vi.fn() }));
 vi.mock("@/lib/use-club-access", () => ({ useClubAccess: () => ({ roles: null, can: accessMock.can }) }));
 
+import { adminService } from "@/lib/services/admin";
 import PreciosPage from "../../../app/(admin)/mi-club/reservas/precios/page";
 
 const SLOT = { id: "s1", courtId: "p1", dayOfWeek: 1, startTime: "09:00", endTime: "23:00", durationMinutes: 90 };
@@ -205,6 +206,27 @@ describe("Precios de las pistas", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Precios" }));
     expect(await screen.findByLabelText("Precio 90 min, franja 1 (€)")).toBeInTheDocument();
+  });
+
+  it("«Aplicar a todas las pistas» confirma con un diálogo del panel (no con confirm()) y aplica", async () => {
+    vi.mocked(adminService.courts.list).mockResolvedValueOnce([
+      { id: "p1", name: "Pista 1", active: true }, { id: "p2", name: "Pista 2", active: true },
+    ] as never);
+    pricing.replaceMany.mockResolvedValue([]);
+    const nativeConfirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Aplicar a todas las pistas/ }));
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", { name: "¿Aplicar a todas las pistas?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
+    await waitFor(() => expect(pricing.replaceMany).toHaveBeenCalled());
+    nativeConfirm.mockRestore();
+  });
+
+  it("con una sola pista no ofrece «Aplicar a todas las pistas»", async () => {
+    renderPage();
+    await screen.findByLabelText("Precio 90 min, franja 1 (€)");
+    expect(screen.queryByRole("button", { name: /Aplicar a todas las pistas/ })).not.toBeInTheDocument();
   });
 
   it("una oferta sin descuento válido no se manda", async () => {

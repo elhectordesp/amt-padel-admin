@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Copy, Loader2, Plus, Save, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { PriceOffersSection } from "@/components/admin/price-offers-section";
 import { PriceSeasonsPanel } from "@/components/admin/price-seasons-panel";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -369,15 +370,12 @@ function GridEditor({
     if (!hasErrors()) save.mutate();
   };
 
+  // Un diálogo propio: el confirm() del navegador se descarta solo en tablets
+  // y navegadores automáticos, y el botón parecía no hacer nada
+  const [confirmApplyAll, setConfirmApplyAll] = useState(false);
   const onApplyAll = () => {
     if (hasErrors()) return;
-    if (
-      window.confirm(
-        `Sustituye los precios ${seasonId ? `de ${seasonName ?? "la temporada"}` : "base"} de ${allCourts.length} pistas por los de esta cuadrícula.\n\n¿Continuar?`,
-      )
-    ) {
-      applyAll.mutate();
-    }
+    setConfirmApplyAll(true);
   };
 
   const updateRow = (id: string, patch: Partial<GridRow>) =>
@@ -412,6 +410,15 @@ function GridEditor({
 
   return (
     <div>
+      <ConfirmModal
+        open={confirmApplyAll}
+        title="¿Aplicar a todas las pistas?"
+        description={`Sustituye los precios ${seasonId ? `de ${seasonName ?? "la temporada"}` : "base"} de ${allCourts.length} pistas por los de esta cuadrícula.`}
+        confirmLabel="Aplicar"
+        loading={applyAll.isPending}
+        onClose={() => setConfirmApplyAll(false)}
+        onConfirm={() => applyAll.mutate(undefined, { onSettled: () => setConfirmApplyAll(false) })}
+      />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">
           Precios {seasonId ? `de ${seasonName ?? "la temporada"}` : "base"} de{" "}
@@ -422,11 +429,13 @@ function GridEditor({
             <Button variant="outline" size="sm" onClick={addRow}>
               <Plus className="h-3.5 w-3.5" /> Añadir franja
             </Button>
+            {/* Con una sola pista no hay a qué aplicar: no se ofrece */}
+            {allCourts.length >= 2 && (
             <Button
               variant="outline"
               size="sm"
               onClick={onApplyAll}
-              disabled={applyAll.isPending || allCourts.length < 2}
+              disabled={applyAll.isPending}
             >
               {applyAll.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -435,6 +444,7 @@ function GridEditor({
               )}
               Aplicar a todas las pistas
             </Button>
+            )}
             <Button size="sm" onClick={onSave} disabled={save.isPending}>
               {save.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
