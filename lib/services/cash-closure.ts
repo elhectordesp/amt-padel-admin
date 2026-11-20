@@ -47,6 +47,8 @@ export interface CashClosureState {
 export interface UnclosedDay {
   date:       string;
   totalCents: number;
+  /** true: el día está cerrado, pero ha cambiado después del cierre. */
+  changedSinceClose: boolean;
 }
 
 export interface CloseCashInput {

@@ -622,6 +622,15 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
       expect(within(dialog()).getByText(/Cobrado: 18,00 €/)).toBeInTheDocument();
     });
 
+    it("«Devolver lo cobrado» rellena el campo con lo cobrado y lo devuelto sale entero", async () => {
+      await openDialog(PAID);
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Devolver lo cobrado (18,00 €)" }));
+      expect(within(dialog()).getByLabelText("Importe a devolver")).toHaveValue("18,00");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+      await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined, 1800));
+    });
+
     it("lo devuelto va en céntimos junto al motivo", async () => {
       await openDialog(PAID);
       fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Lluvia" } });
@@ -662,6 +671,7 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
     ])("%s: no pide devolución", async (_label, booking) => {
       await openDialog(booking);
       expect(within(dialog()).queryByLabelText("Importe a devolver")).not.toBeInTheDocument();
+      expect(within(dialog()).queryByRole("button", { name: /Devolver lo cobrado/ })).not.toBeInTheDocument();
     });
   });
 
