@@ -70,6 +70,7 @@ export function playerPayment(reg: AdminRegistration, player: PaymentPlayer): Pl
       paid:          reg.paid,
       paymentMethod: reg.paymentMethod ?? null,
       paidAt:        reg.paidAt ?? null,
+      paidAmountCents: reg.paidAmountCents ?? null,
       paymentNote:   reg.paymentNote ?? null,
     };
   }

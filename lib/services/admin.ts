@@ -1,23 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from "@/lib/api";
+import { DEFAULT_SCORING_FORMAT } from "@/lib/scoring-format";
 import type {
   AdminStats, Tournament, AdminRegistration,
   Player, MatchResult, CreateTournamentPayload,
   FinanceStats, AdminAlert, CategoryChange, ActivityItem,
   SpaConfig, RankingType, RankingGender, GrowthStats, Sponsor, SponsorScope, Club,
-  CreatePlayerPayload, UpdatePlayerPayload, GenderConflict,
+  CreatePlayerPayload, UpdatePlayerPayload, GenderConflict, Gender, RegistrationStatus,
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
-  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults, AppConfigFaqs, AdminMember, ClubAdmins,
+  AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
+  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan, ClubSetupProgress,
+  ClubAmtPlanInternal, UpdateClubAmtPlanPayload,
   SupportMessage, SupportStatus,
-  Court, TournamentCourt, CourtBlock,
+  Court, TournamentCourt, CourtBlock, CourtBlockKind,
   AuditLogEntry, PlayerRegistrationEntry, RegistrationAvailability,
-  DeletedTournament, DeletedPlayer, CategoryGender,
+  DeletedTournament, DeletedPlayer, CategoryGender, ScoringFormat, ScheduleDayPayload,
 } from "@/types";
 import type {
   TournamentPreparation, PublishAndNotifyResult, AvailabilityHeatmap,
   CategoryLevelSummary, GroupsLockOptions,
 } from "@/types/preparation";
+import type { ClubMembership, ClubStaffRole } from "@/lib/club-permissions";
+import type { AuditArea } from "@/lib/constants";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AutomaticInvite } from "@/lib/player-invite";
@@ -31,6 +36,9 @@ export const registrationsQK = {
   all:  ["registrations"] as const,
   list: (tournamentId: string) => ["registrations", tournamentId] as const,
 };
+
+/** Las opciones de torneo de un club: las edita Opciones de torneo y las lee el asistente. */
+export const clubTournamentConfigQK = (clubId: string) => ["club-tournament-config", clubId] as const;
 
 /**
  * Tras dar de alta, cambiar de estado o mover inscripciones: la lista y las
@@ -76,6 +84,11 @@ export interface AdminUser {
   // Opcionales: una versión anterior del back no los devuelve
   email?: string | null;
   role?:  AccountRole;
+  // Los clubes en los que trabaja (equipo) y con cuál está trabajando ahora
+  clubs?:        ClubMembership[];
+  activeClubId?: string | null;
+  // Club en el que AMT trabaja como soporte (null: no está en soporte)
+  supportClubId?: string | null;
 }
 
 /**
@@ -160,6 +173,8 @@ export const adminService = {
 
   /** P3 — Historial de auditoría con filtros y paginación. */
   auditLogs: (filters: {
+    area?: AuditArea;
+    clubId?: string;  // solo AMT: un club siempre ve el suyo
     tournamentId?: string;
     action?: string;
     adminId?: string;
@@ -202,6 +217,23 @@ export const adminService = {
       api.get<Tournament[]>("/admin/tournaments").then((r) =>
         (r.data ?? []).map((t) => ({ ...t, status: t.status?.toUpperCase() as Tournament["status"] }))
       ),
+    /** Las ligas (el back, sin tipo, devuelve solo torneos: `list`). */
+    listLeagues: () =>
+      api.get<Tournament[]>("/admin/tournaments", { params: { kind: "LEAGUE" } }).then((r) =>
+        (r.data ?? []).map((t) => ({ ...t, status: t.status?.toUpperCase() as Tournament["status"] }))
+      ),
+    /**
+     * Torneos y ligas juntos, con su `kind` (los torneos, aunque el back no lo
+     * mande, `TOURNAMENT`): para los selectores de Inscripciones, Resultados y
+     * el buscador, que sirven para los dos tipos.
+     */
+    listAll: () =>
+      Promise.all([adminService.tournaments.list(), adminService.tournaments.listLeagues()]).then(
+        ([tournaments, leagues]) => [
+          ...tournaments.map((t) => ({ ...t, kind: t.kind ?? ("TOURNAMENT" as const) })),
+          ...leagues,
+        ],
+      ),
     detail: (id: string) =>
       api.get<Tournament>(`/tournaments/${id}`).then((r) =>
         r.data ? { ...r.data, status: r.data.status?.toUpperCase() as Tournament["status"] } : r.data
@@ -215,7 +247,7 @@ export const adminService = {
     create:          (data: CreateTournamentPayload) => api.post<Tournament>("/admin/tournaments", data, { timeout: 30_000 }).then((r) => r.data),
     update:          (id: string, data: Partial<Tournament> | Record<string, unknown>) => api.patch<Tournament>(`/admin/tournaments/${id}`, data).then((r) => r.data),
     /** Editar jornadas/tramos horarios (solo durante el montaje). Reemplaza todas las jornadas. */
-    updateSchedule:  (id: string, schedule: { date: string; type?: string; isFinal?: boolean; maxUnavailableSlots?: number; blocks: { start: string; end: string }[] }[]) =>
+    updateSchedule:  (id: string, schedule: ScheduleDayPayload[]) =>
       api.put(`/admin/tournaments/${id}/schedule`, { schedule }).then((r) => r.data),
     delete:          (id: string, force?: boolean)  => api.delete(`/admin/tournaments/${id}`, force ? { params: { force: true } } : undefined).then((r) => r.data),
     /** Los torneos borrados, los más recientes primero (solo AMT). */
@@ -319,6 +351,13 @@ export const adminService = {
         })
         .then((r) => r.data),
     regenerateElimination: (id: string, categoryId: string, opts?: { topNPerGroup?: number; extraQualifiers?: number; eliminationStartRound?: string; force?: boolean }) => api.post(`/admin/tournaments/${id}/bracket/regenerate-elimination`, { categoryId, ...(opts ?? {}) }).then((r) => r.data),
+    /**
+     * El cuadro final de una liga: la eliminatoria con los N primeros de cada
+     * grupo de la categoría. El back da 409 mientras queden partidos de grupos
+     * sin resultado.
+     */
+    generateLeagueFinal: (id: string, categoryId: string, topNPerGroup: number) =>
+      api.post<{ generated: true; qualifiers: number }>(`/admin/tournaments/${id}/categories/${categoryId}/league-final`, { topNPerGroup }).then((r) => r.data),
     /** Cruce MANUAL de eliminatoria (Frente 3): cada cruce = un partido de 1ª ronda; lado = {groupIdx, pos} o null=bye. */
     generateEliminationManual: (id: string, catId: string, crosses: { a: { groupIdx: number; pos: number } | null; b: { groupIdx: number; pos: number } | null }[]) =>
       api.post(`/admin/tournaments/${id}/categories/${catId}/elimination/manual`, { crosses }).then((r) => r.data),
@@ -429,7 +468,7 @@ export const adminService = {
       }).then((r) => r.data),
     createManualMatch: (
       tournamentId: string,
-      payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string },
+      payload: { categoryId: string; groupId?: string; phase?: string; team1?: { userId: string; partnerId?: string | null }; team2?: { userId: string; partnerId?: string | null }; date?: string; court?: string; /** Jornada, en un grupo de una liga */ round?: number },
       lock?: GroupsLockOptions,
     ) => api.post(`/admin/tournaments/${tournamentId}/matches`, lock?.forceLocked ? { ...payload, forceLocked: true } : payload).then((r) => r.data),
     deleteMatch: (matchId: string, force?: boolean, lock?: GroupsLockOptions) =>
@@ -439,9 +478,13 @@ export const adminService = {
           ...(lock?.forceLocked ? { forceLocked: true } : {}),
         },
       }).then((r) => r.data),
-    /** Des-finalizar un partido: revierte su resultado y lo deja pendiente. */
+    /**
+     * Des-finalizar un partido: revierte su resultado y lo deja pendiente.
+     * `spaRecalcScheduled`: el resultado ya contaba para el SPA, que se
+     * recalcula esa noche.
+     */
     unfinishMatch: (matchId: string, force?: boolean) =>
-      api.post(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),
+      api.post<{ success: boolean; spaRecalcScheduled?: boolean }>(`/admin/matches/${matchId}/unfinish`, force ? { force: true } : {}).then((r) => r.data),
   },
 
   registrations: {
@@ -467,9 +510,22 @@ export const adminService = {
      */
     updatePayment: (
       registrationId: string,
-      data: { paid: boolean; paymentMethod?: string; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
+      data: { paid: boolean; paymentMethod?: string; paidAmountCents?: number; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
     ) =>
       api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
+    /**
+     * «Cobrar pareja»: marca el pago de los jugadores indicados y, si la
+     * inscripción está pendiente, la confirma, todo en una llamada.
+     * `titularId`/`partnerId`: quiénes cree el panel que son (si cambió la
+     * pareja entretanto, el back da 409).
+     */
+    payPair: (
+      registrationId: string,
+      data: { players: PaymentPlayer[]; paymentMethod: string; paidAmountCents?: number; titularId: string; partnerId?: string },
+    ) =>
+      api.post<{ registrationId: string; confirmed: boolean; status: RegistrationStatus }>(
+        `/admin/registrations/${registrationId}/pay-pair`, data,
+      ).then((r) => r.data),
   },
 
   categories: {
@@ -483,13 +539,13 @@ export const adminService = {
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}/prizes`, prizes).then(r => r.data),
     add: (
       tournamentId: string,
-      data: { gender: CategoryGender; level: string; totalSpots: number; price?: number; scoringFormat?: string },
+      data: { gender: CategoryGender; level: string; totalSpots: number; price?: number; scoringFormat?: ScoringFormat },
     ) =>
       api.post(`/admin/tournaments/${tournamentId}/categories`, data).then(r => r.data),
     update: (
       tournamentId: string,
       categoryId:   string,
-      data: { totalSpots?: number; price?: number; scoringFormat?: string; force?: boolean },
+      data: { totalSpots?: number; price?: number; scoringFormat?: ScoringFormat; force?: boolean },
     ) =>
       api.patch(`/admin/tournaments/${tournamentId}/categories/${categoryId}`, data).then(r => r.data),
     remove: (tournamentId: string, categoryId: string, force?: boolean) =>
@@ -532,17 +588,32 @@ export const adminService = {
           // Formato resuelto POR FASE por el backend (roundFormats override); cae al
           // formato base de la categoría si no viene. Así el hint de super-tiebreak
           // del modal respeta p.ej. "final a 3 sets" aunque la base sea super-tie.
-          scoringFormat: m.effectiveScoringFormat ?? m.category?.scoringFormat ?? m.scoringFormat ?? "BEST_OF_3",
+          scoringFormat: m.effectiveScoringFormat ?? m.category?.scoringFormat ?? m.scoringFormat ?? DEFAULT_SCORING_FORMAT,
         }));
       });
     },
+    /**
+     * Fija, cambia o quita la fecha y la pista de un partido de LIGA. Lo que no
+     * se manda no se toca; null lo quita (una pista necesita fecha). `date` sin
+     * zona es hora de la liga. Si la pista está ocupada (bloqueo, reserva u otro
+     * partido) o un jugador tiene otro partido a la vez, el back da 409 con lo
+     * que lo impide: eso no se confirma. Si el día no es de juego de la liga,
+     * avisa con «Confirma para…» y se repite con `force`.
+     */
+    scheduleLeagueMatch: (matchId: string, data: { date?: string | null; court?: string | null; force?: boolean }) =>
+      api.patch<{ match: { id: string; date: string | null; court: string | null; courtId: string | null } }>(`/admin/matches/${matchId}/league-schedule`, data).then((r) => r.data),
     setResult: (matchId: string, sets1: number[], sets2: number[], walkover?: boolean, walkoverWinnerTeam?: 1 | 2, force?: boolean) =>
       // El back espera `winnerTeam`: con `walkoverWinnerTeam` lo descartaba
       // (whitelist) y todo walkover daba 400 «Debes indicar qué equipo gana»
-      api.patch<MatchResult>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, winnerTeam: walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
+      // `spaRecalcScheduled`: corregía un resultado ya contado para el SPA, que
+      // se recalcula esa noche
+      api.patch<{ success: boolean; spaRecalcScheduled?: boolean }>(`/admin/matches/${matchId}/result`, { sets1, sets2, ...(walkover ? { walkover, winnerTeam: walkoverWinnerTeam } : {}), ...(force ? { force: true } : {}) }).then((r) => r.data),
   },
 
   players: {
+    /** Pone el género a un jugador al que le falta (el back da 409 si ya lo tiene). */
+    setMissingGender: (playerId: string, gender: Gender) =>
+      api.patch<{ id: string; gender: Gender }>(`/admin/players/${playerId}/gender`, { gender }).then((r) => r.data),
     list: (params?: { gender?: string; level?: string; page?: number; pageSize?: number; q?: string; sortBy?: string; sortDir?: string; activationStatus?: string }) =>
       api.get<{ data: any[]; total: number; page: number; pageSize: number }>(
         "/admin/players",
@@ -636,12 +707,40 @@ export const adminService = {
       api.get<Club[]>("/clubs").then((r) => r.data ?? []),
     findOne:    (id: string) =>
       api.get<Club>(`/admin/clubs/${id}`).then((r) => r.data),
-    create:     (data: Omit<Club, "id" | "active" | "tournamentCount">) =>
+    create:     (data: Omit<Club, "id" | "active" | "tournamentCount"> & { active?: boolean }) =>
       api.post<Club>("/admin/clubs", data).then((r) => r.data),
     update:     (id: string, data: Partial<Omit<Club, "id" | "tournamentCount">>) =>
       api.patch<Club>(`/admin/clubs/${id}`, data).then((r) => r.data),
     deactivate:   (id: string) =>
       api.delete(`/admin/clubs/${id}`).then((r) => r.data),
+    // Logo: imagen de hasta 2 MB; el back la guarda y devuelve su URL
+    uploadLogo: (id: string, file: File) => {
+      const form = new FormData();
+      form.append("image", file);
+      return api.post<{ logoUrl: string }>(`/admin/clubs/${id}/logo`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }).then((r) => r.data);
+    },
+    // Datos fiscales (solo propietario, gestor y AMT): no vienen en ningún otro GET del club
+    fiscal: (id: string) =>
+      api.get<ClubFiscal>(`/admin/clubs/${id}/fiscal`).then((r) => r.data),
+    updateFiscal: (id: string, data: ClubFiscal) =>
+      api.put<ClubFiscal>(`/admin/clubs/${id}/fiscal`, data).then((r) => r.data),
+    // Puesta en marcha: qué pasos tiene hechos el club, según sus datos reales
+    setupProgress: (id: string) =>
+      api.get<ClubSetupProgress>(`/admin/clubs/${id}/setup-progress`).then((r) => r.data),
+    // Plan con AMT (solo propietario, gestor y AMT); sin notas internas
+    amtPlan: (id: string) =>
+      api.get<ClubAmtPlan>(`/admin/clubs/${id}/amt-plan`).then((r) => r.data),
+    // Solo AMT: el plan con las notas internas, para su formulario
+    amtPlanInternal: (id: string) =>
+      api.get<ClubAmtPlanInternal>(`/admin/clubs/${id}/amt-plan/internal`).then((r) => r.data),
+    // Solo AMT: fija plan, cuota, comisión y notas (reemplaza los cuatro)
+    updateAmtPlan: (id: string, data: UpdateClubAmtPlanPayload) =>
+      api.put<UpdateClubAmtPlanPayload>(`/admin/clubs/${id}/amt-plan`, data).then((r) => r.data),
+    // Solo AMT: último día con la cuota pagada (null la borra)
+    setFeePaidUntil: (id: string, feePaidUntil: string | null) =>
+      api.put<{ feePaidUntil: string | null }>(`/admin/clubs/${id}/amt-plan/paid-until`, { feePaidUntil }).then((r) => r.data),
     geocodeBatch: () =>
       api.post<{ updated: number; skipped: number; errors: string[] }>('/admin/clubs/geocode-batch').then((r) => r.data),
     // Crea un club stub + invita a su admin en un solo paso. El propio
@@ -661,11 +760,25 @@ export const adminService = {
       api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/invitations/${invitationId}/resend`).then((r) => r.data),
     revokeInvitation: (clubId: string, invitationId: string) =>
       api.delete(`/admin/clubs/${clubId}/invitations/${invitationId}`).then((r) => r.data),
+    // Equipo del club: miembros con sus roles e invitaciones sin aceptar
+    staff: (clubId: string) =>
+      api.get<ClubStaff>(`/admin/clubs/${clubId}/staff`).then((r) => r.data),
+    inviteStaff: (clubId: string, email: string, roles: ClubStaffRole[]) =>
+      api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/staff/invitations`, { email, roles }).then((r) => r.data),
+    resendStaffInvitation: (clubId: string, invitationId: string) =>
+      api.post<{ id: string; expiresAt: string }>(`/admin/clubs/${clubId}/staff/invitations/${invitationId}/resend`).then((r) => r.data),
+    revokeStaffInvitation: (clubId: string, invitationId: string) =>
+      api.delete(`/admin/clubs/${clubId}/staff/invitations/${invitationId}`).then((r) => r.data),
+    updateStaffRoles: (clubId: string, userId: string, roles: ClubStaffRole[]) =>
+      api.patch(`/admin/clubs/${clubId}/staff/${userId}`, { roles }).then((r) => r.data),
+    removeStaff: (clubId: string, userId: string) =>
+      api.delete(`/admin/clubs/${clubId}/staff/${userId}`).then((r) => r.data),
   },
 
   courts: {
-    list:   (clubId: string) =>
-      api.get<Court[]>(`/admin/clubs/${clubId}/courts`).then((r) => r.data ?? []),
+    // `range` (días AAAA-MM-DD, del club): solo los bloqueos que tocan esos días; sin él, los que acaban hoy o después
+    list:   (clubId: string, range?: { from?: string; to?: string }) =>
+      api.get<Court[]>(`/admin/clubs/${clubId}/courts`, range ? { params: range } : undefined).then((r) => r.data ?? []),
     create: (clubId: string, data: { name: string; isIndoor?: boolean; isCentral?: boolean }) =>
       api.post<Court>(`/admin/clubs/${clubId}/courts`, data).then((r) => r.data),
     update: (clubId: string, courtId: string, data: Partial<{
@@ -677,13 +790,25 @@ export const adminService = {
     remove: (clubId: string, courtId: string) =>
       api.delete(`/admin/clubs/${clubId}/courts/${courtId}`).then((r) => r.data),
     blocks: {
-      list:   (clubId: string, courtId: string) =>
-        api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`).then((r) => r.data ?? []),
-      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string }) =>
+      // Sin `from`, solo los que acaban hoy o después; con él (YYYY-MM-DD), también los pasados desde ese día
+      list:   (clubId: string, courtId: string, from?: string) =>
+        api.get<CourtBlock[]>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, { params: from ? { from } : undefined })
+          .then((r) => r.data ?? []),
+      // `force`: bloquear aunque haya reservas o partidos en el tramo (el back, sin él, da 409 con la lista)
+      create: (clubId: string, courtId: string, data: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason?: string; kind?: CourtBlockKind; force?: boolean }) =>
         api.post<CourtBlock>(`/admin/clubs/${clubId}/courts/${courtId}/blocks`, data).then((r) => r.data),
       remove: (clubId: string, courtId: string, blockId: string) =>
         api.delete(`/admin/clubs/${clubId}/courts/${courtId}/blocks/${blockId}`).then((r) => r.data),
     },
+  },
+
+  // Opciones de torneo del club: los valores de partida del asistente. Sin
+  // guardar, el GET da los de siempre; el PUT cambia solo lo que se manda
+  clubTournamentConfig: {
+    get:    (clubId: string) =>
+      api.get<ClubTournamentConfig>(`/admin/clubs/${clubId}/tournament-config`).then((r) => r.data),
+    update: (clubId: string, data: UpdateClubTournamentConfigPayload) =>
+      api.put<ClubTournamentConfig>(`/admin/clubs/${clubId}/tournament-config`, data).then((r) => r.data),
   },
 
   tournamentCourts: {
@@ -744,7 +869,6 @@ export const adminService = {
     updateSeason:     (data: Partial<AppConfigSeason>)                    => api.put("/admin/config/season", data).then((r) => r.data),
     updateEmail:      (data: Partial<AppConfigEmail>)                     => api.put("/admin/config/email", data).then((r) => r.data),
     updatePush:       (data: Partial<AppConfigPush>)                      => api.put("/admin/config/push", data).then((r) => r.data),
-    updateTournamentDefaults: (data: Partial<AppConfigTournamentDefaults>) => api.put("/admin/config/tournamentDefaults", data).then((r) => r.data),
     updateFaqs:       (data: AppConfigFaqs)                               => api.put("/admin/config/faqs", data).then((r) => r.data),
     closeSeason:      ()                                                  => api.post<{ previousSeason: number; newSeason: number }>("/admin/config/season/close").then((r) => r.data),
     advanceSeason:    ()                                                  => api.post<{ newSeason: number }>("/admin/config/season/advance").then((r) => r.data),

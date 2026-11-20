@@ -14,14 +14,16 @@
  */
 import { Suspense } from "react";
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/components/admin/header", () => ({
   Header: ({ title }: { title: string }) => <div data-testid="header">{title}</div>,
 }));
 vi.mock("@/components/admin/booking-create-dialog", () => ({ BookingCreateDialog: () => null }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "c1" }),
   isClub: (r: string) => r === "club",
@@ -40,6 +42,11 @@ const svc = vi.hoisted(() => ({
 vi.mock("@/lib/services/bookings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/bookings")>("@/lib/services/bookings");
   return { ...actual, bookingsService: svc };
+});
+const voucherSvc = vi.hoisted(() => ({ booking: { usable: vi.fn(), use: vi.fn(), remove: vi.fn() } }));
+vi.mock("@/lib/services/club-vouchers", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/club-vouchers")>("@/lib/services/club-vouchers");
+  return { ...actual, clubVouchersService: voucherSvc };
 });
 
 import BookingsListPage from "../../../app/(admin)/mi-club/reservas/bookings/page";
@@ -102,7 +109,7 @@ describe("Listado de reservas", () => {
 
   it("«Hoy» es el día del club: de las 00:00 a las 23:59:59.999 de Madrid", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     expect(svc.bookings.list).toHaveBeenCalledWith({
       clubId: "c1",
       limit: 50,
@@ -115,7 +122,7 @@ describe("Listado de reservas", () => {
 
   it("«Próximas» empieza al acabar el día del club e «Histórico» acaba al empezar", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     fireEvent.click(screen.getByRole("button", { name: "Próximas" }));
     await waitFor(() =>
       expect(svc.bookings.list).toHaveBeenLastCalledWith(
@@ -132,12 +139,13 @@ describe("Listado de reservas", () => {
 
   it("cada reserva con su día y su hora de Madrid", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText(/lun, 2 nov · 18:00 - 19:30/)).toBeInTheDocument();
+    expect(await screen.findByText("18:00 - 19:30")).toBeInTheDocument();
+    expect(screen.getByText(/lun, 2 nov/)).toBeInTheDocument();
   });
 
   it("«Próximas» pide solo las que siguen en pie, de la más cercana a la más lejana", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     fireEvent.click(screen.getByRole("button", { name: "Próximas" }));
 
     await waitFor(() =>
@@ -149,7 +157,7 @@ describe("Listado de reservas", () => {
 
   it("«Hoy» va por orden de hora; «Histórico», de la más reciente hacia atrás", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     expect(svc.bookings.list).toHaveBeenLastCalledWith(expect.objectContaining({ order: "asc" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
@@ -160,7 +168,8 @@ describe("Listado de reservas", () => {
 
   it("quien rechazó no cuenta como jugador; el precio, con coma", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText("4 jugadores · 20,00 €")).toBeInTheDocument();
+    expect(await screen.findByText("4 jugadores")).toBeInTheDocument();
+    expect(screen.getByText("20,00 €")).toBeInTheDocument();
   });
 
   it("con uno solo, «1 jugador» (antes «1 jugadores»)", async () => {
@@ -169,7 +178,7 @@ describe("Listado de reservas", () => {
       total: 1,
     });
     wrap(<BookingsListPage />);
-    expect(await screen.findByText("1 jugador · 20,00 €")).toBeInTheDocument();
+    expect(await screen.findByText("1 jugador")).toBeInTheDocument();
   });
 });
 
@@ -222,13 +231,13 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
     await screen.findByText("Mostrando 1–50 de 120 reservas");
     svc.bookings.list.mockReturnValue(new Promise(() => {}));
     await goToSecondPage();
-    expect(screen.getByText("AMT-XP9W")).toBeInTheDocument();
+    expect(screen.getByText(/AMT-XP9W/)).toBeInTheDocument();
     expect(screen.getByText("120 reservas")).toBeInTheDocument();
   });
 
   it("mientras llegan las de otra pestaña no se ven las de la anterior", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     svc.bookings.list.mockReturnValue(new Promise(() => {}));
     fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
     await waitFor(() =>
@@ -237,7 +246,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
       ),
     );
     expect(screen.getByText("Cargando…")).toBeInTheDocument();
-    expect(screen.queryByText("AMT-XP9W")).not.toBeInTheDocument();
+    expect(screen.queryByText(/AMT-XP9W/)).not.toBeInTheDocument();
   });
 
   it("tampoco si se cambia de pestaña mientras llega otra página", async () => {
@@ -252,7 +261,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
       ),
     );
     expect(screen.getByText("Cargando…")).toBeInTheDocument();
-    expect(screen.queryByText("AMT-XP9W")).not.toBeInTheDocument();
+    expect(screen.queryByText(/AMT-XP9W/)).not.toBeInTheDocument();
   });
 
   it("busca con q tras 300 ms sin teclear, sin los espacios de los lados, y vuelve a la primera página", async () => {
@@ -280,7 +289,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
 
   it("si nadie coincide con la búsqueda, lo dice", async () => {
     wrap(<BookingsListPage />);
-    await screen.findByText("AMT-XP9W");
+    await screen.findByText(/AMT-XP9W/);
     svc.bookings.list.mockResolvedValue({ items: [], total: 0 });
     fireEvent.change(screen.getByRole("searchbox", { name: "Buscar reservas" }), { target: { value: "Zoe" } });
     expect(await screen.findByText("Ninguna reserva coincide con la búsqueda")).toBeInTheDocument();
@@ -309,7 +318,7 @@ describe("Listado de reservas por páginas y con búsqueda (B3)", () => {
     expect(screen.queryByText("0 reservas")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
-    expect(await screen.findByText("AMT-XP9W")).toBeInTheDocument();
+    expect(await screen.findByText(/AMT-XP9W/)).toBeInTheDocument();
   });
 });
 
@@ -362,7 +371,7 @@ describe("Detalle de reserva", () => {
       paidAt: "2026-10-27T10:00:00.000Z",
     });
     await renderDetail();
-    expect(await screen.findByText("(Efectivo en pista)")).toBeInTheDocument();
+    expect(await screen.findByText("(En el club)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Marcar como no pagada/ })).toBeInTheDocument();
   });
 
@@ -373,6 +382,56 @@ describe("Detalle de reserva", () => {
     expect(screen.queryByText("()")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Marcar pagado/ })).not.toBeInTheDocument();
+  });
+
+  describe("bonos (B14)", () => {
+    const WITH_CUSTOMER = { ...BOOKING, clubCustomerId: "cc1" };
+
+    it("pendiente y con cliente: ofrece «Pagar con bono» y abre los bonos de ESA reserva", async () => {
+      svc.bookings.detail.mockResolvedValue(WITH_CUSTOMER);
+      voucherSvc.booking.usable.mockResolvedValue([]);
+      await renderDetail();
+      fireEvent.click(await screen.findByRole("button", { name: /Pagar con bono/ }));
+
+      expect(await screen.findByRole("dialog", { name: "Pagar con bono" })).toBeInTheDocument();
+      expect(voucherSvc.booking.usable).toHaveBeenCalledWith("c1", "b1");
+    });
+
+    it("sin cliente, no hay bono que elegir: no ofrece «Pagar con bono» (sí «Cobrar»)", async () => {
+      await renderDetail();
+      expect(await screen.findByRole("button", { name: /Cobrar/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Pagar con bono/ })).not.toBeInTheDocument();
+    });
+
+    it("pagada con bono: lo dice, ofrece quitar el bono (no «Marcar como no pagada») y al quitarlo lo manda al back", async () => {
+      svc.bookings.detail.mockResolvedValue({
+        ...WITH_CUSTOMER,
+        paymentMethod: "VOUCHER",
+        paidAt: "2026-10-27T10:00:00.000Z",
+        paidAmountCents: 0,
+      });
+      voucherSvc.booking.remove.mockResolvedValue({});
+      await renderDetail();
+      expect(await screen.findByText("(Bono)")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Quitar el bono/ }));
+      await waitFor(() => expect(voucherSvc.booking.remove).toHaveBeenCalledWith("c1", "b1"));
+      expect(svc.bookings.markPaid).not.toHaveBeenCalled();
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("Bono quitado")));
+    });
+
+    it("un Entrenador (solo lee las reservas, sin caja): ni cobrar ni pagar con bono", async () => {
+      meMock.data = {
+        id: "coach", name: "Profe", activeClubId: "c1",
+        clubs: [{ clubId: "c1", clubName: "Club Centro", roles: ["COACH"] }],
+      } as unknown as typeof meMock.data;
+      svc.bookings.detail.mockResolvedValue(WITH_CUSTOMER);
+      await renderDetail();
+      await screen.findByText("Lunes, 2 de noviembre de 2026");
+      expect(screen.queryByRole("button", { name: /Cobrar/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Pagar con bono/ })).not.toBeInTheDocument();
+    });
   });
 });
 
@@ -405,6 +464,8 @@ describe("Detalle de reserva — resultado (R2-7)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    // Sin rol de equipo conocido (como el resto de describes): el test del Entrenador de arriba no se arrastra
+    meMock.data = { id: "club-admin", name: "Gestor" };
     svc.bookings.setResult.mockResolvedValue({});
   });
 
@@ -463,6 +524,174 @@ describe("Detalle de reserva — resultado (R2-7)", () => {
   });
 });
 
+describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final de la página", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    meMock.data = { id: "club-admin", name: "Gestor" };
+    svc.bookings.detail.mockResolvedValue(BOOKING);
+    svc.bookings.list.mockResolvedValue({ items: [BOOKING], total: 1 });
+    svc.bookings.cancel.mockResolvedValue({});
+  });
+
+  const dialog = () => screen.getByRole("dialog", { name: "¿Cancelar esta reserva?" });
+
+  it("ficha: «Cancelar reserva» abre un diálogo con el foco dentro, el aviso, qué reserva es y el motivo", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+
+    expect(dialog()).toHaveFocus();
+    expect(within(dialog()).getByText("Se avisará por push y email a 2 jugadores.")).toBeInTheDocument();
+    expect(within(dialog()).getByText("Pista 1 · lun, 2 nov · 18:00 - 19:30")).toBeInTheDocument();
+    expect(within(dialog()).getByPlaceholderText("Motivo (opcional, visible al jugador)")).toBeInTheDocument();
+  });
+
+  it("ficha: Escape lo cierra sin cancelar y el foco vuelve al botón", async () => {
+    await renderDetail();
+    const trigger = await screen.findByRole("button", { name: /Cancelar reserva/ });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(dialog()).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("ficha: «No, volver» cierra sin cancelar, y al abrirla otra vez el motivo está vacío", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Lluvia" } });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "No, volver" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar reserva/ }));
+    expect(within(dialog()).getByPlaceholderText(/Motivo/)).toHaveValue("");
+  });
+
+  it("ficha: «Sí, cancelar reserva» manda el motivo, avisa y cierra", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Pista en obras" } });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", "Pista en obras"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith("Reserva cancelada — jugadores notificados");
+  });
+
+  it("ficha: sin motivo, no manda ninguno", async () => {
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined));
+  });
+
+  describe("reserva cobrada: devolución al cancelar", () => {
+    const PAID = {
+      ...BOOKING,
+      paymentMethod: "CASH_AT_VENUE",
+      paidAt: "2026-10-27T10:00:00.000Z",
+      paidAmountCents: 1800,
+      priceCents: 2000,
+    };
+    const openDialog = async (booking: object) => {
+      svc.bookings.detail.mockResolvedValue(booking);
+      await renderDetail();
+      fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    };
+
+    it("pide el importe a devolver (opcional) y dice lo cobrado, no el precio", async () => {
+      await openDialog(PAID);
+      expect(within(dialog()).getByLabelText("Importe a devolver")).toHaveValue("");
+      expect(within(dialog()).getByText(/Cobrado: 18,00 €/)).toBeInTheDocument();
+    });
+
+    it("lo devuelto va en céntimos junto al motivo", async () => {
+      await openDialog(PAID);
+      fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Lluvia" } });
+      fireEvent.change(within(dialog()).getByLabelText("Importe a devolver"), { target: { value: "12,50" } });
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+      await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", "Lluvia", 1250));
+    });
+
+    it("sin escribir nada, cancela sin devolución (como siempre)", async () => {
+      await openDialog(PAID);
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+      await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined));
+    });
+
+    it("más de lo cobrado: avisa y no cancela", async () => {
+      await openDialog(PAID);
+      fireEvent.change(within(dialog()).getByLabelText("Importe a devolver"), { target: { value: "18,01" } });
+
+      expect(within(dialog()).getByRole("alert")).toHaveTextContent("No puedes devolver más de lo cobrado (18,00 €)");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+      expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    });
+
+    it("un importe que no es un importe: avisa y no cancela", async () => {
+      await openDialog(PAID);
+      fireEvent.change(within(dialog()).getByLabelText("Importe a devolver"), { target: { value: "doce" } });
+
+      expect(within(dialog()).getByRole("alert")).toHaveTextContent("Escribe un importe válido");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+      expect(svc.bookings.cancel).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["sin cobrar", BOOKING],
+      ["pagada con una sesión de bono (no hay dinero que devolver)", { ...PAID, paymentMethod: "VOUCHER", paidAmountCents: 0 }],
+    ])("%s: no pide devolución", async (_label, booking) => {
+      await openDialog(booking);
+      expect(within(dialog()).queryByLabelText("Importe a devolver")).not.toBeInTheDocument();
+    });
+  });
+
+  it("si el back la rechaza, enseña su mensaje y el diálogo sigue abierto", async () => {
+    svc.bookings.cancel.mockRejectedValue({ response: { data: { message: "La reserva ya estaba cancelada" } } });
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("La reserva ya estaba cancelada"));
+    expect(dialog()).toBeInTheDocument();
+  });
+
+  it("listado: «Cancelar» de una reserva abre el mismo diálogo y, al confirmar, vuelve a pedir el listado", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText(/AMT-XP9W/);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(dialog()).toHaveFocus();
+    expect(within(dialog()).getByText("Se avisará por push y email a 2 jugadores.")).toBeInTheDocument();
+    const loads = svc.bookings.list.mock.calls.length;
+    fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Torneo" } });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+    await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", "Torneo"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(svc.bookings.list.mock.calls.length).toBeGreaterThan(loads));
+  });
+
+  it("listado: Escape cierra el diálogo sin cancelar", async () => {
+    wrap(<BookingsListPage />);
+    await screen.findByText(/AMT-XP9W/);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(svc.bookings.cancel).not.toHaveBeenCalled();
+  });
+});
+
 describe("Zona del club (B1): un club en Canarias", () => {
   // El navegador, en Madrid: ni la zona fija de antes ni la del navegador dan lo esperado
   beforeEach(() => {
@@ -479,7 +708,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
   it("listado: «hoy» es el día de Canarias y cada reserva va a su hora", async () => {
     wrap(<BookingsListPage />);
-    expect(await screen.findByText(/lun, 2 nov · 17:00 - 18:30/)).toBeInTheDocument();
+    expect(await screen.findByText("17:00 - 18:30")).toBeInTheDocument();
     expect(clubsMock.findOne).toHaveBeenCalledWith("c1");
     expect(svc.bookings.list).toHaveBeenCalledWith(
       expect.objectContaining({ fromDate: "2026-10-28T00:00:00.000Z", toDate: "2026-10-28T23:59:59.999Z" }),
@@ -502,7 +731,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
     expect(svc.bookings.list).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
-    expect(await screen.findByText(/lun, 2 nov · 17:00 - 18:30/)).toBeInTheDocument();
+    expect(await screen.findByText("17:00 - 18:30")).toBeInTheDocument();
   });
 
   it("detalle: el día, las horas, el cobro, los plazos y las fechas de la reserva, en la hora de Canarias", async () => {
@@ -522,7 +751,7 @@ describe("Zona del club (B1): un club en Canarias", () => {
     expect(screen.getByText(/17:00 – 18:30 · 90 min/)).toBeInTheDocument();
     expect(screen.getByText(/pagada 27\/10\/2026/)).toBeInTheDocument();
     // Creada y actualizada
-    expect(screen.getAllByText("28/10/2026, 10:00:00")).toHaveLength(2);
+    expect(screen.getAllByText("28/10/2026, 10:00")).toHaveLength(2);
     expect(screen.getByText("Hasta el 1/1/99, 0:30")).toBeInTheDocument();
   });
 
@@ -533,5 +762,93 @@ describe("Zona del club (B1): un club en Canarias", () => {
     await waitFor(() => expect(svc.bookings.detail).toHaveBeenCalled());
     expect(screen.queryByText(/2 de noviembre/)).not.toBeInTheDocument();
     expect(screen.queryByText(/18:30/)).not.toBeInTheDocument();
+  });
+});
+
+// ── Quien solo lee las reservas (Entrenador) no ve los botones que escriben ─────
+
+describe("Reservas con un rol de solo lectura", () => {
+  const asRole = (role: string) =>
+    ({
+      id: "staff", name: "Equipo", activeClubId: "c1",
+      clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+    }) as unknown as typeof meMock.data;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    svc.bookings.list.mockResolvedValue({ items: [BOOKING], total: 1 });
+    svc.bookings.detail.mockResolvedValue({ ...BOOKING, clubCustomerId: "cc1" });
+  });
+
+  it("listado, Entrenador: ni «Crear reserva», ni casillas, ni «Cancelar», ni su columna", async () => {
+    meMock.data = asRole("COACH");
+    wrap(<BookingsListPage />);
+    await screen.findByText(/AMT-XP9W/);
+    expect(screen.queryByRole("button", { name: /Crear reserva/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Seleccionar todas/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Seleccionar la reserva/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cancelar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
+    // Lo que sí ve: la reserva
+    expect(screen.getByText("18:00 - 19:30")).toBeInTheDocument();
+  });
+
+  it("listado, Recepción (escribe las reservas): «Crear reserva», casilla y «Cancelar»", async () => {
+    meMock.data = asRole("RECEPTION");
+    wrap(<BookingsListPage />);
+    await screen.findByText(/AMT-XP9W/);
+    expect(screen.getByRole("button", { name: /Crear reserva/ })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Seleccionar la reserva/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Cancelar/ })).toBeInTheDocument();
+  });
+
+  it("ficha, Entrenador: ni cambiar hora, ni cancelar, ni cobrar, ni pagar con bono", async () => {
+    meMock.data = asRole("COACH");
+    await renderDetail();
+    await screen.findByText("Lunes, 2 de noviembre de 2026");
+    for (const name of [/Cambiar hora o pista/, /Cancelar reserva/, /Cobrar/, /Pagar con bono/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("ficha, Recepción: cambiar hora, cancelar, cobrar y pagar con bono", async () => {
+    meMock.data = asRole("RECEPTION");
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING,
+      clubCustomerId: "cc1",
+      startsAt: "2099-01-01T17:00:00.000Z",
+      endsAt: "2099-01-01T18:30:00.000Z",
+    });
+    await renderDetail();
+    for (const name of [/Cambiar hora o pista/, /Cancelar reserva/, /Cobrar/, /Pagar con bono/]) {
+      expect(await screen.findByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("ficha de una cobrada, Entrenador: sin «Marcar como no pagada»", async () => {
+    meMock.data = asRole("COACH");
+    svc.bookings.detail.mockResolvedValue({ ...BOOKING, paymentMethod: "CASH_AT_VENUE", paidAt: "2026-10-27T10:00:00.000Z" });
+    await renderDetail();
+    expect(await screen.findByText("(En el club)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Marcar como no pagada/ })).not.toBeInTheDocument();
+  });
+
+  it("ficha con resultado, Entrenador: lo ve, pero no «Corregir resultado»", async () => {
+    meMock.data = asRole("COACH");
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING,
+      status: "COMPLETED",
+      isCompetitive: true,
+      resultAdminDeadlineAt: "2099-01-01T00:00:00.000Z",
+      resultEntryDeadlineAt: "2099-01-01T00:00:00.000Z",
+      result: {
+        set1Home: 6, set1Away: 4, set2Home: 6, set2Away: 3, set3Home: null, set3Away: null, winnerTeam: 1,
+        enteredByUserId: "u1", enteredAt: "", finalizedAt: null, processedLspaAt: null,
+      },
+    });
+    await renderDetail();
+    expect(await screen.findByText(/6-4/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Corregir resultado|Poner resultado/ })).not.toBeInTheDocument();
   });
 });

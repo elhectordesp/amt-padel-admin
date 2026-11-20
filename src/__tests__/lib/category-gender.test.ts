@@ -86,9 +86,9 @@ describe("a quién ofrece el buscador de jugadores", () => {
     expect(genderSearchHint("J", "F", admin)).toBeNull();
   });
 
-  it("a un club, que no ve la ficha del jugador, no le pide que se la ponga él", () => {
+  it("a un club, que no ve la ficha del jugador, no le manda a pedírselo a AMT", () => {
     expect(genderSearchHint("F", null, { canEditPlayer: false })).toBe(
-      "Femenina: solo salen jugadoras con el género en su ficha. Si falta alguien, pide a AMT que le ponga el género en su ficha.",
+      "Femenina: solo salen jugadoras con el género en su ficha. Si falta alguien, es que aún no tiene el género puesto.",
     );
   });
 });
@@ -119,25 +119,23 @@ describe("si un jugador ya elegido puede jugar la categoría", () => {
   });
 
   it("el aviso: la regla con las palabras del back o qué hacer si le falta el género", () => {
-    const admin = { canEditPlayer: true };
-    const club = { canEditPlayer: false };
-    expect(genderRejectionNotice("mismatch", "F", "Luis Mora", { ...admin, goal: "partner" })).toBe(
+    expect(genderRejectionNotice("mismatch", "F", "Luis Mora", { goal: "partner" })).toBe(
       "\"Luis Mora\" no puede jugarla: la categoría femenina es solo de jugadoras.",
     );
-    expect(genderRejectionNotice("mismatch", "MX", "Luis Mora", { ...admin, goal: "enroll" })).toBe(
+    expect(genderRejectionNotice("mismatch", "MX", "Luis Mora", { goal: "enroll" })).toBe(
       "\"Luis Mora\" no puede jugarla: la categoría mixta es de un jugador y una jugadora.",
     );
-    expect(genderRejectionNotice("unknown", "MX", "Ana López", { ...admin, goal: "partner" })).toBe(
-      "\"Ana López\" no tiene el género en su ficha: pónselo para buscarle pareja.",
+    expect(genderRejectionNotice("unknown", "MX", "Ana López", { goal: "partner" })).toBe(
+      "\"Ana López\" no tiene el género en su ficha: indícalo aquí para buscarle pareja.",
     );
-    expect(genderRejectionNotice("unknown", "M", "Leo Martín", { ...admin, goal: "enroll" })).toBe(
-      "\"Leo Martín\" no tiene el género en su ficha: pónselo para que pueda jugar una categoría masculina.",
+    expect(genderRejectionNotice("unknown", "M", "Leo Martín", { goal: "enroll" })).toBe(
+      "\"Leo Martín\" no tiene el género en su ficha: indícalo aquí para que pueda jugar una categoría masculina.",
     );
-    // Un club no ve la ficha del jugador: se lo pide a AMT
-    expect(genderRejectionNotice("unknown", "F", "Ana López", { ...club, goal: "partner" })).toBe(
-      "\"Ana López\" no tiene el género en su ficha: pide a AMT que se lo ponga para buscarle pareja.",
+    // Igual para un club: lo pone allí mismo, no se lo pide a AMT
+    expect(genderRejectionNotice("unknown", "F", "Ana López", { goal: "partner" })).toBe(
+      "\"Ana López\" no tiene el género en su ficha: indícalo aquí para buscarle pareja.",
     );
-    expect(genderRejectionNotice("mismatch", "MIXED", "Ana López", { ...admin, goal: "partner" })).toBe(
+    expect(genderRejectionNotice("mismatch", "MIXED", "Ana López", { goal: "partner" })).toBe(
       "\"Ana López\" no puede jugarla: la categoría no lo admite.",
     );
   });

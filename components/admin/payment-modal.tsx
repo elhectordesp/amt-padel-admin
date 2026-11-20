@@ -5,13 +5,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
+import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
 import { adminService, registrationsQK } from "@/lib/services/admin";
 import { localDayKey } from "@/lib/utils/date-keys";
+import { centsToEurosInput, eurosToCents, playerShareCents } from "@/lib/utils/payment-methods";
 import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
-
-const PAYMENT_METHODS = ["Efectivo", "Transferencia", "TPV", "Online"] as const;
-type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /** Lo que dice la API cuando la inscripción cambió desde que se abrió el modal. */
 const CHANGED_MEANWHILE = new Set(["REGISTRATION_INVALID_TRANSITION", "PARTNER_NOT_FOUND", "REGISTRATION_NOT_FOUND"]);
@@ -33,8 +32,15 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
   const who = pairPlayers(registration).find((p) => p.player === player);
   const current = who?.payment;
   const [paid,   setPaid]   = useState(current?.paid ?? false);
-  const [method, setMethod] = useState<PaymentMethod | "">((current?.paymentMethod as PaymentMethod | null | undefined) ?? "");
+  const [method, setMethod] = useState<string>(current?.paymentMethod ?? "");
+  // Lo cobrado a este jugador; sin cobro, la mitad del precio de la pareja
+  const [amount, setAmount] = useState<string>(
+    centsToEurosInput(current?.paidAmountCents ?? playerShareCents(registration.category.price)),
+  );
   const [paidAt, setPaidAt] = useState<string>(toDateInput(current?.paidAt));
+  const cents = eurosToCents(amount);
+  // Para marcar pagado hacen falta método e importe (el back exige el método)
+  const incomplete = paid && (method === "" || cents === null);
   const [note,   setNote]   = useState<string>(current?.paymentNote ?? "");
   const qc = useQueryClient();
 
@@ -44,6 +50,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
         paid,
         // Sin pagar, sin método ni fecha (no los de un pago que se desmarca)
         paymentMethod: (paid && method) || undefined,
+        paidAmountCents: paid && cents !== null ? cents : undefined,
         paidAt:        (paid && paidAt) || undefined,
         paymentNote:   note.trim() || undefined,
         player,
@@ -111,25 +118,8 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
 
           {paid && (
             <>
-              {/* Payment method */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Método de pago</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {PAYMENT_METHODS.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMethod(m === method ? "" : m)}
-                      className={`px-3 py-2 rounded-md text-sm border transition-colors ${
-                        method === m
-                          ? "bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border-[rgba(212,175,55,0.4)]"
-                          : "bg-secondary text-muted-foreground border-border hover:border-[rgba(212,175,55,0.3)] hover:text-foreground"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <PaymentMethodPicker value={method} onChange={setMethod} />
+              <AmountField value={amount} onChange={setAmount} invalid={cents === null} />
 
               {/* Date */}
               <div>
@@ -169,7 +159,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
           </button>
           <button
             onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending || !who}
+            disabled={saveMut.isPending || !who || incomplete}
             className="flex-1 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {saveMut.isPending ? (

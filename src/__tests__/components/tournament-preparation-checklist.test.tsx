@@ -56,11 +56,28 @@ function prep(status: TournamentPreparation["status"], doneCount: number, o: Par
   };
 }
 
-function renderChecklist(onNavigate = vi.fn(), timeZone = "Europe/Madrid") {
+const LEAGUE_KEYS = ["CATEGORIES", "DRAW", "PUBLISH"] as const;
+
+function leaguePrep(status: TournamentPreparation["status"], doneKeys: readonly string[], o: Partial<TournamentPreparation> = {}): TournamentPreparation {
+  const steps = LEAGUE_KEYS.map((key) => ({ key, done: doneKeys.includes(key) }));
+  const done = steps.filter((s) => s.done).length;
+  return {
+    kind: "LEAGUE",
+    status,
+    registrationDeadline: null,
+    percent: Math.round((done / 3) * 100),
+    steps,
+    nextStep: steps.find((s) => !s.done)?.key ?? null,
+    categories: [cat({ published: false })],
+    ...o,
+  };
+}
+
+function renderChecklist(onNavigate = vi.fn(), timeZone = "Europe/Madrid", base?: "/ligas" | "/torneos") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <TournamentPreparationChecklist tournamentId="t1" onNavigate={onNavigate} timeZone={timeZone} />
+      <TournamentPreparationChecklist tournamentId="t1" onNavigate={onNavigate} timeZone={timeZone} base={base} />
     </QueryClientProvider>,
   );
   return { onNavigate, qc };
@@ -213,5 +230,53 @@ describe("TournamentPreparationChecklist", () => {
     preparationMock.mockResolvedValue(prep("OPEN", 2));
     renderChecklist();
     expect(await screen.findByRole("link", { name: "Editar → Avanzado" })).toHaveAttribute("href", "/torneos/t1/editar#avanzado");
+  });
+});
+
+describe("TournamentPreparationChecklist — liga", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("tres pasos con las palabras de la liga y su %", async () => {
+    preparationMock.mockResolvedValue(leaguePrep("DRAFT", ["CATEGORIES"]));
+    renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");
+    expect(await screen.findByText("Preparación de la liga")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Preparación al 33 %" })).toBeInTheDocument();
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    expect(within(items[0]).getByText(/Niveles creados/)).toBeInTheDocument();
+    expect(within(items[1]).getByText(/Grupos sorteados/)).toBeInTheDocument();
+    expect(within(items[2]).getByText(/Liga publicada/)).toBeInTheDocument();
+    expect(screen.getByText(/Siguiente paso: Grupos sorteados\./)).toBeInTheDocument();
+  });
+
+  it("«Publicar liga» la saca del borrador sin hablar de avisar a los jugadores", async () => {
+    preparationMock.mockResolvedValue(leaguePrep("DRAFT", ["CATEGORIES", "DRAW"]));
+    publishMock.mockResolvedValue({});
+    renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");
+    fireEvent.click(await screen.findByRole("button", { name: /Publicar liga/ }));
+    expect(screen.getByText(/La app aún no muestra las ligas/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publicar" }));
+    await waitFor(() => expect(publishMock).toHaveBeenCalledWith("t1"));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Liga publicada"));
+  });
+
+  it("una liga abierta se cierra desde su lista: «Cerrar inscripciones» pasa a Sorteo (F19)", async () => {
+    preparationMock.mockResolvedValue(leaguePrep("OPEN", ["CATEGORIES", "PUBLISH"]));
+    updateMock.mockResolvedValue({});
+    renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");
+    fireEvent.click(await screen.findByRole("button", { name: "Cerrar inscripciones" }));
+    expect(screen.getByText(/la liga pasa a «Sorteo» para generar los grupos/)).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", { name: "Cerrar inscripciones" });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(updateMock).toHaveBeenCalledWith("t1", { status: "DRAW" }));
+  });
+
+  it("el paso de grupos lleva a los grupos y el enlace de «Avanzado» cuelga de /ligas", async () => {
+    preparationMock.mockResolvedValue(leaguePrep("OPEN", ["CATEGORIES", "PUBLISH"]));
+    const { onNavigate } = renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");
+    // En una liga, la pestaña del sorteo se llama «Grupos» (su clave sigue siendo «cuadro»)
+    fireEvent.click(await screen.findByRole("button", { name: "Ir a los grupos" }));
+    expect(onNavigate).toHaveBeenCalledWith("cuadro");
+    expect(screen.getByRole("link", { name: "Editar → Avanzado" })).toHaveAttribute("href", "/ligas/t1/editar#avanzado");
   });
 });

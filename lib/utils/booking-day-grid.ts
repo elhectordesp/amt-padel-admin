@@ -13,7 +13,7 @@ import {
   zonedDayKey,
   zonedMinutes,
 } from "@/lib/utils/time-zone";
-import type { Court, CourtBlock } from "@/types";
+import type { Court, CourtOccupation } from "@/types";
 import type {
   Booking,
   ClubOperatingHours,
@@ -33,8 +33,8 @@ export interface DayWindow {
 export type DayGridCell =
   /** Libre. `bookable`: dentro del horario del club, se puede crear ahí. */
   | { kind: "free"; bookable: boolean }
-  /** Pista bloqueada (p. ej. por un torneo) en esa franja. */
-  | { kind: "blocked"; reason: string | null }
+  /** Pista ocupada por algo que no es una reserva (bloqueo, partido de torneo). */
+  | { kind: "blocked"; occupation: CourtOccupation }
   /** Primera franja de una reserva, que ocupa `span` franjas. */
   | { kind: "booking"; booking: Booking; span: number }
   /** Franja tapada por la reserva que empieza más arriba. */
@@ -139,11 +139,19 @@ export function resolveDayWindow(
   return oh ? { openTime: oh.openTime, closeTime: oh.closeTime } : null;
 }
 
-/** Tramos [inicio, fin) en minutos que un bloqueo quita a la pista ese día. */
-function blockRange(block: CourtBlock, dayKey: string): [number, number] | null {
-  if (dayKey < block.startDate || dayKey > block.endDate) return null;
-  if (!block.startTime || !block.endTime) return [0, DAY_MINUTES];
-  return [hhmmToMinutes(block.startTime), hhmmToMinutes(block.endTime)];
+/** Tramo [inicio, fin) en minutos del día `dayKey` del club que cubre una ocupación; null si no toca ese día. */
+function occupationRange(
+  o: CourtOccupation,
+  dayKey: string,
+  timeZone: string,
+): [number, number] | null {
+  const startDay = zonedDayKey(o.startsAt, timeZone);
+  const endDay = zonedDayKey(o.endsAt, timeZone);
+  if (startDay > dayKey || endDay < dayKey) return null;
+  const start = startDay < dayKey ? 0 : zonedMinutes(o.startsAt, timeZone);
+  // Acabar a las 00:00 del día siguiente es llegar al final de este
+  const end = endDay > dayKey ? DAY_MINUTES : zonedMinutes(o.endsAt, timeZone);
+  return end > start ? [start, end] : null;
 }
 
 /**
@@ -154,15 +162,18 @@ function blockRange(block: CourtBlock, dayKey: string): [number, number] | null 
  * - Una reserva fuera del horario (cambiado después) también se ve: la
  *   rejilla se alarga hasta ella, pero esas franjas no se ofrecen libres.
  * - Las franjas van alineadas con la apertura, como los huecos del back.
+ * - Lo que ocupa la pista sin ser una reserva (`occupations`: bloqueos y
+ *   partidos de torneo) tapa las franjas libres que cubre.
  */
 export function buildDayGrid(params: {
   dayKey: string;
   courts: Court[];
   bookings: Booking[];
+  occupations?: CourtOccupation[];
   window: DayWindow | null;
   timeZone: string;
 }): DayGrid | null {
-  const { dayKey, courts, window, timeZone } = params;
+  const { dayKey, courts, window, timeZone, occupations = [] } = params;
   const courtIds = new Set(courts.map((c) => c.id));
   const bookings = params.bookings.filter(
     (b) => b.status !== "CANCELLED" && courtIds.has(b.courtId),
@@ -211,17 +222,15 @@ export function buildDayGrid(params: {
     for (let r = startRow + 1; r < startRow + span; r++) column[r] = { kind: "covered" };
   }
 
-  for (const c of courts) {
-    for (const block of c.blocks ?? []) {
-      const range = blockRange(block, dayKey);
-      if (!range) continue;
-      rows.forEach((t, i) => {
-        const cell = cells[c.id][i];
-        if (cell.kind === "free" && t < range[1] && t + SLOT_MINUTES > range[0]) {
-          cells[c.id][i] = { kind: "blocked", reason: block.reason ?? null };
-        }
-      });
-    }
+  for (const o of [...occupations].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+    const column = cells[o.courtId];
+    const range = column && occupationRange(o, dayKey, timeZone);
+    if (!range) continue;
+    rows.forEach((t, i) => {
+      if (column[i].kind === "free" && t < range[1] && t + SLOT_MINUTES > range[0]) {
+        column[i] = { kind: "blocked", occupation: o };
+      }
+    });
   }
 
   return { rows, cells };

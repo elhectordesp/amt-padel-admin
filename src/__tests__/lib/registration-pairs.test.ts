@@ -107,9 +107,9 @@ describe('groupByPair', () => {
 
 describe('playerPayment', () => {
   it('titular: el pago de la propia fila', () => {
-    const r = reg({ paid: true, paymentMethod: 'TPV', paidAt: '2026-05-02T00:00:00Z', paymentNote: 'nota A' });
+    const r = reg({ paid: true, paymentMethod: 'CARD', paidAmountCents: 1500, paidAt: '2026-05-02T00:00:00Z', paymentNote: 'nota A' });
     expect(playerPayment(r, 'titular')).toEqual({
-      paid: true, paymentMethod: 'TPV', paidAt: '2026-05-02T00:00:00Z', paymentNote: 'nota A',
+      paid: true, paymentMethod: 'CARD', paidAmountCents: 1500, paidAt: '2026-05-02T00:00:00Z', paymentNote: 'nota A',
     });
   });
 

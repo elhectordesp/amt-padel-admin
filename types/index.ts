@@ -1,19 +1,30 @@
+import type { ClubStaffRole } from "@/lib/club-permissions";
 export type Gender             = "M" | "F";
 // El de una CATEGORÍA, no el de una persona: Masculina, Femenina, Mixta,
 // General y Junior (lib/category-gender.ts)
 export type CategoryGender     = "M" | "F" | "MX" | "G" | "J";
 export type SponsorScope       = "CIRCUIT" | "TOURNAMENT" | "REGIONAL";
 export type CategoryLevel      = "1a" | "2a" | "3a" | "4a" | "5a" | "6a" | "iniciacion";
+// Una liga es un torneo con fase de grupos larga y cuadro final (el `kind` del back)
+export type TournamentKind     = "TOURNAMENT" | "LEAGUE";
 export type TournamentStatus   = "DRAFT" | "OPEN" | "DRAW" | "SCHEDULED" | "ONGOING" | "FINISHED" | "CANCELLED";
 export type TournamentTier     = "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 export type RegistrationStatus = "PENDING" | "CONFIRMED" | "WAITLIST" | "CANCELLED";
 export type RankingType        = "spa" | "circuit";
+// Quién ve la lista de inscritos de un torneo: todos, solo los inscritos, o
+// nadie (salvo lo suyo) hasta el día de inicio
+export type ParticipantsVisibility = "PUBLIC" | "REGISTERED_ONLY" | "HIDDEN_UNTIL_START";
+// Cómo se juega un partido y qué marcador vale (el enum `ScoringFormat` del
+// back; sus textos y reglas, en lib/scoring-format.ts)
+export type ScoringFormat = "BEST_OF_3" | "BEST_OF_2_SUPERTB" | "ONE_SET" | "ONE_SET_GOLDEN_GAME" | "PRO_SET_9" | "SHORT_SETS_SUPERTB";
 // El de un ranking: el de una persona o, solo en el de circuito, el Mixto
 // (lib/ranking-gender.ts)
 export type RankingGender      = Gender | "MX";
 
 export interface AdminStats {
   activeTournaments: number;
+  /** Ligas en marcha (falta con un back anterior a las ligas). */
+  activeLeagues?:    number;
   /** Jugadores distintos con una inscripción viva en torneos de la temporada. */
   registeredPlayers: number;
   /** Partidos por jugar programados para hoy (el día de España). */
@@ -40,7 +51,7 @@ export interface TournamentCategory {
   price?:           number;
   minPairs?:        number;
   maxPairs?:        number;
-  scoringFormat?:   string;
+  scoringFormat?:   ScoringFormat;
   roundFormats?:        Record<string, string> | null;
   prizeChampion?:       string;
   prizeRunnerUp?:       string;
@@ -54,7 +65,10 @@ export interface TournamentScheduleDay {
   id:                      string;
   label:                   string;
   // Medianoche UTC del día (dateOnlyKey); null en jornadas antiguas sin fecha
+  // y en los días de una liga
   date?:                   string | null;
+  // Solo en ligas: día de la semana (1 = lunes … 7 = domingo); el `label` es «Lunes»
+  weekday?:                number | null;
   slots:                   string[];
   maxUnavailableHours:     number;
   isFinal?:                boolean;
@@ -75,6 +89,9 @@ export interface Club {
   phone?:               string | null;
   website?:             string | null;
   instagram?:           string | null;
+  // Handle o URL; no vienen con un back anterior
+  facebook?:            string | null;
+  tiktok?:              string | null;
   logoUrl?:             string | null;
   contactEmail?:        string | null;
   isAmtPartner?:        boolean;
@@ -85,6 +102,8 @@ export interface Club {
   status?:              "active" | "pending" | "deactivated";
   // Aún con el nombre o la ciudad de relleno del alta rápida (lo calcula el back)
   pendingSetup?:        boolean;
+  // false: el único propietario borró su cuenta y el club no tiene a quién se le pueda pedir nada (lo calcula el back)
+  hasOwner?:            boolean;
   tournamentCount?:     number;
   lat?:                 number | null;
   lng?:                 number | null;
@@ -92,15 +111,82 @@ export interface Club {
   timezone?:            string;
 }
 
+/** Datos fiscales del club: solo para su gestoría (AMT no emite facturas). */
+export interface ClubFiscal {
+  legalName:     string | null;
+  taxId:         string | null;
+  fiscalAddress: string | null;
+}
+
+/** Plan del club con AMT (sin las notas internas de AMT). */
+/** Puesta en marcha del club (GET /admin/clubs/:id/setup-progress). */
+export type ClubSetupStepCode = "COURTS" | "SCHEDULE" | "PRICES" | "RULES";
+export interface ClubSetupProgress {
+  steps: { code: ClubSetupStepCode; done: boolean }[];
+  complete: boolean;
+}
+
+export interface ClubAmtPlan {
+  bookingPlan:            "FREE" | "SUBSCRIPTION" | "COMMISSION" | "CUSTOM";
+  bookingMonthlyFeeCents: number | null;
+  /** Fracción de 0 a 1 (0,05 = 5 %) */
+  bookingCommissionRate:  number | null;
+  /** Último día pagado, «YYYY-MM-DD» */
+  feePaidUntil:           string | null;
+  overdue:                boolean;
+}
+
+/** El plan con las notas internas de AMT: solo lo lee AMT, para su formulario. */
+export interface ClubAmtPlanInternal extends ClubAmtPlan {
+  bookingBillingNotes: string | null;
+}
+
+/** Lo que guarda AMT: los cuatro campos del plan (cuota en céntimos, comisión de 0 a 1). */
+export interface UpdateClubAmtPlanPayload {
+  bookingPlan:            ClubAmtPlan["bookingPlan"];
+  bookingMonthlyFeeCents: number | null;
+  bookingCommissionRate:  number | null;
+  bookingBillingNotes:    string | null;
+}
+
+/** Por qué está ocupada una pista (además de las reservas). */
+export type CourtBlockKind = "MAINTENANCE" | "CLASS" | "TOURNAMENT" | "LEAGUE" | "EVENT" | "OTHER";
+
 export interface CourtBlock {
   id:        string;
   courtId:   string;
+  kind?:     CourtBlockKind; // no viene con un back anterior: «Otro»
   startDate: string;       // "YYYY-MM-DD"
   endDate:   string;       // "YYYY-MM-DD"
   startTime?: string | null; // "HH:MM"
   endTime?:   string | null;
   reason?:    string | null;
+  /** Solo si es la pista de una clase de la escuela: no se borra desde los bloqueos. */
+  schoolSessionId?: string | null;
+  /** Lo mismo, si es la pista de una clase privada de la escuela. */
+  schoolPrivateClassId?: string | null;
   createdAt:  string;
+}
+
+/**
+ * Lo que un bloqueo manual taparía: va en `details` del 409
+ * COURT_BLOCK_HAS_CONFLICTS al crearlo sin `force`.
+ */
+export interface CourtBlockConflicts {
+  bookings: { id: string; shortCode: string; startsAt: string; endsAt: string }[];
+  matches:  { id: string; label: string; startsAt: string; endsAt: string; tournamentId: string | null }[];
+}
+
+/** Lo que ocupa una pista en un tramo: un bloqueo del club o un partido de torneo. */
+export interface CourtOccupation {
+  kind:         CourtBlockKind;
+  courtId:      string;
+  startsAt:     string; // ISO
+  endsAt:       string; // ISO
+  label:        string; // motivo del bloqueo, o «Torneo · ronda»
+  source:       "BLOCK" | "MATCH";
+  refId:        string;
+  tournamentId?: string; // solo en partidos
 }
 
 export interface Court {
@@ -111,6 +197,11 @@ export interface Court {
   isCentral: boolean;
   order:     number;
   active:    boolean;
+  /**
+   * Bloqueos de la pista. El listado del club trae solo los que acaban hoy o
+   * después (`GET /admin/clubs/:id/courts?from=&to=` pide otro rango): la
+   * lista completa de una pista, en `courts.blocks.list`.
+   */
   blocks?:   CourtBlock[];
   // Atributos del módulo Reservas (Sprint 1)
   type?:             "SINGLES" | "DOUBLES";
@@ -133,6 +224,10 @@ export interface Tournament {
   club:        Club;
   prize?:       string;
   status:       TournamentStatus;
+  /** Falta con un back anterior a las ligas: entonces, un torneo. */
+  kind?:        TournamentKind;
+  /** Fin de la fase de grupos (solo ligas). */
+  groupsEndDate?: string | null;
   tier?:       TournamentTier;   // DB enum — usado por el admin
   spaTier?:    string;            // Clave SPA traducida — usado por la app móvil
   categories:  TournamentCategory[];
@@ -155,7 +250,47 @@ export interface Tournament {
   elimMatchDuration?: number | null;
   maxMatchesPerPlayerPerDay?: number | null;
   season?:     number;
+  // «Sobre el torneo» y normas, texto plano. Estos cinco no vienen de un back anterior a B5-1
+  description?: string | null;
+  rules?:       string | null;
+  participantsVisibility?: ParticipantsVisibility;
+  // El jugador y el público ven el club donde verían la pista
+  showClubInsteadOfCourt?: boolean;
+  // Días tras el último del torneo para quitarlo del listado de la app (null: nunca)
+  hideFromAppAfterDays?:   number | null;
 }
+
+/**
+ * Opciones de torneo de un club (`GET/PUT /admin/clubs/:clubId/tournament-config`):
+ * los valores con los que el asistente de «Nuevo torneo» empieza cada torneo
+ * del club. Un club sin guardar recibe los de siempre (los del asistente).
+ */
+export interface ClubTournamentConfig {
+  id:                       string;
+  clubId:                   string;
+  format:                   string;
+  matchDuration:            number;
+  // Cómo se juega cada partido: el de las categorías de los torneos nuevos
+  scoringFormat:            ScoringFormat;
+  hasShirts:                boolean;
+  useSeeding:               boolean;
+  requirePaymentToConfirm:  boolean;
+  // De cada categoría nueva: € por pareja y plazas
+  categoryPrice:            number;
+  categorySpots:            number;
+  // Tramo de las jornadas que se generan («HH:mm»)
+  dayStartTime:             string;
+  dayEndTime:               string;
+  maxUnavailableTotalHours: number;
+  description:              string | null;
+  rules:                    string | null;
+  participantsVisibility:   ParticipantsVisibility;
+  showClubInsteadOfCourt:   boolean;
+  hideFromAppAfterDays:     number | null;
+}
+
+/** El PUT es parcial: solo lo que se manda cambia. */
+export type UpdateClubTournamentConfigPayload = Partial<Omit<ClubTournamentConfig, "id" | "clubId">>;
 
 /**
  * Un jugador en la API pública (`GET /players/:id/profile`, sin sesión): solo
@@ -177,6 +312,7 @@ export interface DeletedTournament {
   id:        string;
   name:      string;
   status:    TournamentStatus;
+  kind?:     TournamentKind;
   startDate: string;
   endDate:   string;
   deletedAt: string;
@@ -256,6 +392,8 @@ export interface PlayerPayment {
   paid:           boolean;
   paymentMethod?: string | null;
   paidAt?:        string | null;
+  /** Lo cobrado a este jugador, en céntimos. */
+  paidAmountCents?: number | null;
   paymentNote?:   string | null;
 }
 
@@ -273,6 +411,7 @@ export interface AdminRegistration {
   paid:           boolean;
   paymentMethod?: string | null;
   paidAt?:        string | null;
+  paidAmountCents?: number | null;
   paymentNote?:   string | null;
   /** El del compañero, ya resuelto por el back (null sin pareja). Solo en el listado. */
   partnerPayment?: PlayerPayment | null;
@@ -338,6 +477,8 @@ export interface AdminEnrollTeamPayload {
   status?:      "PENDING" | "CONFIRMED";
   paid?:        boolean;
   forceEnroll?: boolean;
+  /** No avisar a los jugadores (copias de inscripciones que ya existen en otro sistema). */
+  skipPlayerNotices?: boolean;
 }
 
 export interface AdminEnrollResult {
@@ -430,9 +571,15 @@ export interface MatchResult {
   sets2?:        number[];
   winner?:       "team1" | "team2";
   referee?:      string;
-  scoringFormat?: "BEST_OF_3" | "BEST_OF_2_SUPERTB";
+  scoringFormat?: ScoringFormat;
   /** El del back, en mayúsculas (SCHEDULED, ONGOING, FINISHED…). Para saber si tiene resultado, isMatchFinished. */
   status:      string;
+  /** Nombre del grupo («Grupo A»), en los partidos de grupos. */
+  group?:      string | null;
+  /** Ronda del partido; en una liga, su jornada (1, 2, 3…). */
+  round?:      number | null;
+  /** Los jugadores del partido (con el equipo, 1 o 2). */
+  players?:    { userId: string; team: number }[];
 }
 
 /** Una jornada del torneo, con sus franjas. `date` puede faltar. */
@@ -583,6 +730,9 @@ export interface CreateTournamentPayload {
   imageUrl?:   string;
   startDate:   string;
   endDate:     string;
+  /** Sin él, un torneo. Una liga exige `groupsEndDate`. */
+  kind?:       TournamentKind;
+  groupsEndDate?: string;
   prize?:      string;
   tier:        TournamentTier;
   format?:     string;
@@ -596,22 +746,37 @@ export interface CreateTournamentPayload {
   matchDuration?: number;
   maxMatchesPerPlayerPerDay?: number | null;
   maxUnavailableTotalHours?:  number;
+  description?: string;
+  rules?:       string;
+  participantsVisibility?: ParticipantsVisibility;
+  showClubInsteadOfCourt?: boolean;
+  hideFromAppAfterDays?:   number | null;
   categories:  {
     gender:          CategoryGender;
     level:           CategoryLevel;
     totalSpots:      number;
     price:           number;
+    scoringFormat?:  ScoringFormat;
     prizeChampion?:   string;
     prizeRunnerUp?:   string;
     prizeConsolation?:string;
     hasConsolation?:  boolean;
   }[];
-  schedule?: {
-    date:   string;
-    blocks: {
-      start: string;
-      end:   string;
-    }[];
+  /** Un torneo, un día por fecha; una liga, un día por día de la semana. */
+  schedule?: ScheduleDayPayload[];
+}
+
+/** Un día de juego que se manda al back: con `date` (torneo) o con `weekday` (liga). */
+export interface ScheduleDayPayload {
+  date?:    string;
+  /** Solo ligas: 1 = lunes … 7 = domingo; sin `date`. */
+  weekday?: number;
+  type?:    string;
+  isFinal?: boolean;
+  maxUnavailableSlots?: number;
+  blocks: {
+    start: string;
+    end:   string;
   }[];
 }
 
@@ -662,16 +827,6 @@ export interface AppConfigPush {
   enableCategoryChange:        boolean;
 }
 
-export interface AppConfigTournamentDefaults {
-  matchDuration:            number;
-  scoringSystem:            string;
-  registrationDeadlineDays: number;
-  defaultFormat:            string;
-  hasShirtsDefault:         boolean;
-  useSeedingDefault:        boolean;
-  defaultCourts:            string[];
-}
-
 export interface FaqEntry {
   q: string;
   a: string;
@@ -692,7 +847,6 @@ export interface AppConfigAll {
   season:             AppConfigSeason;
   email:              AppConfigEmail;
   push:               AppConfigPush;
-  tournamentDefaults: AppConfigTournamentDefaults;
   faqs:               AppConfigFaqs;
 }
 
@@ -732,6 +886,29 @@ export interface ClubAdminInvitation {
 export interface ClubAdmins {
   admins:      ClubAdminAccount[];
   invitations: ClubAdminInvitation[];
+}
+
+/** Un miembro del equipo de un club (GET /admin/clubs/:clubId/staff). */
+export interface ClubStaffMember {
+  userId:    string;
+  name:      string;
+  email:     string | null;
+  roles:     ClubStaffRole[];
+  createdAt: string;
+}
+
+/** Invitación al equipo de un club sin aceptar. */
+export interface ClubStaffInvitation {
+  id:        string;
+  email:     string;
+  roles:     ClubStaffRole[];
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ClubStaff {
+  members:     ClubStaffMember[];
+  invitations: ClubStaffInvitation[];
 }
 
 export type SupportStatus = "NEW" | "READ" | "RESOLVED";

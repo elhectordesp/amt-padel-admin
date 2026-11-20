@@ -16,7 +16,7 @@ export function Field({
     <div className="space-y-1.5">
       <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
       {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p data-field-error className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

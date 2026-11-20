@@ -165,4 +165,21 @@ describe('AvailabilityModal con las jornadas del torneo', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Disponible todo el día/ })[0]);
     expect(guardar).toBeEnabled();
   });
+
+  it('sin permiso para cambiarla (canEdit=false) se ve la disponibilidad, pero no sale «Editar disponibilidad»', () => {
+    const day = makeDay({ fullAvailability: true });
+    mockUseQuery.mockReturnValue({ data: { player1: 'Ana', player2: null, days: [day] }, isLoading: false });
+    render(<AvailabilityModal registrationId="reg-1" onClose={vi.fn()} canEdit={false} />);
+    expect(screen.getByText('Disponible todo el día')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Editar disponibilidad/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument();
+  });
+
+  it('sin permiso, aunque se pida abrir en modo edición, se queda en lectura', () => {
+    const day = makeDay({ fullAvailability: true });
+    mockUseQuery.mockReturnValue({ data: { player1: 'Ana', player2: null, days: [day] }, isLoading: false });
+    render(<AvailabilityModal registrationId="reg-1" onClose={vi.fn()} editMode canEdit={false} />);
+    expect(screen.queryByRole('button', { name: /Guardar/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument();
+  });
 });

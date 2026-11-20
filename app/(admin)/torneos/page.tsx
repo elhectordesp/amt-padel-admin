@@ -20,6 +20,8 @@ import { clampPage } from "@/lib/utils/pagination";
 import { Pagination, usePagination } from "@/components/admin/pagination";
 import { DeletedTournaments } from "@/components/admin/deleted-tournaments";
 import { useRole } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
+import { kindWord, tournamentsBase, useRouteKind } from "@/lib/league";
 
 type FilterStatus = "all" | TournamentStatus;
 
@@ -39,6 +41,8 @@ function CloneTournamentModal({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const word = kindWord(tournament.kind);
+  const base = tournamentsBase(tournament.kind);
   const nameRef      = useRef<HTMLInputElement>(null);
   const startDateRef = useRef<HTMLInputElement>(null);
   const endDateRef   = useRef<HTMLInputElement>(null);
@@ -49,7 +53,7 @@ function CloneTournamentModal({
     onSuccess: (cloned) => {
       queryClient.invalidateQueries({ queryKey: ["tournaments"] });
       onClose();
-      router.push(`/torneos/${cloned.id}`);
+      router.push(`${base}/${cloned.id}`);
     },
   });
 
@@ -65,7 +69,7 @@ function CloneTournamentModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 space-y-5">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Clonar torneo</h2>
+          <h2 className="text-base font-semibold text-foreground">Clonar {word}</h2>
           <p className="text-xs text-muted-foreground mt-1">
             Clonando: <span className="text-foreground font-medium">{tournament.name}</span>
           </p>
@@ -73,11 +77,11 @@ function CloneTournamentModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Nombre del nuevo torneo</label>
+            <label className="text-xs font-medium text-muted-foreground">Nombre de {word === "liga" ? "la nueva liga" : "el nuevo torneo"}</label>
             <input
               ref={nameRef}
               defaultValue={`${tournament.name} (Copia)`}
-              placeholder="Nombre del torneo"
+              placeholder={`Nombre de${word === "liga" ? " la liga" : "l torneo"}`}
               className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:border-[#D4AF37] transition-colors"
             />
           </div>
@@ -106,7 +110,7 @@ function CloneTournamentModal({
           </p>
 
           {error && (
-            <p className="text-xs text-red-400">{(error as Error).message ?? "Error al clonar el torneo"}</p>
+            <p className="text-xs text-red-400">{(error as Error).message ?? `Error al clonar ${word === "liga" ? "la liga" : "el torneo"}`}</p>
           )}
 
           <div className="flex gap-3 pt-1">
@@ -132,18 +136,26 @@ function CloneTournamentModal({
   );
 }
 
+// También es la pantalla de Ligas (`/ligas`, que la reexporta): la ruta decide
+// el tipo
 export default function TorneosPage() {
   const router = useRouter();
+  const kind = useRouteKind();
+  const base = tournamentsBase(kind);
+  const word = kindWord(kind);
+  const isLeague = kind === "LEAGUE";
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const { page, setPage, pageSize, setPageSize } = usePagination();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [cloning, setCloning] = useState<Tournament | null>(null);
   const { role } = useRole();
+  // Crear y clonar son de quien escribe «tournaments»; el resto del equipo solo lo ve
+  const canEdit = useClubAccess().can("tournaments", "write");
 
   const { data: all = [], isLoading } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey: isLeague ? ["tournaments", "leagues"] : ["tournaments"],
+    queryFn:  isLeague ? adminService.tournaments.listLeagues : adminService.tournaments.list,
   });
 
   // El buscador mira el nombre, la sede y su ciudad, sin tildes (P3-4, P3-6):
@@ -164,7 +176,7 @@ export default function TorneosPage() {
           className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Torneo <SortIcon column={column} />
+          {isLeague ? "Liga" : "Torneo"} <SortIcon column={column} />
         </button>
       ),
       cell: ({ row }) => {
@@ -258,15 +270,17 @@ export default function TorneosPage() {
       id:   "actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <button
-            onClick={(e) => { e.stopPropagation(); setCloning(row.original); }}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title="Clonar torneo"
-          >
-            <Copy size={13} />
-          </button>
+          {canEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setCloning(row.original); }}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              title={`Clonar ${word}`}
+            >
+              <Copy size={13} />
+            </button>
+          )}
           <Link
-            href={`/torneos/${row.original.id}`}
+            href={`${base}/${row.original.id}`}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 text-xs text-[#D4AF37] hover:underline"
           >
@@ -303,7 +317,7 @@ export default function TorneosPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Torneos" />
+      <Header title={isLeague ? "Ligas" : "Torneos"} />
 
       <div className="flex-1 p-4 sm:p-6 space-y-4 sm:space-y-5">
         {/* Top bar */}
@@ -340,15 +354,17 @@ export default function TorneosPage() {
               ))}
             </div>
 
-            {/* Create button — always visible */}
-            <Link
-              href="/torneos/nuevo"
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors shrink-0"
-            >
-              <Plus size={15} />
-              <span className="hidden sm:inline">Nuevo torneo</span>
-              <span className="sm:hidden">Nuevo</span>
-            </Link>
+            {/* Create button — visible para quien puede crear */}
+            {canEdit && (
+              <Link
+                href={`${base}/nuevo`}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] transition-colors shrink-0"
+              >
+                <Plus size={15} />
+                <span className="hidden sm:inline">{isLeague ? "Nueva liga" : "Nuevo torneo"}</span>
+                <span className="sm:hidden">Nuevo</span>
+              </Link>
+            )}
           </div>
 
           {/* Search */}
@@ -357,7 +373,7 @@ export default function TorneosPage() {
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Buscar torneo o sede..."
+              placeholder={`Buscar ${word} o sede...`}
               className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
             />
           </div>
@@ -382,7 +398,7 @@ export default function TorneosPage() {
             <div className="sm:hidden space-y-2">
               {table.getRowModel().rows.length === 0 ? (
                 <div className="text-center py-12 text-sm text-muted-foreground bg-card border border-border rounded-lg">
-                  No se encontraron torneos
+                  {isLeague ? "No se encontraron ligas" : "No se encontraron torneos"}
                 </div>
               ) : (
                 table.getRowModel().rows.map((row) => {
@@ -395,7 +411,7 @@ export default function TorneosPage() {
                     <div
                       key={row.id}
                       className="w-full text-left bg-card border border-border rounded-lg px-4 py-3.5 hover:bg-secondary/30 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/torneos/${t.id}`)}
+                      onClick={() => router.push(`${base}/${t.id}`)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -413,13 +429,15 @@ export default function TorneosPage() {
                           <p className="text-xs text-muted-foreground mt-0.5">{t.club?.name ?? ""}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setCloning(t); }}
-                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title="Clonar torneo"
-                          >
-                            <Copy size={13} />
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setCloning(t); }}
+                              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                              title={`Clonar ${word}`}
+                            >
+                              <Copy size={13} />
+                            </button>
+                          )}
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TOURNAMENT_STATUS_COLOR[t.status]}`}>
                             {TOURNAMENT_STATUS_LABEL[t.status]}
                           </span>
@@ -459,14 +477,14 @@ export default function TorneosPage() {
                     {table.getRowModel().rows.length === 0 ? (
                       <tr>
                         <td colSpan={columns.length} className="text-center py-12 text-sm text-muted-foreground">
-                          No se encontraron torneos
+                          {isLeague ? "No se encontraron ligas" : "No se encontraron torneos"}
                         </td>
                       </tr>
                     ) : (
                       table.getRowModel().rows.map((row) => (
                         <tr
                           key={row.id}
-                          onClick={() => router.push(`/torneos/${row.original.id}`)}
+                          onClick={() => router.push(`${base}/${row.original.id}`)}
                           className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors cursor-pointer"
                         >
                           {row.getVisibleCells().map((cell) => (
@@ -488,13 +506,13 @@ export default function TorneosPage() {
               total={data.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              itemLabel="torneos"
+              itemLabel={isLeague ? "ligas" : "torneos"}
             />
           </>
         )}
 
         {/* Restaurar lo borrado: solo AMT puede (D12) */}
-        {role === "admin" && <DeletedTournaments />}
+        {role === "admin" && !isLeague && <DeletedTournaments />}
       </div>
 
       {cloning && (

@@ -61,6 +61,7 @@ const svc = vi.hoisted(() => ({
   operatingHours: { list: vi.fn() },
   exceptions: { list: vi.fn() },
   bookings: { listAll: vi.fn(), create: vi.fn() },
+  occupations: { list: vi.fn() },
   courtDurations: { list: vi.fn() },
   availability: vi.fn(),
 }));
@@ -70,6 +71,7 @@ vi.mock("@/lib/services/bookings", async () => {
 });
 
 import CalendarioPage from "../../../app/(admin)/mi-club/reservas/calendario/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
 const COURTS = [
   { id: "p1", clubId: "c1", name: "Pista 1", isIndoor: false, isCentral: false, order: 1, active: true, type: "DOUBLES" },
@@ -99,9 +101,15 @@ const CLUB_CANARIAS = { id: "c1", name: "Club Atlántico", timezone: "Atlantic/C
 // staleTime: el del panel (components/providers.tsx) cuando lo que se prueba es cuándo se vuelve a pedir.
 // club: ya en la caché (como al llegar desde Mi club), para que la rejilla se pinte en un solo paso;
 // null para probar lo que se ve mientras no llega o si falla
-function renderPage({ staleTime = 0, club = CLUB_MADRID }: { staleTime?: number; club?: typeof CLUB_MADRID | null } = {}) {
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage({
+  staleTime = 0,
+  club = CLUB_MADRID,
+  me,
+}: { staleTime?: number; club?: typeof CLUB_MADRID | null; me?: object } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime } } });
   if (club) qc.setQueryData(["my-club", "c1"], club);
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <CalendarioPage />
@@ -140,6 +148,7 @@ beforeEach(() => {
   );
   svc.exceptions.list.mockResolvedValue([]);
   svc.bookings.listAll.mockResolvedValue([]);
+  svc.occupations.list.mockResolvedValue([]);
   svc.courtDurations.list.mockResolvedValue([{ id: "d1", courtId: "p2", minutes: 90, isDefault: true }]);
   svc.availability.mockResolvedValue(SLOTS);
 });
@@ -158,6 +167,36 @@ describe("Calendario de reservas — vista Día", () => {
       toDate: "2026-10-25T22:59:59.999Z",
     });
     expect(svc.exceptions.list).toHaveBeenCalledWith("c1", { fromDate: "2026-10-25", toDate: "2026-10-25" });
+  });
+
+  it("pinta lo que ocupa cada pista con su tipo, deja el partido de torneo como enlace al torneo y pone la leyenda", async () => {
+    // 15:00Z-16:30Z son las 16:00-17:30 de Madrid; 09:00Z-10:00Z, las 10:00-11:00
+    svc.occupations.list.mockResolvedValue([
+      {
+        kind: "TOURNAMENT", courtId: "p1", startsAt: "2026-10-25T15:00:00Z", endsAt: "2026-10-25T16:30:00Z",
+        label: "Open de Otoño · Cuartos", source: "MATCH", refId: "m1", tournamentId: "t1",
+      },
+      {
+        kind: "MAINTENANCE", courtId: "p2", startsAt: "2026-10-25T09:00:00Z", endsAt: "2026-10-25T10:00:00Z",
+        label: "Cambio de césped", source: "BLOCK", refId: "k1",
+      },
+    ]);
+    renderPage();
+
+    const match = await screen.findByRole("link", { name: /Torneo · Open de Otoño · Cuartos/ });
+    expect(match).toHaveAttribute("href", "/torneos/t1");
+    expect(screen.getByText("Mantenimiento · Cambio de césped")).toBeInTheDocument();
+    // Las franjas ocupadas no se ofrecen para reservar
+    expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 16:00" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Crear reserva en Pista 2 a las 10:00" })).not.toBeInTheDocument();
+    const legend = screen.getByRole("list", { name: "Leyenda" });
+    for (const name of ["Mantenimiento", "Clase", "Torneo", "Liga", "Evento", "Otro"]) {
+      expect(within(legend).getByText(name)).toBeInTheDocument();
+    }
+    expect(svc.occupations.list).toHaveBeenCalledWith("c1", {
+      from: "2026-10-24T22:00:00.000Z",
+      to: "2026-10-25T22:59:59.999Z",
+    });
   });
 
   it("pulsar un hueco libre abre el alta con esa pista y esa hora", async () => {
@@ -197,7 +236,11 @@ describe("Calendario de reservas — vista Día", () => {
     renderPage();
 
     const block = await screen.findByRole("link", { name: /18:00–19:30/ });
-    expect(block).toHaveAttribute("href", "/mi-club/reservas/bookings/b1");
+    // La ficha vuelve al calendario, a este día
+    expect(block).toHaveAttribute(
+      "href",
+      `/mi-club/reservas/bookings/b1?volver=${encodeURIComponent("/mi-club/reservas/calendario?fecha=2026-10-25")}`,
+    );
     expect(within(block).getByText("2 jug.")).toBeInTheDocument();
     // Las franjas que ocupa ya no se ofrecen
     expect(screen.queryByRole("button", { name: "Crear reserva en Pista 1 a las 18:30" })).not.toBeInTheDocument();
@@ -287,6 +330,19 @@ describe("Calendario de reservas — vista Semana", () => {
     expect(within(sunday).getByText("23:30")).toBeInTheDocument();
   });
 
+  it("pide las pistas con los bloqueos de la semana que enseña (lunes a domingo), no los de toda la temporada", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Semana" }));
+    await screen.findByRole("columnheader", { name: "Pista" });
+
+    expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-19", to: "2026-10-25" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Semana siguiente" }));
+    await waitFor(() =>
+      expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-26", to: "2026-11-01" }),
+    );
+  });
+
   it("si fallan las pistas es un fallo de carga, no «Sin pistas activas»", async () => {
     courtsMock.list.mockRejectedValue(new Error("500"));
     renderPage();
@@ -300,6 +356,19 @@ describe("Calendario de reservas — vista Semana", () => {
 const firstSlot = () => screen.findByLabelText("Crear reserva en Pista 1 a las 09:00");
 
 describe("Recepción — navegar por fechas", () => {
+  it("pide las pistas con los bloqueos del día que enseña, y al cambiar de día, con los de ese día", async () => {
+    renderPage();
+    await firstSlot();
+    expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-25", to: "2026-10-25" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    await waitFor(() =>
+      expect(courtsMock.list).toHaveBeenLastCalledWith("c1", { from: "2026-10-26", to: "2026-10-26" }),
+    );
+    // La rejilla no pasa por «cargando» por pedir las pistas del día nuevo
+    expect(await firstSlot()).toBeInTheDocument();
+  });
+
   it("día siguiente y anterior piden ese día del club; «Hoy» solo sale fuera de hoy y vuelve", async () => {
     renderPage();
     await firstSlot();
@@ -396,6 +465,28 @@ describe("Recepción — franja mañana / tarde", () => {
 
     expect(window.history.replaceState).toHaveBeenLastCalledWith(null, "", "/mi-club/reservas/calendario");
     expect(await screen.findByRole("button", { name: "Crear reserva en Pista 1 a las 15:00" })).toBeInTheDocument();
+  });
+
+  it("con ?fecha= abre ese día; cambiar de día lo deja en la URL, junto a la franja, y «Hoy» lo quita", async () => {
+    url.set("fecha=2026-10-28&franja=tarde");
+    renderPage();
+    await screen.findByLabelText("Crear reserva en Pista 1 a las 15:00");
+    expect(screen.getByLabelText("Elegir fecha")).toHaveValue("2026-10-28");
+
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    expect(window.history.replaceState).toHaveBeenLastCalledWith(
+      null, "", "/mi-club/reservas/calendario?fecha=2026-10-29&franja=tarde",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(window.history.replaceState).toHaveBeenLastCalledWith(null, "", "/mi-club/reservas/calendario?franja=tarde");
+  });
+
+  it("un ?fecha= que no es una fecha se ignora: hoy", async () => {
+    url.set("fecha=mañana");
+    renderPage();
+    await firstSlot();
+    expect(screen.getByLabelText("Elegir fecha")).toHaveValue("2026-10-25");
   });
 
   it("una reserva que cruza las 15:00 sale por la tarde desde la primera fila", async () => {
@@ -821,13 +912,14 @@ describe("Zona del club (B1): un club en Canarias", () => {
     expect(within(sunday).getByText("23:30")).toBeInTheDocument();
   });
 
-  it("sin saber aún la zona del club no se pinta ninguna hora ni se piden reservas", async () => {
+  it("sin saber aún la zona del club no se pinta ninguna hora ni se piden reservas ni pistas (su día depende de la zona)", async () => {
     clubsMock.findOne.mockReturnValue(new Promise(() => {}));
     renderPage({ club: null });
-    await waitFor(() => expect(courtsMock.list).toHaveBeenCalled());
+    await waitFor(() => expect(clubsMock.findOne).toHaveBeenCalled());
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
     expect(svc.bookings.listAll).not.toHaveBeenCalled();
+    expect(courtsMock.list).not.toHaveBeenCalled();
   });
 
   it("si no llegan los datos del club, lo dice y se puede reintentar", async () => {
@@ -838,5 +930,37 @@ describe("Zona del club (B1): un club en Canarias", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
     expect(await screen.findByRole("separator", { name: "Hora actual, 10:00" })).toBeInTheDocument();
+  });
+});
+
+describe("Calendario con un rol de solo lectura", () => {
+  const asRole = (role: string) => ({
+    id: "staff", name: "Equipo", activeClubId: "c1",
+    clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+  });
+
+  it("Entrenador: ve la rejilla y las reservas, pero ni «Nueva reserva» ni huecos que pulsar", async () => {
+    svc.bookings.listAll.mockResolvedValue([booking({ participants: [] })]);
+    renderPage({ me: asRole("COACH") });
+
+    await screen.findByRole("link", { name: /AMT-1|18:00/ });
+    expect(screen.queryByRole("button", { name: /Nueva reserva/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Crear reserva en/)).not.toBeInTheDocument();
+    // La rejilla sigue ahí, con sus horas y pistas
+    expect(screen.getByText("Pista 1")).toBeInTheDocument();
+    expect(screen.getByText("Pista 2")).toBeInTheDocument();
+  });
+
+  it("Entrenador: «?nueva=1» (el atajo de la portada) no le abre el alta", async () => {
+    url.set("?nueva=1");
+    renderPage({ me: asRole("COACH") });
+    await screen.findByText("Pista 1");
+    expect(screen.queryByText("Crear reserva", { selector: "h2" })).not.toBeInTheDocument();
+  });
+
+  it("Recepción: «Nueva reserva» y los huecos libres para crear", async () => {
+    renderPage({ me: asRole("RECEPTION") });
+    expect(await screen.findByLabelText("Crear reserva en Pista 1 a las 09:00")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nueva reserva/ })).toBeInTheDocument();
   });
 });

@@ -7,6 +7,7 @@ import {
   getRefreshToken,
   TOO_MANY_REQUESTS_MESSAGE,
 } from "./api";
+import type { ClubMembership } from "./club-permissions";
 
 /** El admin de un club que AMT desactivó no entra hasta que AMT lo reactive. */
 export const CLUB_DEACTIVATED_MESSAGE = "Tu club está desactivado. Contacta con AMT para reactivarlo.";
@@ -16,7 +17,18 @@ export interface AdminUser {
   name:  string;
   email: string;
   role:  string;
+  /** Los clubes en los que trabaja (equipo) y con cuál está trabajando ahora. */
+  clubs?:        ClubMembership[];
+  activeClubId?: string | null;
+  /** Club en el que AMT trabaja como soporte (null: no está en soporte). */
+  supportClubId?: string | null;
+  /** Entró como jugador con varios clubes: falta elegir con cuál (/elegir-club). */
+  needsClubChoice?: boolean;
 }
+
+export const NO_ADMIN_PERMISSIONS_MESSAGE = "No tienes permisos de administrador.";
+export const INVITATION_WRONG_ACCOUNT_MESSAGE =
+  "Esta invitación es para otro email: entra con esa cuenta.";
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   try {
@@ -26,7 +38,15 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   }
 }
 
-export async function login(email: string, password: string): Promise<AdminUser> {
+/**
+ * `keepPlayerSession`: quien va a aceptar una invitación al equipo puede no
+ * tener aún ningún club; su sesión de jugador se conserva tal cual.
+ */
+export async function login(
+  email: string,
+  password: string,
+  { keepPlayerSession = false }: { keepPlayerSession?: boolean } = {},
+): Promise<AdminUser> {
   let res;
   try {
     res = await api.post("/auth/login", { email, password });
@@ -50,16 +70,79 @@ export async function login(email: string, password: string): Promise<AdminUser>
   setToken(data.token);
   if (data.refreshToken) setRefreshToken(data.refreshToken);
 
-  // El role en el JWT es 'admin' (ADMIN/SUPERADMIN AMT), 'club' (admin de un
-  // club concreto) o 'user' (PLAYER). Solo los dos primeros pueden entrar al
-  // panel — al CLUB lo dejamos pasar y el backend ya filtra por su clubId.
+  // El role en el JWT es 'admin' (ADMIN/SUPERADMIN AMT), 'club' (equipo de un
+  // club, con ese club activo) o 'user' (jugador). Un jugador entra al panel
+  // solo si es del equipo de algún club: con uno, entra en él; con varios,
+  // elige (/elegir-club); sin ninguno, no tiene acceso.
   const payload = decodeJwtPayload(data.token);
+  if (payload.role === "user") {
+    if (keepPlayerSession) return { ...data.user, role: "user" };
+    const clubs = data.user.clubs ?? [];
+    if (clubs.length === 0) {
+      removeTokens();
+      throw new Error(NO_ADMIN_PERMISSIONS_MESSAGE);
+    }
+    if (clubs.length > 1) return { ...data.user, role: "user", needsClubChoice: true };
+    return activateClub(clubs[0].clubId);
+  }
   if (payload.role !== "admin" && payload.role !== "club") {
     removeTokens();
-    throw new Error("No tienes permisos de administrador.");
+    throw new Error(NO_ADMIN_PERMISSIONS_MESSAGE);
   }
 
   return { ...data.user, role: payload.role as string };
+}
+
+/**
+ * Pasa a trabajar con ese club (o con ninguno, `null`): el back devuelve la
+ * sesión nueva y se guarda como en el login.
+ */
+export async function activateClub(clubId: string | null): Promise<AdminUser> {
+  let res;
+  try {
+    res = await api.post("/auth/active-club", { clubId, refreshToken: getRefreshToken() });
+  } catch (err: unknown) {
+    const code = err instanceof ApiError ? err.code : undefined;
+    if (code === "CLUB_DEACTIVATED") throw new Error(CLUB_DEACTIVATED_MESSAGE);
+    if (code === "CLUB_STAFF_NOT_MEMBER")
+      throw new Error("Ya no formas parte del equipo de ese club.");
+    throw new Error(
+      err instanceof ApiError && err.message ? err.message : "No se pudo cambiar de club. Inténtalo de nuevo.",
+    );
+  }
+  const data = res.data as unknown as { token: string; refreshToken: string; user: AdminUser };
+  setToken(data.token);
+  if (data.refreshToken) setRefreshToken(data.refreshToken);
+  const payload = decodeJwtPayload(data.token);
+  return { ...data.user, role: (payload.role as string) ?? "club" };
+}
+
+/**
+ * Acepta una invitación al equipo de un club (hay que tener sesión). El back
+ * devuelve la sesión ya con ese club activo y se guarda.
+ */
+export async function acceptStaffInvitation(
+  token: string,
+): Promise<{ clubId: string; clubName: string }> {
+  let res;
+  try {
+    res = await api.post("/auth/club-staff-invitations/accept", { token });
+  } catch (err: unknown) {
+    const code = err instanceof ApiError ? err.code : undefined;
+    if (code === "CLUB_INVITATION_WRONG_ACCOUNT") throw new Error(INVITATION_WRONG_ACCOUNT_MESSAGE);
+    if (code === "CLUB_INVITATION_INVALID")
+      throw new Error("La invitación es inválida o ha caducado. Pide que te la reenvíen.");
+    if (code === "CLUB_DEACTIVATED") throw new Error(CLUB_DEACTIVATED_MESSAGE);
+    throw new Error(
+      err instanceof ApiError && err.message ? err.message : "Error al aceptar la invitación.",
+    );
+  }
+  const data = res.data as unknown as {
+    token: string; refreshToken: string; clubId: string; clubName: string;
+  };
+  setToken(data.token);
+  if (data.refreshToken) setRefreshToken(data.refreshToken);
+  return { clubId: data.clubId, clubName: data.clubName };
 }
 
 /**

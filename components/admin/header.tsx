@@ -7,8 +7,10 @@ import { useQuery } from "@tanstack/react-query";
 import { adminService } from "@/lib/services/admin";
 import { useSearch } from "@/components/admin/search-context";
 import { LogoutModal } from "@/components/admin/logout-modal";
+import { ClubNoticesBell } from "@/components/admin/club-notices-bell";
 import { roleLabel, useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 
 interface HeaderProps { title: string }
 
@@ -39,16 +41,20 @@ export function Header({ title }: HeaderProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [menuOpen, bellOpen]);
 
+  const { data: me } = useMe();
+  const { role, clubId } = useRole();
+  const activeClubId = me?.activeClubId ?? clubId;
+  const isClubRole = isClub(role);
+  const access = useClubAccess();
+
+  // Las cifras son de torneos: quien no los lee (el entrenador) recibiría un 403 en cada pantalla
   const { data: stats } = useQuery({
     queryKey:       ["admin-stats"],
     queryFn:        adminService.stats,
     refetchInterval: 60_000,
     staleTime:       30_000,
+    enabled:         !isClubRole || access.can("tournaments"),
   });
-
-  const { data: me } = useMe();
-  const { role } = useRole();
-  const isClubRole = isClub(role);
 
   const initials = me?.name
     ? me.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -56,7 +62,7 @@ export function Header({ title }: HeaderProps) {
 
   return (
     <>
-      <header className="flex items-center justify-between pl-14 pr-4 sm:px-6 py-4 border-b border-border bg-background sticky top-0 z-10">
+      <header className="flex items-center justify-between pl-16 pr-4 sm:pr-6 min-[1025px]:pl-6 py-4 border-b border-border bg-background sticky top-0 z-10">
         <h1 className="font-heading text-xl text-foreground">{title}</h1>
 
         <div className="flex items-center gap-2">
@@ -78,7 +84,10 @@ export function Header({ title }: HeaderProps) {
             <Search size={18} />
           </button>
 
-          {/* Notification bell dropdown */}
+          {/* Equipo de un club: sus avisos (lo que hacen los jugadores). AMT: lo de hoy */}
+          {isClubRole && activeClubId ? (
+            <ClubNoticesBell clubId={activeClubId} />
+          ) : (
           <div ref={bellRef} className="relative">
             <button
               type="button"
@@ -130,6 +139,7 @@ export function Header({ title }: HeaderProps) {
               </div>
             )}
           </div>
+          )}
 
           {/* Admin profile dropdown */}
           <div ref={menuRef} className="relative">

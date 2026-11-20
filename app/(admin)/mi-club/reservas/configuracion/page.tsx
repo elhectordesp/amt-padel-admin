@@ -12,9 +12,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { ReservasPage } from "@/components/admin/reservas-page";
+import { BookingRulesCard } from "@/components/admin/booking-rules-card";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
+import { rulesError } from "@/lib/utils/booking-rules";
 import type { ClubBookingConfig } from "@/types/bookings";
 
 type FormState = Pick<
@@ -22,6 +25,13 @@ type FormState = Pick<
   | "cancellationWindowHours"
   | "minBookingAheadMinutes"
   | "maxBookingAheadDays"
+  | "strictModeEnabled"
+  | "strictFrom"
+  | "strictTo"
+  | "advanceRuleEnabled"
+  | "advanceRuleFrom"
+  | "advanceRuleTo"
+  | "advanceRuleMinutes"
   | "openMatchEnabled"
   | "openMatchMinPlayers"
   | "openMatchAdminWarnHoursBefore"
@@ -33,10 +43,13 @@ type FormState = Pick<
   | "welcomeMessageMarkdown"
   | "notifyAdminViaPush"
   | "notifyAdminViaEmail"
+  | "memberDiscountPercent"
 >;
 
 export default function ConfiguracionPage() {
   const { role, clubId } = useRole();
+  // Quien solo lee la configuración la ve, sin «Guardar» y con los campos fijos
+  const canWrite = useClubAccess().can("settings", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.config(clubId ?? ""),
@@ -54,6 +67,13 @@ export default function ConfiguracionPage() {
         cancellationWindowHours,
         minBookingAheadMinutes,
         maxBookingAheadDays,
+        strictModeEnabled,
+        strictFrom,
+        strictTo,
+        advanceRuleEnabled,
+        advanceRuleFrom,
+        advanceRuleTo,
+        advanceRuleMinutes,
         openMatchEnabled,
         openMatchMinPlayers,
         openMatchAdminWarnHoursBefore,
@@ -65,11 +85,19 @@ export default function ConfiguracionPage() {
         welcomeMessageMarkdown,
         notifyAdminViaPush,
         notifyAdminViaEmail,
+        memberDiscountPercent,
       } = query.data;
       setForm({
         cancellationWindowHours,
         minBookingAheadMinutes,
         maxBookingAheadDays,
+        strictModeEnabled,
+        strictFrom,
+        strictTo,
+        advanceRuleEnabled,
+        advanceRuleFrom,
+        advanceRuleTo,
+        advanceRuleMinutes,
         openMatchEnabled,
         openMatchMinPlayers,
         openMatchAdminWarnHoursBefore,
@@ -81,13 +109,18 @@ export default function ConfiguracionPage() {
         welcomeMessageMarkdown,
         notifyAdminViaPush,
         notifyAdminViaEmail,
+        memberDiscountPercent,
       });
       setHydrated(true);
     }
   }, [query.data, hydrated]);
 
   const save = useMutation({
-    mutationFn: () => bookingsService.config.update(clubId!, form!),
+    mutationFn: () => {
+      const problem = rulesError(form!);
+      if (problem) throw new Error(problem);
+      return bookingsService.config.update(clubId!, form!);
+    },
     onSuccess: () => {
       toast.success("Configuración guardada");
       qc.invalidateQueries({ queryKey: bookingsQK.config(clubId!) });
@@ -124,18 +157,20 @@ export default function ConfiguracionPage() {
   return (
     <ReservasPage title="Configuración">
       {/* Guardar, en el contenido: la cabecera del panel va sola y a todo el ancho */}
-      <div className="mt-2 flex justify-end">
-        <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
-          {save.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-          Guardar
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="mt-2 flex justify-end">
+          <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
+            {save.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            Guardar
+          </Button>
+        </div>
+      )}
 
-      <div className="mt-6 space-y-8">
+      <fieldset disabled={!canWrite} className="mt-6 min-w-0 space-y-8">
         {/* Cancelación + antelación */}
         <Section title="Cancelación y antelación">
           <NumberField
@@ -143,14 +178,14 @@ export default function ConfiguracionPage() {
             value={form!.cancellationWindowHours}
             onChange={(v) => set("cancellationWindowHours", v)}
             min={1} max={48}
-            help="Si el jugador cancela con menos antelación, el club cobra la pista (offline)."
+            help="Si el jugador cancela con menos antelación, el club puede cobrarle la pista (el cobro se hace fuera de la app)."
           />
           <NumberField
             label="Antelación mínima para reservar (minutos)"
             value={form!.minBookingAheadMinutes}
             onChange={(v) => set("minBookingAheadMinutes", v)}
             min={0} max={240}
-            help="Buffer para que el club tenga tiempo de prepararse."
+            help="Margen para que el club prepare la pista. Ej.: con 60, no se puede reservar una pista que empiece en menos de 1 hora."
           />
           <NumberField
             label="Antelación máxima para reservar (días)"
@@ -160,13 +195,18 @@ export default function ConfiguracionPage() {
           />
         </Section>
 
+        <BookingRulesCard
+          value={form!}
+          onChange={(patch) => setForm((prev) => (prev ? { ...prev, ...patch } : prev))}
+        />
+
         {/* Open matches */}
         <Section title="Partidos abiertos">
           <BoolField
             label="Permitir partidos abiertos en el club"
             value={form!.openMatchEnabled}
             onChange={(v) => set("openMatchEnabled", v)}
-            help="Si desactivas, los partidos abiertos no se podrán crear ni unirse en ningún slot de tu club."
+            help="Si desactivas, los partidos abiertos no se podrán crear ni unirse en ninguna franja de tu club."
           />
           <NumberField
             label="Mínimo de jugadores para que el partido salga adelante"
@@ -175,13 +215,13 @@ export default function ConfiguracionPage() {
             min={2} max={4}
           />
           <NumberField
-            label="Horas antes para avisar al admin si no se llena"
+            label="Horas antes del partido para avisar al club si no se llena"
             value={form!.openMatchAdminWarnHoursBefore}
             onChange={(v) => set("openMatchAdminWarnHoursBefore", v)}
             min={1} max={72}
           />
           <NumberField
-            label="Horas antes para auto-cancelar si no se llena"
+            label="Horas antes del partido para cancelarlo solo si no se llena (0 = no cancelar)"
             value={form!.openMatchAutoCancelHoursBefore}
             onChange={(v) => set("openMatchAutoCancelHoursBefore", v)}
             min={0} max={48}
@@ -201,24 +241,35 @@ export default function ConfiguracionPage() {
             value={form!.resultMaxExtensions}
             onChange={(v) => set("resultMaxExtensions", v)}
             min={0} max={5}
-            help="Si alguien cambia el resultado cerca del deadline, se extiende +1 día (hasta este máximo)."
+            help="Si alguien cambia el resultado cerca del último día permitido, el plazo se alarga 1 día (hasta este máximo)."
           />
         </Section>
 
         {/* Social */}
         <Section title="Social">
           <NumberField
-            label="Partidos juntos para auto-aceptar invitaciones"
+            label="Partidos jugados juntos para aceptar invitaciones automáticamente"
             value={form!.autoAcceptThreshold}
             onChange={(v) => set("autoAcceptThreshold", v)}
             min={0} max={20}
-            help="Si dos jugadores ya han jugado N veces juntos, las invitaciones futuras se auto-aceptan."
+            help="Si dos jugadores ya han jugado N partidos juntos, sus invitaciones futuras se aceptan solas."
           />
           <BoolField
             label="Permitir invitados sin cuenta AMT"
             value={form!.allowGuestPlayers}
             onChange={(v) => set("allowGuestPlayers", v)}
-            help="Útil cuando vienen amigos de fuera. Los invitados no cuentan para stats LSPA."
+            help="Útil cuando vienen amigos de fuera. Los invitados no cuentan para las estadísticas del ranking."
+          />
+        </Section>
+
+        {/* Socios */}
+        <Section title="Socios">
+          <NumberField
+            label="Descuento para socios (%)"
+            value={form!.memberDiscountPercent}
+            onChange={(v) => set("memberDiscountPercent", v)}
+            min={0} max={100}
+            help="Los clientes marcados como socios pagan este porcentaje menos al reservar. No se suma a las ofertas: se aplica el mayor de los dos. 0 = sin descuento."
           />
         </Section>
 
@@ -234,19 +285,21 @@ export default function ConfiguracionPage() {
         </Section>
 
         {/* Notificaciones admin */}
-        <Section title="Notificaciones admin">
+        <Section title="Avisos al equipo">
           <BoolField
-            label="Recibir push de eventos del módulo"
+            label="Avisos push al equipo"
             value={form!.notifyAdminViaPush}
             onChange={(v) => set("notifyAdminViaPush", v)}
+            help="Avisa al móvil de propietario, gestor y recepción (reservas) y de propietario, gestor y torneos (inscripciones). La campana del panel siempre avisa."
           />
           <BoolField
-            label="Recibir email de eventos del módulo"
+            label="Email al equipo (solo anulaciones)"
             value={form!.notifyAdminViaEmail}
             onChange={(v) => set("notifyAdminViaEmail", v)}
+            help="Cuando un jugador anula una reserva, a las cuentas del equipo con el email verificado."
           />
         </Section>
-      </div>
+      </fieldset>
     </ReservasPage>
   );
 }

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { formatCents } from "@/lib/utils/booking-price";
 import type { BookingExtra } from "@/types/bookings";
@@ -43,6 +44,8 @@ const EMPTY_FORM: ExtraForm = {
 
 export default function ExtrasPage() {
   const { role, clubId } = useRole();
+  // Quien solo lee la configuración ve los extras, sin crearlos, editarlos ni desactivarlos
+  const canWrite = useClubAccess().can("settings", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.extras(clubId ?? "", false),
@@ -102,8 +105,7 @@ export default function ExtrasPage() {
     <ReservasPage title="Extras">
       <p className="mt-2 text-sm text-muted-foreground">
         Extras que el club ofrece con cada reserva (luz, alquiler de palas,
-        climatización). Pueden ser opcionales, obligatorios, o auto-aplicarse
-        si la pista es outdoor y el slot es post-sunset.
+        climatización). Pueden ser opcionales, obligatorios, o aplicarse solos en pistas descubiertas cuando ya ha anochecido.
       </p>
 
       <div className="mt-6 flex justify-between">
@@ -111,16 +113,18 @@ export default function ExtrasPage() {
           {extras.length} extra{extras.length === 1 ? "" : "s"} configurado
           {extras.length === 1 ? "" : "s"}
         </h3>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowForm((s) => !s)}
-        >
-          <Plus className="h-3.5 w-3.5" /> Nuevo extra
-        </Button>
+        {canWrite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowForm((s) => !s)}
+          >
+            <Plus className="h-3.5 w-3.5" /> Nuevo extra
+          </Button>
+        )}
       </div>
 
-      {showForm && (
+      {canWrite && showForm && (
         <div className="mt-4 rounded-lg border border-border bg-card p-4 space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Nombre">
@@ -173,7 +177,7 @@ export default function ExtrasPage() {
                 }
                 className="h-4 w-4 accent-primary"
               />
-              Auto-aplicar tras sunset (solo pistas outdoor)
+              Añadir solo al anochecer (solo pistas descubiertas)
             </label>
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -193,11 +197,11 @@ export default function ExtrasPage() {
         ) : extras.length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
             <Sparkles className="mx-auto mb-2 h-6 w-6 opacity-50" />
-            Sin extras todavía. Añade el primero con el botón de arriba.
+            Sin extras todavía.{canWrite && " Añade el primero con el botón de arriba."}
           </div>
         ) : (
           extras.map((e) => (
-            <ExtraCard key={e.id} extra={e} clubId={clubId} />
+            <ExtraCard key={e.id} extra={e} clubId={clubId} canWrite={canWrite} />
           ))
         )}
       </div>
@@ -205,7 +209,7 @@ export default function ExtrasPage() {
   );
 }
 
-function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
+function ExtraCard({ extra, clubId, canWrite }: { extra: BookingExtra; clubId: string; canWrite: boolean }) {
   const qc = useQueryClient();
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState({
@@ -267,7 +271,7 @@ function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
               )}
               {extra.autoApplyAfterSunset && (
                 <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-500">
-                  Auto-sunset
+                  Al anochecer
                 </span>
               )}
               {!extra.active && (
@@ -281,21 +285,23 @@ function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
               {extra.description && ` · ${extra.description}`}
             </div>
           </div>
-          <div className="flex gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setEdit(true)}>
-              Editar
-            </Button>
-            {extra.active && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => deactivate.mutate()}
-                title="Desactivar"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+          {canWrite && (
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setEdit(true)}>
+                Editar
               </Button>
-            )}
-          </div>
+              {extra.active && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => deactivate.mutate()}
+                  title="Desactivar"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -350,7 +356,7 @@ function ExtraCard({ extra, clubId }: { extra: BookingExtra; clubId: string }) {
             }
             className="h-4 w-4 accent-primary"
           />
-          Auto-sunset
+          Al anochecer
         </label>
         <label className="flex items-center gap-2">
           <input

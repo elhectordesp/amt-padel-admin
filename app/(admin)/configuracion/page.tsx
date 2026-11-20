@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Save, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp,
-  Settings, Calendar, Trophy, Mail, Bell, Layers, Users,
+  Settings, Calendar, Trophy, Mail, Bell, Users,
   Plus, Trash2, X, ChevronRight, MessageCircleQuestion,
   GripVertical,
 } from "lucide-react";
@@ -17,7 +17,7 @@ import { AdminsTab } from "@/components/admin/admins-tab";
 import type {
   SpaConfig,
   AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
-  AppConfigEmail, AppConfigPush, AppConfigTournamentDefaults,
+  AppConfigEmail, AppConfigPush,
   AppConfigFaqs, FaqCategory, FaqEntry,
 } from "@/types";
 
@@ -206,7 +206,6 @@ const TABS = [
   { id: "circuito",           label: "Circuito",           icon: Trophy                },
   { id: "comunicaciones",     label: "Comunicaciones",     icon: Mail                  },
   { id: "notificaciones",     label: "Notificaciones",     icon: Bell                  },
-  { id: "torneos",            label: "Torneos",            icon: Layers                },
   { id: "spa",                label: "SPA",                icon: ChevronRight          },
   { id: "faqs",               label: "FAQs",               icon: MessageCircleQuestion },
   { id: "administradores",    label: "Administradores",    icon: Users                 },
@@ -705,73 +704,6 @@ function TabNotificaciones() {
   );
 }
 
-// ── Tab: Torneos ──────────────────────────────────────────────────────────────
-
-function TabTorneos() {
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["config", "tournamentDefaults"],
-    queryFn:  () => adminService.config.getSection("tournamentDefaults") as Promise<AppConfigTournamentDefaults>,
-  });
-  const [local, setLocal] = useState<AppConfigTournamentDefaults | null>(null);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (data && !local) setLocal(structuredClone(data)); }, [data, local]);
-
-  const cfg = local ?? data;
-  const isDirty = local && data && JSON.stringify(local) !== JSON.stringify(data);
-
-  const save = useMutation({
-    mutationFn: () => adminService.config.updateTournamentDefaults(local!),
-    onSuccess: (updated) => { qc.setQueryData(["config", "tournamentDefaults"], updated); setLocal(null); toast.success("Valores por defecto guardados"); },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const set = <K extends keyof AppConfigTournamentDefaults>(k: K, v: AppConfigTournamentDefaults[K]) =>
-    setLocal((p) => p ? { ...p, [k]: v } : p);
-
-  if (isLoading || !cfg) return <TabSkeleton />;
-  return (
-    <div className="space-y-5">
-      <SaveBar isDirty={!!isDirty} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => setLocal(null)} />
-
-      <Section title="Valores por defecto para nuevos torneos" description="Serán el punto de partida al crear un torneo; se podrán modificar por torneo">
-        <Soon note="El asistente de «Nuevo torneo» todavía no los usa.">
-        <NumInput label="Duración de partido" value={cfg.matchDuration} onChange={(v) => set("matchDuration", v)} min={15} suffix="min" />
-        <FieldRow label="Sistema de puntuación">
-          <select
-            value={cfg.scoringSystem}
-            onChange={(e) => set("scoringSystem", e.target.value)}
-            className="h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-          >
-            <option value="BEST_OF_3">Mejor de 3 sets</option>
-            <option value="BEST_OF_1">1 set</option>
-            <option value="PRO_SET">Pro set</option>
-          </select>
-        </FieldRow>
-        <NumInput label="Días límite de inscripción" value={cfg.registrationDeadlineDays} onChange={(v) => set("registrationDeadlineDays", v)} min={0} suffix="días" />
-        <FieldRow label="Formato por defecto">
-          <select
-            value={cfg.defaultFormat}
-            onChange={(e) => set("defaultFormat", e.target.value)}
-            className="h-8 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-          >
-            <option value="grupos+eliminatoria">Grupos + eliminatoria</option>
-            <option value="grupos">Solo grupos</option>
-            <option value="eliminatoria">Solo eliminatoria</option>
-          </select>
-        </FieldRow>
-        <FieldRow label="Camisetas incluidas por defecto">
-          <Toggle checked={cfg.hasShirtsDefault} onChange={(v) => set("hasShirtsDefault", v)} />
-        </FieldRow>
-        <FieldRow label="Cabezas de serie por defecto">
-          <Toggle checked={cfg.useSeedingDefault} onChange={(v) => set("useSeedingDefault", v)} />
-        </FieldRow>
-        </Soon>
-      </Section>
-    </div>
-  );
-}
-
 // ── Tab: SPA ─────────────────────────────────────────────────────────────────
 
 function TabSpa() {
@@ -1134,7 +1066,6 @@ function ConfiguracionContent() {
     circuito:        <TabCircuito />,
     comunicaciones:  <TabComunicaciones />,
     notificaciones:  <TabNotificaciones />,
-    torneos:         <TabTorneos />,
     spa:             <TabSpa />,
     faqs:            <TabFaqs />,
     administradores: <AdminsTab />,

@@ -1,14 +1,18 @@
 /**
- * BookingCreateDialog — Crear una reserva A MANO (Reservas R1).
+ * BookingCreateDialog — Crear una reserva A MANO (Reservas R1), la del mostrador.
  *
- * El admin del club puede crear una reserva de pista para walk-in / teléfono /
- * partido abierto. Elige pista + fecha + duración, ve los huecos LIBRES
- * (GET /availability) y escoge una hora de inicio, luego el modo:
- *  - Abierta (OPEN) + min/max LSPA opcional
- *  - Con jugadores (PRIVATE_AMT / PRIVATE_WITH_GUESTS) — busca jugadores AMT
- *    y/o añade invitados por nombre (hasta 4 en dobles y 2 en individual: el
- *    club reserva para ellos y no figura como jugador)
- *  - Por teléfono / sin gente (ADMIN_MANUAL) — un contacto libre opcional
+ * El club crea una reserva de pista por teléfono, en el mostrador o de partido
+ * abierto. Elige pista + fecha + duración, ve los huecos LIBRES
+ * (GET /availability) y escoge una hora de inicio, con su precio a la vista.
+ * Luego el modo (por defecto «Por teléfono»):
+ *  - Abierta (OPEN) + nivel mín/máx opcional
+ *  - Con jugadores (PRIVATE_AMT / PRIVATE_WITH_GUESTS) — busca jugadores de la
+ *    app y/o añade invitados por nombre (hasta 4 en dobles y 2 en individual:
+ *    el club reserva para ellos y no figura como jugador)
+ *  - Por teléfono (ADMIN_MANUAL) — solo el cliente
+ * El cliente del club se busca o se da de alta ahí mismo (`clubCustomerId`) y,
+ * si paga ya, «Cobrada ahora» la crea cobrada (`payNow`, en la misma operación
+ * del back). El pie de botones queda fijo: el formulario se desplaza por dentro.
  *
  * Submit → bookingsService.bookings.create. Al éxito cierra + refresca la lista.
  */
@@ -22,6 +26,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import type { ClubCustomer } from "@/lib/services/club-customers";
+import { BookingCustomerPicker } from "@/components/admin/booking-customer-picker";
+import { AmountField } from "@/components/admin/payment-fields";
+import {
+  PAYMENT_METHOD_OPTIONS,
+  centsToEurosInput,
+  eurosToCents,
+  type CounterPaymentMethod,
+} from "@/lib/utils/payment-methods";
+import { formatCents } from "@/lib/utils/booking-price";
 import { zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
 import type { CreateBookingPayload } from "@/types/bookings";
@@ -87,7 +101,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   // La hora pedida (ISO UTC): la del hueco del calendario o la elegida aquí.
   // Se conserva al cambiar de pista o de duración; vale si es un hueco libre
   const [wantedStartsAt, setWantedStartsAt] = useState(initial?.startsAt ?? "");
-  const [mode, setMode] = useState<Mode>("PLAYERS");
+  // Lo habitual en el mostrador: alguien llama y se le apunta
+  const [mode, setMode] = useState<Mode>("PHONE");
   const [isCompetitive, setIsCompetitive] = useState(false);
   const [notes, setNotes] = useState("");
 
@@ -100,8 +115,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   const [guests, setGuests] = useState<Guest[]>([]);
   const [guestDraft, setGuestDraft] = useState("");
 
-  // Modo PHONE
-  const [contact, setContact] = useState("");
+  // El cliente del club a quien se reserva (opcional) y si paga ya
+  const [customer, setCustomer] = useState<ClubCustomer | null>(null);
+  const [payNow, setPayNow] = useState(false);
+  const [skipPlayerNotices, setSkipPlayerNotices] = useState(false);
+  const [payMethod, setPayMethod] = useState<CounterPaymentMethod>("CASH");
+  // El importe cobrado, en euros; sin tocar, el precio de la reserva
+  const [payAmount, setPayAmount] = useState<string | null>(null);
 
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
@@ -142,11 +162,25 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   }, [durations, duration]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Huecos libres para pista + fecha + duración
+  // Huecos libres para pista + fecha + duración, con el precio del cliente
+  // elegido (si es socio): el mismo que guarda el back al crear la reserva
+  const availabilityKey = bookingsQK.availability(clubId, courtId, date, duration, customer?.id);
   const availabilityQuery = useQuery({
-    queryKey: bookingsQK.availability(clubId, courtId, date, duration),
+    queryKey: availabilityKey,
+    // Al elegir o quitar el cliente solo cambia el precio: los huecos de antes siguen
+    // a la vista mientras llegan los nuevos (con otra pista, fecha o duración, no)
+    placeholderData: (previous, previousQuery) =>
+      previousQuery &&
+      previousQuery.queryKey.slice(0, -1).join("|") === availabilityKey.slice(0, -1).join("|")
+        ? previous
+        : undefined,
     queryFn: () =>
-      bookingsService.availability({ clubId, date, duration }),
+      bookingsService.availability({
+        clubId,
+        date,
+        duration,
+        ...(customer ? { clubCustomerId: customer.id } : {}),
+      }),
     enabled: open && !!clubId && !!courtId && !!date,
   });
   const slots = useMemo(
@@ -159,6 +193,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   const startsAt = slots.some((s) => s.startsAt === wantedStartsAt) ? wantedStartsAt : "";
   // Una reserva ya empezada se apunta como registro: ni competitiva ni abierta
   const started = hasStarted(startsAt);
+  // El hueco elegido: de él salen el precio y lo que incluye
+  const pickedSlot = slots.find((s) => s.startsAt === startsAt);
   // Si ya se sabe que no cabe (huecos cargados para una duración que admite
   // la pista), se dice por qué en vez de dejar la hora en blanco sin más
   const slotsSettled =
@@ -169,6 +205,11 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           courts.find((c) => c.id === courtId)?.name ?? "esta pista"
         }.`
       : null;
+
+  // Lo cobrado ahora: lo escrito o, sin tocar, el precio del hueco
+  const payAmountText = payAmount ?? centsToEurosInput(pickedSlot?.priceCents ?? 0);
+  const payCents = eurosToCents(payAmountText);
+  const payInvalid = payNow && payCents === null;
 
   const create = useMutation({
     mutationFn: () => bookingsService.bookings.create(buildPayload()),
@@ -195,7 +236,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
 
   function resetAndClose() {
     setWantedStartsAt("");
-    setMode("PLAYERS");
+    setMode("PHONE");
     setIsCompetitive(false);
     setNotes("");
     setMinLspa("");
@@ -203,7 +244,11 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     setPlayers([]);
     setGuests([]);
     setGuestDraft("");
-    setContact("");
+    setCustomer(null);
+    setPayNow(false);
+    setSkipPlayerNotices(false);
+    setPayMethod("CASH");
+    setPayAmount(null);
     onClose();
   }
 
@@ -234,6 +279,11 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
       durationMinutes: duration,
       isCompetitive: isCompetitive && !started,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
+      ...(customer ? { clubCustomerId: customer.id } : {}),
+      ...(skipPlayerNotices ? { skipPlayerNotices: true } : {}),
+      ...(payNow && (pickedSlot?.priceCents ?? 0) > 0
+        ? { payNow: { method: payMethod, ...(payCents !== null ? { amountCents: payCents } : {}) } }
+        : {}),
     };
 
     if (mode === "OPEN") {
@@ -248,12 +298,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     }
 
     if (mode === "PHONE") {
-      const name = contact.trim();
-      return {
-        ...base,
-        matchMode: "ADMIN_MANUAL",
-        ...(name ? { participants: [{ guestName: name }] } : {}),
-      };
+      return { ...base, matchMode: "ADMIN_MANUAL" };
     }
 
     // PLAYERS
@@ -281,6 +326,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     !lspaError &&
     !tooManyPlayers &&
     !openButStarted &&
+    !payInvalid &&
     !create.isPending;
 
   return (
@@ -289,8 +335,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={resetAndClose}
       />
-      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-card border border-border rounded-xl shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="relative flex w-full max-w-md max-h-[90vh] flex-col bg-card border border-border rounded-xl shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <CalendarPlus className="h-5 w-5 text-[#D4AF37]" />
             <div>
@@ -298,7 +344,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 Crear reserva
               </h2>
               <p className="text-xs text-muted-foreground">
-                Alta manual (walk-in / teléfono / abierta)
+                Por teléfono, en el mostrador o abierta a otros jugadores
               </p>
             </div>
           </div>
@@ -311,7 +357,8 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           </button>
         </div>
 
-        <div className="p-5 space-y-3">
+        {/* Solo el formulario se desplaza: el pie con los botones siempre a la vista */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-3">
           {/* Pista */}
           <label className="block">
             <span className="text-xs text-muted-foreground">Pista</span>
@@ -373,6 +420,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando
                 huecos…
               </div>
+            ) : availabilityQuery.isError ? (
+              // El motivo real (un club sin activar, sin reservas…), no un «sin huecos» que engaña
+              <p role="alert" className="mt-1 rounded-md border border-destructive/40 bg-background px-2 py-1.5 text-sm text-destructive">
+                {availabilityQuery.error instanceof Error && availabilityQuery.error.message
+                  ? availabilityQuery.error.message
+                  : "No se pudieron cargar los huecos."}
+              </p>
             ) : slots.length === 0 ? (
               <p className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-muted-foreground">
                 Sin huecos libres para esta pista, fecha y duración.
@@ -398,6 +452,19 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             )}
           </label>
 
+          {/* Precio, antes de crear */}
+          {pickedSlot && (
+            <p className="text-sm">
+              <span className="font-semibold">{formatCents(pickedSlot.priceCents)}</span>
+              <span className="text-muted-foreground"> · {pickedSlot.durationMinutes} min</span>
+              {pickedSlot.priceBreakdown.extras.length > 0 && (
+                <span className="block text-xs text-muted-foreground">
+                  Incluye: {pickedSlot.priceBreakdown.extras.map((e) => e.name).join(", ")}
+                </span>
+              )}
+            </p>
+          )}
+
           {/* Modo */}
           <div className="pt-1">
             <span className="text-xs text-muted-foreground">Modo</span>
@@ -409,7 +476,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 hint={
                   started
                     ? "No se puede: el partido ya ha empezado"
-                    : "Partido abierto a jugadores AMT"
+                    : "Partido abierto a otros jugadores de la app"
                 }
                 disabled={started}
               />
@@ -417,13 +484,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 checked={mode === "PLAYERS"}
                 onChange={() => setMode("PLAYERS")}
                 label="Con jugadores"
-                hint="Busca jugadores AMT o añade invitados"
+                hint="Busca jugadores de la app o añade invitados"
               />
               <ModeRadio
                 checked={mode === "PHONE"}
                 onChange={() => setMode("PHONE")}
-                label="Por teléfono / sin gente"
-                hint="Reserva manual con un contacto opcional"
+                label="Por teléfono"
+                hint="Solo el cliente, sin lista de jugadores"
               />
             </div>
             {openButStarted && (
@@ -440,7 +507,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-3">
               <label className="block">
                 <span className="text-xs text-muted-foreground">
-                  LSPA mín. (opcional)
+                  Nivel mín. (opcional)
                 </span>
                 <input
                   type="number"
@@ -455,7 +522,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
               </label>
               <label className="block">
                 <span className="text-xs text-muted-foreground">
-                  LSPA máx. (opcional)
+                  Nivel máx. (opcional)
                 </span>
                 <input
                   type="number"
@@ -563,20 +630,50 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             </div>
           )}
 
-          {/* Modo PHONE */}
-          {mode === "PHONE" && (
-            <label className="block">
-              <span className="text-xs text-muted-foreground">
-                Nombre/teléfono de contacto (opcional)
-              </span>
-              <input
-                type="text"
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="Ej. Juan · 600 123 456"
-                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-              />
-            </label>
+          {/* Cliente del club: se busca, o se da de alta ahí mismo */}
+          <BookingCustomerPicker clubId={clubId} value={customer} onChange={setCustomer} />
+
+          {/* Para copiar reservas que ya existen en otro sistema sin avisar dos veces */}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={skipPlayerNotices}
+              onChange={(e) => setSkipPlayerNotices(e.target.checked)}
+              className="h-4 w-4 accent-primary"
+            />
+            No avisar al jugador
+          </label>
+
+          {/* Cobrada ahora: solo si la reserva tiene importe */}
+          {pickedSlot && pickedSlot.priceCents > 0 && (
+            <div className="rounded-md border border-border bg-background p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={payNow}
+                  onChange={(e) => setPayNow(e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                Cobrada ahora ({formatCents(pickedSlot.priceCents)})
+              </label>
+              {payNow && (
+                <div className="mt-2 space-y-2">
+                  <select
+                    aria-label="Cómo se ha cobrado"
+                    value={payMethod}
+                    onChange={(e) => setPayMethod(e.target.value as CounterPaymentMethod)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                  >
+                    {PAYMENT_METHOD_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <AmountField value={payAmountText} onChange={setPayAmount} invalid={payInvalid} />
+                </div>
+              )}
+            </div>
           )}
 
           {/* Competitivo (no en una reserva ya empezada: fila 39) */}
@@ -589,7 +686,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 disabled={started}
                 className="h-4 w-4 accent-primary"
               />
-              Partido competitivo (cuenta para LSPA)
+              Partido competitivo (puntúa en el ranking)
             </label>
             {started && (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -613,7 +710,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           </label>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+        <div className="flex shrink-0 items-center justify-end gap-2 px-5 py-4 border-t border-border">
           <Button
             variant="outline"
             size="sm"
@@ -699,7 +796,7 @@ function PlayerSearch({ onPick }: { onPick: (p: Player) => void }) {
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Buscar jugador AMT por nombre o email…"
+          placeholder="Buscar jugador de la app por nombre o email…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="w-full rounded-md border border-border bg-background py-1.5 pl-7 pr-2 text-sm text-foreground"

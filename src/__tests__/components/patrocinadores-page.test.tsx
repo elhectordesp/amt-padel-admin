@@ -43,6 +43,7 @@ vi.mock("@/lib/services/admin", () => ({
 }));
 
 import PatrocinadoresPage from "../../../app/(admin)/patrocinadores/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
 function renderWithClient(ui: React.ReactElement) {
   const qc = new QueryClient({
@@ -146,5 +147,50 @@ describe("PatrocinadoresPage — URL destino", () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
     expect(adminService.sponsors.create).not.toHaveBeenCalled();
+  });
+});
+
+// El back pide escribir en «tournaments» para tocar patrocinadores: quien solo lee los ve, sin botones
+describe("PatrocinadoresPage — rol del equipo del club", () => {
+  const SPONSOR = {
+    id: "s1", name: "Raquetas García", scope: "TOURNAMENT" as const, displayOrder: 0, active: true,
+    clickCount: 3, createdAt: "2026-10-01T00:00:00.000Z",
+  };
+  const asRole = (role: string) => ({
+    id: "staff", name: "Equipo", activeClubId: "club-1",
+    clubs: [{ clubId: "club-1", clubName: "Club Centro", roles: [role] }],
+  });
+  async function renderAs(role: string) {
+    useRoleMock.mockReturnValue({ role: "club", clubId: "club-1" });
+    const { adminService } = await import("@/lib/services/admin");
+    vi.mocked(adminService.sponsors.list).mockResolvedValue([SPONSOR]);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, asRole(role));
+    return render(
+      <QueryClientProvider client={qc}>
+        <PatrocinadoresPage />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("Recepción (lee los torneos): ve el patrocinador y su estado, sin «Nuevo», arrastrar, activar, editar ni eliminar", async () => {
+    await renderAs("RECEPTION");
+    expect(await screen.findByText("Raquetas García")).toBeInTheDocument();
+    expect(screen.getByText("Activo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nuevo patrocinador/ })).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Arrastrar para reordenar")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Editar")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Eliminar")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Activo" })).not.toBeInTheDocument();
+  });
+
+  it("Propietario: todo", async () => {
+    await renderAs("OWNER");
+    expect(await screen.findByText("Raquetas García")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nuevo patrocinador/ })).toBeInTheDocument();
+    expect(screen.getByTitle("Arrastrar para reordenar")).toBeInTheDocument();
+    expect(screen.getByTitle("Editar")).toBeInTheDocument();
+    expect(screen.getByTitle("Eliminar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activo" })).toBeInTheDocument();
   });
 });

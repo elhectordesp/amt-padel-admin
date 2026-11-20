@@ -1,7 +1,8 @@
 import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
-import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE, isPanelRole, tokenRole } from "./session";
+import { CLUB_ROLE_FORBIDDEN_MESSAGE } from "./club-permissions";
+import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE, isPanelRole, isPlayerSessionPath, isPublicPath, tokenRole } from "./session";
 
 const TOKEN_KEY         = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
@@ -16,10 +17,16 @@ export const api = axios.create({
 /**
  * Con lo que se rechazan las peticiones que fallan: el mensaje del back y,
  * si los hay, el estado HTTP y su código de error (`code`), para distinguir
- * un error concreto sin comparar textos.
+ * un error concreto sin comparar textos, y los datos estructurados con que el
+ * back acompaña a algunos 409 (`details`, p. ej. lo que choca con un bloqueo).
  */
 export class ApiError extends Error {
-  constructor(message: string, readonly status?: number, readonly code?: string) {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -83,6 +90,9 @@ function isClubDeactivated(err: unknown): boolean {
 
 function forceLogout(reason?: string) {
   removeTokens();
+  // En una página pública (login, restablecer…) ya se está fuera: recargar
+  // /login desde /login es un bucle de recargas
+  if (typeof window !== "undefined" && isPublicPath(window.location.pathname) && !reason) return;
   const target = reason ? `/login?motivo=${reason}` : "/login";
   try {
     window.location.href = target;
@@ -140,9 +150,21 @@ api.interceptors.response.use(
         );
         // La respuesta está envuelta en { success, data: { token, refreshToken } }
         const tokens = data?.data ?? data;
-        // Un admin al que le quitaron el rol renueva como jugador: se quedaba
-        // dentro con todo a 0 y cada llamada en 403 (P2-16). Fuera.
-        if (!isPanelRole(tokenRole(tokens.token))) {
+        // Un gestor al que le quitaron del club renueva como jugador: guarda
+        // la sesión y /elegir-club decide (un solo club: entra; varios: elige;
+        // ninguno: fuera). Antes se quedaba dentro con todo a 0 (P2-16).
+        if (tokenRole(tokens.token) === "user") {
+          setToken(tokens.token);
+          setRefreshToken(tokens.refreshToken);
+          // En /elegir-club y /invitacion-equipo la sesión de jugador es lo normal: se sigue
+          if (!isPlayerSessionPath(window.location.pathname)) {
+            const lost = new ApiError(CLUB_ROLE_FORBIDDEN_MESSAGE, 403);
+            processQueue(lost, null);
+            window.location.href = "/elegir-club";
+            return Promise.reject(lost);
+          }
+        } else if (!isPanelRole(tokenRole(tokens.token))) {
+          // Cualquier otro rol que no entra al panel: fuera.
           const noAccess = new ApiError(NO_ACCESS_MESSAGE, 403);
           processQueue(noAccess, null);
           forceLogout(LOGIN_REASON_NO_ACCESS);
@@ -172,11 +194,15 @@ api.interceptors.response.use(
       err.response?.data?.error ??
       "Error de conexión";
     const code = err.response?.data?.code;
+    if (code === "CLUB_ROLE_FORBIDDEN") {
+      return Promise.reject(new ApiError(CLUB_ROLE_FORBIDDEN_MESSAGE, err.response?.status, code));
+    }
     return Promise.reject(
       new ApiError(
         Array.isArray(message) ? message[0] : message,
         err.response?.status,
         typeof code === "string" ? code : undefined,
+        err.response?.data?.details,
       ),
     );
   },

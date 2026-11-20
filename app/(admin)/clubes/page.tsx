@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,9 +15,11 @@ import { paginate } from "@/lib/utils/pagination";
 import { matchesSearch } from "@/lib/utils/search";
 import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
+import { ClubAmtPlanEditor } from "@/components/admin/club-amt-plan-editor";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ClubBookingsActivationModal } from "@/components/admin/club-bookings-activation-modal";
 import { ClubAdminsModal } from "@/components/admin/club-admins-modal";
+import { EnterSupportButton } from "@/components/admin/support-mode";
 import { adminService } from "@/lib/services/admin";
 import {
   clubStatus, toggleConfirm, type ClubStatus, type ClubToggle, type ToggleConfirm,
@@ -58,6 +60,8 @@ function CourtsPanel({
   );
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // ── ClubModal ──────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
@@ -95,6 +99,13 @@ function ClubModal({
         }
       : { ...EMPTY_FORM }
   );
+  // Alta de un club nuevo en dos pasos: datos del club y email de su primer
+  // propietario. El club se crea inactivo y se activa al salir la invitación;
+  // si falla, queda oculto y se reintenta solo la invitación.
+  const [step,         setStep]         = useState<1 | 2>(1);
+  const [ownerEmail,   setOwnerEmail]   = useState("");
+  const [created,      setCreated]      = useState<Club | null>(null);
+  const [inviteError,  setInviteError]  = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeLog, setGeoLog]   = useState<{ query: string; found: string | null }[]>([]);
 
@@ -144,32 +155,59 @@ function ClubModal({
     }
   };
 
+  const inviteFailed = useRef(false);
+  const createAndInvite = async (payload: Parameters<typeof adminService.clubs.create>[0]): Promise<Club> => {
+    inviteFailed.current = false;
+    setInviteError(null);
+    let target = created;
+    if (!target) {
+      // Nace «por configurar» (fuera de la app): solo se activa cuando la
+      // invitación al propietario ha salido, para no dejar un club vacío visible
+      target = await adminService.clubs.create({ ...payload, active: false });
+      setCreated(target);
+      qc.invalidateQueries({ queryKey: ["admin-clubs"] });
+    }
+    try {
+      await adminService.clubs.inviteStaff(target.id, ownerEmail.trim(), ["OWNER"]);
+      target = await adminService.clubs.update(target.id, { active: true });
+      setCreated(target);
+    } catch (e) {
+      inviteFailed.current = true;
+      setInviteError(e instanceof Error ? e.message : "No se pudo enviar la invitación");
+    }
+    return target;
+  };
+
   const save = useMutation({
     mutationFn: () => {
       const latN = form.lat.trim() !== "" ? Number(form.lat) : undefined;
       const lngN = form.lng.trim() !== "" ? Number(form.lng) : undefined;
+      // Al editar, vaciar un campo manda null (el back lo borra); undefined no cambiaría nada
+      const empty = isEditing ? null : undefined;
       const payload = {
         name:         form.name.trim(),
         city:         form.city.trim(),
-        province:     form.province.trim()     || undefined,
-        address:      form.address.trim()      || undefined,
-        phone:        form.phone.trim()        || undefined,
-        website:      form.website.trim()      || undefined,
-        instagram:    form.instagram.trim()    || undefined,
-        logoUrl:      form.logoUrl.trim()      || undefined,
-        contactEmail: form.contactEmail.trim() || undefined,
+        province:     form.province.trim()     || empty,
+        address:      form.address.trim()      || empty,
+        phone:        form.phone.trim()        || empty,
+        website:      form.website.trim()      || empty,
+        instagram:    form.instagram.trim()    || empty,
+        logoUrl:      form.logoUrl.trim()      || empty,
+        contactEmail: form.contactEmail.trim() || empty,
         isAmtPartner: form.isAmtPartner,
         lat:          latN != null && !isNaN(latN) ? latN : undefined,
         lng:          lngN != null && !isNaN(lngN) ? lngN : undefined,
         // La heredan los torneos nuevos del club
         timezone:     form.timezone,
       };
-      return isEditing
-        ? adminService.clubs.update(club!.id, payload)
-        : adminService.clubs.create(payload);
+      if (isEditing) return adminService.clubs.update(club!.id, payload);
+      return createAndInvite(payload);
     },
     onSuccess: (saved: Club | undefined) => {
       qc.invalidateQueries({ queryKey: ["admin-clubs"] });
+      // Alta con la invitación fallida: el club queda creado y se queda el
+      // diálogo abierto para reintentar
+      if (!isEditing && inviteFailed.current) return;
       // Un club por configurar se activa solo al guardar sus datos reales
       if (isEditing && club?.active === false && saved?.active === true)
         toast.success("Club actualizado y publicado en la app");
@@ -190,6 +228,14 @@ function ClubModal({
       toast.error("El email de contacto no parece válido");
       return;
     }
+    if (!isEditing && step === 1) {
+      setStep(2);
+      return;
+    }
+    if (!isEditing && !EMAIL_RE.test(ownerEmail.trim())) {
+      toast.error("Escribe un email válido para el propietario");
+      return;
+    }
     save.mutate();
   };
 
@@ -198,7 +244,7 @@ function ClubModal({
       <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="font-heading text-lg">
-            {isEditing ? "Editar club" : "Nuevo club"}
+            {isEditing ? "Editar club" : step === 1 ? "Nuevo club · 1 de 2" : "Nuevo club · 2 de 2"}
           </h2>
           <button
             type="button"
@@ -211,6 +257,35 @@ function ClubModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {club && <ClubStatusNote club={club} />}
+          {!isEditing && step === 2 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {created
+                  ? <>El club <strong className="text-foreground">{created.name}</strong> ya está creado.</>
+                  : <>Se creará <strong className="text-foreground">{form.name.trim()}</strong> y se invitará a su primer propietario.</>}
+                {" "}Recibirá un email para entrar y activar el club.
+              </p>
+              <label className="space-y-1.5 block">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Email del propietario <span className="text-destructive">*</span>
+                </span>
+                <input
+                  type="email"
+                  autoFocus
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  placeholder="propietario@clubejemplo.com"
+                  className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                />
+              </label>
+              {inviteError && (
+                <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  El club se ha creado, pero no se ha podido enviar la invitación: {inviteError}. Revisa el email y reintenta.
+                </p>
+              )}
+            </div>
+          )}
+          <div className={!isEditing && step === 2 ? "hidden" : "space-y-4"}>
           {/* Name + City */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="space-y-1.5">
@@ -419,21 +494,38 @@ function ClubModal({
             <span className="text-sm text-foreground">Club asociado AMT</span>
           </label>
 
+          {/* Solo AMT, y con el club ya creado: se guarda aparte con su botón */}
+          {club && <ClubAmtPlanEditor clubId={club.id} />}
+
+          </div>
+
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground"
-            >
-              Cancelar
-            </button>
+            {!isEditing && step === 2 && !created ? (
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground"
+              >
+                Atrás
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground"
+              >
+                {created ? "Cerrar" : "Cancelar"}
+              </button>
+            )}
             <button
               type="submit"
               disabled={save.isPending}
               className="px-5 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-2"
             >
               {save.isPending && <Loader2 size={14} className="animate-spin" />}
-              {isEditing ? "Guardar cambios" : "Crear club"}
+              {isEditing
+                ? "Guardar cambios"
+                : step === 1 ? "Siguiente" : created ? "Reintentar invitación" : "Crear club e invitar"}
             </button>
           </div>
         </form>
@@ -477,7 +569,11 @@ function ClubStatusNote({ club }: { club: Club }) {
     return (
       <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
         <ClubStatusBadge status={status} />
-        <p>Se activará y saldrá en la app en cuanto se guarden su nombre y su ciudad reales (también si lo haces tú aquí).</p>
+        {club.pendingSetup === false ? (
+          <p>Ya tiene sus datos, pero sigue sin activar y no sale en la app. Actívalo con «Activar club» en su tarjeta.</p>
+        ) : (
+          <p>Tiene el nombre o la ciudad de relleno. Se activará y saldrá en la app en cuanto se guarden su nombre y su ciudad reales (también si lo haces tú aquí).</p>
+        )}
       </div>
     );
   return null;
@@ -565,9 +661,14 @@ function ClubCard({
               <span className="truncate">{club.city}{club.autonomousCommunity ? ` · ${club.autonomousCommunity}` : ""}</span>
             </p>
             {/* Las etiquetas, debajo del nombre: a la derecha solo los botones */}
-            {(status === "deactivated" || status === "pending" || club.isAmtPartner) && (
+            {(status === "deactivated" || status === "pending" || club.isAmtPartner || club.hasOwner === false) && (
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 <ClubStatusBadge status={status} />
+                {club.hasOwner === false && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 border border-destructive/30 text-destructive whitespace-nowrap">
+                    Sin propietario
+                  </span>
+                )}
                 {club.isAmtPartner && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(212,175,55,0.12)] border border-[rgba(212,175,55,0.3)] text-[#D4AF37]">
                     AMT
@@ -602,6 +703,7 @@ function ClubCard({
           >
             <Users size={13} />
           </button>
+          <EnterSupportButton clubId={club.id} clubName={club.name} />
           <button
             onClick={() => onEdit(club)}
             className="p-2 sm:p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
@@ -624,6 +726,29 @@ function ClubCard({
           </button>
         </div>
       </div>
+
+      {/* Un club por configurar: lo que falta, a la vista */}
+      {status === "pending" && (club.pendingSetup === false || club.hasOwner === false) && (
+        <div className="flex flex-wrap gap-2">
+          {club.pendingSetup === false && (
+            <button
+              onClick={() => toggle.mutate({ id: club.id, action: "activate" })}
+              disabled={toggle.isPending}
+              className="px-3 py-1.5 text-xs rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+            >
+              Activar club
+            </button>
+          )}
+          {club.hasOwner === false && (
+            <button
+              onClick={() => onAdmins(club)}
+              className="px-3 py-1.5 text-xs rounded-md border border-[rgba(212,175,55,0.4)] text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.08)]"
+            >
+              Invitar al propietario
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Details */}
       <div className="space-y-1 text-xs text-muted-foreground">
@@ -678,13 +803,16 @@ export default function ClubesPage() {
   const { page, setPage, pageSize, setPageSize } = usePagination();
 
   const { data: clubs = [], isLoading } = useQuery({
-    queryKey:  ["admin-clubs", showInactive],
-    queryFn:   () => adminService.clubs.list(showInactive),
+    queryKey:  ["admin-clubs", "all"],
+    queryFn:   () => adminService.clubs.list(true),
   });
 
+  // Los «por configurar» (el alta con la invitación fallida, por ejemplo) se
+  // ven siempre: tienen cosas pendientes (activar, invitar al propietario)
   const active   = clubs.filter((c) => c.active !== false);
-  const inactive = clubs.filter((c) => c.active === false);
-  const displayed = showInactive ? clubs : active;
+  const pending  = clubs.filter((c) => clubStatus(c) === "pending");
+  const inactive = clubs.filter((c) => c.active === false && clubStatus(c) !== "pending");
+  const displayed = showInactive ? clubs : [...active, ...pending];
   const noCoords  = displayed.filter((c) => c.lat == null || c.lng == null);
   // Por nombre, ciudad o provincia, sin tildes
   const found = displayed.filter((c) => matchesSearch(search, c.name, c.city, c.province));
@@ -739,14 +867,15 @@ export default function ClubesPage() {
           <div className="flex items-center gap-3">
             <p className="text-sm text-muted-foreground">
               {active.length} club{active.length !== 1 ? "s" : ""} activo{active.length !== 1 ? "s" : ""}
-              {inactive.length > 0 && ` · ${inactive.length} inactivo${inactive.length !== 1 ? "s" : ""}`}
+              {pending.length > 0 && ` · ${pending.length} por configurar`}
+              {inactive.length > 0 && ` · ${inactive.length} desactivado${inactive.length !== 1 ? "s" : ""}`}
             </p>
-            <button
+            {inactive.length > 0 && <button
               onClick={() => { setShowInactive((v) => !v); setPage(1); }}
               className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
               {showInactive ? "Ocultar inactivos" : "Ver inactivos"}
-            </button>
+            </button>}
           </div>
           <div className="flex items-center gap-2">
             {noCoords.length > 0 && (

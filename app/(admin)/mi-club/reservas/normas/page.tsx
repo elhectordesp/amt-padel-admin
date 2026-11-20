@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 
 const TEMPLATE = `# Normas del club
@@ -28,6 +29,8 @@ const TEMPLATE = `# Normas del club
 
 export default function NormasPage() {
   const { role, clubId } = useRole();
+  // Quien solo lee las normas las ve tal como las leerán los jugadores: sin editor ni «Guardar»
+  const canWrite = useClubAccess().can("settings", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.rules(clubId ?? ""),
@@ -37,7 +40,8 @@ export default function NormasPage() {
 
   const [markdown, setMarkdown] = useState("");
   const [hydrated, setHydrated] = useState(false);
-  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [pickedMode, setMode] = useState<"edit" | "preview">("edit");
+  const mode = canWrite ? pickedMode : "preview";
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -85,52 +89,52 @@ export default function NormasPage() {
   return (
     <ReservasPage title="Normas del club">
 
-      <div className="mt-4 flex items-center justify-end gap-2">
-        <div className="flex rounded-md border border-border p-0.5">
-          <button
-            type="button"
-            onClick={() => setMode("edit")}
-            className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
-              mode === "edit"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Pencil className="h-3 w-3" /> Editar
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("preview")}
-            className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
-              mode === "preview"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Eye className="h-3 w-3" /> Preview
-          </button>
+      {canWrite && (
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <div className="flex rounded-md border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => setMode("edit")}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+                mode === "edit"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Pencil className="h-3 w-3" /> Editar
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("preview")}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+                mode === "preview"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Eye className="h-3 w-3" /> Vista previa
+            </button>
+          </div>
+          <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
+            {save.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            Guardar
+          </Button>
         </div>
-        <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
-          {save.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-          Guardar
-        </Button>
-      </div>
+      )}
 
       <p className="mt-2 text-sm text-muted-foreground">
         Los jugadores deberán aceptar estas normas la primera vez que reserven
-        en tu club. Si actualizas el texto, el sistema genera una nueva versión
-        — los jugadores que ya aceptaron la anterior NO tienen que volver a
+        en tu club. Si actualizas el texto, los jugadores que ya aceptaron las anteriores NO tienen que volver a
         aceptar (el histórico queda guardado).
       </p>
 
       {query.data?.version && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Versión actual:{" "}
-          <code className="rounded bg-muted px-1 py-0.5">{query.data.version}</code>
+          Normas publicadas y en vigor.
         </p>
       )}
 

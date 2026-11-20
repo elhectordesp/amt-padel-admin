@@ -13,6 +13,7 @@ import { Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import {
   clubCanEditResult,
   formatScore,
@@ -33,7 +34,8 @@ export function BookingResultPanel({ booking: b, timeZone }: { booking: Booking;
   const result = b.result ?? null;
   const team1 = teamNames(b, 1);
   const team2 = teamNames(b, 2);
-  const canEdit = clubCanEditResult(b);
+  // Poner o corregir el resultado escribe la reserva: quien solo lee lo ve, no lo cambia
+  const canEdit = useClubAccess().can("bookings", "write") && clubCanEditResult(b);
 
   const save = useMutation({
     mutationFn: (d: ScoreDraft) => {

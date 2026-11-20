@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Administradores de un club, vistos por AMT desde Clubes: quién lo
+ * Equipo de un club, visto por AMT desde Clubes: quién lo
  * administra, las invitaciones sin aceptar (pendientes y caducadas) con
  * Reenviar y Anular, e Invitar admin a ese mismo club. Cada persona tiene un
  * solo enlace vivo: invitar de nuevo o reenviar deja sin valor el anterior.
@@ -12,13 +12,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCw, Send, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { RoleChips } from "@/components/admin/staff-role-picker";
 import { adminService } from "@/lib/services/admin";
+import { clubStaffQueryKey, staffErrorMessage } from "@/lib/utils/club-staff";
 import { clubStatus } from "@/lib/utils/club-status";
 import {
   adminSinceLabel, clubAdminsQueryKey, invitationDetail, invitationEmailFailed,
   invitationErrorMessage, invitationStatusLabel, invitationsChangedMeanwhile,
 } from "@/lib/utils/club-invitations";
-import type { Club, ClubAdminInvitation } from "@/types";
+import type { Club, ClubAdminInvitation, ClubStaffMember } from "@/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -44,6 +46,23 @@ export function ClubAdminsModal({
     queryFn: () => adminService.clubs.admins(club.id),
   });
   const refresh = () => qc.invalidateQueries({ queryKey });
+
+  // El equipo del club, con los roles de cada uno (lo que se lista como administradores)
+  const staffKey = clubStaffQueryKey(club.id);
+  const staff = useQuery({
+    queryKey: staffKey,
+    queryFn: () => adminService.clubs.staff(club.id),
+  });
+  const [removing, setRemoving] = useState<ClubStaffMember | null>(null);
+  const remove = useMutation({
+    mutationFn: (member: ClubStaffMember) => adminService.clubs.removeStaff(club.id, member.userId),
+    onSuccess: async (_res, member) => {
+      await qc.invalidateQueries({ queryKey: staffKey });
+      toast.success(`${member.name} ya no forma parte del equipo`);
+    },
+    onError: (err: Error) => toast.error(staffErrorMessage(err)),
+    onSettled: () => setRemoving(null),
+  });
 
   const onError = (err: Error) => {
     toast.error(invitationErrorMessage(err));
@@ -140,16 +159,31 @@ export function ClubAdminsModal({
                 <h3 id="club-admins-list" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Administradores
                 </h3>
-                {data.admins.length === 0 ? (
+                {staff.isLoading ? (
+                  <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                ) : staff.isError || !staff.data ? (
+                  <p className="text-sm text-destructive">No se pudo cargar el equipo del club.</p>
+                ) : staff.data.members.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Aún no tiene ningún administrador.</p>
                 ) : (
                   <ul className="divide-y divide-border rounded-md border border-border">
-                    {data.admins.map((admin) => (
-                      <li key={admin.id} className="px-3 py-2 text-sm">
-                        <p className="font-medium text-foreground break-words">{admin.name}</p>
-                        <p className="text-xs text-muted-foreground break-all">
-                          {admin.email ?? "Sin email"} · {adminSinceLabel(admin.createdAt)}
-                        </p>
+                    {staff.data.members.map((member) => (
+                      <li key={member.userId} className="px-3 py-2 text-sm flex items-center justify-between gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-medium text-foreground break-words">{member.name}</p>
+                          <p className="text-xs text-muted-foreground break-all">
+                            {member.email ?? "Sin email"} · {adminSinceLabel(member.createdAt)}
+                          </p>
+                          <RoleChips roles={member.roles} />
+                        </div>
+                        <button
+                          onClick={() => setRemoving(member)}
+                          aria-label={`Quitar a ${member.name} del equipo`}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs text-destructive hover:bg-destructive/10 transition-colors whitespace-nowrap shrink-0"
+                        >
+                          <Trash2 size={12} />
+                          Quitar
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -249,6 +283,17 @@ export function ClubAdminsModal({
           </form>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!removing}
+        title={`¿Quitar a ${removing?.name ?? ""} del equipo?`}
+        description="Dejará de poder entrar al panel de este club. Su cuenta no se borra."
+        confirmLabel="Quitar del equipo"
+        danger
+        loading={remove.isPending}
+        onClose={() => { if (!remove.isPending) setRemoving(null); }}
+        onConfirm={() => { if (removing) remove.mutate(removing); }}
+      />
 
       <ConfirmModal
         open={!!confirm}

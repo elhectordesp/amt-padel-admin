@@ -111,8 +111,10 @@ describe("EnrollTeamModal — quién sale en los buscadores por su género", () 
 
     pickCategory("c-mx");
     expect(slot("Jugador 1").getByText(
-      "\"Leo Martín\" no tiene el género en su ficha: pónselo para que pueda jugar una categoría mixta.",
+      "\"Leo Martín\" no tiene el género en su ficha: indícalo aquí para que pueda jugar una categoría mixta.",
     )).toBeInTheDocument();
+    // Y lo puede poner allí mismo, sin pedírselo a AMT
+    expect(slot("Jugador 1").getByRole("button", { name: "Femenino" })).toBeInTheDocument();
 
     list.mockClear();
     expect(screen.getByText(/^Mixta, un jugador y una jugadora: solo salen jugadores y jugadoras con el género/)).toBeInTheDocument();
@@ -254,5 +256,19 @@ describe("EnrollTeamModal — alta confirmada en un torneo que exige el pago (B4
       status: "CONFIRMED", paid: false, forceEnroll: undefined,
     });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("«No avisar a los jugadores» viene desmarcada y, marcada, se manda", async () => {
+    vi.mocked(adminService.registrations.enroll).mockRejectedValue(new Error("x"));
+    renderModal();
+    fireEvent.change(searchBoxes()[0], { target: { value: "Car" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Carla Gil/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Sin pareja/ }));
+    const box = screen.getByRole("checkbox", { name: "No avisar a los jugadores" });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: /Inscribir pareja/ }));
+    await waitFor(() => expect(adminService.registrations.enroll).toHaveBeenCalled());
+    expect(vi.mocked(adminService.registrations.enroll).mock.calls[0][1]).toMatchObject({ skipPlayerNotices: true });
   });
 });

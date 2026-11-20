@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { phaseLabel } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
-import { isByeMatch } from "@/lib/utils/match-status";
+import { hasBothPairs, isByeMatch } from "@/lib/utils/match-status";
 import { dateOnlyKey, formatDayKey, tournamentTimeZone, zonedDayKey, zonedMinutes } from "@/lib/utils/time-zone";
 import { fitsInWindows, phaseDuration, windowsForDay } from "@/lib/utils/schedule-windows";
 import type { MatchResult } from "@/types";
@@ -38,7 +38,7 @@ interface Props {
   duration:       number;
   tournament:     any;
   onMatchClick:   (m: MatchResult) => void;
-  onCorrectClick: (m: MatchResult) => void;
+  onCorrectClick?: (m: MatchResult) => void;
   // Fase 2 — interactividad (opcionales; si no se pasan, la rejilla es de solo lectura).
   onMove?:        (m: MatchResult, target: ScheduleTarget) => void;
   onDelete?:      (m: MatchResult) => void;
@@ -80,7 +80,7 @@ function MatchCardInner({
   tournament:     any;
   isFinished:     boolean;
   hasSets:        boolean;
-  onCorrectClick: (m: MatchResult) => void;
+  onCorrectClick?: (m: MatchResult) => void;
   onDelete?:      (m: MatchResult) => void;
   overlay?:       boolean;
 }) {
@@ -101,7 +101,7 @@ function MatchCardInner({
         {catLbl && <span className="text-muted-foreground/60 truncate">{catLbl}</span>}
         {!overlay && (
           <div className="ml-auto flex items-center gap-0.5 shrink-0">
-            {isFinished && (
+            {isFinished && onCorrectClick && (
               <button
                 onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
                 onPointerDown={(e) => e.stopPropagation()}
@@ -154,7 +154,7 @@ function DraggableMatch({
   rowSpan:        number;
   draggable:      boolean;
   onMatchClick:   (m: MatchResult) => void;
-  onCorrectClick: (m: MatchResult) => void;
+  onCorrectClick?: (m: MatchResult) => void;
   onDelete?:      (m: MatchResult) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -165,13 +165,16 @@ function DraggableMatch({
 
   const isFinished = !!(m as any).isResult;
   const hasSets    = isFinished && (m as any).sets1 && (m as any).sets2;
+  // Un partido con una pareja «por definir» no admite resultado (el back lo
+  // rechaza): no se ofrece. Sigue pudiéndose mover por la rejilla.
+  const canClick   = !isFinished && hasBothPairs(m);
 
   return (
     <div
       ref={setNodeRef}
       {...(draggable ? { ...listeners, ...attributes } : {})}
-      onClick={() => !isFinished && onMatchClick(m)}
-      className={`p-0.5 ${!isFinished ? "cursor-pointer" : ""}`}
+      onClick={() => canClick && onMatchClick(m)}
+      className={`p-0.5 ${canClick ? "cursor-pointer" : ""}`}
       style={{
         gridColumn: colIdx + 2,
         gridRow: `${rowStart} / span ${rowSpan}`,

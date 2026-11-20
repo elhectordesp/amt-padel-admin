@@ -3,11 +3,14 @@
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
+import { PlainTextField, TournamentVisibilityFields, type TournamentVisibility } from "@/components/admin/tournament-options-fields";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { LeagueDaysDialog } from "@/components/admin/league-days-dialog";
 import { ScheduleEditorDialog } from "@/components/admin/schedule-editor-dialog";
 import { adminService } from "@/lib/services/admin";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
 import { hasDate } from "@/lib/utils/match-status";
 import { tournamentUpdatePayload } from "@/lib/utils/tournament-update";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
@@ -19,6 +22,15 @@ import {
   toZonedDateTimeInput,
   tournamentTimeZone,
 } from "@/lib/utils/time-zone";
+import {
+  HIDE_FROM_APP_MAX_DAYS,
+  TOURNAMENT_DESCRIPTION_MAX,
+  TOURNAMENT_RULES_MAX,
+  matchDurationOptions,
+  plainTextOrNull,
+  textTooLong,
+  tooLongMessage,
+} from "@/lib/utils/tournament-options";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, Loader2, Save } from "lucide-react";
@@ -27,6 +39,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { kindWord, tournamentsBase } from "@/lib/league";
 import { z } from "zod";
 import type { TournamentStatus } from "@/types";
 
@@ -38,12 +51,16 @@ interface Original {
 }
 
 // ── Schema ───────────────────────────────────────────────────────────────
+const HIDE_DAYS_MESSAGE = `Entre 0 y ${HIDE_FROM_APP_MAX_DAYS} días`;
+
 const makeSchema = (original: { current: Original | null }) => z.object({
   name:                 z.string().min(3, "Nombre requerido"),
   clubId:               z.string().min(1, "Club requerido"),
   imageUrl:             z.string().nullable().optional(),
   startDate:            z.string().min(1, "Fecha de inicio requerida"),
   endDate:              z.string().min(1, "Fecha de fin requerida"),
+  // Solo en una liga (el formulario de un torneo no lo trae): fin de la fase de grupos
+  groupsEndDate:        z.string().optional(),
   prize:                z.string().optional(),
   tier:                 z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:               z.string().optional(),
@@ -58,9 +75,26 @@ const makeSchema = (original: { current: Original | null }) => z.object({
   registrationDeadline:      z.string().optional(),
   timezone:                  z.string().min(1),
   status:               z.enum(["DRAFT", "OPEN", "DRAW", "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED"]),
+  // Texto plano; se manda sin los espacios de los bordes, y vacío lo quita
+  description:               z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_DESCRIPTION_MAX), tooLongMessage(TOURNAMENT_DESCRIPTION_MAX)),
+  rules:                     z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_RULES_MAX), tooLongMessage(TOURNAMENT_RULES_MAX)),
+  participantsVisibility:    z.enum(["PUBLIC", "REGISTERED_ONLY", "HIDDEN_UNTIL_START"]),
+  showClubInsteadOfCourt:    z.boolean(),
+  // null: no se quita nunca del listado de la app
+  hideFromAppAfterDays:      z.number({ error: HIDE_DAYS_MESSAGE }).int(HIDE_DAYS_MESSAGE).min(0, HIDE_DAYS_MESSAGE).max(HIDE_FROM_APP_MAX_DAYS, HIDE_DAYS_MESSAGE).nullable(),
 }).superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "La fecha de fin no puede ser anterior a la de inicio" });
+  }
+  // Liga: obligatorio, posterior al inicio y no posterior al fin (como el back)
+  if (data.groupsEndDate !== undefined) {
+    if (!data.groupsEndDate) {
+      ctx.addIssue({ code: "custom", path: ["groupsEndDate"], message: "Indica el fin de la fase de grupos" });
+    } else if (data.startDate && data.endDate && (data.groupsEndDate <= data.startDate || data.groupsEndDate > data.endDate)) {
+      ctx.addIssue({ code: "custom", path: ["groupsEndDate"], message: "Debe ser posterior al inicio y no posterior al fin de la liga" });
+    }
   }
   // La regla del asistente y del back, en la zona del torneo y sin exigir que
   // sea futuro (un torneo pasado se tiene que poder guardar). Solo si cambia
@@ -117,11 +151,16 @@ export default function EditarTorneoPage() {
   // 403earía igualmente). El campo Club es read-only para CLUB.
   const { role, clubId: myClubId } = useRole();
   const isClubUser = isClub(role);
+  // Sin escribir «tournaments» el formulario se ve entero, con los campos
+  // deshabilitados y sin guardar (el back rechazaría el cambio)
+  const canEdit = useClubAccess().can("tournaments", "write");
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
     queryFn:  () => adminService.clubs.list(),
-    enabled:  !isClubUser,
+    // Hasta conocer el rol (sale del token tras el primer pintado) no se pide:
+    // un club recibía un 403 del listado de AMT
+    enabled:  role !== null && !isClubUser,
   });
 
   const { data: myClub } = useQuery({
@@ -136,6 +175,10 @@ export default function EditarTorneoPage() {
     (s, c) => s + c.occupiedCount + c.waitlistCount,
     0,
   );
+
+  const league = tournament?.kind === "LEAGUE";
+  const base   = tournamentsBase(tournament?.kind);
+  const word   = kindWord(tournament?.kind);
 
   const original = useRef<Original | null>(null);
   const schema = useMemo(() => makeSchema(original), []);
@@ -161,6 +204,7 @@ export default function EditarTorneoPage() {
       imageUrl:             tournament.imageUrl ?? "",
       startDate:            startStr,
       endDate:              endStr,
+      ...(tournament.kind === "LEAGUE" ? { groupsEndDate: dateOnlyKey(tournament.groupsEndDate) } : {}),
       prize:                tournament.prize ?? "",
       format:               tournament.format ?? "",
       scoringSystem:        tournament.scoringSystem ?? "",
@@ -175,21 +219,33 @@ export default function EditarTorneoPage() {
       timezone:                  tz,
       status:               tournament.status as FormData["status"],
       tier:                 tournament.tier ?? "BRONZE",
+      // Textos null: sin texto. Los otros tres no vienen de un back anterior
+      // a B5-1: los valores por defecto de la base de datos
+      description:               tournament.description ?? "",
+      rules:                     tournament.rules ?? "",
+      participantsVisibility:    tournament.participantsVisibility ?? "PUBLIC",
+      showClubInsteadOfCourt:    tournament.showClubInsteadOfCourt ?? false,
+      hideFromAppAfterDays:      tournament.hideFromAppAfterDays ?? null,
     });
   }, [tournament, reset]);
 
   const save = useMutation({
     // El estado y el cierre de inscripciones, solo si se han tocado
+    // La descripción y las normas, sin los espacios de los bordes: vacías (null) se quitan
     mutationFn: (data: FormData & { force?: boolean }) =>
-      adminService.tournaments.update(id, tournamentUpdatePayload(data, dirtyFields)),
+      adminService.tournaments.update(id, tournamentUpdatePayload({
+        ...data,
+        description: plainTextOrNull(data.description),
+        rules:       plainTextOrNull(data.rules),
+      }, dirtyFields)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       // Con otra zona, los partidos con hora cambian de instante
       qc.invalidateQueries({ queryKey: ["matches", id] });
-      toast.success("Torneo actualizado correctamente");
-      router.push(`/torneos/${id}`);
+      toast.success(`${league ? "Liga actualizada" : "Torneo actualizado"} correctamente`);
+      router.push(`${base}/${id}`);
     },
     onError: (err: Error, variables) => {
       // Convención "Confirma para…": el admin (dueño) puede forzar transiciones no
@@ -201,7 +257,7 @@ export default function EditarTorneoPage() {
         save.mutate({ ...variables, force: true });
         return;
       }
-      toast.error(msg || "Error al actualizar el torneo");
+      toast.error(msg || `Error al actualizar ${league ? "la liga" : "el torneo"}`);
     },
   });
 
@@ -237,18 +293,26 @@ export default function EditarTorneoPage() {
     }
   };
 
+  /** Los campos de «Lo que ven los jugadores»; tras guardar con errores, revalida. */
+  const setVisibility = (patch: Partial<TournamentVisibility>) => {
+    const options = { shouldDirty: true, shouldValidate: !!errors.hideFromAppAfterDays };
+    if (patch.participantsVisibility !== undefined) setValue("participantsVisibility", patch.participantsVisibility, options);
+    if (patch.showClubInsteadOfCourt !== undefined) setValue("showClubInsteadOfCourt", patch.showClubInsteadOfCourt, options);
+    if ("hideFromAppAfterDays" in patch) setValue("hideFromAppAfterDays", patch.hideFromAppAfterDays ?? null, options);
+  };
+
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Editar torneo" />
+      <Header title={`Editar ${word}`} />
 
       <div className="flex-1 p-6 max-w-3xl mx-auto w-full space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/torneos" className="hover:text-foreground flex items-center gap-1">
-            <ChevronLeft size={14} /> Torneos
+          <Link href={base} className="hover:text-foreground flex items-center gap-1">
+            <ChevronLeft size={14} /> {league ? "Ligas" : "Torneos"}
           </Link>
           <span>/</span>
-          <Link href={`/torneos/${id}`} className="hover:text-foreground truncate max-w-[200px]">
+          <Link href={`${base}/${id}`} className="hover:text-foreground truncate max-w-[200px]">
             {tournament.name}
           </Link>
           <span>/</span>
@@ -308,6 +372,7 @@ export default function EditarTorneoPage() {
           })}
           className="space-y-6"
         >
+          <fieldset disabled={!canEdit} className="min-w-0 space-y-6">
           {/* Basic info */}
           <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
             <div>
@@ -356,10 +421,34 @@ export default function EditarTorneoPage() {
                 {/* deps: el error del cierre depende del inicio y se revalida al cambiarlo */}
                 <Input {...register("startDate", { deps: ["registrationDeadline"] })} type="date" />
               </Field>
-              <Field label="Fecha de fin" error={errors.endDate?.message}>
-                <Input {...register("endDate")} type="date" />
+              <Field label={league ? "Fin de la liga" : "Fecha de fin"} error={errors.endDate?.message}>
+                <Input {...register("endDate", { deps: ["groupsEndDate"] })} type="date" />
               </Field>
+              {league && (
+                <Field label="Fin de la fase de grupos" error={errors.groupsEndDate?.message}>
+                  <Input {...register("groupsEndDate")} type="date" />
+                </Field>
+              )}
             </div>
+            <PlainTextField
+              label="Sobre el torneo"
+              value={watch("description") ?? ""}
+              onChange={(v) => setValue("description", v, { shouldDirty: true, shouldValidate: !!errors.description })}
+              max={TOURNAMENT_DESCRIPTION_MAX}
+              placeholder="Qué es el torneo, a quién va dirigido, qué incluye…"
+              help="Opcional. Texto plano: se enseña tal cual, con sus saltos de línea, en el visor público."
+              error={errors.description?.message}
+            />
+            <PlainTextField
+              label="Normas"
+              value={watch("rules") ?? ""}
+              onChange={(v) => setValue("rules", v, { shouldDirty: true, shouldValidate: !!errors.rules })}
+              max={TOURNAMENT_RULES_MAX}
+              rows={6}
+              placeholder="Puntualidad, bolas, material, qué pasa si no se presenta una pareja…"
+              help="Opcional. Texto plano, como la descripción."
+              error={errors.rules?.message}
+            />
           </div>
 
           {/* Config */}
@@ -405,11 +494,7 @@ export default function EditarTorneoPage() {
               </Field>
               <Field label="Duración por partido (grupos)">
                 <CustomSelect
-                  options={[
-                    { value: "60", label: "60 minutos" },
-                    { value: "90", label: "90 minutos" },
-                    { value: "120", label: "120 minutos" },
-                  ]}
+                  options={matchDurationOptions(watch("matchDuration"))}
                   value={String(watch("matchDuration") ?? 60)}
                   onChange={(v) => setValue("matchDuration", Number(v), { shouldValidate: true, shouldDirty: true })}
                 />
@@ -418,9 +503,7 @@ export default function EditarTorneoPage() {
                 <CustomSelect
                   options={[
                     { value: "", label: "Igual que grupos" },
-                    { value: "60", label: "60 minutos" },
-                    { value: "90", label: "90 minutos" },
-                    { value: "120", label: "120 minutos" },
+                    ...matchDurationOptions(watch("elimMatchDuration") ?? undefined),
                   ]}
                   value={String(watch("elimMatchDuration") ?? "")}
                   onChange={(v) => setValue("elimMatchDuration", v === "" ? null : Number(v), { shouldValidate: true, shouldDirty: true })}
@@ -502,15 +585,32 @@ export default function EditarTorneoPage() {
             </div>
           </div>
 
+          {/* Lo que ven los jugadores */}
+          <div className="bg-card border border-border rounded-lg p-6 space-y-5 shadow-sm">
+            <div>
+              <h3 className="font-heading text-lg text-foreground">Lo que ven los jugadores</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">La lista de inscritos, la pista y el listado de la app</p>
+            </div>
+            <TournamentVisibilityFields
+              value={{
+                participantsVisibility: watch("participantsVisibility") ?? "PUBLIC",
+                showClubInsteadOfCourt: watch("showClubInsteadOfCourt") ?? false,
+                hideFromAppAfterDays:   watch("hideFromAppAfterDays") ?? null,
+              }}
+              onChange={setVisibility}
+              hideFromAppError={errors.hideFromAppAfterDays?.message}
+            />
+          </div>
+
           {/* Jornadas y horarios (editar = crear, solo durante el montaje) */}
           <div className="rounded-lg border border-border bg-card/40 p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="text-sm font-semibold text-foreground">Jornadas y horarios</h3>
+                <h3 className="text-sm font-semibold text-foreground">{league ? "Días de juego" : "Jornadas y horarios"}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {tournament?.status === "ONGOING" || tournament?.status === "FINISHED"
-                    ? "El torneo ya ha empezado: las jornadas no se pueden editar."
-                    : "Edita los días y tramos horarios del torneo."}
+                    ? (league ? "La liga ya ha empezado: los días de juego no se pueden editar." : "El torneo ya ha empezado: las jornadas no se pueden editar.")
+                    : (league ? "Edita los días de la semana en que se juega y sus franjas horarias." : "Edita los días y tramos horarios del torneo.")}
                 </p>
               </div>
               <button
@@ -519,7 +619,7 @@ export default function EditarTorneoPage() {
                 disabled={tournament?.status === "ONGOING" || tournament?.status === "FINISHED"}
                 className="px-3 py-1.5 rounded-md border border-border text-sm text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
               >
-                Editar jornadas
+                {league ? "Editar días de juego" : "Editar jornadas"}
               </button>
             </div>
           </div>
@@ -566,28 +666,44 @@ export default function EditarTorneoPage() {
               </p>
             </div>
           </details>
+          </fieldset>
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">
             <Link
-              href={`/torneos/${id}`}
+              href={`${base}/${id}`}
               className="px-4 py-2 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             >
-              Cancelar
+              {canEdit ? "Cancelar" : "Volver"}
             </Link>
-            <button
-              type="submit"
-              disabled={save.isPending || !isDirty}
-              className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
-            >
-              {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {save.isPending ? "Guardando..." : "Guardar cambios"}
-            </button>
+            {canEdit && (
+              <button
+                type="submit"
+                disabled={save.isPending || !isDirty}
+                className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
+              >
+                {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {save.isPending ? "Guardando..." : "Guardar cambios"}
+              </button>
+            )}
           </div>
         </form>
       </div>
 
-      {showSchedule && tournament && (
+      {showSchedule && tournament && league && (
+        <LeagueDaysDialog
+          open={showSchedule}
+          onClose={() => setShowSchedule(false)}
+          tournamentId={id}
+          initialDays={tournament.schedule ?? []}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["admin-tournament", id] });
+            qc.invalidateQueries({ queryKey: ["tournament", id] });
+          }}
+        />
+      )}
+
+      {showSchedule && tournament && !league && (
         <ScheduleEditorDialog
           open={showSchedule}
           onClose={() => setShowSchedule(false)}

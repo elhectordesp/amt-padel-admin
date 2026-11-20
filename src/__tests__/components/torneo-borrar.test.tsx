@@ -14,6 +14,7 @@ const WAIT = { timeout: 5000 };
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "t-1" }),
+  usePathname: () => "/torneos/t-1",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock("@/components/admin/header", () => ({ Header: () => null }));

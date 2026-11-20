@@ -1,4 +1,4 @@
-import type { TournamentStatus } from "./index";
+import type { TournamentKind, TournamentStatus } from "./index";
 
 /** Pasos de la preparación de un torneo, en orden (los da el back). */
 export type PreparationStepKey =
@@ -26,6 +26,8 @@ export interface PreparationCategory {
 }
 
 export interface TournamentPreparation {
+  /** Falta con un back anterior a las ligas: entonces, un torneo. */
+  kind?: TournamentKind;
   status: TournamentStatus;
   registrationDeadline: string | null;
   percent: number;

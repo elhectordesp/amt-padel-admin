@@ -16,13 +16,27 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { ApiError } from "@/lib/api";
 import { adminService } from "@/lib/services/admin";
-import type { Court, CourtBlock } from "@/types";
+import { useClubAccess } from "@/lib/use-club-access";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
+import { OCCUPATION_KINDS, occupationKindInfo } from "@/lib/utils/court-occupation";
+import { localDayKey } from "@/lib/utils/date-keys";
+import { formatInTimeZone, zonedTime } from "@/lib/utils/time-zone";
+import type { Court, CourtBlock, CourtBlockConflicts, CourtBlockKind } from "@/types";
 
 const EMPTY_COURT = { name: "", isIndoor: false, isCentral: false };
 type CourtForm = typeof EMPTY_COURT;
 
-const EMPTY_BLOCK = {
+const EMPTY_BLOCK: {
+  kind: CourtBlockKind;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+} = {
+  kind: "MAINTENANCE",
   startDate: "",
   endDate: "",
   startTime: "",
@@ -30,6 +44,52 @@ const EMPTY_BLOCK = {
   reason: "",
 };
 type BlockForm = typeof EMPTY_BLOCK;
+
+/** El mismo día de hace un año. */
+function yearAgo(today: Date): Date {
+  const d = new Date(today);
+  d.setFullYear(d.getFullYear() - 1);
+  return d;
+}
+
+/** El 409 COURT_BLOCK_HAS_CONFLICTS lleva en `details` lo que el bloqueo taparía. */
+function conflictsOf(error: unknown): CourtBlockConflicts | null {
+  if (!(error instanceof ApiError) || error.code !== "COURT_BLOCK_HAS_CONFLICTS") return null;
+  const d = error.details as Partial<CourtBlockConflicts> | undefined;
+  if (!d || !Array.isArray(d.bookings) || !Array.isArray(d.matches)) return null;
+  return { bookings: d.bookings, matches: d.matches };
+}
+
+/** Las reservas y los partidos que chocan con el bloqueo, con su día y hora en la zona del club. */
+function BlockConflictsList({ clubId, conflicts }: { clubId: string; conflicts: CourtBlockConflicts }) {
+  const { timeZone } = useClubTimeZone(clubId);
+  const when = (startsAt: string, endsAt: string) =>
+    timeZone
+      ? `${formatInTimeZone(startsAt, timeZone, { weekday: "short", day: "numeric", month: "short" })} · ${zonedTime(startsAt, timeZone)}–${zonedTime(endsAt, timeZone)}`
+      : "";
+  return (
+    <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs" aria-label="Lo que choca con el bloqueo">
+      {conflicts.bookings.map((b) => (
+        <li key={b.id} className="rounded bg-secondary/60 px-2 py-1">
+          <span className="font-medium">Reserva {b.shortCode}</span> {when(b.startsAt, b.endsAt)}
+        </li>
+      ))}
+      {conflicts.matches.map((m) => (
+        <li key={m.id} className="rounded bg-secondary/60 px-2 py-1">
+          <span className="font-medium">{m.label}</span> {when(m.startsAt, m.endsAt)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function conflictsSummary(c: CourtBlockConflicts): string {
+  const parts = [
+    c.bookings.length > 0 ? `${c.bookings.length} ${c.bookings.length === 1 ? "reserva" : "reservas"}` : null,
+    c.matches.length > 0 ? `${c.matches.length} ${c.matches.length === 1 ? "partido" : "partidos"}` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.join(" y ");
+}
 
 function CourtRow({
   court,
@@ -47,6 +107,10 @@ function CourtRow({
   onMoveDown: () => void;
 }) {
   const qc = useQueryClient();
+  const { can } = useClubAccess();
+  // Las pistas son configuración del club; sus bloqueos puntuales, de las reservas
+  const canEditCourt = can("settings", "write");
+  const canEditBlocks = can("bookings", "write");
   const [edit, setEdit] = useState(false);
   const [showBlocks, setShowBlocks] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
@@ -54,15 +118,21 @@ function CourtRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteBlock, setConfirmDeleteBlock] =
     useState<CourtBlock | null>(null);
+  // Lo que el bloqueo que se intenta crear taparía (el back lo dice con un 409)
+  const [blockConflicts, setBlockConflicts] = useState<CourtBlockConflicts | null>(null);
   const [form, setForm] = useState<CourtForm>({
     name: court.name,
     isIndoor: court.isIndoor,
     isCentral: court.isCentral,
   });
 
+  // Por defecto, solo los bloqueos que quedan por delante (la escuela crea uno
+  // por clase de toda la temporada); «Ver también los pasados» los pide desde
+  // hace un año
+  const [pastFrom, setPastFrom] = useState<string | null>(null);
   const { data: blocks = [], isLoading: blocksLoading } = useQuery({
-    queryKey: ["court-blocks", clubId, court.id],
-    queryFn: () => adminService.courts.blocks.list(clubId, court.id),
+    queryKey: ["court-blocks", clubId, court.id, pastFrom],
+    queryFn: () => adminService.courts.blocks.list(clubId, court.id, pastFrom ?? undefined),
     enabled: showBlocks,
   });
 
@@ -91,21 +161,29 @@ function CourtRow({
   });
 
   const addBlock = useMutation({
-    mutationFn: () =>
+    // `force`: bloquear aunque haya reservas o partidos (no se cancelan)
+    mutationFn: (force: boolean) =>
       adminService.courts.blocks.create(clubId, court.id, {
+        kind: blockForm.kind,
         startDate: blockForm.startDate,
         endDate: blockForm.endDate || blockForm.startDate,
         startTime: blockForm.startTime || undefined,
         endTime: blockForm.endTime || undefined,
         reason: blockForm.reason.trim() || undefined,
+        ...(force ? { force: true } : {}),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["court-blocks", clubId, court.id] });
       setBlockForm({ ...EMPTY_BLOCK });
+      setBlockConflicts(null);
       setShowAddBlock(false);
       toast.success("Bloqueo añadido");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      const conflicts = conflictsOf(e);
+      if (conflicts) setBlockConflicts(conflicts);
+      else toast.error(e.message);
+    },
   });
 
   const removeBlock = useMutation({
@@ -188,61 +266,75 @@ function CourtRow({
             <p className="text-[10px] text-muted-foreground mt-0.5">Cubierta</p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
-          <button
-            onClick={onMoveUp}
-            disabled={!canMoveUp}
-            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
-            title="Subir pista"
-          >
-            <ChevronUp size={14} className="sm:hidden" />
-            <ChevronUp size={12} className="hidden sm:block" />
-          </button>
-          <button
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
-            title="Bajar pista"
-          >
-            <ChevronDown size={14} className="sm:hidden" />
-            <ChevronDown size={12} className="hidden sm:block" />
-          </button>
+        {/* Solo se esconden con ratón (al pasar o al enfocar); en una tablet táctil siempre se ven */}
+        <div className="flex items-center gap-1.5 sm:gap-1 [@media(hover:hover)_and_(min-width:640px)]:opacity-0 [@media(hover:hover)_and_(min-width:640px)]:group-hover:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:group-focus-within:opacity-100 sm:transition-opacity">
+          {canEditCourt && (
+            <>
+              <button
+                onClick={onMoveUp}
+                disabled={!canMoveUp}
+                className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+                title="Subir pista"
+                aria-label={`Subir ${court.name}`}
+              >
+                <ChevronUp size={14} className="sm:hidden" />
+                <ChevronUp size={12} className="hidden sm:block" />
+              </button>
+              <button
+                onClick={onMoveDown}
+                disabled={!canMoveDown}
+                className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
+                title="Bajar pista"
+                aria-label={`Bajar ${court.name}`}
+              >
+                <ChevronDown size={14} className="sm:hidden" />
+                <ChevronDown size={12} className="hidden sm:block" />
+              </button>
+            </>
+          )}
           <button
             onClick={() => {
               setShowBlocks((v) => !v);
               setShowAddBlock(false);
             }}
             className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-            title="Gestionar bloqueos"
+            title={canEditBlocks ? "Gestionar bloqueos" : "Ver bloqueos"}
+            aria-label={`${canEditBlocks ? "Gestionar bloqueos de" : "Ver bloqueos de"} ${court.name}`}
           >
             <CalendarOff size={14} className="sm:hidden" />
             <CalendarOff size={12} className="hidden sm:block" />
           </button>
-          <button
-            onClick={() => setEdit(true)}
-            className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-            title="Editar pista"
-          >
-            <Pencil size={14} className="sm:hidden" />
-            <Pencil size={12} className="hidden sm:block" />
-          </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            disabled={remove.isPending}
-            className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-            title="Eliminar pista"
-          >
-            {remove.isPending ? (
-              <Loader2 size={14} className="animate-spin sm:hidden" />
-            ) : (
-              <Trash2 size={14} className="sm:hidden" />
-            )}
-            {remove.isPending ? (
-              <Loader2 size={12} className="animate-spin hidden sm:block" />
-            ) : (
-              <Trash2 size={12} className="hidden sm:block" />
-            )}
-          </button>
+          {canEditCourt && (
+            <>
+              <button
+                onClick={() => setEdit(true)}
+                className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                title="Editar pista"
+                aria-label={`Editar ${court.name}`}
+              >
+                <Pencil size={14} className="sm:hidden" />
+                <Pencil size={12} className="hidden sm:block" />
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                disabled={remove.isPending}
+                className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                title="Eliminar pista"
+                aria-label={`Eliminar ${court.name}`}
+              >
+                {remove.isPending ? (
+                  <Loader2 size={14} className="animate-spin sm:hidden" />
+                ) : (
+                  <Trash2 size={14} className="sm:hidden" />
+                )}
+                {remove.isPending ? (
+                  <Loader2 size={12} className="animate-spin hidden sm:block" />
+                ) : (
+                  <Trash2 size={12} className="hidden sm:block" />
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -268,31 +360,84 @@ function CourtRow({
                     className="text-muted-foreground shrink-0"
                   />
                   <span className="flex-1 min-w-0 truncate">
+                    <span className="font-medium">
+                      {b.schoolPrivateClassId ? "Clase privada" : occupationKindInfo(b.kind).label}
+                    </span>
+                    {" · "}
                     {b.startDate === b.endDate
                       ? b.startDate
                       : `${b.startDate} – ${b.endDate}`}
                     {b.startTime && b.endTime && ` · ${b.startTime}–${b.endTime}`}
-                    {b.reason && ` · ${b.reason}`}
+                    {b.reason && !b.schoolPrivateClassId && ` · ${b.reason}`}
                   </span>
-                  <button
-                    onClick={() => setConfirmDeleteBlock(b)}
-                    disabled={removeBlock.isPending}
-                    className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
-                    title="Eliminar bloqueo"
-                  >
-                    {removeBlock.isPending ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <X size={12} />
-                    )}
-                  </button>
+                  {b.schoolSessionId || b.schoolPrivateClassId ? (
+                    // La pista de una clase de la escuela (de un grupo o privada) se cambia o libera desde Escuela
+                    <span
+                      className="shrink-0 text-muted-foreground"
+                      title="Es una clase de la escuela: se cambia o se cancela desde Escuela"
+                    >
+                      Escuela
+                    </span>
+                  ) : canEditBlocks ? (
+                    <button
+                      onClick={() => setConfirmDeleteBlock(b)}
+                      disabled={removeBlock.isPending}
+                      className="p-1.5 sm:p-0.5 [@media(hover:hover)_and_(min-width:640px)]:opacity-0 [@media(hover:hover)_and_(min-width:640px)]:group-hover/block:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:group-focus-within/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
+                      title="Eliminar bloqueo"
+                      aria-label="Eliminar bloqueo"
+                    >
+                      {removeBlock.isPending ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <X size={12} />
+                      )}
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
           )}
 
+          {!blocksLoading &&
+            (pastFrom === null ? (
+              <button
+                type="button"
+                onClick={() => setPastFrom(localDayKey(yearAgo(new Date())))}
+                className="text-[11px] text-[#D4AF37] hover:underline"
+              >
+                Ver también los pasados
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPastFrom(null)}
+                className="text-[11px] text-[#D4AF37] hover:underline"
+              >
+                Ocultar los pasados
+              </button>
+            ))}
+
           {showAddBlock ? (
             <div className="space-y-1.5 pt-1 border-t border-border">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-0.5">
+                  Motivo del bloqueo *
+                </p>
+                <select
+                  aria-label="Motivo del bloqueo"
+                  value={blockForm.kind}
+                  onChange={(e) =>
+                    setBlockForm((f) => ({ ...f, kind: e.target.value as CourtBlockKind }))
+                  }
+                  className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+                >
+                  {OCCUPATION_KINDS.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-1">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-0.5">
@@ -354,7 +499,7 @@ function CourtRow({
                 onChange={(e) =>
                   setBlockForm((f) => ({ ...f, reason: e.target.value }))
                 }
-                placeholder="Motivo (opcional)"
+                placeholder="Nota (opcional), p. ej. «Clase de iniciación»"
                 className="w-full h-7 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
               <div className="flex justify-end gap-2">
@@ -373,7 +518,7 @@ function CourtRow({
                       toast.error("La fecha de inicio es obligatoria");
                       return;
                     }
-                    addBlock.mutate();
+                    addBlock.mutate(false);
                   }}
                   disabled={addBlock.isPending}
                   className="px-2 py-1 text-[11px] rounded bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50 flex items-center gap-1"
@@ -386,12 +531,14 @@ function CourtRow({
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAddBlock(true)}
-              className="w-full flex items-center justify-center gap-1 py-1 text-[11px] rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/40 transition-colors"
-            >
-              <Plus size={10} /> Añadir bloqueo
-            </button>
+            canEditBlocks && (
+              <button
+                onClick={() => setShowAddBlock(true)}
+                className="w-full flex items-center justify-center gap-1 py-1 text-[11px] rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/40 transition-colors"
+              >
+                <Plus size={10} /> Añadir bloqueo
+              </button>
+            )
           )}
         </div>
       )}
@@ -409,6 +556,24 @@ function CourtRow({
           setConfirmDelete(false);
         }}
       />
+
+      <ConfirmModal
+        open={!!blockConflicts}
+        title="La pista tiene reservas o partidos en ese tramo"
+        description={
+          blockConflicts
+            ? `En ese tramo hay ${conflictsSummary(blockConflicts)}. Bloquear la pista no los cancela: siguen ahí y hay que avisar a quien juega.`
+            : ""
+        }
+        confirmLabel="Bloquear igualmente"
+        cancelLabel="No bloquear"
+        danger
+        loading={addBlock.isPending}
+        onClose={() => setBlockConflicts(null)}
+        onConfirm={() => addBlock.mutate(true)}
+      >
+        {blockConflicts && <BlockConflictsList clubId={clubId} conflicts={blockConflicts} />}
+      </ConfirmModal>
 
       <ConfirmModal
         open={!!confirmDeleteBlock}
@@ -443,10 +608,12 @@ interface CourtsManagerProps {
  * UI inline de gestión de pistas + bloqueos de un club. Sirve tanto a ADMIN
  * (embebido en el modal de /clubes) como a CLUB (embebido en /mi-club como
  * card). El backend ya enforce que solo el dueño del club pueda tocar sus
- * pistas (assertClubAccess), así que aquí no hay gating extra.
+ * pistas (assertClubAccess); aquí solo se ocultan los botones que el rol del
+ * equipo no puede usar (pistas: «settings»; bloqueos: «bookings»).
  */
 export function CourtsManager({ clubId }: CourtsManagerProps) {
   const qc = useQueryClient();
+  const canEditCourts = useClubAccess().can("settings", "write");
   const [showAdd, setShowAdd] = useState(false);
   const [newForm, setNewForm] = useState<CourtForm>({ ...EMPTY_COURT });
 
@@ -594,7 +761,7 @@ export function CourtsManager({ clubId }: CourtsManagerProps) {
         </div>
       )}
 
-      {!showAdd && (
+      {canEditCourts && !showAdd && (
         <button
           onClick={() => setShowAdd(true)}
           className="w-full flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 transition-colors"

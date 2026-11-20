@@ -7,6 +7,17 @@
 /** Roles del token que entran al panel: AMT ('admin') y clubes ('club'). */
 const PANEL_ROLES = ["admin", "club"] as const;
 
+/**
+ * Páginas donde una sesión de jugador (rol 'user') es lo normal: elegir con
+ * qué club trabaja quien tiene varios, o quien acaba de aceptar una
+ * invitación al equipo. En el resto, un jugador no entra al panel.
+ */
+export const PLAYER_SESSION_PATHS = ["/elegir-club", "/invitacion-equipo"] as const;
+
+export function isPlayerSessionPath(pathname: string): boolean {
+  return PLAYER_SESSION_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 /** Motivo de /login?motivo=…: la cuenta no tiene (o ya no tiene) acceso al panel. */
 export const LOGIN_REASON_NO_ACCESS = "sin-acceso";
 
@@ -31,4 +42,34 @@ export function tokenRole(token: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+// Rutas públicas (sin login): login/gestión de cuenta (también /restablecer, la
+// del enlace del email de la contraseña) + visor de torneo (modo espectador y
+// Widget TV), que usan solo endpoints públicos sin datos sensibles.
+export const PUBLIC_PATHS = [
+  "/login",
+  "/eliminar-cuenta",
+  "/privacidad",
+  "/ayuda",
+  "/aceptar-invitacion",
+  // Invitación al equipo de un club: la página misma lleva a /login (con el
+  // enlace de vuelta, token incluido) si no hay sesión
+  "/invitacion-equipo",
+  "/restablecer",
+  "/torneo",
+];
+
+/**
+ * Si `pathname` es la ruta `base` o cuelga de ella. Con startsWith pelado,
+ * "/torneo" (el visor público) dejaba pasar sin sesión "/torneos" y
+ * "/torneos/:id" (páginas del admin).
+ */
+export function isUnder(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
+/** Páginas que se ven sin sesión: ahí un 401 no debe mandar a /login (sería un bucle de recargas). */
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => isUnder(pathname, p));
 }

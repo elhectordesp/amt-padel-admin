@@ -6,6 +6,7 @@ import { Trophy, Users, Calendar, MapPin, Clock, ListTree } from "lucide-react";
 import { DEFAULT_TIME_ZONE, formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/constants";
 import { categoryLabel } from "@/lib/category-gender";
+import { isScoringFormat, scoringFormatLabel } from "@/lib/scoring-format";
 import type { TournamentStatus } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
@@ -182,6 +183,8 @@ export default function TournamentViewer({
   const active = cats.find((c) => c.cat.id === activeCatId) ?? cats[0];
   const bracket = active?.bracket;
   const hasBracket = bracket && BRACKET_ROUNDS.some((r) => (bracket[r.key]?.length ?? 0) > 0);
+  // Cómo se juegan los partidos de la categoría activa (sin él, un back anterior, no se dice)
+  const matchFormat = isScoringFormat(active?.cat.scoringFormat) ? scoringFormatLabel(active.cat.scoringFormat) : null;
 
   // Partidos de la categoría activa
   const catMatches = (matches ?? []).filter((m: any) => m.categoryId === active?.cat.id);
@@ -266,6 +269,23 @@ export default function TournamentViewer({
             {tournament.club?.name && <span className="flex items-center gap-1.5"><Trophy size={14} />{tournament.club.name}</span>}
             {tournament.prize && <span className="text-[#D4AF37] font-semibold">{tournament.prize}</span>}
           </div>
+          {/* Texto plano tal cual (React lo escapa: nada de HTML ni markdown),
+              con sus saltos de línea. Las normas, plegadas: pueden ser largas */}
+          {tournament.description && (
+            <p className="pt-2 text-sm text-zinc-300 leading-relaxed whitespace-pre-line break-words max-w-3xl">
+              {tournament.description}
+            </p>
+          )}
+          {tournament.rules && (
+            <details className="pt-2 max-w-3xl">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">
+                Normas del torneo
+              </summary>
+              <p className="mt-2 text-sm text-zinc-300 leading-relaxed whitespace-pre-line break-words">
+                {tournament.rules}
+              </p>
+            </details>
+          )}
         </div>
 
         {/* Tabs de categoría */}
@@ -289,10 +309,19 @@ export default function TournamentViewer({
 
         {active && (
           <div className="space-y-10">
-            {categories.length === 1 && (
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-300 flex items-center gap-2">
-                <Users size={15} className="text-zinc-500" /> {catName(active.cat)}
-              </h2>
+            {(categories.length === 1 || matchFormat) && (
+              <div className="space-y-1.5">
+                {categories.length === 1 && (
+                  <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-300 flex items-center gap-2">
+                    <Users size={15} className="text-zinc-500" /> {catName(active.cat)}
+                  </h2>
+                )}
+                {matchFormat && (
+                  <p className="text-xs text-zinc-500">
+                    Formato de partido: <span className="text-zinc-300">{matchFormat}</span>
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Próximo partido */}

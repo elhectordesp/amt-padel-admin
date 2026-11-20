@@ -9,6 +9,7 @@ import { CATEGORY_LABEL_SHORT as LEVEL_LABEL, LEVELS, TOURNAMENT_STATUS_LABEL, l
 import { invitationNotice } from "@/lib/player-invite";
 import { categoryLabel, genderRejection, genderRejectionNotice, genderSearchHint, searchGendersFor } from "@/lib/category-gender";
 import { isClub, useRole } from "@/lib/use-role";
+import MissingGenderPicker from "@/components/admin/missing-gender-picker";
 import { searchPlayersForCategory } from "@/lib/utils/eligible-players";
 import type { Player, Tournament, AdminEnrollTeamPayload, CategoryLevel, CreatePlayerPayload, Gender } from "@/types";
 
@@ -55,12 +56,11 @@ function selectedPlayerNotice(
   player: Player | null,
   categoryGender: string | undefined,
   otherGender: Gender | null,
-  canEditPlayer: boolean,
 ): string | null {
   if (!player || !categoryGender) return null;
   const rejection = genderRejection(categoryGender, playerGender(player), otherGender);
   return rejection
-    ? genderRejectionNotice(rejection, categoryGender, player.name, { canEditPlayer, goal: "enroll" })
+    ? genderRejectionNotice(rejection, categoryGender, player.name, { goal: "enroll" })
     : null;
 }
 
@@ -105,7 +105,7 @@ function PlayerSlotSection({ label, slot, setSlot, otherPlayer, categoryGender }
     : null;
   // El elegido que ya no encaja (se cambió la categoría, o su pareja): se
   // avisa antes de que lo rechace el back
-  const playerNotice = selectedPlayerNotice(slot.player, categoryGender, otherGender, canEditPlayer);
+  const playerNotice = selectedPlayerNotice(slot.player, categoryGender, otherGender);
 
   // Busca al escribir y otra vez si cambian los géneros que admite (otra
   // categoría, o el otro jugador elegido): fuera los resultados de antes, y
@@ -245,6 +245,13 @@ function PlayerSlotSection({ label, slot, setSlot, otherPlayer, categoryGender }
               <p className="text-xs text-yellow-400">{playerNotice}</p>
             </div>
           )}
+          {playerNotice && slot.player && playerGender(slot.player) === null && (
+            <MissingGenderPicker
+              playerId={slot.player.id}
+              playerName={slot.player.name}
+              onSet={(gender) => setSlot((s) => (s.player ? { ...s, player: { ...s.player, gender, hasGender: true } } : s))}
+            />
+          )}
 
           {genderHint && !slot.player && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">{genderHint}</p>
@@ -351,6 +358,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
   const [status,      setStatus]      = useState<"PENDING" | "CONFIRMED">("PENDING");
   const [paid,        setPaid]        = useState(false);
   const [forceEnroll, setForceEnroll] = useState(false);
+  const [skipPlayerNotices, setSkipPlayerNotices] = useState(false);
 
   const selectedCategory = tournament.categories?.find((c) => c.id === categoryId);
   const isNotOpen = !["OPEN", "DRAW", "SCHEDULED"].includes(tournament.status ?? "");
@@ -393,6 +401,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
       status,
       paid,
       forceEnroll: forceEnroll || undefined,
+      skipPlayerNotices: skipPlayerNotices || undefined,
     });
   };
 
@@ -507,6 +516,11 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
                 <input type="checkbox" checked={forceEnroll} onChange={(e) => setForceEnroll(e.target.checked)}
                   className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
                 <span className="text-sm text-foreground">Forzar (ignorar límite de plazas)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={skipPlayerNotices} onChange={(e) => setSkipPlayerNotices(e.target.checked)}
+                  className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
+                <span className="text-sm text-foreground">No avisar a los jugadores</span>
               </label>
             </div>
           </div>

@@ -3,12 +3,13 @@
  * club, y el cierre escrito se manda en ella, no en la del navegador (los
  * tests corren en Europe/Madrid).
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/torneos/nuevo",
 }));
 vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "club-1" }),
@@ -19,20 +20,47 @@ vi.mock("@/components/admin/tournament-image-uploader", () => ({ TournamentImage
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const create = vi.fn().mockResolvedValue({ id: "t-new" });
-vi.mock("@/lib/services/admin", () => ({
-  adminService: {
-    tournaments: { create: (...args: unknown[]) => create(...args) },
-    clubs: {
-      list: vi.fn(async () => []),
-      findOne: vi.fn(async () => ({
-        id: "club-1",
-        name: "Club Las Palmas",
-        city: "Las Palmas",
-        timezone: "Atlantic/Canary",
-      })),
+// Las opciones de un club sin guardar: los de siempre (lo que da el back)
+const DEFAULT_CONFIG = {
+  id: "__pending__",
+  clubId: "club-1",
+  format: "eliminatoria",
+  matchDuration: 60,
+  scoringFormat: "BEST_OF_3",
+  hasShirts: false,
+  useSeeding: false,
+  requirePaymentToConfirm: false,
+  categoryPrice: 25,
+  categorySpots: 32,
+  dayStartTime: "16:00",
+  dayEndTime: "21:00",
+  maxUnavailableTotalHours: 0,
+  description: null as string | null,
+  rules: null as string | null,
+  participantsVisibility: "PUBLIC",
+  showClubInsteadOfCourt: false,
+  hideFromAppAfterDays: null as number | null,
+};
+const getConfig = vi.fn(async (clubId: string) => ({ ...DEFAULT_CONFIG, clubId }));
+vi.mock("@/lib/services/admin", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/admin")>("@/lib/services/admin");
+  return {
+    ...actual,
+    adminService: {
+      tournaments: { create: (...args: unknown[]) => create(...args) },
+      clubs: {
+        list: vi.fn(async () => []),
+        findOne: vi.fn(async () => ({
+          id: "club-1",
+          name: "Club Las Palmas",
+          city: "Las Palmas",
+          timezone: "Atlantic/Canary",
+        })),
+      },
+      clubTournamentConfig: { get: (clubId: string) => getConfig(clubId) },
     },
-  },
-}));
+  };
+});
 
 import NuevoTorneoPage from "../../../app/(admin)/torneos/nuevo/page";
 
@@ -60,7 +88,7 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
     // Paso 2: categorías (la de por defecto vale)
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
     // Paso 3: configuración, con la zona del club
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
@@ -78,6 +106,8 @@ describe("Crear torneo — zona del club y cierre en ella", () => {
       clubId: "club-1",
       timezone: "Atlantic/Canary",
       registrationDeadline: "2099-11-10T20:00:00.000Z",
+      // Sin tocarlo, el del club (3 sets si no ha guardado otro) va en la categoría
+      categories: [{ scoringFormat: "BEST_OF_3" }],
     });
   }, 30_000);
 });
@@ -97,7 +127,7 @@ describe("Crear torneo — género de la categoría (D2)", () => {
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
     // Paso 2: la categoría de por defecto es masculina; se cambia a junior
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     fireEvent.click(screen.getByRole("button", { name: "Masculina" }));
     for (const name of ["Femenina", "Mixta", "General", "Junior"])
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
@@ -132,7 +162,7 @@ describe("Crear torneo — tramos del paso 4 (P2-10)", () => {
     fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
     fireEvent.change(input("endDate"), { target: { value: "2099-11-20" } });
     next();
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
     fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
@@ -198,7 +228,7 @@ describe("Crear torneo — exigir el pago para confirmar (B4)", () => {
     fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
     fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
     next();
-    await screen.findByLabelText("Plazas", {}, WAIT);
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
     next();
     // Paso 3: el interruptor, apagado por defecto y con su ayuda
     await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
@@ -218,4 +248,189 @@ describe("Crear torneo — exigir el pago para confirmar (B4)", () => {
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
     expect(create.mock.calls[0][0]).toMatchObject({ requirePaymentToConfirm: true });
   }, 30_000);
+});
+
+describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
+  beforeEach(() => {
+    create.mockClear();
+    getConfig.mockClear();
+  });
+  afterEach(() => getConfig.mockImplementation(async () => DEFAULT_CONFIG));
+
+  function renderWizard() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+  }
+  async function fillStep1() {
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    fireEvent.change(input("name"), { target: { value: "Open del club" } });
+    fireEvent.change(input("startDate"), { target: { value: "2099-11-20" } });
+    fireEvent.change(input("endDate"), { target: { value: "2099-11-21" } });
+  }
+  const values = (label: string) => screen.getAllByLabelText(label).map((i) => (i as HTMLInputElement).value);
+  const summary = (label: string) => screen.getByText(label).parentElement as HTMLElement;
+
+  it("cada paso empieza con las del club, lo cambiado a mano se queda, y el resumen y el envío las llevan", async () => {
+    getConfig.mockImplementation(async () => ({
+      ...DEFAULT_CONFIG,
+      format: "grupos+eliminatoria",
+      matchDuration: 90,
+      scoringFormat: "ONE_SET",
+      hasShirts: true,
+      categoryPrice: 30,
+      categorySpots: 16,
+      dayStartTime: "10:00",
+      dayEndTime: "14:00",
+      maxUnavailableTotalHours: 4,
+      description: "Open de otoño del club",
+      rules: "Normas del club",
+      participantsVisibility: "HIDDEN_UNTIL_START",
+      showClubInsteadOfCourt: true,
+      hideFromAppAfterDays: 7,
+    }));
+    renderWizard();
+
+    // Paso 1: descripción y normas del club; las normas se cambian a mano
+    expect(await screen.findByDisplayValue("Open de otoño del club", {}, WAIT)).toBeInTheDocument();
+    expect(getConfig).toHaveBeenCalledWith("club-1");
+    fireEvent.change(screen.getByLabelText("Normas"), { target: { value: "Normas de este torneo" } });
+    await fillStep1();
+    next();
+
+    // Paso 2: precio y plazas del club, también en la categoría que se añade
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    await waitFor(() => expect(values("Plazas (parejas)")).toEqual(["16"]), WAIT);
+    fireEvent.click(screen.getByRole("button", { name: /Añadir categoría/ }));
+    expect(values("Plazas (parejas)")).toEqual(["16", "16"]);
+    expect(values("Precio por pareja (€)")).toEqual(["30", "30"]);
+    next();
+
+    // Paso 3: formato, duración, camisetas y lo que ven los jugadores
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    await screen.findByRole("button", { name: "Grupos + Eliminatoria" }, WAIT);
+    expect(screen.getByRole("button", { name: "90 minutos" })).toBeInTheDocument();
+    // El formato de partido del club, con su duración típica como pista: la duración del partido sigue siendo la del club
+    expect(screen.getByRole("button", { name: "1 set (tie-break a 6-6)" })).toBeInTheDocument();
+    expect(screen.getByText(/Suele durar unos 30 min/)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Incluir camisetas/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Nadie hasta que empiece/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Mostrar el club en vez de la pista/ })).toBeChecked();
+    expect(screen.getByLabelText("Días después del último día del torneo")).toHaveValue(7);
+    fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
+    next();
+
+    // Paso 4: el tramo y las franjas del club en las jornadas generadas
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+    await waitFor(() => expect(values("Inicio del tramo")).toEqual(["10:00", "10:00"]), WAIT);
+    expect(values("Fin del tramo")).toEqual(["14:00", "14:00"]);
+    expect(screen.getByPlaceholderText("0")).toHaveValue(4);
+    next();
+
+    // Paso 5: el resumen enseña lo nuevo
+    await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
+    expect(within(summary("Formato de partido")).getByText("1 set (tie-break a 6-6)")).toBeInTheDocument();
+    expect(within(summary("Lista de inscritos")).getByText("Nadie hasta que empiece")).toBeInTheDocument();
+    expect(within(summary("El club en vez de la pista")).getByText("Sí")).toBeInTheDocument();
+    expect(within(summary("Quitarlo del listado de la app")).getByText("7 días después del último día")).toBeInTheDocument();
+    expect(screen.getByText("Open de otoño del club")).toBeInTheDocument();
+    expect(screen.getByText("Normas de este torneo")).toBeInTheDocument();
+    next();
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
+    expect(create.mock.calls[0][0]).toMatchObject({
+      description: "Open de otoño del club",
+      rules: "Normas de este torneo",
+      format: "grupos+eliminatoria",
+      matchDuration: 90,
+      hasShirts: true,
+      participantsVisibility: "HIDDEN_UNTIL_START",
+      showClubInsteadOfCourt: true,
+      hideFromAppAfterDays: 7,
+      maxUnavailableTotalHours: 4,
+      // El formato de partido va en todas las categorías
+      categories: [
+        { totalSpots: 16, price: 30, scoringFormat: "ONE_SET" },
+        { totalSpots: 16, price: 30, scoringFormat: "ONE_SET" },
+      ],
+      schedule: [
+        { date: "2099-11-20", blocks: [{ start: "10:00", end: "14:00" }] },
+        { date: "2099-11-21", blocks: [{ start: "10:00", end: "14:00" }] },
+      ],
+    });
+  }, 60_000);
+
+  it("volver atrás no pisa lo cambiado a mano (la zona elegida volvía a la del club al volver del paso 4), ni el formato de partido", async () => {
+    getConfig.mockImplementation(async () => ({ ...DEFAULT_CONFIG, format: "grupos+eliminatoria", scoringFormat: "ONE_SET" }));
+    renderWizard();
+    await fillStep1();
+    next();
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    next();
+
+    // Paso 3: el formato, el formato de partido y la zona, a mano
+    await screen.findByRole("button", { name: "Grupos + Eliminatoria" }, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Grupos + Eliminatoria" }));
+    fireEvent.click(screen.getByRole("button", { name: "Round Robin" }));
+    fireEvent.click(screen.getByRole("button", { name: "1 set (tie-break a 6-6)" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 9 juegos" }));
+    // Solo la pista: la duración del partido no cambia sola con el formato
+    expect(screen.getByText(/Suele durar unos 45 min/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "60 minutos" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Canarias/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Península, Baleares/ }));
+    fireEvent.change(input("registrationDeadline"), { target: { value: "2099-11-10T20:00" } });
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+
+    // Y vuelta al paso 3: siguen los elegidos
+    fireEvent.click(screen.getByRole("button", { name: /Anterior/ }));
+    await waitFor(() => expect(input("registrationDeadline")).toBeTruthy(), WAIT);
+    expect(screen.getByRole("button", { name: "Round Robin" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 9 juegos" })).toBeInTheDocument();
+    expect(screen.getByText(/^Hora del torneo/).textContent).toBe("Hora del torneo (Península, Baleares, Ceuta y Melilla)");
+
+    // Y es el que se manda, con la duración que tenía
+    next();
+    await screen.findByText("Horarios por jornada", {}, WAIT);
+    next();
+    await screen.findByRole("button", { name: /Crear torneo/ }, WAIT);
+    next();
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1), WAIT);
+    expect(create.mock.calls[0][0]).toMatchObject({ matchDuration: 60, categories: [{ scoringFormat: "PRO_SET_9" }] });
+  }, 60_000);
+
+  it("sin poder cargar las opciones del club, lo dice y empieza con los de siempre", async () => {
+    getConfig.mockImplementation(async () => {
+      throw new Error("Network Error");
+    });
+    renderWizard();
+    expect(
+      await screen.findByText("No se pudieron cargar las opciones de torneo del club: los valores de partida son los de siempre.", {}, WAIT),
+    ).toBeInTheDocument();
+    await fillStep1();
+    next();
+    await screen.findByLabelText("Plazas (parejas)", {}, WAIT);
+    expect(values("Plazas (parejas)")).toEqual(["32"]);
+    expect(values("Precio por pareja (€)")).toEqual(["25"]);
+  }, 60_000);
+});
+
+describe("Crear torneo — errores a la vista", () => {
+  it("un «Siguiente» con errores lleva el primero a la vista (el botón está abajo)", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    next();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled(), WAIT);
+  });
 });

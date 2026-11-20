@@ -15,7 +15,7 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/lib/services/admin', () => ({
   adminService: {
-    tournaments: { list: vi.fn() },
+    tournaments: { list: vi.fn(), listAll: vi.fn() },
     players:     { list: vi.fn() },
   },
 }));
@@ -46,6 +46,7 @@ const mockUseSearch = useSearch as ReturnType<typeof vi.fn>;
 const fakeTournaments = [
   { id: 't-1', name: 'Torneo Madrid', startDate: '2026-07-01T00:00:00Z', endDate: '2026-07-03T00:00:00Z', club: { name: 'Club A' } },
   { id: 't-2', name: 'Open Costa del Sol', startDate: '2026-08-01T00:00:00Z', endDate: '2026-08-03T00:00:00Z', club: { name: 'Pádel Indoor', city: 'Málaga' } },
+  { id: 'l-1', kind: 'LEAGUE', name: 'Liga de invierno', startDate: '2026-12-01T00:00:00Z', endDate: '2027-03-01T00:00:00Z', club: { name: 'Club A' } },
 ];
 const fakePlayers = [
   { id: 'p-1', name: 'Carlos García', gender: 'M', level: '4a', points: 1200 },
@@ -113,6 +114,25 @@ describe('SearchModal', () => {
     render(<SearchModal />);
     fireEvent.change(screen.getByPlaceholderText(/buscar torneos/i), { target: { value: 'madrid' } });
     expect(screen.getByText('Torneo Madrid')).toBeInTheDocument();
+  });
+
+  it('también busca ligas: llevan su etiqueta y abren su ficha en /ligas', () => {
+    setupOpen();
+    render(<SearchModal />);
+    fireEvent.change(screen.getByPlaceholderText(/buscar torneos/i), { target: { value: 'invierno' } });
+    expect(screen.getByText('Liga de invierno')).toBeInTheDocument();
+    expect(screen.getByText(/^Liga · /)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Liga de invierno'));
+    expect(mockPush).toHaveBeenCalledWith('/ligas/l-1');
+  });
+
+  it('un torneo sigue sin etiqueta y abre su ficha en /torneos', () => {
+    setupOpen();
+    render(<SearchModal />);
+    fireEvent.change(screen.getByPlaceholderText(/buscar torneos/i), { target: { value: 'madrid' } });
+    expect(screen.queryByText(/^Liga · /)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Torneo Madrid'));
+    expect(mockPush).toHaveBeenCalledWith('/torneos/t-1');
   });
 
   it('muestra resultados de jugadores cuando el query coincide', () => {

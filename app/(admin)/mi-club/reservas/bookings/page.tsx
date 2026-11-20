@@ -4,14 +4,17 @@
  * Tabs: Hoy / Próximas / Histórico / Todas. Filtros adicionales por estado.
  * Búsqueda por el nombre o el email de quien juega (`q`, en el back) y
  * paginación del servidor (`limit` + `offset`).
- * Cada reserva: hora, pista, jugadores, estado, pago, acciones (cancelar).
+ * Tabla compacta: hora, pista, titular, jugadores, importe, pago y estado, con
+ * «Sin pagar» para ver quién debe dinero. Cada fila, su casilla (cancelar
+ * varias) y «Cancelar».
  */
 
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Calendar,
   Loader2,
@@ -19,18 +22,24 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
+import { CancelManyBookingsDialog } from "@/components/admin/cancel-many-bookings-dialog";
 import { ErrorState } from "@/components/admin/error-state";
 import { Pagination, useKeepPageInRange, usePagination } from "@/components/admin/pagination";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog } from "@/components/admin/booking-create-dialog";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { cancelFailureReason, cancelledSummary } from "@/lib/utils/booking-cancel-many";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
+import { bookingHolder, isUnpaid, MODE_LABELS } from "@/lib/utils/booking-labels";
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
+import { paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
+import { refundableOf } from "@/lib/utils/booking-refund";
 import {
   formatInTimeZone,
   zonedDayKey,
@@ -40,6 +49,7 @@ import type {
   Booking,
   BookingFiltersQuery,
   BookingStatus,
+  CancelManyResult,
 } from "@/types/bookings";
 
 type Tab = "today" | "upcoming" | "history" | "all";
@@ -55,6 +65,10 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
 
 const UPCOMING_STATUSES: BookingStatus[] = ["PENDING_INVITES", "CONFIRMED", "IN_PROGRESS"];
 
+// Las que aún se pueden cancelar (las mismas para las que el listado enseña «Cancelar»)
+const CANCELABLE_STATUSES: BookingStatus[] = ["PENDING_INVITES", "CONFIRMED", "IN_PROGRESS"];
+const isCancelable = (b: Booking) => CANCELABLE_STATUSES.includes(b.status);
+
 const STATUS_COLORS: Record<BookingStatus, string> = {
   PENDING_INVITES: "bg-amber-500/15 text-amber-500",
   CONFIRMED: "bg-blue-500/15 text-blue-500",
@@ -66,8 +80,22 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
 
 export default function BookingsListPage() {
   const { role, clubId } = useRole();
+  // Crear y cancelar son de quien escribe las reservas; quien solo lee ve el listado
+  const canWrite = useClubAccess().can("bookings", "write");
   const [tab, setTab] = useState<Tab>("today");
   const [showCreate, setShowCreate] = useState(false);
+  // Un día concreto (YYYY-MM-DD, el del club): manda sobre la pestaña
+  const [day, setDay] = useState("");
+  // Solo las que se deben (sin cobrar, con importe)
+  const [unpaid, setUnpaid] = useState(false);
+  // Las marcadas para cancelar de golpe, con sus datos para el resumen
+  const [selected, setSelected] = useState<Map<string, Booking>>(new Map());
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [showCancelMany, setShowCancelMany] = useState(false);
+  const [cancelResult, setCancelResult] = useState<{
+    result: CancelManyResult;
+    byId: Map<string, Booking>;
+  } | null>(null);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
   const timeZone = clubTimeZone.timeZone;
   const { page, setPage, pageSize, setPageSize } = usePagination();
@@ -83,13 +111,34 @@ export default function BookingsListPage() {
     const t = setTimeout(() => {
       setSearch(next);
       setPage(1);
+      setSelected(new Map());
     }, 300);
     return () => clearTimeout(t);
   }, [searchInput, search, setPage]);
 
+  // El enlace de la portada llega con ?sinpagar=1: el filtro «Sin pagar» ya puesto
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (new URLSearchParams(window.location.search).get("sinpagar") === "1") setUnpaid(true);
+  }, []);
+
   const changeTab = (next: Tab) => {
     setTab(next);
+    setDay("");
     setPage(1);
+    setSelected(new Map());
+  };
+
+  const changeUnpaid = (next: boolean) => {
+    setUnpaid(next);
+    setPage(1);
+    setSelected(new Map());
+  };
+
+  const changeDay = (next: string) => {
+    setDay(next);
+    setPage(1);
+    setSelected(new Map());
   };
 
   // null: aún sin la zona del club, no hay «hoy» con el que pedir
@@ -104,7 +153,11 @@ export default function BookingsListPage() {
       limit: pageSize,
       offset: (page - 1) * pageSize,
       q: search || undefined,
+      unpaid: unpaid ? ("true" as const) : undefined,
     };
+    if (day) {
+      return { ...base, ...dayRangeIso(day, day, timeZone), order: "asc" };
+    }
     if (tab === "today") {
       return { ...base, ...today, order: "asc" };
     }
@@ -116,7 +169,7 @@ export default function BookingsListPage() {
       return { ...base, toDate: today.fromDate };
     }
     return base;
-  }, [clubId, timeZone, tab, page, pageSize, search]);
+  }, [clubId, timeZone, tab, day, page, pageSize, search, unpaid]);
 
   const query = useQuery({
     queryKey: bookingsQK.bookingsList(filters ?? {}),
@@ -166,46 +219,104 @@ export default function BookingsListPage() {
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
 
+  const toggle = (b: Booking) =>
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (!next.delete(b.id)) next.set(b.id, b);
+      return next;
+    });
+
+  // Todas las cancelables del filtro (no solo las de esta página)
+  const selectAll = async () => {
+    if (!filters) return;
+    setSelectingAll(true);
+    try {
+      // listAll pide página a página: su límite y desplazamiento mandan sobre los del filtro
+      const all = await bookingsService.bookings.listAll({ ...filters, statuses: CANCELABLE_STATUSES });
+      setSelected(new Map(all.map((b) => [b.id, b])));
+    } catch {
+      toast.error("No se han podido seleccionar las reservas");
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
   return (
     <ReservasPage title="Reservas">
       {/* El botón va con el texto, no junto a la cabecera: en el móvil se cortaba */}
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">
-          Listado de reservas de tu club. Cancelar aquí notifica automáticamente
-          a los jugadores con el motivo opcional.
+          Listado de reservas de tu club.
+          {canWrite && " Cancelar aquí notifica automáticamente a los jugadores con el motivo opcional."}
         </p>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
-          <Plus className="h-3.5 w-3.5" /> Crear reserva
-        </Button>
+        {canWrite && (
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus className="h-3.5 w-3.5" /> Crear reserva
+          </Button>
+        )}
       </div>
 
-      <BookingCreateDialog
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        clubId={clubId}
-        timeZone={timeZone}
-      />
+      {canWrite && (
+        <BookingCreateDialog
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          clubId={clubId}
+          timeZone={timeZone}
+        />
+      )}
 
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">
-          <TabButton active={tab === "today"} onClick={() => changeTab("today")}>
+          <TabButton active={!day && tab === "today"} onClick={() => changeTab("today")}>
             Hoy
           </TabButton>
           <TabButton
-            active={tab === "upcoming"}
+            active={!day && tab === "upcoming"}
             onClick={() => changeTab("upcoming")}
           >
             Próximas
           </TabButton>
           <TabButton
-            active={tab === "history"}
+            active={!day && tab === "history"}
             onClick={() => changeTab("history")}
           >
             Histórico
           </TabButton>
-          <TabButton active={tab === "all"} onClick={() => changeTab("all")}>
+          <TabButton active={!day && tab === "all"} onClick={() => changeTab("all")}>
             Todas
           </TabButton>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Día
+            <input
+              type="date"
+              aria-label="Ver un día concreto"
+              value={day}
+              onChange={(e) => changeDay(e.target.value)}
+              className={`rounded-md border bg-background px-2 py-1.5 text-sm text-foreground ${
+                day ? "border-primary" : "border-border"
+              }`}
+            />
+          </label>
+          {day && (
+            <Button variant="ghost" size="sm" onClick={() => changeDay("")}>
+              <X className="h-3.5 w-3.5" /> Quitar día
+            </Button>
+          )}
+          <label
+            className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors focus-within:ring-2 focus-within:ring-primary ${
+              unpaid
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={unpaid}
+              onChange={(e) => changeUnpaid(e.target.checked)}
+              className="sr-only"
+            />
+            Sin pagar
+          </label>
         </div>
 
         <div className="mt-4 flex w-full items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 sm:max-w-xs">
@@ -233,7 +344,34 @@ export default function BookingsListPage() {
           </div>
         )}
 
-        <div className="mt-3 space-y-2">
+        {cancelResult && (
+          <CancelResultCard
+            result={cancelResult.result}
+            byId={cancelResult.byId}
+            timeZone={timeZone}
+            onDismiss={() => setCancelResult(null)}
+          />
+        )}
+
+        {canWrite && !query.isError && items.some(isCancelable) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void selectAll()} disabled={selectingAll}>
+              {selectingAll && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Seleccionar todas
+            </Button>
+            {selected.size > 0 && (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setSelected(new Map())}>
+                  Quitar selección
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setShowCancelMany(true)}>
+                  <X className="h-3.5 w-3.5" /> Cancelar seleccionadas ({selected.size})
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="mt-3">
           {query.isError ? (
             <ErrorState
               message="No se pudieron cargar las reservas."
@@ -242,10 +380,42 @@ export default function BookingsListPage() {
           ) : items.length === 0 && !query.isLoading ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
               <Calendar className="mx-auto mb-2 h-6 w-6 opacity-50" />
-              {search ? "Ninguna reserva coincide con la búsqueda" : "Sin reservas en este filtro"}
+              {search
+                ? "Ninguna reserva coincide con la búsqueda"
+                : unpaid
+                  ? "Ninguna reserva sin pagar en este filtro"
+                  : "Sin reservas en este filtro"}
             </div>
           ) : (
-            items.map((b) => <BookingRow key={b.id} booking={b} timeZone={timeZone} />)
+            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+              <table className="w-full min-w-[56rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    {canWrite && <th className="w-8 px-3 py-2" aria-label="Seleccionar" />}
+                    <th className="px-3 py-2 font-medium">Hora</th>
+                    <th className="px-3 py-2 font-medium">Pista</th>
+                    <th className="px-3 py-2 font-medium">Titular</th>
+                    <th className="px-3 py-2 font-medium">Jugadores</th>
+                    <th className="px-3 py-2 text-right font-medium">Importe</th>
+                    <th className="px-3 py-2 font-medium">Pago</th>
+                    <th className="px-3 py-2 font-medium">Estado</th>
+                    {canWrite && <th className="px-3 py-2" aria-label="Acciones" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((b) => (
+                    <BookingRow
+                      key={b.id}
+                      booking={b}
+                      timeZone={timeZone}
+                      canWrite={canWrite}
+                      selected={selected.has(b.id)}
+                      onToggle={() => toggle(b)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -263,30 +433,84 @@ export default function BookingsListPage() {
           </div>
         )}
       </div>
+
+      {showCancelMany && (
+        <CancelManyBookingsDialog
+          ids={[...selected.keys()]}
+          refundable={refundableOf([...selected.values()])}
+          onClose={() => setShowCancelMany(false)}
+          onDone={(result) => {
+            setCancelResult({ result, byId: selected });
+            setSelected(new Map());
+            setShowCancelMany(false);
+          }}
+        />
+      )}
     </ReservasPage>
   );
 }
 
-function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: string }) {
-  const qc = useQueryClient();
-  const [showCancel, setShowCancel] = useState(false);
-  const [reason, setReason] = useState("");
+/** Qué pasó con cada reserva marcada: las canceladas y las que no se pudieron, con el motivo. */
+function CancelResultCard({
+  result,
+  byId,
+  timeZone,
+  onDismiss,
+}: {
+  result: CancelManyResult;
+  byId: Map<string, Booking>;
+  timeZone: string;
+  onDismiss: () => void;
+}) {
+  const failed = result.failed.length;
+  return (
+    <div role="status" className="mt-3 rounded-lg border border-border bg-card p-3 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-medium">
+          {cancelledSummary(result)}
+          {failed > 0 && `; ${failed === 1 ? "1 no se ha" : `${failed} no se han`} podido cancelar`}.
+        </p>
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
+          Cerrar
+        </Button>
+      </div>
+      {failed > 0 && (
+        <ul className="mt-2 space-y-1 text-muted-foreground">
+          {result.failed.map((f) => {
+            const b = byId.get(f.id);
+            return (
+              <li key={f.id}>
+                {b ? bookingLabel(b, timeZone) : f.id}: {cancelFailureReason(f.code)}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
-  const cancel = useMutation({
-    mutationFn: () => bookingsService.bookings.cancel(b.id, reason || undefined),
-    onSuccess: () => {
-      toast.success("Reserva cancelada — jugadores notificados");
-      setShowCancel(false);
-      qc.invalidateQueries({ queryKey: ["bookings", "list"] });
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (err as Error)?.message ??
-        "Error";
-      toast.error(msg);
-    },
-  });
+/** «Pista 2 · lun, 9 nov · 18:00 - 19:00» */
+function bookingLabel(b: Booking, timeZone: string): string {
+  const dateStr = formatInTimeZone(b.startsAt, timeZone, { weekday: "short", day: "numeric", month: "short" });
+  return `${b.court?.name ?? "Pista?"} · ${dateStr} · ${zonedTime(b.startsAt, timeZone)} - ${zonedTime(b.endsAt, timeZone)}`;
+}
+
+function BookingRow({
+  booking: b,
+  timeZone,
+  canWrite,
+  selected,
+  onToggle,
+}: {
+  booking: Booking;
+  timeZone: string;
+  /** Sin escritura no hay casilla ni «Cancelar» (ni sus columnas). */
+  canWrite: boolean;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const [showCancel, setShowCancel] = useState(false);
 
   // En hora del club, como el detalle y el calendario
   const timeStr = `${zonedTime(b.startsAt, timeZone)} - ${zonedTime(b.endsAt, timeZone)}`;
@@ -295,71 +519,77 @@ function BookingRow({ booking: b, timeZone }: { booking: Booking; timeZone: stri
     day: "numeric",
     month: "short",
   });
+  const href = `/mi-club/reservas/bookings/${b.id}`;
+  const holder = bookingHolder(b);
+  const phone = b.clubCustomer?.phone;
+  const unpaid = isUnpaid(b);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-card/70">
-      <div className="flex items-start justify-between gap-3">
-        <Link
-          href={`/mi-club/reservas/bookings/${b.id}`}
-          className="min-w-0 flex-1 cursor-pointer"
-        >
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              {b.shortCode}
-            </span>
-            <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_COLORS[b.status]}`}>
-              {STATUS_LABELS[b.status]}
-            </span>
-            <span className="text-xs text-muted-foreground">{b.matchMode}</span>
-          </div>
-          <div className="mt-1.5 text-sm font-medium">
-            {b.court?.name ?? "Pista?"} · {dateStr} · {timeStr}
-          </div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
-            {playersLabel(activeParticipants(b).length)} · {formatCents(b.priceCents)}
-            {b.paidAt && <span> · pagada</span>}
-          </div>
-        </Link>
-        {b.status !== "CANCELLED" && b.status !== "COMPLETED" && b.status !== "WITHOUT_RESULT" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCancel(true)}
-          >
-            <X className="h-3.5 w-3.5" /> Cancelar
-          </Button>
-        )}
-      </div>
-      {showCancel && (
-        <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3">
-          <p className="text-sm font-medium">¿Cancelar esta reserva?</p>
-          <input
-            type="text"
-            placeholder="Motivo (opcional, visible al jugador)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowCancel(false)}>
-              Cerrar
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => cancel.mutate()}
-              disabled={cancel.isPending}
-            >
-              {cancel.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                "Confirmar cancelación"
-              )}
-            </Button>
-          </div>
-        </div>
+    <tr className="border-b border-border last:border-0 transition-colors hover:bg-muted/40">
+      {canWrite && (
+        <td className="px-3 py-2 align-top">
+          {isCancelable(b) && (
+            <input
+              type="checkbox"
+              aria-label={`Seleccionar la reserva ${b.shortCode}`}
+              checked={selected}
+              onChange={onToggle}
+              className="mt-0.5 h-4 w-4 cursor-pointer"
+            />
+          )}
+        </td>
       )}
-    </div>
+      <td className="px-3 py-2 align-top">
+        <Link href={href} className="block cursor-pointer">
+          <span className="font-medium tabular-nums">{timeStr}</span>
+          <span className="block text-xs text-muted-foreground">
+            {dateStr} · {b.shortCode}
+          </span>
+        </Link>
+      </td>
+      <td className="px-3 py-2 align-top">{b.court?.name ?? "Pista?"}</td>
+      <td className="px-3 py-2 align-top">
+        <Link href={href} className="block cursor-pointer">
+          <span className="font-medium">{holder ?? "—"}</span>
+          <span className="block text-xs text-muted-foreground">
+            {[phone, MODE_LABELS[b.matchMode]].filter(Boolean).join(" · ")}
+          </span>
+        </Link>
+      </td>
+      <td className="px-3 py-2 align-top">{playersLabel(activeParticipants(b).length)}</td>
+      <td className="px-3 py-2 text-right align-top tabular-nums">{formatCents(b.priceCents)}</td>
+      <td className="px-3 py-2 align-top">
+        {unpaid ? (
+          <span className="font-medium text-red-600 dark:text-red-400">Sin cobrar</span>
+        ) : b.paymentMethod && b.paymentMethod !== "PENDING" && b.priceCents > 0 ? (
+          <span
+            className="text-green-600 dark:text-green-400"
+            title={paymentMethodLabel(b.paymentMethod)}
+          >
+            Cobrada
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2 align-top">
+        <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_COLORS[b.status]}`}>
+          {STATUS_LABELS[b.status]}
+        </span>
+      </td>
+      {canWrite && (
+        <td className="px-3 py-2 text-right align-top">
+          {isCancelable(b) && (
+            <Button variant="ghost" size="sm" onClick={() => setShowCancel(true)}>
+              <X className="h-3.5 w-3.5" /> Cancelar
+            </Button>
+          )}
+          {showCancel && (
+            <CancelBookingDialog booking={b} timeZone={timeZone} onClose={() => setShowCancel(false)} />
+          )}
+        </td>
+      )}
+    </tr>
   );
 }
 

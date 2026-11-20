@@ -174,3 +174,68 @@ describe("Editar torneo — exigir el pago para confirmar (B4)", { timeout: 30_0
     expect(update.mock.calls[0][1]).toMatchObject({ requirePaymentToConfirm: true });
   });
 });
+
+describe("Editar torneo — descripción, normas y lo que ven los jugadores (B5-1)", { timeout: 30_000 }, () => {
+  const detail = vi.mocked(adminService.tournaments.adminDetail);
+  beforeEach(() => update.mockClear());
+  afterEach(() => detail.mockImplementation(async () => CANARY_TOURNAMENT as never));
+
+  it("los trae del torneo y guarda lo cambiado: vaciar la descripción la quita (null), las normas sin los espacios de los bordes", async () => {
+    detail.mockImplementation(async () => ({
+      ...CANARY_TOURNAMENT,
+      description: "Open de otoño",
+      rules: "Puntualidad",
+      participantsVisibility: "REGISTERED_ONLY",
+      showClubInsteadOfCourt: true,
+      hideFromAppAfterDays: 3,
+    }) as never);
+    renderPage();
+    await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT);
+
+    expect(screen.getByLabelText("Sobre el torneo")).toHaveValue("Open de otoño");
+    expect(screen.getByLabelText("Normas")).toHaveValue("Puntualidad");
+    expect(screen.getByRole("radio", { name: /Solo los inscritos/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Mostrar el club en vez de la pista/ })).toBeChecked();
+    expect(screen.getByLabelText("Días después del último día del torneo")).toHaveValue(3);
+
+    fireEvent.change(screen.getByLabelText("Sobre el torneo"), { target: { value: "  " } });
+    fireEvent.change(screen.getByLabelText("Normas"), { target: { value: " Puntualidad\nBolas nuevas " } });
+    fireEvent.click(screen.getByRole("radio", { name: /Nadie hasta que empiece/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Quitarlo del listado de la app/ }));
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
+    expect(update.mock.calls[0][1]).toMatchObject({
+      description: null,
+      rules: "Puntualidad\nBolas nuevas",
+      participantsVisibility: "HIDDEN_UNTIL_START",
+      showClubInsteadOfCourt: true,
+      hideFromAppAfterDays: null,
+    });
+  });
+
+  it("un torneo sin ellos sale como uno sin tocar (todos ven la lista, la pista, nunca se quita), y sin los días no se guarda", async () => {
+    renderPage();
+    await screen.findByDisplayValue("2026-11-10T20:00", {}, WAIT);
+
+    expect(screen.getByLabelText("Sobre el torneo")).toHaveValue("");
+    expect(screen.getByRole("radio", { name: /^Todos/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Mostrar el club en vez de la pista/ })).not.toBeChecked();
+    const hide = screen.getByRole("checkbox", { name: /Quitarlo del listado de la app/ });
+    expect(hide).not.toBeChecked();
+
+    // Marcado y con el campo vacío. Fuera de 0-365 (p. ej. 400) lo para antes
+    // el navegador: el campo lleva min y max y esto es un formulario
+    fireEvent.click(hide);
+    fireEvent.change(screen.getByLabelText("Días después del último día del torneo"), { target: { value: "" } });
+    fireEvent.click(saveButton());
+    expect(await screen.findByText("Entre 0 y 365 días", {}, WAIT)).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+
+    // Corregido, se guarda
+    fireEvent.change(screen.getByLabelText("Días después del último día del torneo"), { target: { value: "0" } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1), WAIT);
+    expect(update.mock.calls[0][1]).toMatchObject({ hideFromAppAfterDays: 0, description: null, rules: null });
+  });
+});

@@ -21,9 +21,13 @@ vi.mock("@/components/admin/courts-manager", () => ({ CourtsManager: () => null 
 const clubsMock = vi.hoisted(() => ({
   list:             vi.fn(),
   update:           vi.fn(),
+  create:           vi.fn(),
+  inviteStaff:      vi.fn(),
   deactivate:       vi.fn(),
   geocodeBatch:     vi.fn(),
   admins:           vi.fn(),
+  staff:            vi.fn(),
+  removeStaff:      vi.fn(),
   inviteAdmin:      vi.fn(),
   resendInvitation: vi.fn(),
   revokeInvitation: vi.fn(),
@@ -258,6 +262,10 @@ describe("ClubesPage — administradores del club (L25)", () => {
     vi.clearAllMocks();
     clubsMock.list.mockResolvedValue([ACTIVE]);
     clubsMock.admins.mockResolvedValue({ admins: [ADMIN], invitations: [PENDING, EXPIRED] });
+    clubsMock.staff.mockResolvedValue({
+      members: [{ userId: "u-1", name: "Admin Club", email: "admin@club.com", roles: ["OWNER", "RESULTS"], createdAt: ADMIN.createdAt }],
+      invitations: [],
+    });
   });
 
   async function openAdmins(name = "Club Activo") {
@@ -278,10 +286,25 @@ describe("ClubesPage — administradores del club (L25)", () => {
     expect(within(dialog).getByText("Caducada")).toBeInTheDocument();
     expect(within(dialog).getByText("Enviada el 1/10/26 · caducó el 8/10/26")).toBeInTheDocument();
     expect(clubsMock.admins).toHaveBeenCalledWith("c-activo");
+    expect(clubsMock.staff).toHaveBeenCalledWith("c-activo");
+    // El equipo, con sus roles
+    expect(within(dialog).getByText("Propietario")).toBeInTheDocument();
+    expect(within(dialog).getByText("Resultados")).toBeInTheDocument();
+  });
+
+  it("AMT puede quitar a un miembro del equipo, con confirmación", async () => {
+    clubsMock.removeStaff.mockResolvedValue(undefined);
+    renderPage();
+    const dialog = await openAdmins();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Quitar a Admin Club del equipo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Quitar del equipo" }));
+    await waitFor(() => expect(clubsMock.removeStaff).toHaveBeenCalledWith("c-activo", "u-1"));
   });
 
   it("sin admins ni invitaciones lo dice", async () => {
     clubsMock.admins.mockResolvedValue({ admins: [], invitations: [] });
+    clubsMock.staff.mockResolvedValue({ members: [], invitations: [] });
     renderPage();
     const dialog = await openAdmins();
 
@@ -466,5 +489,99 @@ describe("ClubesPage — ficha del club", () => {
     fireEvent.click(screen.getByRole("button", { name: /Guardar/ }));
 
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Club actualizado y publicado en la app"));
+  });
+});
+
+describe("ClubesPage — vaciar datos de un club", () => {
+  it("vaciar web, teléfono, logo y email manda null, no undefined", async () => {
+    vi.clearAllMocks();
+    const full = { ...ACTIVE, website: "https://a.es", phone: "911111111", logoUrl: "https://a.es/l.png", contactEmail: "a@a.es" };
+    clubsMock.list.mockResolvedValue([full]);
+    clubsMock.update.mockResolvedValue(full);
+    renderPage();
+    fireEvent.click(within(await cardOf("Club Activo")).getByRole("button", { name: "Editar club" }));
+    for (const v of ["https://a.es", "911111111", "https://a.es/l.png", "a@a.es"])
+      fireEvent.change(screen.getByDisplayValue(v), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Guardar/ }));
+    await waitFor(() => expect(clubsMock.update).toHaveBeenCalledWith(
+      "c-activo",
+      expect.objectContaining({ website: null, phone: null, logoUrl: null, contactEmail: null }),
+    ));
+  });
+});
+
+describe("ClubesPage — alta guiada: club y primer propietario", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.list.mockResolvedValue([ACTIVE]);
+    clubsMock.create.mockResolvedValue({ ...ACTIVE, id: "c-nuevo", name: "Club Nuevo" });
+  });
+
+  async function fillStepOne() {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Nuevo club/ }));
+    fireEvent.change(screen.getByPlaceholderText("Club Padel Pozuelo"), { target: { value: "Club Nuevo" } });
+    fireEvent.change(screen.getByPlaceholderText("Madrid"), { target: { value: "Getafe" } });
+    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+  }
+
+  it("crea el club y invita al propietario con el rol OWNER", async () => {
+    clubsMock.inviteStaff.mockResolvedValue({ id: "i1", expiresAt: "2026-12-01T00:00:00.000Z" });
+    await fillStepOne();
+    expect(clubsMock.create).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText("propietario@clubejemplo.com"), { target: { value: "dueno@club.es" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear club e invitar" }));
+
+    await waitFor(() => expect(clubsMock.inviteStaff).toHaveBeenCalledWith("c-nuevo", "dueno@club.es", ["OWNER"]));
+    expect(toastMock.success).toHaveBeenCalledWith("Club creado");
+  });
+
+  it("si la invitación falla, el club queda creado y se reintenta solo la invitación", async () => {
+    clubsMock.inviteStaff.mockRejectedValueOnce(new Error("Correo caído")).mockResolvedValueOnce({ id: "i1", expiresAt: "x" });
+    await fillStepOne();
+    fireEvent.change(screen.getByPlaceholderText("propietario@clubejemplo.com"), { target: { value: "dueno@club.es" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear club e invitar" }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/El club se ha creado, pero no se ha podido enviar la invitación: Correo caído/);
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar invitación" }));
+
+    await waitFor(() => expect(clubsMock.inviteStaff).toHaveBeenCalledTimes(2));
+    expect(clubsMock.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("un email no válido no crea nada", async () => {
+    await fillStepOne();
+    fireEvent.change(screen.getByPlaceholderText("propietario@clubejemplo.com"), { target: { value: "dueno@club" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear club e invitar" }));
+    expect(toastMock.error).toHaveBeenCalled();
+    expect(clubsMock.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("ClubesPage — clubes por configurar (alta con la invitación fallida)", () => {
+  const CREATED = {
+    ...base, id: "c-nuevo", name: "Club Nuevo", active: false, deactivatedAt: null,
+    status: "pending", pendingSetup: false, hasOwner: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.list.mockResolvedValue([ACTIVE, OFF, CREATED]);
+    clubsMock.update.mockResolvedValue({ ...CREATED, active: true, status: "active" });
+  });
+
+  it("se ve en la lista sin pulsar «Ver inactivos» y el desactivado no", async () => {
+    renderPage();
+    expect(await screen.findByText("Club Nuevo", { selector: "p" })).toBeTruthy();
+    expect(screen.queryByText("Club Apagado", { selector: "p" })).toBeNull();
+  });
+
+  it("«Activar club» lo activa; «Invitar al propietario» abre sus administradores", async () => {
+    renderPage();
+    const card = await cardOf("Club Nuevo");
+    expect(within(card).getByRole("button", { name: "Invitar al propietario" })).toBeTruthy();
+    fireEvent.click(within(card).getByRole("button", { name: "Activar club" }));
+    await waitFor(() => expect(clubsMock.update).toHaveBeenCalledWith("c-nuevo", { active: true }));
   });
 });

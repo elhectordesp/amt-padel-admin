@@ -3,27 +3,35 @@
  *
  * Vista admin con todos los campos relevantes: pista, modo, participantes,
  * precio, pago, cancelación, normas aceptadas, metadata. Incluye acción de
- * cancelar (con motivo opcional) si la reserva aún es cancelable.
+ * cancelar (confirmada en un diálogo, con motivo opcional) si la reserva aún
+ * es cancelable.
  */
 
 "use client";
 
-import { use, useState } from "react";
+import { Suspense, use, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Calendar, Clock, CreditCard, Crown, FileText, Flame,
-  Loader2, MapPin, Trophy, Users, X,
+  Calendar, CalendarClock, Clock, CreditCard, Crown, FileText, Flame,
+  Loader2, MapPin, Ticket, Trophy, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
+import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
+import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
+import { PayWithVoucherModal } from "@/components/admin/pay-with-voucher-modal";
+import { RescheduleBookingDialog } from "@/components/admin/reschedule-booking-dialog";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { clubVouchersQK, clubVouchersService } from "@/lib/services/club-vouchers";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
-import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
-import { bookingCapacity, cancellationNoticeCount } from "@/lib/utils/booking-participants";
+import { MODE_LABELS } from "@/lib/utils/booking-labels";
+import { bookingCapacity } from "@/lib/utils/booking-participants";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
@@ -32,7 +40,7 @@ import {
   zonedTime,
 } from "@/lib/utils/time-zone";
 import type {
-  BookingMatchMode, BookingParticipant, BookingParticipantStatus,
+  BookingParticipant, BookingParticipantStatus,
   BookingPaymentMethod, BookingStatus,
 } from "@/types/bookings";
 
@@ -54,24 +62,29 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
   WITHOUT_RESULT: "bg-muted text-muted-foreground border-border",
 };
 
-const MODE_LABELS: Record<BookingMatchMode, string> = {
-  INDIVIDUAL: "Individual",
-  PRIVATE_AMT: "Privado AMT",
-  PRIVATE_WITH_GUESTS: "Privado con invitados",
-  OPEN: "Abierto",
-  ADMIN_MANUAL: "Manual (admin)",
-};
 
 const BACK_TO_LIST = { href: "/mi-club/reservas/bookings", label: "Volver al listado" };
+const CALENDAR_PREFIX = "/mi-club/reservas/calendario";
 
-// Como toLocaleDateString y toLocaleString («27/10/2026», «27/10/2026, 9:05:00»), en la zona del club
+/**
+ * A dónde vuelve el enlace de arriba: al calendario, en el día y la franja de
+ * donde se venía (`?volver=`), si es una ruta del calendario; si no, al listado.
+ * Solo rutas del propio calendario: la URL llega del navegador.
+ */
+function backTarget(volver: string | null): { href: string; label: string } {
+  const isCalendar =
+    !!volver && (volver === CALENDAR_PREFIX || volver.startsWith(`${CALENDAR_PREFIX}?`));
+  return isCalendar ? { href: volver, label: "Volver al calendario" } : BACK_TO_LIST;
+}
+
+// Como toLocaleDateString y toLocaleString («27/10/2026», «27/10/2026, 9:05»), en la zona del club
 const DATE: Intl.DateTimeFormatOptions = { day: "numeric", month: "numeric", year: "numeric" };
-const DATE_TIME: Intl.DateTimeFormatOptions = { ...DATE, hour: "numeric", minute: "2-digit", second: "2-digit" };
+const DATE_TIME: Intl.DateTimeFormatOptions = { ...DATE, hour: "numeric", minute: "2-digit" };
 
 const PARTICIPANT_STATUS_LABELS: Record<BookingParticipantStatus, string> = {
   INVITED: "Invitado",
   ACCEPTED: "Confirmado",
-  AUTO_ACCEPTED: "Auto-confirmado",
+  AUTO_ACCEPTED: "Confirmado",
   DECLINED: "Rechazó",
   REMOVED: "Eliminado",
 };
@@ -89,36 +102,34 @@ export default function BookingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // La vuelta sale de la URL (useSearchParams): sin Suspense, el build no prerenderiza la página
+  return (
+    <Suspense fallback={<Loader2 className="m-6 h-5 w-5 animate-spin text-muted-foreground" />}>
+      <BookingDetail params={params} />
+    </Suspense>
+  );
+}
+
+function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const back = backTarget(useSearchParams().get("volver"));
   const { role, clubId } = useRole();
-  const { data: me } = useMe();
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
-  const [reason, setReason] = useState("");
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [showCollect, setShowCollect] = useState(false);
+  const [showVoucher, setShowVoucher] = useState(false);
   const clubTimeZone = useClubTimeZone(clubId, isClub(role));
+  // Mover, cancelar y cobrar la reserva son del área «bookings»; pagar con
+  // bono es un cobro de caja: el área «cash» (el back lo exige igual)
+  const { can } = useClubAccess();
+  const canWrite = can("bookings", "write");
+  const canVoucher = can("cash", "write");
 
   const query = useQuery({
     queryKey: bookingsQK.bookingDetail(id),
     queryFn: () => bookingsService.bookings.detail(id),
     enabled: !!id && !!clubId && isClub(role),
-  });
-
-  const cancelMut = useMutation({
-    mutationFn: () => bookingsService.bookings.cancel(id, reason || undefined),
-    onSuccess: () => {
-      toast.success("Reserva cancelada — jugadores notificados");
-      setShowCancel(false);
-      setReason("");
-      qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
-      qc.invalidateQueries({ queryKey: ["bookings", "list"] });
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (err as Error)?.message ??
-        "Error al cancelar";
-      toast.error(msg);
-    },
   });
 
   const markPaidMut = useMutation({
@@ -138,6 +149,28 @@ export default function BookingDetailPage({
     },
   });
 
+  // Qué cambia al pagar con bono o quitárselo: la reserva, sus listas, la caja y los bonos
+  const refreshAfterVoucher = () => {
+    qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
+    qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+    qc.invalidateQueries({ queryKey: ["club-cash"] });
+    if (clubId) qc.invalidateQueries({ queryKey: clubVouchersQK.all(clubId) });
+  };
+  const removeVoucherMut = useMutation({
+    mutationFn: () => clubVouchersService.booking.remove(clubId!, id),
+    onSuccess: () => {
+      toast.success("Bono quitado: la sesión vuelve al bono y la reserva queda sin pagar");
+      refreshAfterVoucher();
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ??
+        "Error al quitar el bono";
+      toast.error(msg);
+    },
+  });
+
   if (role === null || query.isLoading) {
     return (
       <div className="flex h-full items-center justify-center p-12">
@@ -147,7 +180,7 @@ export default function BookingDetailPage({
   }
   if (!isClub(role) || !clubId) {
     return (
-      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+      <ReservasPage title="Reserva" back={back}>
         <p className="mt-6 text-sm text-muted-foreground">
           Requiere usuario CLUB con club asignado.
         </p>
@@ -156,7 +189,7 @@ export default function BookingDetailPage({
   }
   if (clubTimeZone.isError) {
     return (
-      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+      <ReservasPage title="Reserva" back={back}>
         <ErrorState
           message="No se pudieron cargar los datos del club."
           onRetry={() => void clubTimeZone.refetch()}
@@ -175,7 +208,7 @@ export default function BookingDetailPage({
   }
   if (query.isError || !query.data) {
     return (
-      <ReservasPage title="Reserva" back={BACK_TO_LIST}>
+      <ReservasPage title="Reserva" back={back}>
         <p className="mt-6 text-sm text-muted-foreground">
           Reserva no encontrada o sin permisos.
         </p>
@@ -191,20 +224,22 @@ export default function BookingDetailPage({
   const timeStr = `${zonedTime(b.startsAt, tz)} – ${zonedTime(b.endsAt, tz)}`;
   const at = (iso: string) => formatInTimeZone(iso, tz, DATE_TIME);
   const isOpen = b.matchMode === "OPEN";
-  const canCancel = !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
-  // Los que avisa el back: siguen en la reserva y tienen cuenta, menos quien
-  // cancela. Sin saber aún quién es, no hay número (contaría al propio club)
-  const noticeCount = me ? cancellationNoticeCount(b, me.id) : null;
-  const payment = paymentAction(b.paymentMethod);
+  const canCancel = canWrite && !["CANCELLED", "COMPLETED", "WITHOUT_RESULT"].includes(b.status);
+  // Solo una que aún no ha empezado: después ya no tiene sentido moverla
+  const canReschedule =
+    canWrite && ["PENDING_INVITES", "CONFIRMED"].includes(b.status) && new Date(b.startsAt) > new Date();
+  const payment = b.status === "CANCELLED" ? null : paymentAction(b.paymentMethod);
+  // Qué botones de cobro le tocan a quien mira: así no queda una fila vacía
+  const showCollectBtn = canWrite && payment === "markPaid";
+  const showVoucherBtn = canVoucher && payment === "markPaid" && !!b.clubCustomerId;
+  const showRemoveVoucherBtn = canVoucher && payment === "removeVoucher";
+  const showUnpaidBtn = canWrite && payment === "markUnpaid";
 
   return (
-    <ReservasPage title="Reserva" back={BACK_TO_LIST} className="max-w-4xl">
+    <ReservasPage title={`Reserva ${b.shortCode}`} back={back} className="max-w-4xl">
       <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Reserva <span className="font-mono text-primary">{b.shortCode}</span>
-          </h1>
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[b.status]}`}>
               {STATUS_LABELS[b.status]}
             </span>
@@ -223,10 +258,19 @@ export default function BookingDetailPage({
             )}
           </div>
         </div>
-        {canCancel && (
-          <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
-            <X className="h-3.5 w-3.5" /> Cancelar reserva
-          </Button>
+        {(canReschedule || canCancel) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canReschedule && (
+              <Button variant="outline" size="sm" onClick={() => setShowReschedule(true)}>
+                <CalendarClock className="h-3.5 w-3.5" /> Cambiar hora o pista
+              </Button>
+            )}
+            {canCancel && (
+              <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
+                <X className="h-3.5 w-3.5" /> Cancelar reserva
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -235,7 +279,11 @@ export default function BookingDetailPage({
         <Row icon={MapPin} label="Pista">
           {b.court?.name ?? "—"}
           {b.court?.isIndoor && <span className="ml-1 text-xs text-muted-foreground">(cubierta)</span>}
-          {b.court?.type && <span className="ml-1 text-xs text-muted-foreground">· {b.court.type}</span>}
+          {b.court?.type && (
+            <span className="ml-1 text-xs text-muted-foreground">
+              · {b.court.type === "SINGLES" ? "Individual" : "Dobles"}
+            </span>
+          )}
         </Row>
         <Row icon={Calendar} label="Fecha">
           {dateStr}
@@ -254,18 +302,25 @@ export default function BookingDetailPage({
             </span>
           )}
         </Row>
-        {b.status !== "CANCELLED" && payment && (
+        {(showCollectBtn || showVoucherBtn || showRemoveVoucherBtn || showUnpaidBtn) && (
           <div className="ml-7 flex flex-wrap items-center gap-2">
-            {payment === "markPaid" ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("CASH_AT_VENUE")} disabled={markPaidMut.isPending}>
-                  {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar pagado (efectivo)
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PAID_MANUAL")} disabled={markPaidMut.isPending}>
-                  Manual / Bizum
-                </Button>
-              </>
-            ) : (
+            {showCollectBtn && (
+              <Button variant="outline" size="sm" onClick={() => setShowCollect(true)}>
+                <CreditCard className="h-3.5 w-3.5" /> Cobrar
+              </Button>
+            )}
+            {/* Un bono solo paga reservas de su dueño: sin cliente, no hay bono que elegir */}
+            {showVoucherBtn && (
+              <Button variant="outline" size="sm" onClick={() => setShowVoucher(true)}>
+                <Ticket className="h-3.5 w-3.5" /> Pagar con bono
+              </Button>
+            )}
+            {showRemoveVoucherBtn && (
+              <Button variant="outline" size="sm" onClick={() => removeVoucherMut.mutate()} disabled={removeVoucherMut.isPending}>
+                {removeVoucherMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Quitar el bono
+              </Button>
+            )}
+            {showUnpaidBtn && (
               <Button variant="outline" size="sm" onClick={() => markPaidMut.mutate("PENDING")} disabled={markPaidMut.isPending}>
                 {markPaidMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Marcar como no pagada
               </Button>
@@ -336,7 +391,7 @@ export default function BookingDetailPage({
       )}
 
       {/* Metadata */}
-      <Section title="Metadata">
+      <Section title="Datos de la reserva">
         <Row icon={Clock} label="Creada">
           {at(b.createdAt)}
         </Row>
@@ -355,33 +410,35 @@ export default function BookingDetailPage({
         )}
       </Section>
 
-      {/* Cancel dialog */}
+      {showReschedule && canReschedule && (
+        <RescheduleBookingDialog booking={b} timeZone={tz} onClose={() => setShowReschedule(false)} />
+      )}
       {showCancel && canCancel && (
-        <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
-          <p className="text-sm font-medium text-destructive">¿Cancelar esta reserva?</p>
-          <p className="text-xs text-muted-foreground">
-            {noticeCount === null
-              ? "Se avisará por push y email a los jugadores con cuenta."
-              : noticeCount === 0
-                ? "No hay jugadores con cuenta a los que avisar."
-                : `Se avisará por push y email a ${noticeCount === 1 ? "1 jugador" : `${noticeCount} jugadores`}.`}
-          </p>
-          <input
-            type="text"
-            placeholder="Motivo (opcional, visible al jugador)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowCancel(false)} disabled={cancelMut.isPending}>
-              No, volver
-            </Button>
-            <Button variant="destructive" size="sm" onClick={() => cancelMut.mutate()} disabled={cancelMut.isPending}>
-              {cancelMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Sí, cancelar
-            </Button>
-          </div>
-        </div>
+        <CancelBookingDialog booking={b} timeZone={tz} onClose={() => setShowCancel(false)} />
+      )}
+      {showCollect && (
+        <CollectModal
+          title="Cobrar reserva"
+          subtitle={`${b.shortCode} · ${b.court?.name ?? "—"}`}
+          defaultCents={b.priceCents}
+          onSubmit={(method, amountCents) => bookingsService.bookings.markPaid(id, { method, amountCents })}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
+            qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+            qc.invalidateQueries({ queryKey: ["club-cash"] });
+          }}
+          onClose={() => setShowCollect(false)}
+        />
+      )}
+      {showVoucher && (
+        <PayWithVoucherModal
+          clubId={clubId}
+          bookingId={id}
+          subtitle={`${b.shortCode} · ${b.court?.name ?? "—"} · ${dateStr}, ${timeStr}`}
+          timeZone={tz}
+          onDone={refreshAfterVoucher}
+          onClose={() => setShowVoucher(false)}
+        />
       )}
     </ReservasPage>
   );
@@ -423,7 +480,7 @@ function ParticipantItem({ p }: { p: BookingParticipant }) {
           </span>
         )}
         {!p.userId && (
-          <span className="text-xs text-muted-foreground">(invitado externo)</span>
+          <span className="text-xs text-muted-foreground">(sin cuenta)</span>
         )}
         {p.user?.email && (
           <span className="text-xs text-muted-foreground truncate">· {p.user.email}</span>

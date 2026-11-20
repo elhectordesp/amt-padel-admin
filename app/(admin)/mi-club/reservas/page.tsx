@@ -28,12 +28,15 @@ import { Header } from "@/components/admin/header";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useRole, isClub } from "@/lib/use-role";
 import { formatInTimeZone, tournamentTimeZone } from "@/lib/utils/time-zone";
 
 export default function MiClubReservasPage() {
   const router = useRouter();
   const { role, clubId } = useRole();
+  // Pedir la activación o gestionar testers es de quien escribe la configuración
+  const canWrite = useClubAccess().can("settings", "write");
 
   // Datos básicos del club para mostrar nombre en el header
   const myClubQuery = useQuery({
@@ -110,6 +113,7 @@ export default function MiClubReservasPage() {
             loading={activationQuery.isLoading || myClubQuery.isLoading}
             state={activation}
             timeZone={myClubQuery.data ? tournamentTimeZone(myClubQuery.data) : null}
+            canWrite={canWrite}
             onAction={() => router.push("/mi-club/reservas/activacion")}
           />
         )}
@@ -127,25 +131,25 @@ export default function MiClubReservasPage() {
           href="/mi-club/reservas/pistas"
           icon={<Settings className="h-5 w-5" />}
           title="Pistas + duraciones"
-          description="Tipo (singles/dobles), indoor/outdoor, duraciones permitidas"
+          description="Dobles o individual, cubierta o descubierta, y cuánto pueden durar las reservas"
         />
         <NavCard
           href="/mi-club/reservas/precios"
           icon={<DollarSign className="h-5 w-5" />}
           title="Precios"
-          description="Matriz por pista × día × franja × duración"
+          description="Cuánto cuesta cada pista según el día, la hora y la duración"
         />
         <NavCard
           href="/mi-club/reservas/extras"
           icon={<Sparkles className="h-5 w-5" />}
           title="Extras"
-          description="Luz, palas, climatización — opcionales o obligatorios"
+          description="Luz, palas, climatización: opcionales u obligatorios"
         />
         <NavCard
           href="/mi-club/reservas/configuracion"
           icon={<Settings className="h-5 w-5" />}
           title="Configuración"
-          description="Política de cancelación, slots, open matches, social"
+          description="Cancelación, antelación, partidos abiertos y avisos"
         />
         <NavCard
           href="/mi-club/reservas/normas"
@@ -156,14 +160,14 @@ export default function MiClubReservasPage() {
         <NavCard
           href="/mi-club/reservas/activacion"
           icon={<Users className="h-5 w-5" />}
-          title="Activación + Testers"
-          description="Estado del módulo + usuarios que pueden probar antes de la apertura pública"
+          title="Activación y pruebas"
+          description="Estado de las reservas y jugadores de prueba que pueden reservar antes de abrirlas a todos"
         />
         <NavCard
           href="/mi-club/reservas/bookings"
           icon={<CalendarDays className="h-5 w-5" />}
           title="Reservas de hoy"
-          description="Listado en tiempo real + gestión de cancelaciones"
+          description="Reservas del día al instante y cancelaciones"
         />
         <NavCard
           href="/mi-club/reservas/calendario"
@@ -182,20 +186,49 @@ function ActivationBanner({
   loading,
   state,
   timeZone,
+  canWrite,
   onAction,
 }: {
   loading: boolean;
   state:
-    | { status: "INACTIVE" | "TESTER_MODE" | "PUBLIC"; activeTesterCount: number; bookingPublicAt: string | null }
+    | {
+        status: "INACTIVE" | "TESTER_MODE" | "PUBLIC";
+        activeTesterCount: number;
+        bookingPublicAt: string | null;
+        bookingActivationRequestedAt: string | null;
+      }
     | undefined;
   /** La del club; null si no llegó (la fecha no se pinta con otra). */
   timeZone: string | null;
+  /** Sin escritura no hay botón para pedir la activación ni para gestionar testers. */
+  canWrite: boolean;
   onAction: () => void;
 }) {
   if (loading) {
     return (
       <div className="rounded-lg border border-border bg-card p-6">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (state?.status === "INACTIVE" && state.bookingActivationRequestedAt) {
+    return (
+      <div className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Clock className="h-5 w-5 shrink-0 text-blue-500" />
+            <div>
+              <p className="text-sm font-medium">Solicitud enviada, pendiente de AMT</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ya has pedido la activación del módulo de Reservas. Cuando AMT
+                la apruebe, podrás probarlo con tus testers.
+              </p>
+            </div>
+          </div>
+          <Button onClick={onAction} size="sm" variant="outline">
+            Ver estado <ArrowRight className="ml-1 h-3 w-3" />
+          </Button>
+        </div>
       </div>
     );
   }
@@ -213,9 +246,11 @@ function ActivationBanner({
               </p>
             </div>
           </div>
-          <Button onClick={onAction} size="sm">
-            Solicitar activación <ArrowRight className="ml-1 h-3 w-3" />
-          </Button>
+          {canWrite && (
+            <Button onClick={onAction} size="sm">
+              Solicitar activación <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -234,9 +269,11 @@ function ActivationBanner({
               </p>
             </div>
           </div>
-          <Button onClick={onAction} size="sm">
-            Gestionar testers <ArrowRight className="ml-1 h-3 w-3" />
-          </Button>
+          {canWrite && (
+            <Button onClick={onAction} size="sm">
+              Gestionar testers <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     );

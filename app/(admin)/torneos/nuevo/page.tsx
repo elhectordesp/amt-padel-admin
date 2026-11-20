@@ -3,12 +3,19 @@
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { Header } from "@/components/admin/header";
 import { Field, Input, CustomSelect, TierPicker } from "@/components/admin/form";
+import { LeagueDaysEditor } from "@/components/admin/league-days-editor";
 import { TournamentImageUploader } from "@/components/admin/tournament-image-uploader";
+import { PlainTextField, TournamentVisibilityFields, type TournamentVisibility } from "@/components/admin/tournament-options-fields";
 import { ApiError } from "@/lib/api";
-import { adminService } from "@/lib/services/admin";
+import { adminService, clubTournamentConfigQK } from "@/lib/services/admin";
 import { TIER_LABEL } from "@/lib/constants";
 import { CATEGORY_GENDERS, CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
+import { SCORING_FORMAT_OPTIONS, isScoringFormat, scoringFormatLabel, typicalDurationText } from "@/lib/scoring-format";
 import { useRole, isClub } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
+import { CLUB_ROLE_FORBIDDEN_MESSAGE } from "@/lib/club-permissions";
+import { tournamentsBase, useRouteKind } from "@/lib/league";
+import { leagueDaysIssue, leagueDaysPayload, weekdayLabel, type LeagueDayForm } from "@/lib/utils/league-days";
 import { registrationDeadlineIssue } from "@/lib/utils/registration-deadline";
 import { nextFreeBlock, overlappingBlocks } from "@/lib/utils/schedule-windows";
 import {
@@ -20,13 +27,29 @@ import {
   tournamentTimeZone,
   zonedDateTimeToIso,
 } from "@/lib/utils/time-zone";
-import type { CategoryGender, CategoryLevel } from "@/types";
+import {
+  DEFAULT_TOURNAMENT_DEFAULTS,
+  HIDE_FROM_APP_MAX_DAYS,
+  TOURNAMENT_DESCRIPTION_MAX,
+  TOURNAMENT_RULES_MAX,
+  WIZARD_FORMAT_OPTIONS,
+  hideFromAppLabel,
+  matchDurationOptions,
+  participantsVisibilityLabel,
+  plainText,
+  textTooLong,
+  tooLongMessage,
+  tournamentDefaultsFromConfig,
+  untouchedChanges,
+} from "@/lib/utils/tournament-options";
+import type { CategoryGender, CategoryLevel, ScoringFormat } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Loader2, Lock, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -38,12 +61,28 @@ const infoSchema = z.object({
   clubId:    z.string({ error: "Club requerido" }).min(1, "Club requerido"),
   startDate: z.string().min(1, "Fecha de inicio requerida"),
   endDate:   z.string().min(1, "Fecha de fin requerida"),
+  // Fin de la fase de grupos: solo se pide en una liga (infoSchemaFor)
+  groupsEndDate: z.string().optional(),
   prize:       z.string().optional(),
   imageUrl:    z.string().nullable().optional(),
+  // Texto plano; se manda sin los espacios de los bordes
+  description: z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_DESCRIPTION_MAX), tooLongMessage(TOURNAMENT_DESCRIPTION_MAX)),
+  rules:       z.string().optional()
+    .refine((v) => !textTooLong(v, TOURNAMENT_RULES_MAX), tooLongMessage(TOURNAMENT_RULES_MAX)),
 }).refine(
   (d) => !d.startDate || !d.endDate || d.endDate >= d.startDate,
   { message: "La fecha de fin debe ser igual o posterior al inicio", path: ["endDate"] },
 );
+
+// En una liga, el fin de la fase de grupos es obligatorio, posterior al inicio y
+// no posterior al fin (la regla del back)
+const infoSchemaFor = (league: boolean) => infoSchema
+  .refine((d) => !league || !!d.groupsEndDate, { message: "Indica el fin de la fase de grupos", path: ["groupsEndDate"] })
+  .refine(
+    (d) => !league || !d.groupsEndDate || !d.startDate || !d.endDate || (d.groupsEndDate > d.startDate && d.groupsEndDate <= d.endDate),
+    { message: "Debe ser posterior al inicio y no posterior al fin de la liga", path: ["groupsEndDate"] },
+  );
 
 const catSchema = z.object({
   categories: z.array(z.object({
@@ -59,9 +98,13 @@ const catSchema = z.object({
   })).min(1, "Añade al menos una categoría"),
 });
 
+const HIDE_DAYS_MESSAGE = `Entre 0 y ${HIDE_FROM_APP_MAX_DAYS} días`;
+
 const configSchema = z.object({
   tier:                z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]),
   format:              z.string().min(1),
+  // Cómo se juega cada partido: se manda en todas las categorías
+  scoringFormat:       z.custom<ScoringFormat>(isScoringFormat, "Elige el formato de partido"),
   scoringSystem:       z.string().min(1),
   matchDuration:       z.number().int().min(10).max(180),
   registrationDeadline:z.string().min(1, "La fecha de cierre de inscripciones es obligatoria"),
@@ -70,6 +113,10 @@ const configSchema = z.object({
   hasShirts:           z.boolean(),
   useSeeding:          z.boolean(),
   requirePaymentToConfirm: z.boolean(),
+  participantsVisibility: z.enum(["PUBLIC", "REGISTERED_ONLY", "HIDDEN_UNTIL_START"]),
+  showClubInsteadOfCourt: z.boolean(),
+  // null: no se quita nunca del listado de la app
+  hideFromAppAfterDays: z.number({ error: HIDE_DAYS_MESSAGE }).int(HIDE_DAYS_MESSAGE).min(0, HIDE_DAYS_MESSAGE).max(HIDE_FROM_APP_MAX_DAYS, HIDE_DAYS_MESSAGE).nullable(),
 });
 
 const DAY_TYPE_OPTIONS = [
@@ -130,6 +177,9 @@ const LEVELS: { value: CategoryLevel; label: string }[] = [
   { value: "iniciacion", label: "Iniciación" },
 ];
 
+/** El formato de toda liga: fase de grupos (la liga) y fase final. */
+const LEAGUE_FORMAT = "grupos+eliminatoria";
+
 const FORMAT_LABEL: Record<string, string> = {
   "eliminatoria":        "Eliminatoria + Consolación",
   "grupos+eliminatoria": "Grupos + Eliminatoria",
@@ -156,8 +206,13 @@ const STEPS = [
 ];
 
 // ── Main ──────────────────────────────────────────────────────────────────
+// También es el asistente de Nueva liga (`/ligas/nuevo`, que lo reexporta): la
+// ruta decide el tipo
 export default function NuevoTorneoPage() {
   const router = useRouter();
+  const kind   = useRouteKind();
+  const league = kind === "LEAGUE";
+  const base   = tournamentsBase(kind);
   const qc     = useQueryClient();
   const [step, setStep] = useState(1);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -173,6 +228,11 @@ export default function NuevoTorneoPage() {
   const [catData,      setCatData]      = useState<CatData      | null>(null);
   const [configData,   setConfigData]   = useState<ConfigData   | null>(null);
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null);
+  // Una liga no tiene un día por fecha: sus días de juego son los de la semana
+  // (paso 4). Un torneo los lleva en scheduleData
+  const [leagueDays, setLeagueDays] = useState<LeagueDayForm[]>([]);
+  // Lo que impide seguir en «Días de juego», tras pulsar «Siguiente»
+  const [leagueDaysError, setLeagueDaysError] = useState<string | null>(null);
 
   // ── Clubs list for selector ───────────────────────────────────────────
   // ADMIN ve el listado completo de clubes y elige; CLUB solo puede crear
@@ -180,11 +240,14 @@ export default function NuevoTorneoPage() {
   // 403earía igualmente).
   const { role, clubId: myClubId } = useRole();
   const isClubUser = isClub(role);
+  const canCreate = useClubAccess().can("tournaments", "write");
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["admin-clubs"],
     queryFn:  () => adminService.clubs.list(),
-    enabled:  !isClubUser,
+    // Hasta conocer el rol (sale del token tras el primer pintado) no se pide:
+    // un club recibía un 403 del listado de AMT
+    enabled:  role !== null && !isClubUser,
   });
 
   const { data: myClub } = useQuery({
@@ -195,7 +258,7 @@ export default function NuevoTorneoPage() {
 
   // ── Step 1: Info ───────────────────────────────────────────────────────
   const infoForm = useForm<InfoData>({
-    resolver:      zodResolver(infoSchema),
+    resolver:      zodResolver(infoSchemaFor(league)),
     defaultValues: infoData ?? undefined,
   });
 
@@ -206,6 +269,23 @@ export default function NuevoTorneoPage() {
       infoForm.setValue("clubId", myClubId, { shouldValidate: true });
     }
   }, [isClubUser, myClubId, infoForm]);
+
+  // Las opciones de torneo del club (el propio, o el elegido en el paso 1):
+  // los valores con los que empieza cada paso
+  const pickedClubId = useWatch({ control: infoForm.control, name: "clubId" });
+  const knownClubId  = isClubUser ? myClubId : pickedClubId;
+  const clubConfigQuery = useQuery({
+    queryKey: clubTournamentConfigQK(knownClubId ?? ""),
+    queryFn:  () => adminService.clubTournamentConfig.get(knownClubId!),
+    enabled:  !!knownClubId,
+  });
+  const clubDefaults = useMemo(
+    () => (clubConfigQuery.data ? tournamentDefaultsFromConfig(clubConfigQuery.data) : null),
+    [clubConfigQuery.data],
+  );
+  // Los valores puestos en cada campo (los de siempre hasta que llegan los del
+  // club): lo que sigue igual no lo ha tocado el admin y se puede cambiar
+  const applied = useRef({ ...DEFAULT_TOURNAMENT_DEFAULTS, timezone: tournamentTimeZone(null) });
 
   // Warn on accidental navigation away (must be after infoForm declaration)
   useEffect(() => {
@@ -219,7 +299,7 @@ export default function NuevoTorneoPage() {
   const handleCancel = () => {
     const dirty = step > 1 || infoForm.formState.isDirty;
     if (dirty) setShowLeaveModal(true);
-    else router.push("/torneos");
+    else router.push(base);
   };
 
   // ── Step 2: Categories ────────────────────────────────────────────────
@@ -229,7 +309,7 @@ export default function NuevoTorneoPage() {
     // válido se va al corregirlo (con trigger() solo se iba al volver a
     // pulsar "Siguiente")
     mode:          "onTouched",
-    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: 32, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
+    defaultValues: catData ?? { categories: [{ gender: "M", level: "4a", totalSpots: DEFAULT_TOURNAMENT_DEFAULTS.categorySpots, price: DEFAULT_TOURNAMENT_DEFAULTS.categoryPrice, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false }] },
   });
   const { fields, append, remove } = useFieldArray({ control: catForm.control, name: "categories" });
 
@@ -244,18 +324,33 @@ export default function NuevoTorneoPage() {
   // ── Step 3: Config ────────────────────────────────────────────────────
   const configForm = useForm<ConfigData>({
     resolver:      zodResolver(configSchema),
-    defaultValues: configData ?? { tier: "BRONZE", format: "eliminatoria", scoringSystem: "AMT+ELO+SPA", matchDuration: 60, timezone: tournamentTimeZone(null), hasShirts: false, useSeeding: false, requirePaymentToConfirm: false },
+    defaultValues: configData ?? {
+      tier: "BRONZE",
+      scoringSystem: "AMT+ELO+SPA",
+      timezone: tournamentTimeZone(null),
+      format:                  DEFAULT_TOURNAMENT_DEFAULTS.format,
+      scoringFormat:           DEFAULT_TOURNAMENT_DEFAULTS.scoringFormat,
+      matchDuration:           DEFAULT_TOURNAMENT_DEFAULTS.matchDuration,
+      hasShirts:               DEFAULT_TOURNAMENT_DEFAULTS.hasShirts,
+      useSeeding:              DEFAULT_TOURNAMENT_DEFAULTS.useSeeding,
+      requirePaymentToConfirm: DEFAULT_TOURNAMENT_DEFAULTS.requirePaymentToConfirm,
+      participantsVisibility:  DEFAULT_TOURNAMENT_DEFAULTS.participantsVisibility,
+      showClubInsteadOfCourt:  DEFAULT_TOURNAMENT_DEFAULTS.showClubInsteadOfCourt,
+      hideFromAppAfterDays:    DEFAULT_TOURNAMENT_DEFAULTS.hideFromAppAfterDays,
+    },
   });
 
-  // La zona del torneo empieza siendo la de su club (la elegida en el paso 1),
-  // mientras no se cambie a mano
+  // La zona del torneo empieza siendo la de su club (la elegida en el paso 1)
   const selectedClub = isClubUser ? myClub : clubs.find((c) => c.id === infoData?.clubId);
   const clubTimeZone = tournamentTimeZone(selectedClub);
-  useEffect(() => {
-    if (step === 3 && !configForm.getFieldState("timezone").isDirty) {
-      configForm.setValue("timezone", clubTimeZone);
-    }
-  }, [step, clubTimeZone, configForm]);
+
+  /** Los campos de «Lo que ven los jugadores»; tras un «Siguiente» con errores, revalida. */
+  const setVisibility = (patch: Partial<TournamentVisibility>) => {
+    const options = { shouldDirty: true, shouldValidate: !!configForm.formState.errors.hideFromAppAfterDays };
+    if (patch.participantsVisibility !== undefined) configForm.setValue("participantsVisibility", patch.participantsVisibility, options);
+    if (patch.showClubInsteadOfCourt !== undefined) configForm.setValue("showClubInsteadOfCourt", patch.showClubInsteadOfCourt, options);
+    if ("hideFromAppAfterDays" in patch) configForm.setValue("hideFromAppAfterDays", patch.hideFromAppAfterDays ?? null, options);
+  };
 
   // ── Step 4: Schedule ──────────────────────────────────────────────────
   const scheduleForm = useForm<ScheduleData>({
@@ -271,9 +366,10 @@ export default function NuevoTorneoPage() {
       shouldValidate: !!scheduleForm.formState.errors.days,
     });
 
-  // Auto-generate days when reaching step 4
+  // Auto-generate days when reaching step 4 (solo un torneo: una liga no
+  // tiene un día por fecha, elige los días de la semana)
   useEffect(() => {
-    if (step === 4 && infoData && (scheduleForm.getValues().days.length === 0)) {
+    if (!league && step === 4 && infoData && (scheduleForm.getValues().days.length === 0)) {
       const days: ScheduleData["days"] = [];
       // Día a día sobre «YYYY-MM-DD», sin hora: con setDate en hora local, el
       // cambio de hora de marzo repetía una jornada
@@ -287,22 +383,88 @@ export default function NuevoTorneoPage() {
           type:                "AMBOS" as const,
           isFinal:             false,
           maxUnavailableSlots: 0,
-          blocks:              [{ start: "16:00", end: "21:00" }],
+          // El tramo puesto; si llegan los del club, el efecto de abajo lo cambia
+          blocks:              [{ start: applied.current.dayStartTime, end: applied.current.dayEndTime }],
         });
       }
       scheduleForm.reset({ days });
     }
-  }, [step, infoData, scheduleForm]);
+  }, [league, step, infoData, scheduleForm]);
+
+  // ── Valores de partida: los del club y la zona de su club ──────────────
+  // Al entrar en cada paso (y si llegan estando en él), en los campos de ese
+  // paso que siguen con el valor puesto. Se compara con el valor y no con el
+  // «tocado» del formulario: volver atrás lo reinicia (reset) y se perdía lo
+  // cambiado a mano (la zona elegida volvía a la del club)
+  useEffect(() => {
+    const next = { ...applied.current, ...(clubDefaults ?? {}), timezone: clubTimeZone };
+    const was  = applied.current;
+    const keep = (keys: readonly (keyof typeof next)[]) => {
+      applied.current = { ...applied.current, ...Object.fromEntries(keys.map((k) => [k, next[k]])) };
+    };
+
+    if (step === 1) {
+      const keys = ["description", "rules"] as const;
+      const changes = untouchedChanges(infoForm.getValues(), was, next, keys);
+      for (const key of keys) {
+        const value = changes[key];
+        if (value !== undefined) infoForm.setValue(key, value);
+      }
+      keep(keys);
+    } else if (step === 2) {
+      // Cada categoría que sigue con el precio y las plazas puestas
+      const keys = ["categorySpots", "categoryPrice"] as const;
+      catForm.getValues().categories.forEach((c, i) => {
+        const changes = untouchedChanges({ categorySpots: c.totalSpots, categoryPrice: c.price }, was, next, keys);
+        if (changes.categorySpots !== undefined) catForm.setValue(`categories.${i}.totalSpots`, changes.categorySpots);
+        if (changes.categoryPrice !== undefined) catForm.setValue(`categories.${i}.price`, changes.categoryPrice);
+      });
+      keep(keys);
+    } else if (step === 3) {
+      const keys = [
+        "format", "scoringFormat", "matchDuration", "hasShirts", "useSeeding", "requirePaymentToConfirm",
+        "participantsVisibility", "showClubInsteadOfCourt", "hideFromAppAfterDays", "timezone",
+      ] as const;
+      const changes = untouchedChanges(configForm.getValues(), was, next, keys);
+      for (const key of keys) {
+        // Con «in»: hideFromAppAfterDays puede pasar a null (nunca)
+        if (key in changes) configForm.setValue(key, changes[key] as ConfigData[typeof key]);
+      }
+      keep(keys);
+    } else if (step === 4) {
+      const { maxUnavailableTotalHours, days } = scheduleForm.getValues();
+      const changes = untouchedChanges({ maxUnavailableTotalHours }, was, next, ["maxUnavailableTotalHours"]);
+      if (changes.maxUnavailableTotalHours !== undefined) {
+        scheduleForm.setValue("maxUnavailableTotalHours", changes.maxUnavailableTotalHours);
+      }
+      // Las jornadas que siguen con un solo tramo, el puesto
+      if (was.dayStartTime !== next.dayStartTime || was.dayEndTime !== next.dayEndTime) {
+        days.forEach((d, i) => {
+          const [only] = d.blocks;
+          if (d.blocks.length === 1 && only.start === was.dayStartTime && only.end === was.dayEndTime) {
+            scheduleForm.setValue(`days.${i}.blocks`, [{ start: next.dayStartTime, end: next.dayEndTime }]);
+          }
+        });
+      }
+      keep(["maxUnavailableTotalHours", "dayStartTime", "dayEndTime"]);
+    }
+  }, [step, clubDefaults, clubTimeZone, infoForm, catForm, configForm, scheduleForm]);
 
   // ── Mutation ──────────────────────────────────────────────────────────
   const create = useMutation({
     mutationFn: () => adminService.tournaments.create({
       ...infoData!,
+      // Una liga lleva su tipo y el fin de los grupos; un torneo, ninguno de los dos
+      kind:          league ? "LEAGUE" : undefined,
+      groupsEndDate: league ? infoData!.groupsEndDate : undefined,
       // Sanitiza imageUrl: backend valida con @IsUrl() y "" lo rechaza.
       // Si no hay banner, omitimos el campo del payload.
       imageUrl: infoData!.imageUrl?.trim() ? infoData!.imageUrl : undefined,
+      // Sin texto, no se mandan (el torneo nace sin ellos)
+      description: plainText(infoData!.description) || undefined,
+      rules:       plainText(infoData!.rules) || undefined,
       tier:        configData!.tier,
-      format:      configData!.format,
+      format:      league ? LEAGUE_FORMAT : configData!.format,
       scoringSystem: configData!.scoringSystem,
       matchDuration: configData!.matchDuration,
       // Como instante: lo escrito es hora de la zona del torneo (sin zona, un
@@ -312,29 +474,37 @@ export default function NuevoTorneoPage() {
       hasShirts:   configData!.hasShirts,
       useSeeding:  configData!.useSeeding,
       requirePaymentToConfirm: configData!.requirePaymentToConfirm,
+      participantsVisibility:  configData!.participantsVisibility,
+      showClubInsteadOfCourt:  configData!.showClubInsteadOfCourt,
+      hideFromAppAfterDays:    configData!.hideFromAppAfterDays,
       categories: catData!.categories.map((c) => ({
         gender:          c.gender,
         level:           c.level  as CategoryLevel,
         totalSpots:      c.totalSpots,
         price:           c.price,
+        // El del paso 3, para todas las categorías (cada una se puede cambiar después en la ficha)
+        scoringFormat:   configData!.scoringFormat,
         prizeChampion:   c.prizeChampion   || undefined,
         prizeRunnerUp:   c.prizeRunnerUp   || undefined,
         prizeConsolation:c.hasConsolation ? (c.prizeConsolation || undefined) : undefined,
         hasConsolation:  c.hasConsolation  ?? false,
       })),
       maxUnavailableTotalHours: scheduleData?.maxUnavailableTotalHours ?? 0,
-      schedule: scheduleData?.days.map(d => ({
-        date:                d.date,
-        type:                d.type,
-        isFinal:             d.isFinal,
-        maxUnavailableSlots: d.maxUnavailableSlots,
-        blocks:              d.blocks,
-      })),
+      // Una liga, un día por día de la semana (sin fecha); un torneo, uno por fecha
+      schedule: league
+        ? leagueDaysPayload(leagueDays)
+        : scheduleData?.days.map(d => ({
+            date:                d.date,
+            type:                d.type,
+            isFinal:             d.isFinal,
+            maxUnavailableSlots: d.maxUnavailableSlots,
+            blocks:              d.blocks,
+          })),
     }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo creado correctamente");
-      router.push(`/torneos/${t.id}`);
+      toast.success(league ? "Liga creada correctamente" : "Torneo creado correctamente");
+      router.push(`${base}/${t.id}`);
     },
     onError: (err: Error) => {
       // El botón se vuelve a habilitar siempre (antes había que recargar y
@@ -349,7 +519,7 @@ export default function NuevoTorneoPage() {
       } else {
         setMaybeCreated(true);
         qc.invalidateQueries({ queryKey: ["tournaments"] });
-        toast.error(`${status ? `${err.message}. ` : ""}No se sabe si el torneo se ha creado: revisa la lista de torneos antes de volver a intentarlo`);
+        toast.error(`${status ? `${err.message}. ` : ""}No se sabe si ${league ? "la liga se ha creado: revisa la lista de ligas" : "el torneo se ha creado: revisa la lista de torneos"} antes de volver a intentarlo`);
       }
     },
   });
@@ -375,7 +545,20 @@ export default function NuevoTorneoPage() {
     create.mutate();
   };
 
+  // Tras un «Siguiente» con errores, el primero se lleva a la vista: el botón
+  // está al final de la página y el error de un campo de arriba quedaba fuera
+  const revealFirstError = () => {
+    requestAnimationFrame(() => {
+      document.querySelector("[data-field-error]")?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    });
+  };
+
   const goNext = async () => {
+    await advance();
+    revealFirstError();
+  };
+
+  const advance = async () => {
     if (step === 1) {
       const ok = await infoForm.trigger();
       if (!ok) return;
@@ -398,6 +581,15 @@ export default function NuevoTorneoPage() {
       setConfigData(cfg);
       setStep(4);
     } else if (step === 4) {
+      if (league) {
+        // Sin fechas que validar: los días de la semana y sus franjas
+        const issue = leagueDaysIssue(leagueDays);
+        setLeagueDaysError(issue);
+        if (issue) return;
+        setScheduleData(scheduleForm.getValues());
+        setStep(5);
+        return;
+      }
       const ok = await scheduleForm.trigger();
       if (!ok) return;
       setScheduleData(scheduleForm.getValues());
@@ -420,9 +612,28 @@ export default function NuevoTorneoPage() {
     setStep((s) => s - 1);
   };
 
+  // Crear es escribir «tournaments»: sin permiso no hay nada que rellenar (el
+  // back rechazaría el alta), así que el asistente no se abre
+  if (!canCreate) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <Header title={league ? "Nueva liga" : "Nuevo torneo"} />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-sm text-center space-y-3">
+            <Lock size={28} className="mx-auto text-muted-foreground" />
+            <p className="text-sm text-foreground">{CLUB_ROLE_FORBIDDEN_MESSAGE}</p>
+            <Link href={base} className="inline-block text-xs text-[#D4AF37] hover:underline">
+              Volver a {league ? "Ligas" : "Torneos"}
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Nuevo torneo" />
+      <Header title={league ? "Nueva liga" : "Nuevo torneo"} />
 
       <div className="flex-1 p-6 max-w-3xl mx-auto w-full space-y-6">
 
@@ -442,7 +653,7 @@ export default function NuevoTorneoPage() {
                     {done ? <Check size={14} /> : s.num}
                   </div>
                   <span className={`text-[10px] font-medium ${current ? "text-[#D4AF37]" : "text-muted-foreground"}`}>
-                    {s.label}
+                    {league && s.num === 4 ? "Días de juego" : s.label}
                   </span>
                 </div>
                 {i < STEPS.length - 1 && (
@@ -453,6 +664,20 @@ export default function NuevoTorneoPage() {
           })}
         </div>
 
+        {/* Sin las opciones del club se sigue con los de siempre, pero se dice */}
+        {clubConfigQuery.isError && step < 5 && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+            <span>No se pudieron cargar las opciones de torneo del club: los valores de partida son los de siempre.</span>
+            <button
+              type="button"
+              onClick={() => void clubConfigQuery.refetch()}
+              className="font-semibold text-[#D4AF37] hover:underline"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
         {/* Step content card */}
         <div className="bg-card border border-border rounded-lg p-6">
 
@@ -461,13 +686,13 @@ export default function NuevoTorneoPage() {
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Información básica</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">Datos generales del torneo</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Datos generales de{league ? " la liga" : "l torneo"}</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Nombre del torneo" error={infoForm.formState.errors.name?.message}>
+                <Field label={league ? "Nombre de la liga" : "Nombre del torneo"} error={infoForm.formState.errors.name?.message}>
                   <Input
                     {...infoForm.register("name")}
-                    placeholder="AMT GOLD MADRID"
+                    placeholder={league ? "LIGA DE INVIERNO" : "AMT GOLD MADRID"}
                   />
                 </Field>
                 {isClubUser ? (
@@ -514,12 +739,23 @@ export default function NuevoTorneoPage() {
                     ) : null;
                   })()}
                 </Field>
-                <Field label="Fecha de fin" error={infoForm.formState.errors.endDate?.message}>
+                <Field label={league ? "Fin de la liga (último partido del cuadro final)" : "Fecha de fin"} error={infoForm.formState.errors.endDate?.message}>
                   <Input
                     {...infoForm.register("endDate")}
                     type="date"
                   />
                 </Field>
+                {league && (
+                  <Field label="Fin de la fase de grupos" error={infoForm.formState.errors.groupsEndDate?.message}>
+                    <Input
+                      {...infoForm.register("groupsEndDate")}
+                      type="date"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Hasta aquí se juegan los grupos; después, el cuadro final.
+                    </p>
+                  </Field>
+                )}
               </div>
               <Field label="Imagen del banner (opcional)">
                 <TournamentImageUploader
@@ -527,6 +763,25 @@ export default function NuevoTorneoPage() {
                   onChange={(url) => infoForm.setValue("imageUrl", url, { shouldDirty: true })}
                 />
               </Field>
+              <PlainTextField
+                label={league ? "Sobre la liga" : "Sobre el torneo"}
+                value={infoForm.watch("description") ?? ""}
+                onChange={(v) => infoForm.setValue("description", v, { shouldDirty: true, shouldValidate: !!infoForm.formState.errors.description })}
+                max={TOURNAMENT_DESCRIPTION_MAX}
+                placeholder={league ? "Qué es la liga, a quién va dirigida, cómo se juega…" : "Qué es el torneo, a quién va dirigido, qué incluye…"}
+                help="Opcional. Texto plano: se enseña tal cual, con sus saltos de línea, en el visor público."
+                error={infoForm.formState.errors.description?.message}
+              />
+              <PlainTextField
+                label="Normas"
+                value={infoForm.watch("rules") ?? ""}
+                onChange={(v) => infoForm.setValue("rules", v, { shouldDirty: true, shouldValidate: !!infoForm.formState.errors.rules })}
+                max={TOURNAMENT_RULES_MAX}
+                rows={6}
+                placeholder="Puntualidad, bolas, material, qué pasa si no se presenta una pareja…"
+                help="Opcional. Texto plano, como la descripción."
+                error={infoForm.formState.errors.rules?.message}
+              />
             </div>
           )}
 
@@ -535,12 +790,13 @@ export default function NuevoTorneoPage() {
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-heading text-lg text-foreground">Categorías del torneo</h3>
+                  <h3 className="font-heading text-lg text-foreground">{league ? "Niveles de la liga (categorías)" : "Categorías del torneo"}</h3>
                   <p className="text-sm text-muted-foreground mt-0.5">Define las categorías y plazas disponibles</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => append({ gender: "M", level: "4a", totalSpots: 16, price: 25, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false })}
+                  // Con el precio y las plazas de partida (las del club, si han llegado)
+                  onClick={() => append({ gender: "M", level: "4a", totalSpots: applied.current.categorySpots, price: applied.current.categoryPrice, prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false })}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-medium hover:bg-[rgba(212,175,55,0.2)] transition-colors"
                 >
                   <Plus size={13} /> Añadir categoría
@@ -554,7 +810,7 @@ export default function NuevoTorneoPage() {
               <div className="space-y-3">
                 {/* Table header — desktop only */}
                 <div className="hidden sm:grid grid-cols-[1fr_1fr_100px_100px_36px] gap-3 px-1">
-                  {["Género", "Nivel", "Plazas", "Precio (€)", ""].map((h) => (
+                  {["Género", "Nivel", "Plazas (parejas)", "Precio por pareja (€)", ""].map((h) => (
                     <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
                   ))}
                 </div>
@@ -583,12 +839,12 @@ export default function NuevoTorneoPage() {
                           <CustomSelect compact options={LEVELS.map((l) => ({ value: l.value, label: l.label }))} value={levelVal} onChange={(v) => catForm.setValue(`categories.${index}.level`, v)} />
                         </div>
                         <div>
-                          <p className={MOBILE_LABEL}>Plazas</p>
-                          <Input type="number" aria-label="Plazas" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
+                          <p className={MOBILE_LABEL}>Plazas (parejas)</p>
+                          <Input type="number" aria-label="Plazas (parejas)" {...catForm.register(`categories.${index}.totalSpots`, { valueAsNumber: true })} min={4} max={128} />
                         </div>
                         <div>
-                          <p className={MOBILE_LABEL}>Precio (€)</p>
-                          <Input type="number" aria-label="Precio (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={1} />
+                          <p className={MOBILE_LABEL}>Precio por pareja (€)</p>
+                          <Input type="number" aria-label="Precio por pareja (€)" {...catForm.register(`categories.${index}.price`, { valueAsNumber: true })} min={0} step={1} />
                         </div>
                         <button type="button" aria-label="Quitar categoría" onClick={() => tryRemoveCategory(index)} disabled={fields.length === 1} className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-30"><Trash2 size={14} /></button>
                       </div>
@@ -655,27 +911,25 @@ export default function NuevoTorneoPage() {
               {/* Grupo 1: Formato del torneo */}
               <div className="space-y-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border pb-2">
-                  Formato del torneo
+                  {league ? "Formato de la liga" : "Formato del torneo"}
                 </p>
-                <Field label="Tier del torneo">
+                <Field label={league ? "Tier de la liga" : "Tier del torneo"}>
                   <TierPicker
                     value={configForm.watch("tier")}
                     onChange={(v) => configForm.setValue("tier", v as ConfigData["tier"], { shouldValidate: true })}
                   />
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Formato" error={configForm.formState.errors.format?.message}>
-                    <CustomSelect
-                      options={[
-                        { value: "eliminatoria",        label: "Eliminatoria + Consolación" },
-                        { value: "grupos+eliminatoria", label: "Grupos + Eliminatoria" },
-                        { value: "round-robin",         label: "Round Robin" },
-                        { value: "cuadro",              label: "Cuadro" },
-                      ]}
-                      value={configForm.watch("format")}
-                      onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
-                    />
-                  </Field>
+                  {/* Una liga siempre es grupos + fase final: no hay formato que elegir */}
+                  {!league && (
+                    <Field label="Formato" error={configForm.formState.errors.format?.message}>
+                      <CustomSelect
+                        options={WIZARD_FORMAT_OPTIONS}
+                        value={configForm.watch("format")}
+                        onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
+                      />
+                    </Field>
+                  )}
                   <Field label="Sistema de puntuación" error={configForm.formState.errors.scoringSystem?.message}>
                     <CustomSelect
                       options={[
@@ -688,6 +942,17 @@ export default function NuevoTorneoPage() {
                     />
                   </Field>
                 </div>
+                <Field label="Formato de partido" error={configForm.formState.errors.scoringFormat?.message}>
+                  <CustomSelect
+                    options={SCORING_FORMAT_OPTIONS}
+                    value={configForm.watch("scoringFormat")}
+                    onChange={(v) => configForm.setValue("scoringFormat", v as ScoringFormat, { shouldValidate: true })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {typicalDurationText(configForm.watch("scoringFormat"))}. La «Duración por partido» de más abajo no cambia sola: ajústala tú si hace falta.
+                    Vale para todas las categorías; luego se puede cambiar en cada una, o en cada fase, desde la ficha {league ? "de la liga" : "del torneo"}.
+                  </p>
+                </Field>
                 <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
                   <input
                     type="checkbox"
@@ -709,11 +974,7 @@ export default function NuevoTorneoPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label="Duración por partido" error={configForm.formState.errors.matchDuration?.message}>
                     <CustomSelect
-                      options={[
-                        { value: "60",  label: "60 minutos" },
-                        { value: "90",  label: "90 minutos" },
-                        { value: "120", label: "120 minutos" },
-                      ]}
+                      options={matchDurationOptions(configForm.watch("matchDuration"))}
                       value={String(configForm.watch("matchDuration"))}
                       onChange={(v) => configForm.setValue("matchDuration", Number(v), { shouldValidate: true })}
                     />
@@ -725,7 +986,7 @@ export default function NuevoTorneoPage() {
                       onChange={(v) => configForm.setValue("timezone", v, { shouldValidate: true, shouldDirty: true })}
                     />
                     <p className="text-xs text-muted-foreground">
-                      La de su club, salvo que la cambies. Las horas del torneo (jornadas, partidos y cierre) van en esta zona.
+                      La de su club, salvo que la cambies. Las horas {league ? "de la liga" : "del torneo"} (jornadas, partidos y cierre) van en esta zona.
                     </p>
                   </Field>
                   <Field label="Cierre de inscripciones" error={configForm.formState.errors.registrationDeadline?.message}>
@@ -734,7 +995,7 @@ export default function NuevoTorneoPage() {
                       type="datetime-local"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Hora del torneo ({timeZoneLabel(configForm.watch("timezone"))})
+                      Hora {league ? "de la liga" : "del torneo"} ({timeZoneLabel(configForm.watch("timezone"))})
                     </p>
                   </Field>
                 </div>
@@ -761,11 +1022,69 @@ export default function NuevoTorneoPage() {
                   </div>
                 </label>
               </div>
+
+              {/* Grupo 3: Lo que ven los jugadores */}
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border pb-2">
+                  Lo que ven los jugadores
+                </p>
+                <TournamentVisibilityFields
+                  value={{
+                    participantsVisibility: configForm.watch("participantsVisibility"),
+                    showClubInsteadOfCourt: configForm.watch("showClubInsteadOfCourt"),
+                    hideFromAppAfterDays:   configForm.watch("hideFromAppAfterDays"),
+                  }}
+                  onChange={setVisibility}
+                  hideFromAppError={configForm.formState.errors.hideFromAppAfterDays?.message}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 4 (liga): DÍAS DE JUEGO ── */}
+          {step === 4 && league && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="font-heading text-lg text-foreground">Días de juego</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Elige los días de la semana en que se juega la liga y a qué horas. Cada jornada del calendario cae en una semana.
+                </p>
+              </div>
+
+              <LeagueDaysEditor
+                days={leagueDays}
+                onChange={(next) => {
+                  setLeagueDays(next);
+                  // Tras un «Siguiente» con error, se revalida para que se vaya al corregirlo
+                  if (leagueDaysError) setLeagueDaysError(leagueDaysIssue(next));
+                }}
+                newDayBlock={() => ({ start: applied.current.dayStartTime, end: applied.current.dayEndTime })}
+              />
+
+              {/* Límite total de disponibilidad */}
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-xs text-muted-foreground shrink-0">Máx. franjas bloqueables en total:</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="0"
+                  aria-label="Máx. franjas bloqueables en total"
+                  value={scheduleForm.watch("maxUnavailableTotalHours") || ""}
+                  onChange={(e) => scheduleForm.setValue("maxUnavailableTotalHours", Number(e.target.value), { shouldDirty: true })}
+                  className="w-16 h-7 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37]"
+                />
+                <span className="text-[10px] text-muted-foreground">(0 = sin límite · suma de todos los días)</span>
+              </div>
+
+              {leagueDaysError && (
+                <p role="alert" className="text-xs text-destructive">{leagueDaysError}</p>
+              )}
             </div>
           )}
 
           {/* ── STEP 4: SCHEDULE ── */}
-          {step === 4 && (
+          {step === 4 && !league && (
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Horarios por jornada</h3>
@@ -931,7 +1250,7 @@ export default function NuevoTorneoPage() {
             <div className="space-y-5">
               <div>
                 <h3 className="font-heading text-lg text-foreground">Confirmar creación</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">Revisa los datos antes de crear el torneo</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Revisa los datos antes de crear {league ? "la liga" : "el torneo"}</p>
               </div>
 
               <div className="space-y-3">
@@ -942,6 +1261,7 @@ export default function NuevoTorneoPage() {
                     ["Nombre",   infoData.name],
                     ["Club",     (isClubUser ? myClub?.name : clubs.find(c => c.id === infoData.clubId)?.name) ?? infoData.clubId],
                     ["Fechas",   `${infoData.startDate} → ${infoData.endDate}`],
+                    ...(league ? [["Fin de grupos", infoData.groupsEndDate ?? "—"]] : []),
                     ["Premio",   infoData.prize || "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
@@ -949,6 +1269,20 @@ export default function NuevoTorneoPage() {
                       <span className="text-foreground font-medium">{v}</span>
                     </div>
                   ))}
+                  {/* Los textos, como se mandan (sin los espacios de los bordes) */}
+                  {([[league ? "Sobre la liga" : "Sobre el torneo", infoData.description], ["Normas", infoData.rules]] as const).map(([k, v]) =>
+                    plainText(v) ? (
+                      <div key={k} className="text-sm space-y-0.5">
+                        <span className="text-muted-foreground">{k}</span>
+                        <p className="text-foreground whitespace-pre-line break-words line-clamp-4">{plainText(v)}</p>
+                      </div>
+                    ) : (
+                      <div key={k} className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">{k}</span>
+                        <span className="text-foreground font-medium">—</span>
+                      </div>
+                    ),
+                  )}
                 </div>
 
                 {/* Categories summary */}
@@ -982,7 +1316,8 @@ export default function NuevoTorneoPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Configuración</p>
                   {[
                     ["Tier",         TIER_LABEL[configData.tier] ?? configData.tier],
-                    ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
+                    ["Formato",      FORMAT_LABEL[league ? LEAGUE_FORMAT : configData.format] ?? configData.format],
+                    ["Formato de partido", scoringFormatLabel(configData.scoringFormat)],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Duración part.", `${configData.matchDuration} mins`],
                     ["Cierre insc.", configData.registrationDeadline
@@ -996,6 +1331,9 @@ export default function NuevoTorneoPage() {
                     ["Camisetas",    configData.hasShirts  ? "Sí" : "No"],
                     ["Cabezas de serie", configData.useSeeding ? "Sí (por SPA)" : "No (sorteo)"],
                     ["Exigir el pago para confirmar", configData.requirePaymentToConfirm ? "Sí" : "No"],
+                    ["Lista de inscritos", participantsVisibilityLabel(configData.participantsVisibility)],
+                    ["El club en vez de la pista", configData.showClubInsteadOfCourt ? "Sí" : "No"],
+                    ["Quitarlo del listado de la app", hideFromAppLabel(configData.hideFromAppAfterDays)],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{k}</span>
@@ -1006,17 +1344,26 @@ export default function NuevoTorneoPage() {
 
                 {/* Schedule summary */}
                 <div className="bg-secondary/50 rounded-lg border border-border p-4 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Horarios</p>
-                  {scheduleData?.days.map((d) => (
-                    <div key={d.date} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground capitalize">
-                        {formatDayKey(d.date, { weekday: 'short', day: 'numeric' })}
-                      </span>
-                      <span className="text-foreground">
-                        {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
-                      </span>
-                    </div>
-                  ))}
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">{league ? "Días de juego" : "Horarios"}</p>
+                  {league
+                    ? leagueDays.map((d) => (
+                        <div key={d.weekday} className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">{weekdayLabel(d.weekday)}</span>
+                          <span className="text-foreground">
+                            {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
+                          </span>
+                        </div>
+                      ))
+                    : scheduleData?.days.map((d) => (
+                        <div key={d.date} className="flex justify-between text-xs">
+                          <span className="text-muted-foreground capitalize">
+                            {formatDayKey(d.date, { weekday: 'short', day: 'numeric' })}
+                          </span>
+                          <span className="text-foreground">
+                            {d.blocks.map(b => `${b.start}-${b.end}`).join(", ")}
+                          </span>
+                        </div>
+                      ))}
                 </div>
               </div>
             </div>
@@ -1041,7 +1388,7 @@ export default function NuevoTorneoPage() {
             className="flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-60 transition-colors"
           >
             {create.isPending && <Loader2 size={14} className="animate-spin" />}
-            {step === 5 ? (create.isPending ? "Creando..." : "Crear torneo") : "Siguiente"}
+            {step === 5 ? (create.isPending ? "Creando..." : league ? "Crear liga" : "Crear torneo") : "Siguiente"}
             {step < 5 && <ChevronRight size={15} />}
           </button>
         </div>
@@ -1054,13 +1401,13 @@ export default function NuevoTorneoPage() {
         confirmLabel="Salir"
         danger
         onClose={() => setShowLeaveModal(false)}
-        onConfirm={() => router.push("/torneos")}
+        onConfirm={() => router.push(base)}
       />
 
       <ConfirmModal
         open={confirmRetry}
         title="¿Volver a intentarlo?"
-        description="El intento anterior no tuvo una respuesta clara y puede que el torneo ya se haya creado. Revisa la lista de torneos: si está, volver a crearlo lo duplicaría."
+        description={`El intento anterior no tuvo una respuesta clara y puede que ${league ? "la liga ya se haya creado" : "el torneo ya se haya creado"}. Revisa la lista de ${league ? "ligas" : "torneos"}: si está, volver a crearl${league ? "a la duplicaría" : "o lo duplicaría"}.`}
         confirmLabel="Crear de todos modos"
         onClose={() => setConfirmRetry(false)}
         onConfirm={() => {

@@ -7,6 +7,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -21,10 +22,13 @@ import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { sessionLabel } from "@/lib/utils/school";
 import { dateOnlyKey, formatDayKey, zonedDayKey } from "@/lib/utils/time-zone";
 import type {
+  AffectedSchoolClass,
   ClubOperatingHours,
   ClubScheduleException,
   OperatingHourInput,
@@ -99,6 +103,8 @@ export default function HorariosPage() {
 
 function WeeklyHoursSection({ clubId }: { clubId: string }) {
   const qc = useQueryClient();
+  // Quien solo lee la configuración ve el horario, sin «Guardar» y con los campos fijos
+  const canWrite = useClubAccess().can("settings", "write");
   const [rows, setRows] = useState<DayRow[]>(DEFAULT_DAY_ROWS);
   const [hydrated, setHydrated] = useState(false);
 
@@ -113,9 +119,13 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
     const map = new Map<number, ClubOperatingHours>(
       query.data.map((h) => [h.dayOfWeek, h]),
     );
+    // Un club sin horario guardado empieza con todos los días abiertos (se
+    // desmarca el que cierra); con horario, lo que falta es un día cerrado
+    const firstTime = map.size === 0;
     setRows(
       DEFAULT_DAY_ROWS.map((d) => {
         const found = map.get(d.dayOfWeek);
+        if (firstTime) return { ...d, active: true };
         return found
           ? {
               dayOfWeek: d.dayOfWeek,
@@ -199,22 +209,24 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
     <section>
       <div className="flex items-center justify-between gap-3">
         <SectionTitle>Horario semanal</SectionTitle>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={applyToAll}>
-            Aplicar a todos
-          </Button>
-          <Button onClick={handleSave} disabled={save.isPending} size="sm">
-            {save.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
-              </>
-            ) : (
-              <>
-                <Save className="h-3.5 w-3.5" /> Guardar
-              </>
-            )}
-          </Button>
-        </div>
+        {canWrite && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={applyToAll}>
+              Aplicar a todos
+            </Button>
+            <Button onClick={handleSave} disabled={save.isPending} size="sm">
+              {save.isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" /> Guardar
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-border">
@@ -238,6 +250,7 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
                       className="h-4 w-4 rounded border-border accent-primary"
                       checked={r.active}
                       onChange={(e) => updateRow(i, { active: e.target.checked })}
+                      disabled={!canWrite}
                     />
                   </label>
                 </td>
@@ -247,14 +260,14 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
                     className="rounded border border-border bg-background px-2 py-1 text-sm disabled:opacity-40"
                     value={r.openTime}
                     onChange={(e) => updateRow(i, { openTime: e.target.value })}
-                    disabled={!r.active}
+                    disabled={!r.active || !canWrite}
                   />
                 </td>
                 <td className="px-4 py-3">
                   <CloseTimeInput
                     value={r.closeTime}
                     onChange={(closeTime) => updateRow(i, { closeTime })}
-                    disabled={!r.active}
+                    disabled={!r.active || !canWrite}
                     label={DAY_NAMES[r.dayOfWeek]}
                   />
                 </td>
@@ -271,6 +284,7 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
 
 function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   // Hoy en el club (con el día UTC, de 00:00 a 02:00 en Madrid salía el de ayer)
   const today = zonedDayKey(new Date(), timeZone);
 
@@ -281,12 +295,16 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
   });
 
   const [showForm, setShowForm] = useState(false);
+  // Clases de la escuela que la última excepción deja fuera de horario: no se cancelan solas
+  const [affected, setAffected] = useState<AffectedSchoolClass[]>([]);
   const [form, setForm] = useState({
     date: today,
     isClosed: false,
     customOpen: "10:00",
     customClose: "20:00",
     reason: "",
+    // "" = se cobra como el día que es; 1-7 = como ese día de la semana
+    priceAsDayOfWeek: "",
   });
 
   const create = useMutation({
@@ -297,9 +315,12 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
         customOpen: form.isClosed ? undefined : form.customOpen,
         customClose: form.isClosed ? undefined : form.customClose,
         reason: form.reason || undefined,
+        priceAsDayOfWeek:
+          form.isClosed || !form.priceAsDayOfWeek ? undefined : Number(form.priceAsDayOfWeek),
       }),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success("Excepción añadida");
+      setAffected(saved.affectedSchoolClasses ?? []);
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["bookings", "exceptions", clubId] });
     },
@@ -326,20 +347,52 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
     <section>
       <div className="flex items-center justify-between">
         <SectionTitle>Excepciones por fecha</SectionTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowForm((s) => !s)}
-        >
-          <Plus className="h-3.5 w-3.5" /> Añadir
-        </Button>
+        {canWrite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowForm((s) => !s)}
+          >
+            <Plus className="h-3.5 w-3.5" /> Añadir
+          </Button>
+        )}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Festivos, cierres puntuales, horarios reducidos. Tienen prioridad
         sobre el horario semanal regular.
       </p>
 
-      {showForm && (
+      {affected.length > 0 && (
+        <div
+          role="alert"
+          className="mt-4 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+        >
+          <p className="font-medium">
+            {affected.length === 1
+              ? "1 clase de la escuela queda fuera del horario"
+              : `${affected.length} clases de la escuela quedan fuera del horario`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            No se han cancelado ni movido: decide qué hacer con cada una desde{" "}
+            <Link href="/mi-club/escuela" className="underline">
+              la escuela
+            </Link>
+            .
+          </p>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {affected.map((c) => (
+              <li key={`${c.kind}-${c.id}`}>
+                {c.name} · {sessionLabel(c, timeZone)}
+              </li>
+            ))}
+          </ul>
+          <Button variant="outline" size="sm" onClick={() => setAffected([])}>
+            Entendido
+          </Button>
+        </div>
+      )}
+
+      {canWrite && showForm && (
         <div className="mt-4 rounded-lg border border-border bg-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha">
@@ -369,6 +422,25 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
             />
             Club cerrado todo el día
           </label>
+          {!form.isClosed && (
+            <Field label="Se cobra como (opcional)">
+              <select
+                value={form.priceAsDayOfWeek}
+                onChange={(e) => setForm({ ...form, priceAsDayOfWeek: e.target.value })}
+                className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+              >
+                <option value="">El día que es</option>
+                {DAY_NAMES.slice(1).map((name, i) => (
+                  <option key={name} value={i + 1}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Un festivo puede cobrarse con las tarifas de un domingo, por ejemplo.
+              </span>
+            </Field>
+          )}
           {!form.isClosed && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Apertura">
@@ -427,7 +499,7 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
                 <th className="px-4 py-2.5 text-left font-medium">Fecha</th>
                 <th className="px-4 py-2.5 text-left font-medium">Estado</th>
                 <th className="px-4 py-2.5 text-left font-medium">Motivo</th>
-                <th className="px-4 py-2.5"></th>
+                {canWrite && <th className="px-4 py-2.5"></th>}
               </tr>
             </thead>
             <tbody>
@@ -435,7 +507,7 @@ function ExceptionsSection({ clubId, timeZone }: { clubId: string; timeZone: str
                 <ExceptionRow
                   key={exc.id}
                   exc={exc}
-                  onRemove={() => remove.mutate(exc.id)}
+                  onRemove={canWrite ? () => remove.mutate(exc.id) : undefined}
                 />
               ))}
             </tbody>
@@ -451,7 +523,8 @@ function ExceptionRow({
   onRemove,
 }: {
   exc: ClubScheduleException;
-  onRemove: () => void;
+  /** Sin él (quien solo lee la configuración) no hay botón ni columna de borrar. */
+  onRemove?: () => void;
 }) {
   // Una fecha de calendario, sin zona: en la del navegador, al oeste de UTC
   // salía el día anterior
@@ -480,18 +553,25 @@ function ExceptionRow({
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
+        {exc.priceAsDayOfWeek && !exc.isClosed && (
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Se cobra como {DAY_NAMES[exc.priceAsDayOfWeek].toLowerCase()}
+          </span>
+        )}
       </td>
       <td className="px-4 py-3 text-muted-foreground">{exc.reason ?? "—"}</td>
-      <td className="px-4 py-3 text-right">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onRemove}
-          aria-label="Eliminar excepción"
-        >
-          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-        </Button>
-      </td>
+      {onRemove && (
+        <td className="px-4 py-3 text-right">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onRemove}
+            aria-label="Eliminar excepción"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </td>
+      )}
     </tr>
   );
 }

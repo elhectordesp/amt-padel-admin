@@ -4,27 +4,27 @@
  * (null) y no consta.
  */
 import type { BookingPaymentMethod } from "@/types/bookings";
+import { methodLabel } from "@/lib/utils/payment-methods";
 
-const PAYMENT_LABELS: Record<BookingPaymentMethod, string> = {
-  PENDING: "Pendiente",
-  CASH_AT_VENUE: "Efectivo en pista",
-  ONLINE: "Online",
-  PAID_MANUAL: "Cobrado manualmente",
-};
-
-/** Cómo se cobró, para leer; sin método, que no consta (antes salía «()»). */
+/**
+ * Cómo se cobró, para leer; sin método, que no consta (antes salía «()»).
+ * Los métodos son los del catálogo único (lib/utils/payment-methods.ts); las
+ * reservas antiguas pueden llevar «En el club» o «Pagada».
+ */
 export function paymentMethodLabel(method: BookingPaymentMethod | null): string {
-  return method ? PAYMENT_LABELS[method] : "sin datos de cobro";
+  return method ? methodLabel(method) : "sin datos de cobro";
 }
 
 /**
- * Qué puede hacer el club con el pago: marcarla pagada si está pendiente o
- * como no pagada si consta un cobro. Sin método, nada: sus datos de cobro se
- * borraron y marcarla los volvería a crear.
+ * Qué puede hacer el club con el pago: marcarla pagada si está pendiente,
+ * como no pagada si consta un cobro, o quitarle el bono si se pagó con uno (la
+ * sesión vuelve al bono). Sin método, nada: sus datos de cobro se borraron y
+ * marcarla los volvería a crear.
  */
 export function paymentAction(
   method: BookingPaymentMethod | null,
-): "markPaid" | "markUnpaid" | null {
+): "markPaid" | "markUnpaid" | "removeVoucher" | null {
   if (method === null) return null;
+  if (method === "VOUCHER") return "removeVoucher";
   return method === "PENDING" ? "markPaid" : "markUnpaid";
 }

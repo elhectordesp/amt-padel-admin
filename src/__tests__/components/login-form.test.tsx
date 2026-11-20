@@ -100,7 +100,7 @@ describe('LoginForm', () => {
     await userEvent.type(screen.getByPlaceholderText('••••••••••'), 'mipassword');
     submitForm();
     await waitFor(() => {
-      expect(mockLogin).toHaveBeenCalledWith('admin@test.com', 'mipassword');
+      expect(mockLogin).toHaveBeenCalledWith('admin@test.com', 'mipassword', { keepPlayerSession: false });
     });
   });
 

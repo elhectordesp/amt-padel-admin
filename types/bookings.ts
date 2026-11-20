@@ -5,6 +5,8 @@
  * no las necesitamos en admin).
  */
 
+import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
+
 export type CourtType = "SINGLES" | "DOUBLES";
 export type WallType = "GLASS" | "WALL";
 
@@ -26,8 +28,16 @@ export type BookingStatus =
   | "WITHOUT_RESULT";
 export type BookingPaymentMethod =
   | "PENDING"
-  | "CASH_AT_VENUE"
+  | "CASH"
+  | "CARD"
+  | "BIZUM"
+  | "TRANSFER"
+  | "OTHER"
   | "ONLINE"
+  // Pagada con una sesión de un bono del club: solo la pone el uso del bono
+  | "VOUCHER"
+  // Solo reservas antiguas
+  | "CASH_AT_VENUE"
   | "PAID_MANUAL";
 export type BookingParticipantStatus =
   | "INVITED"
@@ -57,6 +67,23 @@ export interface ClubScheduleException {
   customOpen: string | null;
   customClose: string | null;
   reason: string | null;
+  /** Festivo que se cobra como ese día de la semana (1=lunes … 7=domingo). */
+  priceAsDayOfWeek: number | null;
+}
+
+/** Una clase de la escuela (de grupo o privada) que una excepción de horario deja fuera de él. */
+export interface AffectedSchoolClass {
+  kind: "GROUP" | "PRIVATE";
+  id: string;
+  /** El grupo, o «Clase privada». */
+  name: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+/** Lo que devuelve el back al crear o editar una excepción: la excepción y las clases que se quedan fuera de horario (no se cancelan solas). */
+export interface SavedScheduleException extends ClubScheduleException {
+  affectedSchoolClasses: AffectedSchoolClass[];
 }
 
 export interface ClubBookingConfig {
@@ -65,6 +92,13 @@ export interface ClubBookingConfig {
   cancellationWindowHours: number;
   minBookingAheadMinutes: number;
   maxBookingAheadDays: number;
+  strictModeEnabled: boolean;
+  strictFrom: string | null; // "HH:mm", hora local del club
+  strictTo: string | null;
+  advanceRuleEnabled: boolean;
+  advanceRuleFrom: string | null;
+  advanceRuleTo: string | null;
+  advanceRuleMinutes: number;
   openMatchEnabled: boolean;
   openMatchMinPlayers: number;
   openMatchAdminWarnHoursBefore: number;
@@ -76,6 +110,8 @@ export interface ClubBookingConfig {
   welcomeMessageMarkdown: string | null;
   notifyAdminViaPush: boolean;
   notifyAdminViaEmail: boolean;
+  /** Descuento (%) para los clientes socios; 0 = sin descuento. */
+  memberDiscountPercent: number;
 }
 
 export interface ClubRulesResponse {
@@ -100,6 +136,50 @@ export interface CourtPriceSlot {
   endTime: string;
   durationMinutes: number;
   priceCents: number;
+  label?: string | null;
+  /** null = precio base de todo el año. */
+  seasonId?: string | null;
+}
+
+export interface ClubSeason {
+  id: string;
+  clubId: string;
+  name: string;
+  startDate: string; // ISO; se lee como día de calendario
+  endDate: string;
+}
+
+export interface ClubPriceOffer {
+  id: string;
+  clubId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  daysOfWeek: number[]; // 1=lunes … 7=domingo
+  startTime: string;
+  endTime: string;
+  /** Vacío = todas las pistas. */
+  courtIds: string[];
+  discountPercent: number;
+  membersOnly: boolean;
+}
+
+export interface ClubSeasonPayload {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface ClubPriceOfferPayload {
+  name: string;
+  startDate: string;
+  endDate: string;
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
+  courtIds: string[];
+  discountPercent: number;
+  membersOnly: boolean;
 }
 
 export interface BookingExtra {
@@ -117,11 +197,34 @@ export interface BookingExtra {
 
 // ── Activation + testers ───────────────────────────────────────────────────
 
+export type ActivationCheckCode =
+  | "COURTS"
+  | "OPERATING_HOURS"
+  | "COURT_DURATIONS"
+  | "COURT_PRICES";
+
+export interface ActivationCheck {
+  code: ActivationCheckCode;
+  ok: boolean;
+  /** Lo que falta, listo para enseñar: pistas sin duraciones o duraciones sin precio. */
+  missing: string[];
+}
+
+/** Lo que falta para que, al activarse, haya huecos que reservar. */
+export interface ActivationReadiness {
+  ready: boolean;
+  checks: ActivationCheck[];
+}
+
 export interface ActivationState {
   bookingEnabled: boolean;
   bookingPublicAt: string | null;
+  /** Cuándo pidió el club la activación; null si no hay solicitud pendiente. */
+  bookingActivationRequestedAt: string | null;
   status: ClubActivationStatus;
   activeTesterCount: number;
+  /** Solo con el módulo inactivo; null en los demás estados. */
+  readiness: ActivationReadiness | null;
 }
 
 export interface ClubTesterUser {
@@ -226,6 +329,13 @@ export interface Booking {
   court?: { id: string; name: string; type: CourtType; isIndoor: boolean };
   club?: { id: string; name: string; city: string };
   participants?: BookingParticipant[];
+  // El cliente del club a quien se reservó (null: sin cliente). Un bono solo
+  // paga reservas de su dueño
+  clubCustomerId?: string | null;
+  // Solo en el listado del personal del club: el titular (el cliente del club
+  // y quien la apuntó). No vienen con un back anterior
+  clubCustomer?: { id: string; name: string | null; phone: string | null } | null;
+  creator?: { id: string; name: string | null };
   // Solo en el detalle (GET /bookings/:id). No vienen con un back anterior
   result?: BookingResult | null;
   /** Hasta cuándo meten o cambian el resultado los jugadores. */
@@ -253,6 +363,7 @@ export interface CreateScheduleExceptionPayload {
   customOpen?: string;
   customClose?: string;
   reason?: string;
+  priceAsDayOfWeek?: number;
 }
 
 export interface UpdateScheduleExceptionPayload {
@@ -260,6 +371,8 @@ export interface UpdateScheduleExceptionPayload {
   customOpen?: string | null;
   customClose?: string | null;
   reason?: string | null;
+  /** null lo quita. */
+  priceAsDayOfWeek?: number | null;
 }
 
 export type UpdateBookingConfigPayload = Partial<
@@ -285,9 +398,20 @@ export interface PriceSlotInput {
   endTime: string;
   durationMinutes: number;
   priceCents: number;
+  /** Nombre de la franja («Valle», «Punta»), máx. 40 caracteres. */
+  label?: string;
 }
 
 export interface ReplaceCourtPricingPayload {
+  /** Sin ella, los precios base. */
+  seasonId?: string;
+  slots: PriceSlotInput[];
+}
+
+export interface ReplaceClubPriceSlotsPayload {
+  courtIds: string[];
+  /** Sin ella, los precios base. */
+  seasonId?: string;
   slots: PriceSlotInput[];
 }
 
@@ -318,6 +442,12 @@ export interface CreateBookingPayload {
   openMatchMinLspa?: number;
   openMatchMaxLspa?: number;
   notes?: string;
+  /** Cliente del club a quien se reserva (solo el personal del club). */
+  clubCustomerId?: string;
+  /** Cobrada en el mostrador: nace cobrada, en la misma operación (solo el personal del club). */
+  payNow?: { method: CounterPaymentMethod; amountCents?: number };
+  /** No avisar a los jugadores de la reserva (copias de reservas que ya existen en otro sistema). */
+  skipPlayerNotices?: boolean;
 }
 
 export interface AvailabilityQuery {
@@ -326,6 +456,8 @@ export interface AvailabilityQuery {
   duration?: number;
   courtType?: CourtType;
   indoor?: boolean;
+  /** Solo el personal del club o de AMT: el precio es el de este cliente (socio o no). */
+  clubCustomerId?: string;
 }
 
 export interface AvailableSlot {
@@ -337,7 +469,12 @@ export interface AvailableSlot {
   endsAt: string;
   startsAtLocal: string; // "HH:mm" local del club
   durationMinutes: number;
+  /** Precio final (con el descuento). */
   priceCents: number;
+  /** Precio sin descuento. */
+  basePriceCents: number;
+  /** «-20 % Mañanas de agosto»; null si no hay descuento. */
+  discountLabel: string | null;
   priceBreakdown: {
     slot: number;
     extras: { id: string; name: string; cents: number }[];
@@ -350,6 +487,8 @@ export interface BookingFiltersQuery {
   userId?: string;
   statuses?: BookingStatus[];
   matchMode?: BookingMatchMode;
+  /** "true": solo las que se deben (sin cobrar, con importe, no canceladas). */
+  unpaid?: "true";
   fromDate?: string;
   toDate?: string;
   /** Por hora de inicio; el back, por defecto «desc» (las más lejanas primero). */
@@ -363,4 +502,44 @@ export interface BookingFiltersQuery {
 export interface PaginatedBookings {
   items: Booking[];
   total: number;
+}
+
+/** Cambio de hora, pista o duración de una reserva (PATCH /bookings/:id). */
+export interface UpdateBookingPayload {
+  courtId: string;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+}
+
+export interface BookingPriceChange {
+  previousCents: number;
+  newCents: number;
+  /** newCents - previousCents (negativo: sale más barata). */
+  differenceCents: number;
+  /** Estaba pagada: el precio se mantiene. */
+  kept: boolean;
+}
+
+export interface RescheduleSlot {
+  courtId: string;
+  courtName: string;
+  startsAt: string;
+  endsAt: string;
+  startsAtLocal: string; // "HH:mm" del club
+  durationMinutes: number;
+  /** Lo que costaría la reserva en este hueco, con sus mismos extras. */
+  priceCents: number;
+  differenceCents: number;
+}
+
+export interface RescheduleOptions {
+  currentPriceCents: number;
+  priceKept: boolean;
+  durations: number[];
+  slots: RescheduleSlot[];
+}
+
+export interface CancelManyResult {
+  cancelled: string[];
+  failed: { id: string; code: string }[];
 }

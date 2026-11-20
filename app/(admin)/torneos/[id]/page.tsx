@@ -11,11 +11,12 @@ import {
   Square, CheckSquare, Lock, RefreshCw, CalendarDays, Printer,
   LayoutGrid, Star, Ban, CalendarOff, AlarmClock,
   Pencil, Send, EyeOff, RotateCcw, List, Save, ShieldAlert, ShieldCheck, UserPlus,
-  ArrowLeftRight, Users, Plus,
+  ArrowLeftRight, Users, Plus, CreditCard,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { kindWord, tournamentsBase } from "@/lib/league";
 import { ShareViewerModal } from "@/components/admin/share-viewer-modal";
 import { PublicViewerActions } from "@/components/admin/public-viewer-actions";
 import { Header } from "@/components/admin/header";
@@ -25,6 +26,7 @@ import { EnrollTeamModal } from "@/components/admin/enroll-team-modal";
 import { MoveCategoryModal } from "@/components/admin/move-category-modal";
 import ReplacePartnerModal from "@/components/admin/replace-partner-modal";
 import PaymentModal from "@/components/admin/payment-modal";
+import PayPairModal from "@/components/admin/pay-pair-modal";
 import { PairPayment } from "@/components/admin/pair-payment";
 import { PaymentTotals } from "@/components/admin/payment-totals";
 import { ResultModal } from "@/components/admin/result-modal";
@@ -37,10 +39,15 @@ import { GroupMemberStatsDialog } from "@/components/admin/group-member-stats-di
 import { ScheduleGrid } from "@/components/admin/schedule-grid";
 import { TournamentPreparationChecklist } from "@/components/admin/tournament-preparation-checklist";
 import { AvailabilityHeatmap } from "@/components/admin/availability-heatmap";
+import { LeagueRoundsTab, LeagueStandingsTab, type LeagueStandingsGroup } from "@/components/admin/league-tabs";
+import { LeagueCalendarTab } from "@/components/admin/league-calendar";
+import { LeagueFinalPanel } from "@/components/admin/league-final-panel";
 import { CategoryLevelBands } from "@/components/admin/category-level-bands";
 import { GroupsLockBanner, GroupsLockedPrompt } from "@/components/admin/groups-lock-banner";
 import { useForcedGroupsLock } from "@/lib/use-forced-groups-lock";
 import { useRole } from "@/lib/use-role";
+import { useClubAccess } from "@/lib/use-club-access";
+import { REGISTRATION_PAYMENT_AREAS } from "@/lib/club-permissions";
 import { useRestoreTournament } from "@/lib/use-restore-tournament";
 import { useGroupsLockedPrompt } from "@/lib/use-groups-locked-prompt";
 import { TournamentPushPanel, DRAFT_MESSAGES_HINT } from "@/components/admin/tournament-push-panel";
@@ -53,17 +60,20 @@ import { hasBothPairs, hasDate, isMatchFinished } from "@/lib/utils/match-status
 import { groupByPair, pairsSummary, paymentCsvColumns, pendingInviteLabel, type PairRegistration as PairReg, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import { isUnpaidPair } from "@/lib/utils/registration-amounts";
 import { needsForce } from "@/lib/utils/registration-force";
+import { leftMatchesNotice } from "@/lib/utils/registration-left-matches";
 import { categoryNumbersIssue } from "@/lib/utils/category-numbers";
 import { CATEGORY_GENDER_OPTIONS, categoryLabel } from "@/lib/category-gender";
+import { DEFAULT_SCORING_FORMAT, SCORING_FORMAT_OPTIONS, scoringFormatLabel } from "@/lib/scoring-format";
 import {
   CATEGORY_LABEL_SHORT, LEVELS,
   REGISTRATION_STATUS_CONFIG,
   TOURNAMENT_STATUS_LABEL, TOURNAMENT_STATUS_COLOR,
   resolveTier, phaseLabel, registrationStatusLabel,
 } from "@/lib/constants";
-import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryGender, CategoryLevel, AuditLogEntry, Tournament } from "@/types";
+import type { AdminRegistration, RegistrationStatus, MatchResult, TournamentStatus, TournamentCourt, CategoryGender, CategoryLevel, AuditLogEntry, Tournament, ScoringFormat } from "@/types";
 import { formatDateRange } from "@/lib/utils/formatDateRange";
 import {
+  dateOnlyKey,
   formatDayKey,
   formatInTimeZone,
   toZonedDateTimeInput,
@@ -219,7 +229,7 @@ function ConflictModal({
 // ── CalendarTab ───────────────────────────────────────────────────────────────
 function CalendarTab({
   matches, loading, isError, refetch, autoSchedule, onMatchClick, onCorrectClick, onEditPairs, tournament, tournamentId,
-  scheduleWarnings, onClearWarnings, onCreateAt,
+  scheduleWarnings, onClearWarnings, onCreateAt, canEdit, canResults,
 }: {
   matches:          MatchResult[];
   loading:          boolean;
@@ -234,6 +244,10 @@ function CalendarTab({
   scheduleWarnings: { pair: string; phase: string; category: string }[];
   onClearWarnings:  () => void;
   onCreateAt?:      (target: { date: string; court: string }) => void;
+  /** Cambiar el calendario del torneo (horarios, publicar, parejas, borrar partidos): área «tournaments». */
+  canEdit:          boolean;
+  /** Meter, corregir y reabrir resultados: área «results». */
+  canResults:       boolean;
 }) {
   const qc = useQueryClient();
   // Las horas se enseñan y se mandan en la zona del torneo, no en la del navegador
@@ -391,8 +405,12 @@ function CalendarTab({
   const unfinishMatchMut = useMutation({
     mutationFn: ({ matchId, force }: { matchId: string; force?: boolean }) =>
       adminService.tournaments.unfinishMatch(matchId, force),
-    onSuccess: () => {
-      toast.success("Partido reabierto (resultado deshecho)");
+    onSuccess: (saved) => {
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Partido reabierto (resultado deshecho). El SPA se actualizará esta noche."
+          : "Partido reabierto (resultado deshecho)",
+      );
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
@@ -528,6 +546,7 @@ function CalendarTab({
             <Trophy size={13} />
             <span className="hidden sm:inline">Informe PDF</span>
           </button>
+          {canEdit && (<>
           <button
             onClick={() => autoSchedule.mutate(false)}
             disabled={autoSchedule.isPending || matches.length === 0}
@@ -557,6 +576,7 @@ function CalendarTab({
             {publishAllMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
             <span className="hidden sm:inline">Publicar todo</span>
           </button>
+          </>)}
         </div>
       </div>
 
@@ -612,10 +632,10 @@ function CalendarTab({
           matches={matches}
           duration={tournament?.matchDuration ?? 60}
           tournament={tournament}
-          onMatchClick={onMatchClick}
-          onCorrectClick={onCorrectClick}
-          onMove={(m, target) => moveMut.mutate({ matchId: m.id, data: { date: zonedDateTimeToIso(target.date, tz), court: target.court } })}
-          onDelete={(m) => {
+          onMatchClick={(m) => { if (canResults) onMatchClick(m); }}
+          onCorrectClick={canResults ? onCorrectClick : undefined}
+          onMove={canEdit ? (m, target) => moveMut.mutate({ matchId: m.id, data: { date: zonedDateTimeToIso(target.date, tz), court: target.court } }) : undefined}
+          onDelete={canEdit ? (m) => {
             const finished = !!(m as { isResult?: boolean }).isResult;
             if (typeof window !== "undefined" &&
                 window.confirm(finished
@@ -623,8 +643,8 @@ function CalendarTab({
                   : "¿Borrar este partido?")) {
               deleteMatchMut.mutate({ matchId: m.id, force: finished, categoryId: m.categoryId });
             }
-          }}
-          onCreateAt={onCreateAt}
+          } : undefined}
+          onCreateAt={canEdit ? onCreateAt : undefined}
         />
       ) : (
         // Per-category sections (lista)
@@ -664,7 +684,7 @@ function CalendarTab({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                {canEdit && <div className="flex items-center gap-2">
                   {isPublished && (
                     <button
                       onClick={() => setUnpublishCatId(cat.id)}
@@ -685,7 +705,7 @@ function CalendarTab({
                     {isPublishing ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
                     {isPublished ? "Republicar" : "Publicar horario"}
                   </button>
-                </div>
+                </div>}
               </div>
 
               {/* Matches grouped by date */}
@@ -724,8 +744,8 @@ function CalendarTab({
                           <div key={m.id}>
                             {/* Match row — mobile: stacked card, desktop: single horizontal row */}
                             <div
-                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${!m.isResult && !isEditing && hasBothTeams(m) ? "cursor-pointer" : ""}`}
-                              onClick={() => !m.isResult && !isEditing && hasBothTeams(m) && onMatchClick(m)}
+                              className={`flex flex-wrap items-center gap-2 sm:gap-4 px-4 py-3 sm:px-5 hover:bg-secondary/30 transition-colors ${canResults && !m.isResult && !isEditing && hasBothTeams(m) ? "cursor-pointer" : ""}`}
+                              onClick={() => canResults && !m.isResult && !isEditing && hasBothTeams(m) && onMatchClick(m)}
                             >
                               <span className="text-xs font-mono text-muted-foreground sm:w-12 shrink-0">{time}</span>
                               <span className="text-xs text-muted-foreground sm:w-16 shrink-0 truncate">{m.court || "—"}</span>
@@ -747,7 +767,7 @@ function CalendarTab({
                                     </span>
                                   </div>
                                   {/* Un bye (una sola pareja) no se corrige ni se reabre: el back lo rechaza */}
-                                  {hasBothPairs(m) && (<>
+                                  {canResults && hasBothPairs(m) && (<>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); onCorrectClick(m); }}
                                     className="p-1.5 sm:p-1 rounded-md border border-border text-muted-foreground hover:text-amber-400 hover:border-amber-400/40 transition-colors"
@@ -775,7 +795,7 @@ function CalendarTab({
                                   <Clock size={12} /> Pendiente
                                 </span>
                               )}
-                              {m.categoryId && (
+                              {canEdit && m.categoryId && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onEditPairs(m); }}
                                   className="p-2 sm:p-1.5 rounded-md border border-border text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors shrink-0"
@@ -785,6 +805,7 @@ function CalendarTab({
                                   <Users size={12} />
                                 </button>
                               )}
+                              {canEdit && (<>
                               <button
                                 onClick={(e) => { e.stopPropagation(); if (isEditing) { cancelEdit(); } else { startEdit(m); } }}
                                 className={`p-2 sm:p-1.5 rounded-md border transition-colors shrink-0 ${
@@ -815,6 +836,7 @@ function CalendarTab({
                               >
                                 <Trash2 size={12} />
                               </button>
+                              </>)}
                             </div>
 
                             {/* Inline edit form */}
@@ -1113,11 +1135,14 @@ function CourtBoard({
   tournamentId,
   categories,
   timeZone,
+  canWrite,
 }: {
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
   /** Zona del torneo: la de los días y horas del tablero. */
   timeZone:     string;
+  /** Cambiar la pista de un partido: área «tournaments». Sin ella, el tablero solo se ve. */
+  canWrite:     boolean;
 }) {
   const qc = useQueryClient();
   const [selectedDay,  setSelectedDay]  = useState("");
@@ -1294,8 +1319,9 @@ function CourtBoard({
                     <td key={courtName} className="px-2 py-2 align-top border-l border-border">
                       {match ? (
                         <div
-                          className={`rounded-md border p-2 space-y-1 cursor-pointer transition-all hover:brightness-110 ${style}`}
+                          className={`rounded-md border p-2 space-y-1 transition-all ${canWrite ? "cursor-pointer hover:brightness-110" : ""} ${style}`}
                           onClick={() => {
+                            if (!canWrite) return;
                             if (editingId === match.id) { setEditingId(null); setBoardConflicts([]); return; }
                             setEditingId(match.id);
                             setNewCourt((match.court as string) ?? "");
@@ -1382,10 +1408,13 @@ function PistasTab({
   tournamentId,
   categories,
   timeZone,
+  canWrite,
 }: {
   tournamentId: string;
   categories:   { id: string; gender: string; level: string }[];
   timeZone:     string;
+  /** Sincronizar las pistas y cambiar la de un partido: área «tournaments». */
+  canWrite:     boolean;
 }) {
   const qc = useQueryClient();
 
@@ -1416,14 +1445,16 @@ function PistasTab({
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <LayoutGrid size={36} className="text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">No hay pistas asociadas a este torneo.</p>
-        <button
-          onClick={() => sync.mutate()}
-          disabled={sync.isPending}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
-        >
-          {sync.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Sincronizar con club
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+          >
+            {sync.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Sincronizar con club
+          </button>
+        )}
       </div>
     );
   }
@@ -1433,7 +1464,7 @@ function PistasTab({
       {/* Board */}
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">Tablero del día</h3>
-        <CourtBoard tournamentId={tournamentId} categories={categories} timeZone={timeZone} />
+        <CourtBoard tournamentId={tournamentId} categories={categories} timeZone={timeZone} canWrite={canWrite} />
       </div>
 
       {/* Court list */}
@@ -1442,14 +1473,16 @@ function PistasTab({
           <p className="text-xs text-muted-foreground">
             {courts.length} pista{courts.length !== 1 ? "s" : ""} · Los bloqueos se gestionan desde el panel del club
           </p>
-          <button
-            onClick={() => sync.mutate()}
-            disabled={sync.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 disabled:opacity-50 transition-colors"
-          >
-            {sync.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            Sincronizar con club
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-[#D4AF37]/50 disabled:opacity-50 transition-colors"
+            >
+              {sync.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Sincronizar con club
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {courts.map((tc) => (
@@ -1463,7 +1496,8 @@ function PistasTab({
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type Tab = "resumen" | "inscripciones" | "cuadro" | "horarios" | "mas";
+// «jornadas», «calendario» y «clasificacion» son de las ligas
+type Tab = "resumen" | "inscripciones" | "cuadro" | "jornadas" | "calendario" | "clasificacion" | "horarios" | "mas";
 // El filtro de Inscripciones: por estado o «Sin pagar» (UNPAID: las no
 // canceladas a las que les falta pagar a alguno de sus jugadores)
 type RegFilter = "all" | RegistrationStatus | "UNPAID";
@@ -1473,6 +1507,7 @@ export default function TorneoDetailPage() {
   const router  = useRouter();
   const qc      = useQueryClient();
   const { role } = useRole();
+  const access = useClubAccess();
 
   const [tab,             setTab]           = useState<Tab>("resumen");
   const [horariosView,    setHorariosView]  = useState<"lista" | "tablero" | "disponibilidad">("lista");
@@ -1508,6 +1543,7 @@ export default function TorneoDetailPage() {
   const [movePair,           setMovePair]           = useState<PairReg | null>(null);
   const [replaceReg,         setReplaceReg]         = useState<AdminRegistration | null>(null);
   const [paymentOf,          setPaymentOf]          = useState<{ reg: AdminRegistration; player: PaymentPlayer } | null>(null);
+  const [payPairOf,          setPayPairOf]          = useState<AdminRegistration | null>(null);
   const [confirmCancel,      setConfirmCancel]      = useState<{ ids: string[]; name: string } | null>(null);
   const [confirmBulk,        setConfirmBulk]        = useState<{ ids: string[]; status: string; count: number } | null>(null);
   // Categoría llena o con cola: el aviso del back y el cambio a repetir con force
@@ -1515,6 +1551,9 @@ export default function TorneoDetailPage() {
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
+  // «Confirma para…» del back (torneo no En curso, siguiente ronda ya jugada):
+  // se pregunta en un diálogo del panel, no con el confirm() del navegador
+  const [forceResultAsk, setForceResultAsk] = useState<{ message: string; retry: () => void } | null>(null);
   const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
   const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
   const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
@@ -1530,9 +1569,9 @@ export default function TorneoDetailPage() {
   const [editPrizesCatId,     setEditPrizesCatId]     = useState<string | null>(null);
   const [prizesForm,          setPrizesForm]           = useState<{ prizeChampion: string; prizeRunnerUp: string; prizeConsolation: string; hasConsolation: boolean }>({ prizeChampion: "", prizeRunnerUp: "", prizeConsolation: "", hasConsolation: false });
   const [editCatId,           setEditCatId]            = useState<string | null>(null);
-  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ totalSpots: 0, price: 0, scoringFormat: "BEST_OF_3" });
+  const [editCatForm,         setEditCatForm]          = useState<{ totalSpots: number; price: number; scoringFormat: ScoringFormat }>({ totalSpots: 0, price: 0, scoringFormat: DEFAULT_SCORING_FORMAT });
   const [addCatOpen,          setAddCatOpen]           = useState(false);
-  const [addCatForm,          setAddCatForm]           = useState<{ gender: CategoryGender; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: "BEST_OF_3" | "BEST_OF_2_SUPERTB" }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
+  const [addCatForm,          setAddCatForm]           = useState<{ gender: CategoryGender; level: CategoryLevel; totalSpots: number; price: number; scoringFormat: ScoringFormat }>({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: DEFAULT_SCORING_FORMAT });
   const [deleteCatId,         setDeleteCatId]          = useState<string | null>(null);
   // Borrar una categoría con inscripciones o partidos: lo que dice el back que se borra con ella
   const [cascadeCat,          setCascadeCat]           = useState<{ catId: string; message: string } | null>(null);
@@ -1551,6 +1590,29 @@ export default function TorneoDetailPage() {
     queryKey: ["tournament", id],
     queryFn:  () => adminService.tournaments.adminDetail(id),
   });
+
+  // Torneo y liga comparten esta ficha: el tipo lo da el propio torneo y la
+  // ruta lo sigue (una liga abierta por /torneos/:id pasa a /ligas/:id)
+  const pathname = usePathname();
+  const league   = tournament?.kind === "LEAGUE";
+  // Sin permiso de escritura (rol del club con «torneos», «resultados» o «caja»
+  // solo en lectura) no salen los botones que cambian algo: cada acción, con el
+  // área que le pide su endpoint (meter y corregir resultados, «results»;
+  // cobrar, «cash» o «tournaments»; el resto del torneo, «tournaments»). El back
+  // es quien manda de verdad; esto evita ofrecer lo que dará 403
+  const canEdit    = access.can("tournaments", "write");
+  const canResults = access.can("results", "write");
+  const canCash    = REGISTRATION_PAYMENT_AREAS.some((area) => access.can(area, "write"));
+  const base     = tournamentsBase(tournament?.kind);
+  const word     = kindWord(tournament?.kind);
+  useEffect(() => {
+    if (!tournament) return;
+    const expected = `${tournamentsBase(tournament.kind)}/${id}`;
+    const other    = tournamentsBase(tournament.kind) === "/ligas" ? `/torneos/${id}` : `/ligas/${id}`;
+    if (pathname === other || pathname.startsWith(`${other}/`)) {
+      router.replace(pathname.replace(other, expected));
+    }
+  }, [tournament, pathname, id, router]);
 
   // Auto-seleccionar categoría si el torneo tiene solo una (UX: evita
   // un click innecesario al admin)
@@ -1645,6 +1707,9 @@ export default function TorneoDetailPage() {
       setUpdatingIds(new Set());
       const updated = res?.count ?? res?.updated ?? ids.length;
       toast.success(`${updated} inscripción(es) actualizadas`);
+      // Cancelar con el sorteo hecho deja partidos sin jugar
+      const left = leftMatchesNotice(res?.leftMatches);
+      if (left) toast.warning(left, { duration: 20_000 });
     },
     onError: (err: Error, vars) => {
       setUpdatingIds(new Set());
@@ -1661,8 +1726,8 @@ export default function TorneoDetailPage() {
     mutationFn: () => adminService.tournaments.duplicate(id),
     onSuccess:  (t) => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo duplicado");
-      router.push(`/torneos/${t.id}`);
+      toast.success(league ? "Liga duplicada" : "Torneo duplicado");
+      router.push(`${base}/${t.id}`);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -1676,10 +1741,10 @@ export default function TorneoDetailPage() {
     mutationFn: (force?: boolean) => adminService.tournaments.delete(id, force),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ["tournaments"] });
-      toast.success("Torneo eliminado", canRestore
+      toast.success(league ? "Liga eliminada" : "Torneo eliminado", canRestore
         ? { action: { label: "Deshacer", onClick: () => restoreTournament.mutate(id) }, duration: 10_000 }
         : undefined);
-      router.push("/torneos");
+      router.push(base);
     },
     onError: (err: Error, force) => {
       const msg: string = err?.message ?? "";
@@ -1778,7 +1843,7 @@ export default function TorneoDetailPage() {
     if (!resultMatch) return;
     setSavingResultId(resultMatch.id);
     try {
-      await adminService.matches.setResult(
+      const saved = await adminService.matches.setResult(
         resultMatch.id,
         sets1,
         sets2,
@@ -1786,7 +1851,11 @@ export default function TorneoDetailPage() {
         opts?.walkoverWinnerTeam,
         force,
       );
-      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Resultado corregido. El SPA se actualizará esta noche."
+          : opts?.walkover ? "Walkover registrado" : "Resultado guardado",
+      );
       setResultMatch(null);
       setResultCorrection(false);
       qc.invalidateQueries({ queryKey: ["matches", id] });
@@ -1798,10 +1867,9 @@ export default function TorneoDetailPage() {
       // (dueño del torneo) puede forzar bajo su riesgo: torneo no ONGOING, o corregir
       // un resultado cuya siguiente ronda ya se jugó. Ofrecemos forzar y reintentar.
       const msg: string = err?.message ?? "";
-      if (!force && /Confirma para/i.test(msg) &&
-          typeof window !== "undefined" &&
-          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
-        return saveResult(sets1, sets2, opts, true);
+      if (!force && /Confirma para/i.test(msg)) {
+        setForceResultAsk({ message: msg, retry: () => void saveResult(sets1, sets2, opts, true) });
+        return;
       }
       toast.error(msg || "Error al guardar resultado");
     } finally {
@@ -2057,7 +2125,7 @@ export default function TorneoDetailPage() {
   });
 
   const updateCatMut = useMutation({
-    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number; scoringFormat?: string; force?: boolean } }) =>
+    mutationFn: ({ catId, data }: { catId: string; data: { totalSpots: number; price: number; scoringFormat?: ScoringFormat; force?: boolean } }) =>
       adminService.categories.update(id, catId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
@@ -2085,7 +2153,7 @@ export default function TorneoDetailPage() {
       qc.invalidateQueries({ queryKey: ["tournament", id] });
       toast.success("Categoría añadida");
       setAddCatOpen(false);
-      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: "BEST_OF_3" });
+      setAddCatForm({ gender: "M", level: "3a", totalSpots: 16, price: 25, scoringFormat: DEFAULT_SCORING_FORMAT });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2188,7 +2256,7 @@ export default function TorneoDetailPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col min-h-full">
-        <Header title="Torneo" />
+        <Header title={pathname.startsWith("/ligas") ? "Liga" : "Torneo"} />
         <div className="flex-1 p-6 space-y-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-16 rounded-lg bg-card animate-pulse border border-border" />
@@ -2201,9 +2269,9 @@ export default function TorneoDetailPage() {
   if (isErrorTournament || !tournament) {
     return (
       <div className="flex flex-col min-h-full">
-        <Header title="Torneo" />
+        <Header title={pathname.startsWith("/ligas") ? "Liga" : "Torneo"} />
         <ErrorState
-          message="No se pudo cargar el torneo."
+          message={pathname.startsWith("/ligas") ? "No se pudo cargar la liga." : "No se pudo cargar el torneo."}
           onRetry={refetchTournament}
         />
       </div>
@@ -2230,23 +2298,28 @@ export default function TorneoDetailPage() {
     <div className="flex flex-col min-h-full">
       <Header title={tournament.name} />
 
-      <div className="flex-1 p-6 space-y-5">
+      <div className="flex-1 p-6 space-y-5 max-[1024px]:p-4 max-[1024px]:space-y-3">
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/torneos" className="hover:text-foreground transition-colors flex items-center gap-1">
-            <ChevronLeft size={14} /> Torneos
+        {/* Breadcrumb (en tablet sobra: el título y el menú ya dicen dónde estás) */}
+        <div className="flex items-center gap-2 text-sm max-[1024px]:hidden text-muted-foreground">
+          <Link href={base} className="hover:text-foreground transition-colors flex items-center gap-1">
+            <ChevronLeft size={14} /> {league ? "Ligas" : "Torneos"}
           </Link>
           <span>/</span>
           <span className="text-foreground">{tournament.name}</span>
         </div>
 
         {/* Tournament header card */}
-        <div className="bg-card border border-border rounded-lg p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2 min-w-0">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-5 max-[1024px]:p-3">
+          <div className="flex flex-col gap-4 max-[1024px]:gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2 max-[1024px]:space-y-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-heading text-xl text-foreground">{tournament.name}</h2>
+                {league && (
+                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/40">
+                    LIGA
+                  </span>
+                )}
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${TOURNAMENT_STATUS_COLOR[tournament.status as TournamentStatus]}`}>
                   {TOURNAMENT_STATUS_LABEL[tournament.status as TournamentStatus]}
                 </span>
@@ -2280,6 +2353,11 @@ export default function TorneoDetailPage() {
                   <Calendar size={14} className="text-[#D4AF37]" />
                   {formatDateRange(tournament.startDate, tournament.endDate)}
                 </span>
+                {league && tournament.groupsEndDate && (
+                  <span className="flex items-center gap-1.5">
+                    Grupos hasta el {formatDayKey(dateOnlyKey(tournament.groupsEndDate), { day: "numeric", month: "short" })}
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5 min-w-0">
                   <MapPin size={14} className="text-[#D4AF37] shrink-0" />
                   <span className="truncate">{tournament.club?.name ?? ""}</span>
@@ -2295,41 +2373,47 @@ export default function TorneoDetailPage() {
 
             {/* Action group — sm: inline / mobile: full-width row */}
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-              <button
-                onClick={() => duplicate.mutate()}
-                disabled={duplicate.isPending}
-                title="Duplicar torneo"
-                aria-label="Duplicar torneo"
-                className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
-              >
-                {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
-              </button>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                title="Eliminar torneo"
-                aria-label="Eliminar torneo"
-                className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
-              >
-                <Trash2 size={15} />
-              </button>
+              {canEdit && (
+                <>
+                  <button
+                    onClick={() => duplicate.mutate()}
+                    disabled={duplicate.isPending}
+                    title={`Duplicar ${word}`}
+                    aria-label={`Duplicar ${word}`}
+                    className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+                  >
+                    {duplicate.isPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    title={`Eliminar ${word}`}
+                    aria-label={`Eliminar ${word}`}
+                    className="p-2 rounded-md border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </>
+              )}
               <PublicViewerActions
                 tournamentId={id}
                 isDraft={tournament.status === "DRAFT"}
                 onShare={() => setShowShare(true)}
               />
-              <Link
-                href={`/torneos/${id}/editar`}
-                aria-label="Editar torneo"
-                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
-              >
-                <Pencil size={14} className="sm:hidden" />
-                <span className="hidden sm:inline">Editar</span>
-              </Link>
+              {canEdit && (
+                <Link
+                  href={`${base}/${id}/editar`}
+                  aria-label={`Editar ${word}`}
+                  className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 rounded-md border border-border text-sm text-foreground hover:bg-secondary transition-colors ml-auto sm:ml-0"
+                >
+                  <Pencil size={14} className="sm:hidden" />
+                  <span className="hidden sm:inline">Editar</span>
+                </Link>
+              )}
             </div>
           </div>
 
           {/* Quick stats */}
-          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4 max-[1024px]:mt-2 max-[1024px]:pt-2 max-[1024px]:gap-2 max-[1024px]:[&_p.font-heading]:text-lg max-[1024px]:[&_p.font-heading]:leading-tight max-[1024px]:[&_.h-1]:hidden">
             <div className="text-center">
               <p className="text-2xl font-heading text-[#D4AF37]">{totalRegistered}</p>
               <p className="text-xs text-muted-foreground mt-0.5">Parejas inscritas</p>
@@ -2360,9 +2444,18 @@ export default function TorneoDetailPage() {
           <div className="flex items-center gap-0 w-max min-w-full">
             {([
               { key: "resumen",       label: "Resumen"        },
-              { key: "cuadro",        label: "Cuadro"         },
+              // En una liga, el sorteo de los grupos; y tras él, las jornadas y la clasificación
+              { key: "cuadro",        label: league ? "Grupos" : "Cuadro" },
+              ...(league
+                ? [
+                    { key: "jornadas",      label: "Jornadas"      },
+                    { key: "calendario",    label: "Calendario"    },
+                    { key: "clasificacion", label: "Clasificación" },
+                  ]
+                : []),
               { key: "inscripciones", label: `Inscripciones (${pairs.length || registrations.length || "…"})` },
-              { key: "horarios",      label: "Horarios"       },
+              // Una liga no tiene fecha ni pista por partido: solo la disponibilidad de los jugadores
+              { key: "horarios",      label: league ? "Disponibilidad" : "Horarios" },
               { key: "mas",           label: "Más"            },
             ] as { key: Tab; label: string }[]).map(({ key, label }) => (
               <button
@@ -2381,7 +2474,7 @@ export default function TorneoDetailPage() {
         </div>
 
         {/* Sub-navegación de Horarios (Lista / Tablero) */}
-        {tab === "horarios" && (
+        {tab === "horarios" && !league && (
           <div className="flex flex-wrap items-center gap-2 py-3">
             {([
               { key: "lista", label: "Lista / Calendario" },
@@ -2411,6 +2504,8 @@ export default function TorneoDetailPage() {
               { key: "mensajes", label: "Mensajes a inscritos" },
               { key: "historial", label: "Historial" },
             ] as { key: "estado" | "mensajes" | "historial"; label: string }[]).map(({ key, label }) => {
+              // Mandar mensajes a los inscritos es cambiar algo: sin permiso, no sale
+              if (key === "mensajes" && !canEdit) return null;
               // En borrador no se puede mandar: los jugadores aún no ven el torneo
               const off = key === "mensajes" && tournament?.status === "DRAFT";
               return (
@@ -2439,12 +2534,12 @@ export default function TorneoDetailPage() {
         {tab === "resumen" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="lg:col-span-2 empty:hidden">
-              <TournamentPreparationChecklist tournamentId={id} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} />
+              <TournamentPreparationChecklist tournamentId={id} base={base} onNavigate={setTab} timeZone={tournamentTimeZone(tournament)} readOnly={!canEdit} />
             </div>
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-foreground">Categorías</h3>
-                {!addCatOpen && (
+                {!addCatOpen && canEdit && (
                   <button
                     onClick={() => setAddCatOpen(true)}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[rgba(212,175,55,0.1)] border border-[rgba(212,175,55,0.3)] text-xs text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.2)] transition-colors"
@@ -2475,11 +2570,10 @@ export default function TorneoDetailPage() {
                     <select
                       title="Formato de puntuación base"
                       value={addCatForm.scoringFormat}
-                      onChange={(e) => setAddCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                      onChange={(e) => setAddCatForm((f) => ({ ...f, scoringFormat: e.target.value as ScoringFormat }))}
                       className="h-8 px-2 rounded-md bg-secondary border border-border text-xs text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                     >
-                      <option value="BEST_OF_3">3 sets</option>
-                      <option value="BEST_OF_2_SUPERTB">2 sets + super-TB</option>
+                      {SCORING_FORMAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <input
                       type="number" min={1} step={1} placeholder="Plazas"
@@ -2559,11 +2653,10 @@ export default function TorneoDetailPage() {
                               <select
                                 title="Formato base"
                                 value={editCatForm.scoringFormat}
-                                onChange={(e) => setEditCatForm((f) => ({ ...f, scoringFormat: e.target.value as "BEST_OF_3" | "BEST_OF_2_SUPERTB" }))}
+                                onChange={(e) => setEditCatForm((f) => ({ ...f, scoringFormat: e.target.value as ScoringFormat }))}
                                 className="h-7 px-1 rounded bg-secondary border border-border text-[11px] text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                               >
-                                <option value="BEST_OF_3">3 sets</option>
-                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                                {SCORING_FORMAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                               </select>
                             </div>
                           ) : <span className="text-muted-foreground">{cat.price ?? 0}€</span>}
@@ -2609,12 +2702,12 @@ export default function TorneoDetailPage() {
                                   <X size={12} />
                                 </button>
                               </>
-                            ) : (
+                            ) : canEdit ? (
                               <>
                                 <button
                                   onClick={() => {
                                     setEditCatId(cat.id);
-                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0, scoringFormat: (cat.scoringFormat as "BEST_OF_3" | "BEST_OF_2_SUPERTB") ?? "BEST_OF_3" });
+                                    setEditCatForm({ totalSpots: cat.totalSpots, price: cat.price ?? 0, scoringFormat: cat.scoringFormat ?? DEFAULT_SCORING_FORMAT });
                                   }}
                                   className="p-2 sm:p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                                   title="Editar plazas y precio"
@@ -2632,7 +2725,7 @@ export default function TorneoDetailPage() {
                                   <Trash2 size={12} />
                                 </button>
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -2681,7 +2774,7 @@ export default function TorneoDetailPage() {
                     <div key={cat.id} className="px-5 py-4">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-foreground">{catLabel}</span>
-                        {!isEditing ? (
+                        {!isEditing ? (!canEdit ? null : (
                           <button
                             onClick={() => {
                               setEditPrizesCatId(cat.id);
@@ -2696,7 +2789,7 @@ export default function TorneoDetailPage() {
                           >
                             Editar
                           </button>
-                        ) : (
+                        )) : (
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => updatePrizesMut.mutate({ catId: cat.id, prizes: prizesForm })}
@@ -2787,13 +2880,13 @@ export default function TorneoDetailPage() {
                 </p>
                 <PaymentTotals pairs={pairs} />
               </div>
-              {(tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
+              {canEdit && (tournament.status === "DRAFT" || tournament.status === "OPEN" || tournament.status === "SCHEDULED") && (
                 <button
                   onClick={() => setEnrollOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#D4AF37] hover:bg-[#c09b2a] text-black text-xs font-semibold transition-colors"
                 >
                   <UserPlus size={13} />
-                  Inscribir equipo
+                  Inscribir pareja
                 </button>
               )}
             </div>
@@ -2885,7 +2978,7 @@ export default function TorneoDetailPage() {
             </div>
 
             {/* Bulk action bar */}
-            {selectedKeys.size > 0 && (
+            {canEdit && selectedKeys.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[rgba(212,175,55,0.08)] border border-[rgba(212,175,55,0.25)]">
                 <span className="text-xs font-medium text-[#D4AF37]">{selectedKeys.size} pareja(s) seleccionada(s)</span>
                 <div className="flex items-center gap-2 ml-auto">
@@ -2940,14 +3033,16 @@ export default function TorneoDetailPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
-                      <th className="px-4 py-3 w-10">
-                        <button onClick={toggleSelectAll} className="text-muted-foreground hover:text-foreground transition-colors">
-                          {allPageSelected
-                            ? <CheckSquare size={15} className="text-[#D4AF37]" />
-                            : <Square size={15} />
-                          }
-                        </button>
-                      </th>
+                      {canEdit && (
+                        <th className="px-4 py-3 w-10">
+                          <button onClick={toggleSelectAll} className="text-muted-foreground hover:text-foreground transition-colors">
+                            {allPageSelected
+                              ? <CheckSquare size={15} className="text-[#D4AF37]" />
+                              : <Square size={15} />
+                            }
+                          </button>
+                        </th>
+                      )}
                       {["Pareja / Jugador", "Nivel SPA", "Categoría", "Estado", "Pago", "Acciones"].map((h) => (
                         <th key={h} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
                       ))}
@@ -2970,14 +3065,16 @@ export default function TorneoDetailPage() {
                           key={pair.pairKey}
                           className={`border-b border-border last:border-0 transition-colors ${isSelected ? "bg-[rgba(212,175,55,0.04)]" : "hover:bg-secondary/30"}`}
                         >
-                          <td className="px-4 py-3.5">
-                            <button onClick={() => toggleSelect(pair.pairKey)} className="text-muted-foreground hover:text-foreground transition-colors">
-                              {isSelected
-                                ? <CheckSquare size={15} className="text-[#D4AF37]" />
-                                : <Square size={15} />
-                              }
-                            </button>
-                          </td>
+                          {canEdit && (
+                            <td className="px-4 py-3.5">
+                              <button onClick={() => toggleSelect(pair.pairKey)} className="text-muted-foreground hover:text-foreground transition-colors">
+                                {isSelected
+                                  ? <CheckSquare size={15} className="text-[#D4AF37]" />
+                                  : <Square size={15} />
+                                }
+                              </button>
+                            </td>
+                          )}
                           <td className="px-5 py-3.5">
                             <p className="text-sm font-medium text-foreground">{reg.user.name}</p>
                             {reg.partner?.name
@@ -3014,10 +3111,20 @@ export default function TorneoDetailPage() {
                             <PairPayment
                               registration={reg}
                               onEdit={(player) => setPaymentOf({ reg, player })}
+                              readOnly={!canCash}
                             />
                           </td>
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-1.5 sm:gap-1">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
+                              {canCash && pair.status !== "CANCELLED" && (
+                                <button
+                                  onClick={() => setPayPairOf(reg)}
+                                  disabled={isUpdating}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-2 sm:py-1.5 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-xs font-semibold hover:bg-[#C49F2A] transition-colors disabled:opacity-50"
+                                >
+                                  <CreditCard size={13} /> Cobrar pareja
+                                </button>
+                              )}
                               <button
                                 onClick={() => setAvailRegId(pair.primary.id)}
                                 title="Ver disponibilidad"
@@ -3025,17 +3132,17 @@ export default function TorneoDetailPage() {
                               >
                                 <CalendarDays size={14} />
                               </button>
-                              {pair.status !== "CONFIRMED" && (
+                              {canEdit && pair.status !== "CONFIRMED" && (
                                 <button
                                   onClick={() => handlePairStatus(pair, "CONFIRMED")}
                                   disabled={isUpdating}
-                                  className="p-2 sm:p-1.5 rounded-md hover:bg-green-400/10 text-muted-foreground hover:text-green-400 transition-colors disabled:opacity-50"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-2 sm:py-1.5 rounded-md border border-green-400/40 text-green-400 text-xs font-semibold hover:bg-green-400/10 transition-colors disabled:opacity-50"
                                   title="Confirmar pareja"
                                 >
-                                  <Check size={14} />
+                                  <Check size={13} /> Confirmar
                                 </button>
                               )}
-                              {pair.status !== "WAITLIST" && (
+                              {canEdit && pair.status !== "WAITLIST" && (
                                 <button
                                   onClick={() => handlePairStatus(pair, "WAITLIST")}
                                   disabled={isUpdating}
@@ -3045,15 +3152,17 @@ export default function TorneoDetailPage() {
                                   <Clock size={14} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => setMovePair(pair)}
-                                disabled={isUpdating}
-                                title="Cambiar categoría"
-                                className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
-                              >
-                                <ArrowLeftRight size={14} />
-                              </button>
-                              {reg.partnerId && (
+                              {canEdit && (
+                                <button
+                                  onClick={() => setMovePair(pair)}
+                                  disabled={isUpdating}
+                                  title="Cambiar categoría"
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-[rgba(212,175,55,0.1)] text-muted-foreground hover:text-[#D4AF37] transition-colors disabled:opacity-50"
+                                >
+                                  <ArrowLeftRight size={14} />
+                                </button>
+                              )}
+                              {canEdit && reg.partnerId && (
                                 <button
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
@@ -3063,7 +3172,7 @@ export default function TorneoDetailPage() {
                                   <Users size={14} />
                                 </button>
                               )}
-                              {!reg.partnerId && pair.status !== "CANCELLED" && (
+                              {canEdit && !reg.partnerId && pair.status !== "CANCELLED" && (
                                 <button
                                   onClick={() => setReplaceReg(reg)}
                                   disabled={isUpdating}
@@ -3073,14 +3182,16 @@ export default function TorneoDetailPage() {
                                   <UserPlus size={14} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => handlePairStatus(pair, "CANCELLED")}
-                                disabled={isUpdating}
-                                className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                                title="Cancelar pareja"
-                              >
-                                <X size={14} />
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => handlePairStatus(pair, "CANCELLED")}
+                                  disabled={isUpdating}
+                                  className="p-2 sm:p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                                  title="Cancelar pareja"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -3118,7 +3229,7 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── CALENDARIO TAB ── */}
-        {tab === "horarios" && horariosView === "lista" && (
+        {tab === "horarios" && !league && horariosView === "lista" && (
           <CalendarTab
             matches={matches}
             loading={loadingMatches}
@@ -3132,6 +3243,8 @@ export default function TorneoDetailPage() {
             tournamentId={id}
             scheduleWarnings={scheduleWarnings}
             onClearWarnings={() => setScheduleWarnings([])}
+            canEdit={canEdit}
+            canResults={canResults}
             onCreateAt={(target) => {
               const cats = tournament.categories;
               if (cats.length === 1) {
@@ -3147,7 +3260,7 @@ export default function TorneoDetailPage() {
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {(tournament.status === "OPEN" || tournament.status === "DRAW") && (() => {
+            {(tournament.status === "OPEN" || tournament.status === "DRAW" || (league && tournament.status === "DRAFT")) && (() => {
               const st = tournament.status;
               // En DRAW las inscripciones siempre están cerradas
               const deadlinePassed = st === "DRAW"
@@ -3184,9 +3297,12 @@ export default function TorneoDetailPage() {
               // - "ya generado": banner ámbar o rojo según resultados
               // - "inscripciones abiertas": modo read-only con motivo
               // El botón siempre se puede pulsar para abrir el dialog.
-              const blockedReason = !deadlinePassed
-                ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Ciérralas en «Preparación del torneo» (pestaña Resumen) para generar el cuadro.`
-                : null;
+              const prepName = league ? "Preparación de la liga" : "Preparación del torneo";
+              const blockedReason = st === "DRAFT"
+                ? `La liga es un borrador. Publícala y cierra las inscripciones en «${prepName}» (pestaña Resumen) para sortear los grupos.`
+                : !deadlinePassed
+                  ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Ciérralas en «${prepName}» (pestaña Resumen) para ${league ? "sortear los grupos" : "generar el cuadro"}.`
+                  : null;
 
               return (
                 <div className="bg-card border border-border rounded-lg p-5">
@@ -3210,21 +3326,24 @@ export default function TorneoDetailPage() {
                           onChange={(v) => { setBracketCatId(v); setBracketFormat(""); }}
                         />
                       </div>
-                      <button
-                        onClick={() => setShowGenerateDialog(true)}
-                        disabled={!bracketCatId}
-                        className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <GitBranch size={14} />
-                        Generar cuadro…
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => setShowGenerateDialog(true)}
+                          disabled={!bracketCatId}
+                          className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#D4AF37] text-[#0C0C0C] text-sm font-semibold hover:bg-[#C49F2A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <GitBranch size={14} />
+                          Generar cuadro…
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               );
             })()}
 
-            {bracketCatId && (
+            {/* El aviso solo sirve para poder cambiar los grupos: sin permiso, no sale */}
+            {canEdit && bracketCatId && (
               <GroupsLockBanner
                 tournamentId={id}
                 categoryId={bracketCatId}
@@ -3245,7 +3364,7 @@ export default function TorneoDetailPage() {
                     desde cero usa &quot;Generar cuadro…&quot; de arriba.
                   </p>
                 </div>
-                {bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
+                {canEdit && bracketCatId && ((allStandings as any)[bracketCatId]?.length ?? 0) > 0 && (
                   <div className="flex items-center gap-2 shrink-0">
                     {!groupEditMode ? (
                       <>
@@ -3396,7 +3515,7 @@ export default function TorneoDetailPage() {
                               <div key={grp.id} className="bg-secondary/30 border border-border rounded-md p-3 space-y-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="text-xs font-semibold text-[#D4AF37]">{grp.label}</p>
-                                  <div className="flex items-center gap-1">
+                                  {canEdit && <div className="flex items-center gap-1">
                                     <button
                                       onClick={() => {
                                         const name = window.prompt("Nuevo nombre del grupo:", grp.label);
@@ -3422,7 +3541,7 @@ export default function TorneoDetailPage() {
                                     >
                                       <Trash2 size={12} />
                                     </button>
-                                  </div>
+                                  </div>}
                                 </div>
 
                                 {groupEdit.length === 0 && (
@@ -3502,7 +3621,7 @@ export default function TorneoDetailPage() {
                           })}
 
                           {/* Botón "+ Nuevo grupo" — mini-Bloque 5 */}
-                          <button
+                          {canEdit && <button
                             onClick={() => addEmptyGroupMut.mutate({ catId: bracketCatId })}
                             disabled={addEmptyGroupMut.isPending || catGroups.length >= 16 || groupsLocked(bracketCatId)}
                             className="flex flex-col items-center justify-center gap-2 min-h-[120px] rounded-md border-2 border-dashed border-border bg-background/30 text-muted-foreground hover:text-[#D4AF37] hover:border-[rgba(212,175,55,0.4)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -3516,7 +3635,7 @@ export default function TorneoDetailPage() {
                                 <span className="text-xs">Nuevo grupo</span>
                               </>
                             )}
-                          </button>
+                          </button>}
                         </div>
                       </div>
                     );
@@ -3574,11 +3693,7 @@ export default function TorneoDetailPage() {
                   { key: "FINAL",       label: "Final"         },
                   { key: "CONSOLATION", label: "Consolación"   },
                 ] as const;
-                const baseFormat = cat.scoringFormat ?? "BEST_OF_3";
-                const FORMAT_LABEL: Record<string, string> = {
-                  BEST_OF_3:        "3 sets",
-                  BEST_OF_2_SUPERTB:"2 sets + STB",
-                };
+                const baseFormat = cat.scoringFormat ?? DEFAULT_SCORING_FORMAT;
                 return (
                   <div key={cat.id} className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 sm:px-5 border-b border-border">
@@ -3626,7 +3741,7 @@ export default function TorneoDetailPage() {
                         </button>
 
                         {/* Formatos de puntuación por fase */}
-                        <button
+                        {canEdit && <button
                           onClick={() => {
                             if (roundFmtOpen) {
                               setShowRoundFmtCatId(null);
@@ -3645,7 +3760,7 @@ export default function TorneoDetailPage() {
                         >
                           <Star size={13} />
                           <span className="hidden sm:inline">Formatos</span>
-                        </button>
+                        </button>}
                         {hasGroups && (
                           <>
                             {/* En eliminatoria: botón para ver/ocultar clasificación de grupos */}
@@ -3664,7 +3779,7 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">{showStandingsCatId === cat.id ? "Ocultar grupos" : "Ver grupos"}</span>
                               </button>
                             )}
-                            {cat.currentPhase !== "GROUPS" && (
+                            {canEdit && cat.currentPhase !== "GROUPS" && (
                               <button
                                 onClick={() => setRegenElimCatId(cat.id)}
                                 className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-blue-400/50 transition-colors"
@@ -3675,7 +3790,7 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Regen. eliminatorias</span>
                               </button>
                             )}
-                            {((allStandings as any)[cat.id]?.length ?? 0) > 0 && (
+                            {canEdit && ((allStandings as any)[cat.id]?.length ?? 0) > 0 && (
                               <button
                                 onClick={() => setManualCrossCatId(cat.id)}
                                 className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[rgba(212,175,55,0.5)] transition-colors"
@@ -3686,15 +3801,17 @@ export default function TorneoDetailPage() {
                                 <span className="hidden sm:inline">Cruce manual</span>
                               </button>
                             )}
-                            <button
-                              onClick={() => setCreateMatchCatId(cat.id)}
-                              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-green-400/50 transition-colors"
-                              title="Crear un partido a mano"
-                              aria-label="Crear partido"
-                            >
-                              <Plus size={13} />
-                              <span className="hidden sm:inline">Crear partido</span>
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => setCreateMatchCatId(cat.id)}
+                                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-green-400/50 transition-colors"
+                                title="Crear un partido a mano"
+                                aria-label="Crear partido"
+                              >
+                                <Plus size={13} />
+                                <span className="hidden sm:inline">Crear partido</span>
+                              </button>
+                            )}
                             {groupsLocked(cat.id) && (
                               <span
                                 className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1 rounded-md border border-amber-400/40 bg-amber-400/5 text-xs text-amber-400"
@@ -3704,7 +3821,7 @@ export default function TorneoDetailPage() {
                                 <span className="sr-only sm:not-sr-only">Publicado · bloqueado</span>
                               </span>
                             )}
-                            <button
+                            {canEdit && <button
                               // Con el cuadro publicado, primero se explica cómo desbloquearlo;
                               // «Forzar» lleva a la confirmación, forzado solo esa vez
                               onClick={() =>
@@ -3721,7 +3838,7 @@ export default function TorneoDetailPage() {
                             >
                               <RefreshCw size={13} />
                               <span className="hidden sm:inline">Regenerar todo</span>
-                            </button>
+                            </button>}
                           </>
                         )}
                       </div>
@@ -3761,7 +3878,7 @@ export default function TorneoDetailPage() {
                     {roundFmtOpen && (
                       <div className="border-b border-border bg-secondary/20 px-5 py-4 space-y-3">
                         <p className="text-xs text-muted-foreground">
-                          Formato base de la categoría: <span className="text-foreground font-medium">{FORMAT_LABEL[baseFormat] ?? baseFormat}</span>. Configura un formato diferente por fase si lo necesitas.
+                          Formato base de la categoría: <span className="text-foreground font-medium">{scoringFormatLabel(baseFormat)}</span>. Configura un formato diferente por fase si lo necesitas.
                         </p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           {ROUND_PHASES.map(({ key, label }) => (
@@ -3777,9 +3894,8 @@ export default function TorneoDetailPage() {
                                 })}
                                 className="h-8 rounded-md border border-border bg-background text-foreground text-xs px-2 focus:outline-none focus:ring-1 focus:ring-purple-400"
                               >
-                                <option value="">Auto ({FORMAT_LABEL[baseFormat] ?? baseFormat})</option>
-                                <option value="BEST_OF_3">3 sets</option>
-                                <option value="BEST_OF_2_SUPERTB">2 sets + STB</option>
+                                <option value="">Auto ({scoringFormatLabel(baseFormat)})</option>
+                                {SCORING_FORMAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                               </select>
                             </div>
                           ))}
@@ -3838,7 +3954,7 @@ export default function TorneoDetailPage() {
                                         <td className="px-2 py-1.5 text-foreground max-w-[140px]">
                                           <div className="flex items-center gap-1">
                                             <span className="truncate">{row.name}</span>
-                                            <button
+                                            {canEdit && <button
                                               onClick={() => setEditStatsTarget({
                                                 categoryId: cat.id,
                                                 groupId: grp.id,
@@ -3854,7 +3970,7 @@ export default function TorneoDetailPage() {
                                               title="Editar estadísticas (sanción/ajuste)"
                                             >
                                               <Pencil size={10} />
-                                            </button>
+                                            </button>}
                                           </div>
                                         </td>
                                         <td className="px-2 py-1.5 text-center text-muted-foreground">{row.played}</td>
@@ -3916,6 +4032,7 @@ export default function TorneoDetailPage() {
                                     !m.isResult &&
                                     (m.team1?.length ?? 0) > 0;
                                   const canInitSwap =
+                                    canEdit &&
                                     !swapSourceMatchId &&
                                     !m.isResult &&
                                     (m.team1?.length ?? 0) > 0;
@@ -3996,7 +4113,7 @@ export default function TorneoDetailPage() {
                                               <span aria-hidden>✕</span> Cancelar swap
                                             </button>
                                           )}
-                                          {!m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
+                                          {canResults && !m.isResult && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(false); }}
                                               className="inline-flex items-center gap-1 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37] transition-colors"
@@ -4005,7 +4122,7 @@ export default function TorneoDetailPage() {
                                               <CheckCircle size={10} /> Meter resultado
                                             </button>
                                           )}
-                                          {m.isResult && (
+                                          {canResults && m.isResult && (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setResultMatch(m); setResultCorrection(true); }}
                                               className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
@@ -4062,7 +4179,7 @@ export default function TorneoDetailPage() {
                                           {m.court && <span className="text-[10px] text-muted-foreground/60">{m.court}</span>}
                                         </div>
                                       ) : <span />}
-                                      {!m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
+                                      {canResults && !m.isResult && !m.isWalkover && (m.team1?.length ?? 0) > 0 && (m.team2?.length ?? 0) > 0 && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(false); }}
                                           className="flex items-center gap-1 rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-medium text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37] transition-colors"
@@ -4071,7 +4188,7 @@ export default function TorneoDetailPage() {
                                           <CheckCircle size={10} /> Meter resultado
                                         </button>
                                       )}
-                                      {m.isResult && (
+                                      {canResults && m.isResult && (
                                         <button
                                           onClick={() => { setResultMatch(m); setResultCorrection(true); }}
                                           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors"
@@ -4110,12 +4227,53 @@ export default function TorneoDetailPage() {
         )}
 
         {/* ── PISTAS TAB ── */}
-        {tab === "horarios" && horariosView === "tablero" && (
-          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} timeZone={tournamentTimeZone(tournament)} />
+        {tab === "horarios" && !league && horariosView === "tablero" && (
+          <PistasTab tournamentId={id} categories={tournament?.categories ?? []} timeZone={tournamentTimeZone(tournament)} canWrite={canEdit} />
         )}
 
-        {tab === "horarios" && horariosView === "disponibilidad" && (
+        {tab === "horarios" && (league || horariosView === "disponibilidad") && (
           <AvailabilityHeatmap tournamentId={id} categories={tournament.categories} />
+        )}
+
+        {/* ── JORNADAS TAB (liga) ── */}
+        {tab === "jornadas" && league && (
+          <LeagueRoundsTab
+            startDate={dateOnlyKey(tournament.startDate)}
+            categories={tournament.categories}
+            matches={bracketMatches}
+            standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+            onEnterResult={(m) => { setResultMatch(m); setResultCorrection(false); }}
+            onCorrectResult={(m) => { setResultMatch(m); setResultCorrection(true); }}
+            canWrite={canResults}
+          />
+        )}
+
+        {/* ── CALENDARIO TAB (liga): fecha, hora y pista de cada partido ── */}
+        {tab === "calendario" && league && (
+          <LeagueCalendarTab
+            tournamentId={id}
+            tournament={tournament}
+            matches={bracketMatches}
+            canWrite={canEdit}
+            onCorrectResult={canResults ? (m) => { setResultMatch(m); setResultCorrection(true); } : undefined}
+          />
+        )}
+
+        {/* ── CLASIFICACIÓN TAB (liga) ── */}
+        {tab === "clasificacion" && league && (
+          <div className="space-y-6">
+            <LeagueStandingsTab
+              categories={tournament.categories}
+              standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+            />
+            <LeagueFinalPanel
+              tournamentId={id}
+              categories={tournament.categories}
+              matches={bracketMatches}
+              standings={allStandings as Record<string, LeagueStandingsGroup[] | undefined>}
+              canWrite={canEdit}
+            />
+          </div>
         )}
 
         {/* ── HISTORIAL TAB ── */}
@@ -4218,6 +4376,7 @@ export default function TorneoDetailPage() {
           tournament.categories.find((c) => c.id === bracketCatId)
             ?.confirmedCount ?? 0
         }
+        league={league}
         alreadyHasBracket={bracketMatches.some(
           (m: any) => m.categoryId === bracketCatId,
         )}
@@ -4288,6 +4447,7 @@ export default function TorneoDetailPage() {
         initialDate={createAt?.date}
         initialCourt={createAt?.court}
         timeZone={tournamentTimeZone(tournament)}
+        league={league}
         categoryLabel={
           (catOptions.find((c) => c.value === createMatchCatId)?.label) ?? "Categoría"
         }
@@ -4479,9 +4639,18 @@ export default function TorneoDetailPage() {
       );
     })()}
 
+      <ConfirmModal
+        open={!!forceResultAsk}
+        title="¿Registrar el resultado igualmente?"
+        description={`${forceResultAsk?.message ?? ""} Recalculará clasificación y avance.`}
+        confirmLabel="Registrar igualmente"
+        onClose={() => setForceResultAsk(null)}
+        onConfirm={() => { const retry = forceResultAsk?.retry; setForceResultAsk(null); retry?.(); }}
+      />
+
     <ConfirmModal
       open={showDeleteModal}
-      title="Eliminar torneo"
+      title={`Eliminar ${word}`}
       // Decía «no se puede deshacer» y luego «se puede restaurar» (D12)
       description={canRestore
         ? `¿Eliminar «${tournament?.name}»? Dejará de verse en el panel y en la app. Podrás restaurarlo desde Torneos → Eliminados.`
@@ -4494,7 +4663,7 @@ export default function TorneoDetailPage() {
     />
 
     {availRegId && (
-      <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} />
+      <AvailabilityModal registrationId={availRegId} onClose={() => setAvailRegId(null)} canEdit={canEdit} />
     )}
 
     {enrollOpen && tournament && (
@@ -4531,6 +4700,14 @@ export default function TorneoDetailPage() {
         player={paymentOf.player}
         tournamentId={id}
         onClose={() => setPaymentOf(null)}
+      />
+    )}
+
+    {payPairOf && (
+      <PayPairModal
+        registration={payPairOf}
+        tournamentId={id}
+        onClose={() => setPayPairOf(null)}
       />
     )}
 

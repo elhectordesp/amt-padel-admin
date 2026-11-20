@@ -9,20 +9,31 @@
  */
 
 import { api } from "@/lib/api";
+import { CANCEL_NOT_PROCESSED } from "@/lib/utils/booking-cancel-many";
 import type {
   ActivationState,
   Booking,
   BookingExtra,
   BookingFiltersQuery,
   BookingPaymentMethod,
+  BookingPriceChange,
+  CancelManyResult,
+  RescheduleOptions,
+  UpdateBookingPayload,
   BookingResult,
   ClubBookingConfig,
   ClubOperatingHours,
   ClubRulesResponse,
   ClubScheduleException,
+  SavedScheduleException,
+  ClubSeason,
+  ClubSeasonPayload,
+  ClubPriceOffer,
+  ClubPriceOfferPayload,
   ClubTesterUser,
   CourtAvailableDuration,
   CourtPriceSlot,
+  ReplaceClubPriceSlotsPayload,
   CreateBookingExtraPayload,
   CreateScheduleExceptionPayload,
   PaginatedBookings,
@@ -39,11 +50,15 @@ import type {
   UpdateClubRulesPayload,
   UpdateScheduleExceptionPayload,
 } from "@/types/bookings";
+import type { CourtOccupation } from "@/types";
 
 const base = (clubId: string) => `/admin/clubs/${clubId}/booking-config`;
 
 /** Lo más que devuelve el back en una página de GET /bookings. */
 const BOOKINGS_PAGE_SIZE = 100;
+
+/** Lo más que cancela el back en una petición de «cancelar varias». */
+const CANCEL_MANY_MAX = 100;
 
 function listBookings(filters: BookingFiltersQuery = {}) {
   return api
@@ -82,7 +97,7 @@ export const bookingsService = {
 
     create: (clubId: string, payload: CreateScheduleExceptionPayload) =>
       api
-        .post<ClubScheduleException>(`${base(clubId)}/exceptions`, payload)
+        .post<SavedScheduleException>(`${base(clubId)}/exceptions`, payload)
         .then((r) => r.data),
 
     update: (
@@ -91,7 +106,7 @@ export const bookingsService = {
       payload: UpdateScheduleExceptionPayload,
     ) =>
       api
-        .patch<ClubScheduleException>(
+        .patch<SavedScheduleException>(
           `${base(clubId)}/exceptions/${exceptionId}`,
           payload,
         )
@@ -151,9 +166,12 @@ export const bookingsService = {
   },
 
   courtPricing: {
-    list: (clubId: string, courtId: string) =>
+    /** Sin temporada, los precios base; con ella, solo los de esa temporada. */
+    list: (clubId: string, courtId: string, seasonId?: string | null) =>
       api
-        .get<CourtPriceSlot[]>(`${base(clubId)}/courts/${courtId}/pricing`)
+        .get<CourtPriceSlot[]>(`${base(clubId)}/courts/${courtId}/pricing`, {
+          params: seasonId ? { seasonId } : undefined,
+        })
         .then((r) => r.data),
 
     replace: (
@@ -167,6 +185,56 @@ export const bookingsService = {
           payload,
         )
         .then((r) => r.data),
+
+    /** Mismos precios para varias pistas, en una transacción. */
+    replaceMany: (clubId: string, payload: ReplaceClubPriceSlotsPayload) =>
+      api
+        .put<{ courtId: string; slots: CourtPriceSlot[] }[]>(
+          `/admin/clubs/${clubId}/price-slots`,
+          payload,
+        )
+        .then((r) => r.data),
+  },
+
+  // ── Temporadas de precios ───────────────────────────────────────────────
+
+  seasons: {
+    list: (clubId: string) =>
+      api.get<ClubSeason[]>(`/admin/clubs/${clubId}/seasons`).then((r) => r.data),
+
+    create: (clubId: string, payload: ClubSeasonPayload) =>
+      api
+        .post<ClubSeason>(`/admin/clubs/${clubId}/seasons`, payload)
+        .then((r) => r.data),
+
+    update: (clubId: string, seasonId: string, payload: Partial<ClubSeasonPayload>) =>
+      api
+        .patch<ClubSeason>(`/admin/clubs/${clubId}/seasons/${seasonId}`, payload)
+        .then((r) => r.data),
+
+    /** Borra también los precios de la temporada. */
+    remove: (clubId: string, seasonId: string) =>
+      api.delete(`/admin/clubs/${clubId}/seasons/${seasonId}`).then(() => undefined),
+  },
+
+  // ── Ofertas de precio ───────────────────────────────────────────────────
+
+  priceOffers: {
+    list: (clubId: string) =>
+      api.get<ClubPriceOffer[]>(`/admin/clubs/${clubId}/price-offers`).then((r) => r.data),
+
+    create: (clubId: string, payload: ClubPriceOfferPayload) =>
+      api
+        .post<ClubPriceOffer>(`/admin/clubs/${clubId}/price-offers`, payload)
+        .then((r) => r.data),
+
+    update: (clubId: string, offerId: string, payload: Partial<ClubPriceOfferPayload>) =>
+      api
+        .patch<ClubPriceOffer>(`/admin/clubs/${clubId}/price-offers/${offerId}`, payload)
+        .then((r) => r.data),
+
+    remove: (clubId: string, offerId: string) =>
+      api.delete(`/admin/clubs/${clubId}/price-offers/${offerId}`).then(() => undefined),
   },
 
   // ── Extras ─────────────────────────────────────────────────────────────
@@ -269,10 +337,56 @@ export const bookingsService = {
     create: (payload: CreateBookingPayload) =>
       api.post<Booking>(`/bookings`, payload).then((r) => r.data),
 
-    cancel: (id: string, reason?: string) =>
+    /** `refundAmountCents`: lo que el club devuelve de una reserva cobrada (como mucho lo cobrado). */
+    cancel: (id: string, reason?: string, refundAmountCents?: number) =>
       api
-        .delete<Booking>(`/bookings/${id}`, { data: { reason } })
+        .delete<Booking>(`/bookings/${id}`, {
+          data: { reason, ...(refundAmountCents ? { refundAmountCents } : {}) },
+        })
         .then((r) => r.data),
+
+    /** Cambia la reserva de hora, pista o duración; avisa a los jugadores. */
+    update: (id: string, payload: UpdateBookingPayload) =>
+      api
+        .patch<{ booking: Booking; price: BookingPriceChange }>(`/bookings/${id}`, payload)
+        .then((r) => r.data),
+
+    /** Huecos libres de un día para esta reserva (el suyo cuenta como libre), con su precio. */
+    rescheduleOptions: (id: string, params: { date: string; durationMinutes?: number }) =>
+      api
+        .get<RescheduleOptions>(`/bookings/${id}/reschedule-options`, { params })
+        .then((r) => r.data),
+
+    /**
+     * Cancela varias: el back admite 100 por petición, así que de 100 en 100.
+     * Cada una va por su cuenta; las que no se pueden vuelven con su código.
+     */
+    cancelMany: async (ids: string[], reason?: string, refundPaid?: boolean): Promise<CancelManyResult> => {
+      const result: CancelManyResult = { cancelled: [], failed: [] };
+      for (let i = 0; i < ids.length; i += CANCEL_MANY_MAX) {
+        let part: CancelManyResult;
+        try {
+          part = await api
+            .post<CancelManyResult>(`/bookings/cancel-many`, {
+              ids: ids.slice(i, i + CANCEL_MANY_MAX),
+              reason,
+              // A cada cobrada, se le devuelve todo lo cobrado
+              ...(refundPaid ? { refundPaid: true } : {}),
+            })
+            .then((r) => r.data);
+        } catch (err) {
+          // Sin nada cancelado aún, el error sale tal cual. Si ya hay lotes
+          // cancelados, no se pierden: el lote que falló y los siguientes
+          // vuelven como «sin procesar» y el listado enseña todo.
+          if (i === 0) throw err;
+          result.failed.push(...ids.slice(i).map((id) => ({ id, code: CANCEL_NOT_PROCESSED })));
+          return result;
+        }
+        result.cancelled.push(...part.cancelled);
+        result.failed.push(...part.failed);
+      }
+      return result;
+    },
 
     /**
      * El club pone o corrige el resultado (hasta 30 días después del partido).
@@ -297,6 +411,16 @@ export const bookingsService = {
         .then((r) => r.data),
   },
 
+  // ── Ocupación de las pistas (calendario) ───────────────────────────────
+
+  /** Bloqueos y partidos de torneo que ocupan las pistas del club en `[from, to)` (ISO). */
+  occupations: {
+    list: (clubId: string, params: { from: string; to: string }) =>
+      api
+        .get<{ occupations: CourtOccupation[] }>(`/admin/clubs/${clubId}/occupations`, { params })
+        .then((r) => r.data?.occupations ?? []),
+  },
+
   // ── Availability (público) ─────────────────────────────────────────────
 
   availability: (params: AvailabilityQuery) =>
@@ -316,8 +440,10 @@ export const bookingsQK = {
   rules: (clubId: string) => ["bookings", "rules", clubId] as const,
   courtDurations: (clubId: string, courtId: string) =>
     ["bookings", "courtDurations", clubId, courtId] as const,
-  courtPricing: (clubId: string, courtId: string) =>
-    ["bookings", "courtPricing", clubId, courtId] as const,
+  courtPricing: (clubId: string, courtId: string, seasonId?: string | null) =>
+    ["bookings", "courtPricing", clubId, courtId, seasonId ?? "base"] as const,
+  seasons: (clubId: string) => ["bookings", "seasons", clubId] as const,
+  priceOffers: (clubId: string) => ["bookings", "priceOffers", clubId] as const,
   extras: (clubId: string, onlyActive: boolean) =>
     ["bookings", "extras", clubId, onlyActive] as const,
   activation: (clubId: string) => ["bookings", "activation", clubId] as const,
@@ -329,6 +455,8 @@ export const bookingsQK = {
   bookingsAll: (filters: BookingFiltersQuery) =>
     ["bookings", "list", "all", JSON.stringify(filters)] as const,
   bookingDetail: (id: string) => ["bookings", "detail", id] as const,
-  availability: (clubId: string, courtId: string, date: string, duration: number) =>
-    ["bookings", "availability", clubId, courtId, date, duration] as const,
+  occupations: (clubId: string, from: string, to: string) =>
+    ["bookings", "occupations", clubId, from, to] as const,
+  availability: (clubId: string, courtId: string, date: string, duration: number, clubCustomerId?: string) =>
+    ["bookings", "availability", clubId, courtId, date, duration, clubCustomerId ?? ""] as const,
 };

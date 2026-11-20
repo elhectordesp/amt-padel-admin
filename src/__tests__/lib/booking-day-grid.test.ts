@@ -16,7 +16,7 @@ import {
   weekDayKeys,
   type DayGridCell,
 } from "@/lib/utils/booking-day-grid";
-import type { Court } from "@/types";
+import type { Court, CourtOccupation } from "@/types";
 import type { Booking, ClubOperatingHours, ClubScheduleException } from "@/types/bookings";
 
 const MADRID = "Europe/Madrid";
@@ -27,7 +27,7 @@ const hours = (dayOfWeek: number, openTime: string, closeTime: string, active = 
 
 const exception = (p: Partial<ClubScheduleException>): ClubScheduleException => ({
   id: "e1", clubId: "c1", date: "2026-10-28T00:00:00.000Z", isClosed: false,
-  customOpen: null, customClose: null, reason: null, ...p,
+  customOpen: null, customClose: null, reason: null, priceAsDayOfWeek: null, ...p,
 });
 
 const court = (id: string, extra: Partial<Court> = {}): Court =>
@@ -198,20 +198,41 @@ describe("buildDayGrid", () => {
     expect(grid.cells.p1[0]).toMatchObject({ kind: "booking", span: 3 });
   });
 
-  it("los bloqueos de la pista ese día salen como «Bloqueada», no como huecos libres", () => {
-    const blocked = court("p1", {
-      blocks: [
-        { id: "k1", courtId: "p1", startDate: DAY, endDate: DAY, startTime: "10:00", endTime: "11:00", reason: "Torneo", createdAt: "" },
-        { id: "k2", courtId: "p1", startDate: "2026-10-29", endDate: "2026-10-30", startTime: null, endTime: null, reason: null, createdAt: "" },
-      ],
-    });
-    const grid = buildDayGrid({ dayKey: DAY, courts: [blocked], bookings: [], window, timeZone: MADRID })!;
+  it("lo que ocupa la pista ese día sale como bloqueado con su tipo, no como hueco libre", () => {
+    // 09:00Z-10:00Z son las 10:00-11:00 de Madrid (CET)
+    const clase: CourtOccupation = {
+      kind: "CLASS", courtId: "p1", startsAt: "2026-10-28T09:00:00Z", endsAt: "2026-10-28T10:00:00Z",
+      label: "Escuela", source: "BLOCK", refId: "k1",
+    };
+    const grid = buildDayGrid({
+      dayKey: DAY, courts: [court("p1")], bookings: [], occupations: [clase], window, timeZone: MADRID,
+    })!;
     expect(kinds(grid.cells.p1.slice(1, 5))).toEqual(["free", "blocked", "blocked", "free"]);
-    expect(grid.cells.p1[2]).toEqual({ kind: "blocked", reason: "Torneo" });
+    expect(grid.cells.p1[2]).toEqual({ kind: "blocked", occupation: clase });
 
-    const allDay = court("p2", { blocks: [{ id: "k3", courtId: "p2", startDate: DAY, endDate: DAY, startTime: null, endTime: null, reason: null, createdAt: "" }] });
-    const grid2 = buildDayGrid({ dayKey: DAY, courts: [allDay], bookings: [], window, timeZone: MADRID })!;
+    const todoElDia: CourtOccupation = {
+      kind: "MAINTENANCE", courtId: "p2", startsAt: "2026-10-27T23:00:00Z", endsAt: "2026-10-28T23:00:00Z",
+      label: "Obras", source: "BLOCK", refId: "k2",
+    };
+    const grid2 = buildDayGrid({
+      dayKey: DAY, courts: [court("p2")], bookings: [], occupations: [todoElDia], window, timeZone: MADRID,
+    })!;
     expect(grid2.cells.p2.every((c) => c.kind === "blocked")).toBe(true);
+  });
+
+  it("un partido de torneo ocupa su tramo; el de otro día o de otra pista no", () => {
+    const partido: CourtOccupation = {
+      kind: "TOURNAMENT", courtId: "p1", startsAt: "2026-10-28T16:00:00Z", endsAt: "2026-10-28T17:30:00Z",
+      label: "Open · Cuartos", source: "MATCH", refId: "m1", tournamentId: "t1",
+    };
+    const otroDia = { ...partido, startsAt: "2026-10-29T16:00:00Z", endsAt: "2026-10-29T17:30:00Z" };
+    const otraPista = { ...partido, courtId: "p2" };
+    const grid = buildDayGrid({
+      dayKey: DAY, courts: [court("p1")], bookings: [], occupations: [partido, otroDia, otraPista], window, timeZone: MADRID,
+    })!;
+    // 17:00-18:30 en Madrid: tres franjas de 30 min desde las 17:00
+    const blocked = grid.rows.filter((_, i) => grid.cells.p1[i].kind === "blocked");
+    expect(blocked).toEqual([17 * 60, 17 * 60 + 30, 18 * 60]);
   });
 
   it("las reservas de pistas que no salen (inactivas) no rompen la rejilla", () => {

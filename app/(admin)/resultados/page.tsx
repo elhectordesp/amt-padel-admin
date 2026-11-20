@@ -12,7 +12,9 @@ import { matchesSearch } from "@/lib/utils/search";
 import { ErrorState } from "@/components/admin/error-state";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ResultModal } from "@/components/admin/result-modal";
+import { TournamentSelectOptions } from "@/components/admin/tournament-select-options";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { phaseLabel } from "@/lib/constants";
 import { hasBothPairs } from "@/lib/utils/match-status";
 import { isActiveTournamentStatus } from "@/lib/utils/dashboard-tournaments";
@@ -27,19 +29,29 @@ const scoreText = (m: MatchResult) => {
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function ResultadosPage() {
   const qc = useQueryClient();
+  // Meter y corregir resultados es escribir «results»; sin ese permiso solo se ven
+  const canResults = useClubAccess().can("results", "write");
   const [search,        setSearch]        = useState("");
   const { page, setPage, pageSize, setPageSize } = usePagination();
-  const [tournamentId,  setTournamentId]  = useState<string>("");
+  const [pickedId,      setPickedId]      = useState<string>("");
   const [selectedMatch,  setSelectedMatch]  = useState<MatchResult | null>(null);
   const [savingId,       setSavingId]       = useState<string | null>(null);
   const [confirmEdit,    setConfirmEdit]    = useState<MatchResult | null>(null);
 
+  // Torneos y ligas: los resultados se meten igual en los dos
   const { data: tournaments = [] } = useQuery({
-    queryKey: ["tournaments"],
-    queryFn:  adminService.tournaments.list,
+    queryKey: ["tournaments", "all"],
+    queryFn:  adminService.tournaments.listAll,
   });
 
+  /** La fase de un partido; en una liga, también su jornada («Grupos · Jornada 3»). */
+  const phaseText = (m: MatchResult, isLeague: boolean) =>
+    isLeague && m.phase === "GROUPS" && m.round ? `${phaseLabel(m.phase)} · Jornada ${m.round}` : phaseLabel(m.phase);
+
   const ongoingTournaments = tournaments.filter((t: Tournament) => isActiveTournamentStatus(t.status));
+  // Con un solo torneo (o liga) activo no hay nada que elegir: se abre directamente
+  const tournamentId = pickedId || (ongoingTournaments.length === 1 ? ongoingTournaments[0].id : "");
+  const isLeague = tournaments.find((t: Tournament) => t.id === tournamentId)?.kind === "LEAGUE";
 
   const {
     data: matches = [], isLoading, isError, refetch,
@@ -52,6 +64,9 @@ export default function ResultadosPage() {
   // Como en la ficha del torneo: también walkover, y la convención
   // "Confirma para…" del back (torneo que no está en curso, siguiente ronda ya
   // jugada) se puede forzar. Antes aquí solo salía el toast, sin salida
+  // «Confirma para…» del back (torneo no En curso, siguiente ronda ya jugada):
+  // se pregunta en un diálogo del panel, no con el confirm() del navegador
+  const [forceResultAsk, setForceResultAsk] = useState<{ message: string; retry: () => void } | null>(null);
   const saveResult = async (
     match: MatchResult,
     sets1: number[],
@@ -61,7 +76,7 @@ export default function ResultadosPage() {
   ): Promise<void> => {
     setSavingId(match.id);
     try {
-      await adminService.matches.setResult(match.id, sets1, sets2, opts?.walkover, opts?.walkoverWinnerTeam, force);
+      const saved = await adminService.matches.setResult(match.id, sets1, sets2, opts?.walkover, opts?.walkoverWinnerTeam, force);
       qc.invalidateQueries({ queryKey: ["matches", tournamentId] });
       qc.invalidateQueries({ queryKey: ["standings", tournamentId] });
       qc.invalidateQueries({ queryKey: ["bracket", tournamentId] });
@@ -69,13 +84,17 @@ export default function ResultadosPage() {
       // tienen que enterarse
       qc.invalidateQueries({ queryKey: ["tournaments"] });
       qc.invalidateQueries({ queryKey: ["tournament", tournamentId] });
-      toast.success(opts?.walkover ? "Walkover registrado" : "Resultado guardado");
+      toast.success(
+        saved.spaRecalcScheduled
+          ? "Resultado corregido. El SPA se actualizará esta noche."
+          : opts?.walkover ? "Walkover registrado" : "Resultado guardado",
+      );
       setSelectedMatch(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      if (!force && /Confirma para/i.test(msg) &&
-          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
-        return await saveResult(match, sets1, sets2, opts, true);
+      if (!force && /Confirma para/i.test(msg)) {
+        setForceResultAsk({ message: msg, retry: () => void saveResult(match, sets1, sets2, opts, true) });
+        return;
       }
       toast.error(msg || "Error al guardar resultado");
     } finally {
@@ -96,7 +115,7 @@ export default function ResultadosPage() {
 
   const paged = paginate(filtered, page, pageSize);
 
-  const handleTournamentChange = (id: string) => { setTournamentId(id); setPage(1); setSearch(""); };
+  const handleTournamentChange = (id: string) => { setPickedId(id); setPage(1); setSearch(""); };
   const handleSearchChange     = (v: string)  => { setSearch(v);        setPage(1); };
 
   return (
@@ -113,13 +132,11 @@ export default function ResultadosPage() {
               onChange={(e) => handleTournamentChange(e.target.value)}
               className="h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] min-w-[260px]"
             >
-              <option value="">Selecciona un torneo...</option>
+              <option value="">Selecciona un torneo o una liga...</option>
               {ongoingTournaments.length === 0 && (
-                <option disabled>— No hay torneos en curso o abiertos —</option>
+                <option disabled>— No hay torneos ni ligas en curso o abiertos —</option>
               )}
-              {ongoingTournaments.map((t: Tournament) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
+              <TournamentSelectOptions tournaments={ongoingTournaments} />
             </select>
 
             {tournamentId && (
@@ -205,7 +222,7 @@ export default function ResultadosPage() {
                         {/* Header: fase + court + status */}
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span className="font-semibold text-foreground">{phaseLabel(match.phase)}</span>
+                            <span className="font-semibold text-foreground">{phaseText(match, isLeague)}</span>
                             {match.court && <span>· {match.court}</span>}
                           </div>
                           {match.isResult && match.sets1 && match.sets2 ? (
@@ -237,7 +254,7 @@ export default function ResultadosPage() {
                             <span className="text-[11px] text-muted-foreground italic">
                               {match.isResult ? "Pase directo" : "Faltan parejas"}
                             </span>
-                          ) : (
+                          ) : canResults ? (
                             <button
                               onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
                               className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
@@ -248,7 +265,7 @@ export default function ResultadosPage() {
                             >
                               {match.isResult ? "Editar" : "Introducir"}
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -271,7 +288,7 @@ export default function ResultadosPage() {
                         {paged.map((match: MatchResult) => (
                           <tr key={match.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                             <td className="px-5 py-3.5">
-                              <span className="text-xs text-muted-foreground">{phaseLabel(match.phase)}</span>
+                              <span className="text-xs text-muted-foreground">{phaseText(match, isLeague)}</span>
                             </td>
                             <td className="px-5 py-3.5">
                               <span className="text-sm font-medium text-foreground">{match.team1.join(" / ")}</span>
@@ -301,7 +318,7 @@ export default function ResultadosPage() {
                                 <span className="text-xs text-muted-foreground italic">
                                   {match.isResult ? "Pase directo" : "Faltan parejas"}
                                 </span>
-                              ) : (
+                              ) : canResults ? (
                                 <button
                                   onClick={() => match.isResult ? setConfirmEdit(match) : setSelectedMatch(match)}
                                   className={`text-xs font-medium transition-colors hover:underline ${
@@ -310,7 +327,7 @@ export default function ResultadosPage() {
                                 >
                                   {match.isResult ? "Editar" : "Introducir"}
                                 </button>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
                         ))}
@@ -335,6 +352,15 @@ export default function ResultadosPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!forceResultAsk}
+        title="¿Registrar el resultado igualmente?"
+        description={`${forceResultAsk?.message ?? ""} Recalculará clasificación y avance.`}
+        confirmLabel="Registrar igualmente"
+        onClose={() => setForceResultAsk(null)}
+        onConfirm={() => { const retry = forceResultAsk?.retry; setForceResultAsk(null); retry?.(); }}
+      />
 
       {/* Confirm overwrite existing result */}
       <ConfirmModal

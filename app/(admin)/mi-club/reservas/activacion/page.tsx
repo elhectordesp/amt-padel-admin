@@ -2,8 +2,10 @@
  * /mi-club/reservas/activacion — lifecycle del módulo + gestión de testers.
  *
  * 3 acciones:
- *  - Request activation (solo si INACTIVE)
- *  - Publish to public (solo si TESTER_MODE)
+ *  - Request activation (solo si INACTIVE): antes enseña la lista de lo que
+ *    falta para que haya huecos reservables, y una vez enviada queda
+ *    «pendiente de AMT» (no se puede pedir otra vez)
+ *  - Publish to public (solo si TESTER_MODE), tras confirmarlo
  *  - Manage tester users (cualquier estado)
  */
 
@@ -11,9 +13,12 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
+  Circle,
+  Clock,
   Loader2,
   Plus,
   Search,
@@ -24,15 +29,18 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { ReservasPage } from "@/components/admin/reservas-page";
 import { formatInTimeZone, zonedDateTimeToIso } from "@/lib/utils/time-zone";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { adminService } from "@/lib/services/admin";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import type { Player } from "@/types";
+import type { ActivationCheck, ActivationCheckCode, ActivationReadiness } from "@/types/bookings";
 
 export default function ActivacionPage() {
   const { role, clubId } = useRole();
@@ -56,7 +64,7 @@ export default function ActivacionPage() {
   }
 
   return (
-    <ReservasPage title="Activación + Testers">
+    <ReservasPage title="Activación y pruebas">
       <p className="mt-2 text-sm text-muted-foreground">
         Solicita la activación al equipo AMT cuando hayas terminado de configurar
         horarios, pistas, precios y extras. Una vez aprobado, podrás usar el
@@ -86,38 +94,64 @@ export default function ActivacionPage() {
 
 function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
+  // Pedir la activación y publicar son de quien escribe la configuración
+  const canWrite = useClubAccess().can("settings", "write");
   const query = useQuery({
     queryKey: bookingsQK.activation(clubId),
     queryFn: () => bookingsService.activation.state(clubId),
   });
 
+  const [confirmPublish, setConfirmPublish] = useState(false);
+
   const requestMut = useMutation({
     mutationFn: () => bookingsService.activation.request(clubId),
-    onSuccess: (data) => {
-      toast.success(`Solicitud enviada (${data.notifiedAdminCount} admins notificados)`);
-      qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) });
-    },
+    onSuccess: () => toast.success("Solicitud enviada al equipo de AMT"),
     onError: showErr,
+    // También con error: el back pudo rechazarla por lo que falta, o ya
+    // había una solicitud, y la página tiene que enseñar lo que hay ahora
+    onSettled: () => qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) }),
   });
 
   const publishMut = useMutation({
     mutationFn: () => bookingsService.activation.publish(clubId),
-    onSuccess: () => {
-      toast.success("Club publicado");
+    onSuccess: () => toast.success("Club publicado"),
+    onError: showErr,
+    onSettled: () => {
+      setConfirmPublish(false);
       qc.invalidateQueries({ queryKey: bookingsQK.activation(clubId) });
     },
-    onError: showErr,
   });
 
   if (query.isLoading) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
 
   const state = query.data;
+  // Sin lo necesario para tener huecos, el back rechazaría la solicitud
+  const notReady = state?.readiness?.ready === false;
 
   return (
     <section className="rounded-lg border border-border bg-card p-5">
       <h2 className="mb-4 text-sm font-medium">Estado del módulo</h2>
 
-      {state?.status === "INACTIVE" && (
+      {state?.status === "INACTIVE" && state.bookingActivationRequestedAt && (
+        <div className="flex items-start gap-3 rounded-md bg-blue-500/10 p-3">
+          <Clock className="h-5 w-5 shrink-0 text-blue-500" />
+          <div className="text-sm">
+            <p className="font-medium">Solicitud enviada, pendiente de AMT</p>
+            <p className="text-muted-foreground">
+              Enviada el{" "}
+              {formatInTimeZone(state.bookingActivationRequestedAt, timeZone, {
+                day: "numeric",
+                month: "numeric",
+                year: "numeric",
+              })}
+              . Cuando AMT la apruebe, el módulo pasará a modo prueba con tus
+              testers.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {state?.status === "INACTIVE" && !state.bookingActivationRequestedAt && (
         <div className="space-y-3">
           <div className="flex items-start gap-3 rounded-md bg-amber-500/10 p-3">
             <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" />
@@ -129,14 +163,24 @@ function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: stri
               </p>
             </div>
           </div>
-          <Button onClick={() => requestMut.mutate()} disabled={requestMut.isPending}>
-            {requestMut.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
-            )}
-            Solicitar activación
-          </Button>
+          {state.readiness && <ActivationChecklist readiness={state.readiness} />}
+          {canWrite && (
+            <>
+              <Button onClick={() => requestMut.mutate()} disabled={requestMut.isPending || notReady}>
+                {requestMut.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                Solicitar activación
+              </Button>
+              {notReady && (
+                <p className="text-xs text-muted-foreground">
+                  Completa los pasos pendientes de la lista para poder solicitarla.
+                </p>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -153,14 +197,24 @@ function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: stri
               </p>
             </div>
           </div>
-          <Button onClick={() => publishMut.mutate()} disabled={publishMut.isPending}>
-            {publishMut.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            )}
-            Publicar al público
-          </Button>
+          {canWrite && (
+            <>
+              <Button onClick={() => setConfirmPublish(true)}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Publicar al público
+              </Button>
+              <ConfirmModal
+                open={confirmPublish}
+                title="¿Publicar el club al público?"
+                description="Tu club aparecerá a todos los jugadores de la app; para retirarlo tendrás que pedírselo a AMT."
+                confirmLabel="Sí, publicar"
+                cancelLabel="No, volver"
+                loading={publishMut.isPending}
+                onClose={() => setConfirmPublish(false)}
+                onConfirm={() => publishMut.mutate()}
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -188,10 +242,80 @@ function LifecycleSection({ clubId, timeZone }: { clubId: string; timeZone: stri
   );
 }
 
+/** Cada comprobación del back: qué dice cuando está hecha, cuando falta y a dónde ir. */
+const CHECK_INFO: Record<
+  ActivationCheckCode,
+  { done: string; todo: (c: ActivationCheck) => string; href: string; link: string }
+> = {
+  COURTS: {
+    done: "El club tiene pistas dadas de alta",
+    todo: () => "Da de alta al menos una pista",
+    href: "/mi-club",
+    link: "Ir a Mi club",
+  },
+  OPERATING_HOURS: {
+    done: "Horario de apertura configurado",
+    todo: () => "Indica los días y las horas a las que abre el club",
+    href: "/mi-club/reservas/horarios",
+    link: "Ir a Horarios",
+  },
+  COURT_DURATIONS: {
+    done: "Todas las pistas tienen sus duraciones",
+    todo: (c) => `Faltan las duraciones de: ${c.missing.join(", ")}`,
+    href: "/mi-club/reservas/pistas",
+    link: "Ir a Pistas",
+  },
+  COURT_PRICES: {
+    done: "Todas las duraciones tienen precio",
+    todo: (c) => `Falta el precio de: ${c.missing.join(", ")}`,
+    href: "/mi-club/reservas/precios",
+    link: "Ir a Precios",
+  },
+};
+
+/** Lo que falta para que haya huecos que reservar, cada cosa con su enlace. */
+function ActivationChecklist({ readiness }: { readiness: ActivationReadiness }) {
+  return (
+    <div className="rounded-md border border-border bg-background p-3">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
+        {readiness.ready
+          ? "Todo listo para que los jugadores vean huecos libres"
+          : "Lo que falta para que los jugadores vean huecos libres"}
+      </p>
+      <ul className="space-y-2">
+        {readiness.checks.map((c) => {
+          const info = CHECK_INFO[c.code];
+          return (
+            <li key={c.code} className="flex items-start gap-2 text-sm">
+              {c.ok ? (
+                <CheckCircle2 aria-label="Hecho" className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+              ) : (
+                <Circle aria-label="Pendiente" className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              )}
+              <span className={c.ok ? "text-muted-foreground" : "text-foreground"}>
+                {c.ok ? info.done : info.todo(c)}
+                {!c.ok && (
+                  <>
+                    {" "}
+                    <Link href={info.href} className="text-primary underline">
+                      {info.link}
+                    </Link>
+                  </>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // ── Testers ────────────────────────────────────────────────────────────────
 
 function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string }) {
   const qc = useQueryClient();
+  const canWrite = useClubAccess().can("settings", "write");
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Player | null>(null);
   const [validUntil, setValidUntil] = useState("");
@@ -241,16 +365,18 @@ function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string
           <Users className="mr-1 inline-block h-3.5 w-3.5" />
           Testers
         </h2>
-        <Button variant="outline" size="sm" onClick={() => setShowForm((s) => !s)}>
-          <Plus className="h-3.5 w-3.5" /> Añadir
-        </Button>
+        {canWrite && (
+          <Button variant="outline" size="sm" onClick={() => setShowForm((s) => !s)}>
+            <Plus className="h-3.5 w-3.5" /> Añadir
+          </Button>
+        )}
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
         Usuarios AMT que pueden ver y reservar mientras el club está en modo
         prueba. Si no especificas fecha, expiran en 7 días.
       </p>
 
-      {showForm && (
+      {canWrite && showForm && (
         <div className="mb-4 rounded-md border border-border bg-background p-3 space-y-3">
           {selected ? (
             <div className="flex items-center justify-between rounded border border-primary/30 bg-primary/5 px-3 py-2">
@@ -320,14 +446,16 @@ function TestersSection({ clubId, timeZone }: { clubId: string; timeZone: string
                   })}
                 </p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => remove.mutate(t.id)}
-                title="Eliminar"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-              </Button>
+              {canWrite && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => remove.mutate(t.id)}
+                  title="Eliminar"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>

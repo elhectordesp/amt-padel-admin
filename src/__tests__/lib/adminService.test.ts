@@ -72,6 +72,23 @@ describe('adminService', () => {
     });
   });
 
+  describe('tournaments.listAll', () => {
+    it('junta los torneos y las ligas: dos peticiones, la de ligas con kind=LEAGUE', async () => {
+      mockGet.mockImplementation(async (_url: string, config?: { params?: { kind?: string } }) =>
+        config?.params?.kind === 'LEAGUE'
+          ? { data: [{ id: 'l1', status: 'open', name: 'Liga', kind: 'LEAGUE' }] }
+          : { data: [{ id: 't1', status: 'open', name: 'Torneo' }] },
+      );
+      const result = await adminService.tournaments.listAll();
+      expect(mockGet).toHaveBeenCalledWith('/admin/tournaments');
+      expect(mockGet).toHaveBeenCalledWith('/admin/tournaments', { params: { kind: 'LEAGUE' } });
+      expect(result.map((t) => [t.id, t.kind, t.status])).toEqual([
+        ['t1', 'TOURNAMENT', 'OPEN'],
+        ['l1', 'LEAGUE', 'OPEN'],
+      ]);
+    });
+  });
+
   describe('tournaments.detail', () => {
     it('normaliza status a mayúsculas', async () => {
       mockGet.mockResolvedValueOnce({ data: { id: 't1', status: 'scheduled' } });
@@ -105,6 +122,15 @@ describe('adminService', () => {
 
   // ── Matches — lógica de transformación ──────────────────────────────
 
+  describe('tournaments.unfinishMatch', () => {
+    it('devuelve spaRecalcScheduled cuando el resultado ya contaba para el SPA (se recalcula esa noche)', async () => {
+      mockPost.mockResolvedValueOnce({ data: { success: true, spaRecalcScheduled: true } });
+      const res = await adminService.tournaments.unfinishMatch('m1', true);
+      expect(mockPost).toHaveBeenCalledWith('/admin/matches/m1/unfinish', { force: true });
+      expect(res.spaRecalcScheduled).toBe(true);
+    });
+  });
+
   describe('matches.setResult', () => {
     it('un walkover manda la pareja ganadora como winnerTeam (con walkoverWinnerTeam, el back la descartaba y daba 400)', async () => {
       mockPatch.mockResolvedValueOnce({ data: {} });
@@ -112,6 +138,12 @@ describe('adminService', () => {
       expect(mockPatch).toHaveBeenCalledWith('/admin/matches/m1/result', {
         sets1: [], sets2: [], walkover: true, winnerTeam: 2,
       });
+    });
+
+    it('devuelve spaRecalcScheduled cuando el back avisa de que el SPA se recalcula esa noche', async () => {
+      mockPatch.mockResolvedValueOnce({ data: { success: true, spaRecalcScheduled: true } });
+      const res = await adminService.matches.setResult('m1', [6, 6], [3, 4]);
+      expect(res.spaRecalcScheduled).toBe(true);
     });
 
     it('un resultado normal no manda walkover ni winnerTeam; force solo si se pide', async () => {
@@ -530,6 +562,25 @@ describe('adminService', () => {
       expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/t1/bracket/regenerate', { categoryId: 'c1' });
     });
 
+    it('ligas: programar un partido (fecha y pista, o quitarlas) y sacar el cuadro final', async () => {
+      mockPatch.mockResolvedValueOnce({ data: { match: { id: 'm1', date: null, court: null, courtId: null } } });
+      await adminService.matches.scheduleLeagueMatch('m1', { date: '2026-11-20T18:00:00.000Z', court: 'Pista 1' });
+      expect(mockPatch).toHaveBeenLastCalledWith('/admin/matches/m1/league-schedule', {
+        date: '2026-11-20T18:00:00.000Z',
+        court: 'Pista 1',
+      });
+      await adminService.matches.scheduleLeagueMatch('m1', { date: null, court: null });
+      expect(mockPatch).toHaveBeenLastCalledWith('/admin/matches/m1/league-schedule', { date: null, court: null });
+
+      mockPost.mockResolvedValueOnce({ data: { generated: true, qualifiers: 4 } });
+      await expect(adminService.tournaments.generateLeagueFinal('l1', 'c1', 2)).resolves.toEqual({ generated: true, qualifiers: 4 });
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/l1/categories/c1/league-final', { topNPerGroup: 2 });
+
+      // Un partido manual en un grupo de liga lleva su jornada
+      await adminService.tournaments.createManualMatch('l1', { categoryId: 'c1', groupId: 'g1', round: 3 });
+      expect(mockPost).toHaveBeenLastCalledWith('/admin/tournaments/l1/matches', { categoryId: 'c1', groupId: 'g1', round: 3 });
+    });
+
     it('partidos de grupos y generar: sin forzar, las peticiones de siempre; forzando, con forceLocked', async () => {
       const team = { userId: 'a', partnerId: 'b' };
       await adminService.tournaments.editMatchPlayers('m1', team, team);
@@ -592,6 +643,53 @@ describe('adminService', () => {
       expect(mockPost).toHaveBeenLastCalledWith('/admin/clubs/c1/invitations/inv-1/resend');
       await adminService.clubs.revokeInvitation('c1', 'inv-1');
       expect(mockDelete).toHaveBeenLastCalledWith('/admin/clubs/c1/invitations/inv-1');
+    });
+  });
+
+  describe('ficha del club e historial (A3)', () => {
+    const mockPut = api.put as ReturnType<typeof vi.fn>;
+
+    it('el historial manda el área y no manda los filtros vacíos', async () => {
+      mockGet.mockResolvedValueOnce({ data: { items: [], total: 0 } });
+      await adminService.auditLogs({ area: 'bookings', search: '', page: 2 });
+      expect(mockGet).toHaveBeenCalledWith('/admin/audit-logs?area=bookings&page=2');
+    });
+
+    it('datos fiscales: GET y PUT /admin/clubs/:id/fiscal', async () => {
+      const fiscal = { legalName: 'Club SL', taxId: 'B12345678', fiscalAddress: null };
+      mockGet.mockResolvedValueOnce({ data: fiscal });
+      await expect(adminService.clubs.fiscal('c1')).resolves.toEqual(fiscal);
+      expect(mockGet).toHaveBeenCalledWith('/admin/clubs/c1/fiscal');
+      mockPut.mockResolvedValueOnce({ data: fiscal });
+      await adminService.clubs.updateFiscal('c1', fiscal);
+      expect(mockPut).toHaveBeenCalledWith('/admin/clubs/c1/fiscal', fiscal);
+    });
+
+    it('logo: POST multipart a /admin/clubs/:id/logo con el campo image', async () => {
+      mockPost.mockResolvedValueOnce({ data: { logoUrl: 'https://cdn/logo.png' } });
+      const file = new File(['x'], 'logo.png', { type: 'image/png' });
+      await expect(adminService.clubs.uploadLogo('c1', file)).resolves.toEqual({ logoUrl: 'https://cdn/logo.png' });
+      const [url, form, cfg] = mockPost.mock.calls.at(-1)!;
+      expect(url).toBe('/admin/clubs/c1/logo');
+      expect((form as FormData).get('image')).toBe(file);
+      expect(cfg).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } });
+    });
+  });
+
+  describe('opciones de torneo del club (B5-1)', () => {
+    const mockPut = api.put as ReturnType<typeof vi.fn>;
+
+    it('leer: GET /admin/clubs/:id/tournament-config', async () => {
+      const config = { id: 'cfg-1', clubId: 'c1', format: 'eliminatoria' };
+      mockGet.mockResolvedValueOnce({ data: config });
+      await expect(adminService.clubTournamentConfig.get('c1')).resolves.toEqual(config);
+      expect(mockGet).toHaveBeenCalledWith('/admin/clubs/c1/tournament-config');
+    });
+
+    it('guardar: PUT con solo lo que se manda', async () => {
+      mockPut.mockResolvedValueOnce({ data: { id: 'cfg-1', clubId: 'c1', categorySpots: 16 } });
+      await adminService.clubTournamentConfig.update('c1', { categorySpots: 16 });
+      expect(mockPut).toHaveBeenCalledWith('/admin/clubs/c1/tournament-config', { categorySpots: 16 });
     });
   });
 });

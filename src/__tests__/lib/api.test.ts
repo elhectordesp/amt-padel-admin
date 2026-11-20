@@ -26,7 +26,7 @@ describe("api: club desactivado a mitad de sesión", () => {
   const originalLocation = window.location;
 
   beforeEach(() => {
-    Object.defineProperty(window, "location", { value: { href: "" }, writable: true });
+    Object.defineProperty(window, "location", { value: { href: "", pathname: "/dashboard" }, writable: true });
   });
 
   afterEach(() => {
@@ -73,7 +73,7 @@ describe("api: un admin al que le quitan el rol renueva como jugador (P2-16)", (
   const originalAdapter = axios.defaults.adapter;
 
   beforeEach(() => {
-    Object.defineProperty(window, "location", { value: { href: "" }, writable: true });
+    Object.defineProperty(window, "location", { value: { href: "", pathname: "/dashboard" }, writable: true });
     vi.mocked(Cookies.set).mockClear();
   });
 
@@ -82,7 +82,7 @@ describe("api: un admin al que le quitan el rol renueva como jugador (P2-16)", (
     axios.defaults.adapter = originalAdapter;
   });
 
-  it("si la sesión renovada no es de admin ni de club: fuera, a /login?motivo=sin-acceso", async () => {
+  it("si la sesión renovada es de jugador (le quitaron del club): se guarda y va a /elegir-club", async () => {
     backAnswers(401, { success: false, error: "Sesión caducada" });
     // /auth/refresh va por axios (no por api): devuelve un token de jugador
     axios.defaults.adapter = async (config: InternalAxiosRequestConfig) => ({
@@ -92,8 +92,43 @@ describe("api: un admin al que le quitan el rol renueva como jugador (P2-16)", (
 
     await expect(api.get("/admin/stats/finance")).rejects.toMatchObject({ status: 403 });
 
+    expect(window.location.href).toBe("/elegir-club");
+    // La sesión de jugador se guarda: /elegir-club decide si entra, elige o sale
+    expect(Cookies.set).toHaveBeenCalled();
+  });
+
+  it("si la sesión renovada no es de panel ni de jugador: fuera, a /login?motivo=sin-acceso", async () => {
+    backAnswers(401, { success: false, error: "Sesión caducada" });
+    axios.defaults.adapter = async (config: InternalAxiosRequestConfig) => ({
+      status: 200, statusText: "OK", headers: {}, config,
+      data: { success: true, data: { token: tokenWithRole("otro"), refreshToken: "r2" } },
+    } as AxiosResponse);
+
+    await expect(api.get("/admin/stats/finance")).rejects.toMatchObject({ status: 403 });
+
     expect(window.location.href).toBe("/login?motivo=sin-acceso");
-    // No se guarda el token de jugador
     expect(Cookies.set).not.toHaveBeenCalled();
   });
+});
+
+describe("api: sin sesión en una página pública", () => {
+  const originalLocation = window.location;
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", { value: originalLocation });
+  });
+
+  it.each(["/login", "/aceptar-invitacion", "/invitacion-equipo", "/restablecer"])(
+    "un 401 en %s no recarga la página (bucle de recargas)",
+    async (pathname) => {
+      Object.defineProperty(window, "location", { value: { href: "", pathname }, writable: true });
+      vi.mocked(Cookies.get).mockReturnValue(undefined as never);
+      backAnswers(401, { success: false, error: "No autorizado" });
+
+      await expect(api.get("/auth/me")).rejects.toBeDefined();
+
+      expect(window.location.href).toBe("");
+      vi.mocked(Cookies.get).mockReturnValue("refresh-token" as never);
+    },
+  );
 });

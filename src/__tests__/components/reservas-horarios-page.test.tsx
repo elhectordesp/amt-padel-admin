@@ -31,9 +31,17 @@ vi.mock("@/lib/services/bookings", async () => {
 });
 
 import HorariosPage from "../../../app/(admin)/mi-club/reservas/horarios/page";
+import { ME_QUERY_KEY } from "@/lib/use-me";
 
-function renderPage() {
+const asRole = (role: string) => ({
+  id: "staff", name: "Equipo", activeClubId: "c1",
+  clubs: [{ clubId: "c1", clubName: "Club Centro", roles: [role] }],
+});
+
+// me: la cuenta del equipo con sus roles en el club (en la caché, como la deja el panel al entrar)
+function renderPage(me?: object) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <HorariosPage />
@@ -78,6 +86,15 @@ describe("Horarios: cierre a medianoche", () => {
     expect(screen.getByLabelText("Cierre de Viernes")).toHaveValue("23:00");
   });
 
+  it("un club sin horario guardado empieza con todos los días abiertos", async () => {
+    svc.operatingHours.list.mockResolvedValue([]);
+    renderPage();
+    const monday = await screen.findByLabelText("Cierra a medianoche (Lunes)");
+    expect(monday).toBeEnabled();
+    for (const day of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
+      expect(screen.getByLabelText(`Cierre de ${day}`)).toBeEnabled();
+  });
+
   it("una excepción también puede cerrar a medianoche", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
@@ -87,6 +104,68 @@ describe("Horarios: cierre a medianoche", () => {
     await waitFor(() =>
       expect(svc.exceptions.create).toHaveBeenCalledWith("c1", expect.objectContaining({ customClose: "24:00" })),
     );
+  });
+
+  it("un cierre enseña las clases de la escuela que quedan fuera del horario, sin cancelarlas", async () => {
+    svc.exceptions.create.mockResolvedValue({
+      id: "e1",
+      affectedSchoolClasses: [
+        {
+          kind: "GROUP",
+          id: "ses1",
+          name: "Iniciación",
+          startsAt: "2026-12-25T17:00:00.000Z",
+          endsAt: "2026-12-25T18:00:00.000Z",
+        },
+        {
+          kind: "PRIVATE",
+          id: "pc1",
+          name: "Clase privada",
+          startsAt: "2026-12-25T09:00:00.000Z",
+          endsAt: "2026-12-25T10:00:00.000Z",
+        },
+      ],
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("2 clases de la escuela quedan fuera del horario");
+    expect(alert).toHaveTextContent("Iniciación");
+    expect(alert).toHaveTextContent("Clase privada");
+    expect(alert).toHaveTextContent("No se han cancelado ni movido");
+    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("sin clases afectadas no hay aviso", async () => {
+    svc.exceptions.create.mockResolvedValue({ id: "e1", affectedSchoolClasses: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+    await waitFor(() => expect(svc.exceptions.create).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("un festivo puede cobrarse como otro día de la semana", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.change(screen.getByLabelText(/Se cobra como/), { target: { value: "7" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+
+    await waitFor(() =>
+      expect(svc.exceptions.create).toHaveBeenCalledWith("c1", expect.objectContaining({ priceAsDayOfWeek: 7 })),
+    );
+  });
+
+  it("sin elegir «se cobra como», no se manda", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Guardar" }).at(-1)!);
+
+    await waitFor(() => expect(svc.exceptions.create).toHaveBeenCalled());
+    expect(svc.exceptions.create.mock.calls[0][1].priceAsDayOfWeek).toBeUndefined();
   });
 });
 
@@ -137,5 +216,32 @@ describe("Horarios — zona del club (B1)", () => {
     } finally {
       process.env.TZ = browserTz;
     }
+  });
+
+  describe("con un rol de solo lectura (Recepción lee la configuración)", () => {
+    beforeEach(() => {
+      svc.exceptions.list.mockResolvedValue([
+        { id: "e1", clubId: "c1", date: "2026-11-20", isClosed: true, customOpen: null, customClose: null, reason: "Festivo" },
+      ]);
+    });
+
+    it("ve el horario y las excepciones, sin «Guardar», «Aplicar a todos», «Añadir» ni borrar", async () => {
+      renderPage(asRole("RECEPTION"));
+      expect(await screen.findByText("vie, 20 nov 2026")).toBeInTheDocument();
+      expect(screen.getByText("Lunes")).toBeInTheDocument();
+      for (const name of [/Guardar/, /Aplicar a todos/, /Añadir/, /Eliminar excepción/]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      }
+      // El horario se lee, no se cambia
+      expect(screen.getByLabelText("Cierre de Lunes")).toBeDisabled();
+    });
+
+    it("con escritura (Propietario) están todos esos botones", async () => {
+      renderPage(asRole("OWNER"));
+      expect(await screen.findByText("vie, 20 nov 2026")).toBeInTheDocument();
+      for (const name of [/Guardar/, /Aplicar a todos/, /Añadir/, /Eliminar excepción/]) {
+        expect(screen.getByRole("button", { name })).toBeInTheDocument();
+      }
+    });
   });
 });

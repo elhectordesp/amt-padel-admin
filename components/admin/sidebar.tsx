@@ -1,21 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History,
+  History, Contact, CalendarDays, Wallet, UsersRound, Megaphone, Medal, GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
-import { useRole, isClub } from "@/lib/use-role";
+import { useRole, isClub, type Role } from "@/lib/use-role";
+import { useMe, ME_QUERY_KEY } from "@/lib/use-me";
+import { useClubAccess, type ClubAccess } from "@/lib/use-club-access";
+import { activateClub } from "@/lib/auth";
+import type { ClubArea } from "@/lib/club-permissions";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const NAV = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard"     },
   { href: "/torneos",       icon: Trophy,           label: "Torneos"       },
+  { href: "/ligas",         icon: Medal,            label: "Ligas"         },
   { href: "/jugadores",     icon: Users,            label: "Jugadores"     },
   { href: "/rankings",      icon: BarChart3,        label: "Rankings"      },
   { href: "/estadisticas",  icon: LineChart,        label: "Estadísticas"  },
@@ -29,28 +36,31 @@ const NAV = [
   { href: "/configuracion",   icon: Settings,         label: "Configuración"  },
 ];
 
-// Rutas que un user CLUB sí puede ver. El resto se ocultan del sidebar.
-// El backend ya enforce el aislamiento — esto es UX para no enseñar
-// botones que devolverían 403.
-const CLUB_ALLOWED_PATHS = new Set([
-  "/dashboard",
-  "/torneos",
-  "/inscripciones",
-  "/resultados",
-  "/patrocinadores",
-]);
+// Menú del gestor del club, lo diario arriba. El backend ya enforce el
+// aislamiento — esto es UX para no enseñar botones que devolverían 403.
+// «Inscripciones» y «Resultados» siguen dentro de cada torneo.
+const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubArea }[] = [
+  { href: "/dashboard",                    icon: LayoutDashboard, label: "Hoy"            },
+  { href: "/mi-club/reservas/calendario",  icon: CalendarDays,    label: "Calendario",     area: "bookings"  },
+  { href: "/mi-club/reservas/bookings",    icon: CalendarRange,   label: "Reservas",       area: "bookings"  },
+  { href: "/caja",                         icon: Wallet,          label: "Caja",           area: "cash"      },
+  { href: "/mi-club/clientes",             icon: Contact,         label: "Clientes",       area: "customers" },
+  { href: "/mi-club/mensajes",             icon: Megaphone,       label: "Mensajes",       area: "customers" },
+  { href: "/mi-club/escuela",              icon: GraduationCap,   label: "Escuela",        area: "school"    },
+  { href: "/torneos",                     icon: Trophy,          label: "Torneos",        area: "tournaments" },
+  { href: "/ligas",                        icon: Medal,           label: "Ligas",          area: "tournaments" },
+  { href: "/mi-club",                      icon: Landmark,        label: "Mi club",        area: "settings"  },
+  { href: "/mi-club/equipo",               icon: UsersRound,      label: "Equipo",         area: "staff"     },
+  { href: "/historial",                    icon: History,         label: "Historial",      area: "staff"     },
+  { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores", area: "tournaments" },
+];
 
-// Items que se insertan SOLO para CLUB users.
-const CLUB_MY_CLUB_ITEM = {
-  href: "/mi-club",
-  icon: Landmark,
-  label: "Mi club",
-};
-const CLUB_RESERVAS_ITEM = {
-  href: "/mi-club/reservas",
-  icon: CalendarRange,
-  label: "Reservas",
-};
+/** El menú que ve cada rol: el del club, el suyo; el resto (AMT), el completo. */
+export function navForRole(role: Role, access?: Pick<ClubAccess, "can">) {
+  if (!isClub(role)) return NAV;
+  // Al equipo del club solo se le enseña lo que su rol puede leer
+  return access ? CLUB_NAV.filter((i) => !i.area || access.can(i.area, "read")) : CLUB_NAV;
+}
 
 export function Sidebar() {
   const pathname    = usePathname();
@@ -59,13 +69,12 @@ export function Sidebar() {
   const [collapsed,   setCollapsed]   = useState(false); // desktop collapse
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
 
-  const visibleNav = isClub(role)
-    ? [
-        ...NAV.filter((item) => CLUB_ALLOWED_PATHS.has(item.href)),
-        CLUB_MY_CLUB_ITEM,
-        CLUB_RESERVAS_ITEM,
-      ]
-    : NAV;
+  const menuButtonRef  = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef     = useRef(false);
+
+  const access     = useClubAccess();
+  const visibleNav = navForRole(role, access);
 
   const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
 
@@ -79,6 +88,13 @@ export function Sidebar() {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileOpen(false); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+  }, [mobileOpen]);
+
+  // Foco accesible: al abrir va al botón de cerrar; al cerrar vuelve al de abrir
+  useEffect(() => {
+    if (mobileOpen) closeButtonRef.current?.focus();
+    else if (wasOpenRef.current) menuButtonRef.current?.focus();
+    wasOpenRef.current = mobileOpen;
   }, [mobileOpen]);
 
   const sidebarContent = (isMobile = false) => (
@@ -96,9 +112,10 @@ export function Sidebar() {
         {/* Botón cerrar — solo en el drawer móvil, siempre dentro del sidebar */}
         {isMobile && (
           <button
+            ref={closeButtonRef}
             onClick={() => setMobileOpen(false)}
             aria-label="Cerrar menú"
-            className="absolute top-3 right-3 flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="absolute top-2 right-2 flex items-center justify-center size-11 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
           >
             <X size={15} />
           </button>
@@ -114,6 +131,9 @@ export function Sidebar() {
         )}
       </div>
 
+      {/* Con qué club trabaja (solo quien lleva varios) */}
+      {(!collapsed || isMobile) && <ClubSwitcher />}
+
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
         {visibleNav.map(({ href, icon: Icon, label }) => {
@@ -125,7 +145,7 @@ export function Sidebar() {
               title={collapsed && !isMobile ? label : undefined}
               className={cn(
                 "flex items-center rounded-md text-sm transition-colors",
-                collapsed && !isMobile ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2",
+                collapsed && !isMobile ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2 max-[1024px]:min-h-11",
                 active
                   ? "bg-[rgba(212,175,55,0.12)] text-[#D4AF37] font-semibold"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary",
@@ -176,16 +196,17 @@ export function Sidebar() {
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────────────── */}
-      <div className="hidden lg:flex h-screen sticky top-0 shrink-0">
+      <div className="hidden min-[1025px]:flex h-full sticky top-0 shrink-0">
         {sidebarContent(false)}
       </div>
 
       {/* ── Mobile: botón hamburguesa — solo cuando drawer cerrado ── */}
       {!mobileOpen && (
         <button
+          ref={menuButtonRef}
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menú"
-          className="lg:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-9 h-9 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
+          className="min-[1025px]:hidden fixed top-3 left-3 z-50 flex items-center justify-center size-11 rounded-md bg-sidebar border border-[var(--sidebar-border)] text-muted-foreground hover:text-foreground transition-colors"
         >
           <Menu size={18} />
         </button>
@@ -194,7 +215,7 @@ export function Sidebar() {
       {/* ── Mobile: backdrop ──────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          className="min-[1025px]:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -202,8 +223,12 @@ export function Sidebar() {
 
       {/* ── Mobile: drawer ───────────────────────────────────────── */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menú"
+        inert={!mobileOpen}
         className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 h-screen transition-transform duration-200",
+          "min-[1025px]:hidden fixed inset-y-0 left-0 z-50 h-screen transition-transform duration-200",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -236,4 +261,49 @@ export function computeActiveHref(
     if (best === null || href.length > best.length) return href;
     return best;
   }, null);
+}
+
+/** Selector de club de quien lleva varias sedes: cambia la sesión y recarga en la portada. */
+function ClubSwitcher() {
+  const { role } = useRole();
+  const { data: me } = useMe();
+  const qc = useQueryClient();
+  const [changing, setChanging] = useState(false);
+  const clubs = me?.clubs ?? [];
+  if (!isClub(role) || clubs.length < 2) return null;
+
+  const onChange = async (clubId: string) => {
+    if (clubId === me?.activeClubId) return;
+    setChanging(true);
+    try {
+      await activateClub(clubId);
+      // Nada del club anterior en la caché
+      qc.clear();
+      window.location.href = "/";
+    } catch (err) {
+      setChanging(false);
+      toast.error(err instanceof Error ? err.message : "No se pudo cambiar de club");
+      qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    }
+  };
+
+  return (
+    <div className="px-2 pt-3">
+      <label htmlFor="club-switcher" className="block px-1 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        Club
+      </label>
+      <select
+        id="club-switcher"
+        value={me?.activeClubId ?? ""}
+        disabled={changing}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-9 max-[1024px]:h-11 px-2 rounded-md bg-input border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#D4AF37] disabled:opacity-60"
+      >
+        {!me?.activeClubId && <option value="" disabled>Elige un club</option>}
+        {clubs.map((c) => (
+          <option key={c.clubId} value={c.clubId}>{c.clubName}</option>
+        ))}
+      </select>
+    </div>
+  );
 }
