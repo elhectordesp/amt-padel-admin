@@ -14,7 +14,8 @@ export const UNCLOSED_DAYS_WINDOW = 14;
 
 /**
  * «Días sin cerrar» de la portada: los días recientes con cobros y sin cierre
- * de caja, cada uno con enlace a su caja. Solo con el módulo «Cuentas» y para
+ * de caja, y los cerrados que han cambiado después del cierre («Cerrado, pero
+ * ha cambiado»), cada uno con enlace a su caja. Solo con el módulo «Cuentas» y para
  * quien lee la caja; sin días pendientes, no sale.
  */
 export function UnclosedDaysNotice({ clubId }: { clubId: string }) {
@@ -43,7 +44,12 @@ export function UnclosedDaysNotice({ clubId }: { clubId: string }) {
                 {capitalizeFirst(formatDayKey(d.date, { weekday: "long", day: "numeric", month: "long" }))}
               </span>
               <span className="text-xs text-muted-foreground">{formatCents(d.totalCents)} cobrados</span>
-              <span className="text-xs text-muted-foreground">Cerrar ›</span>
+              {d.changedSinceClose && (
+                <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-medium text-amber-500">
+                  Cerrado, pero ha cambiado
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">{d.changedSinceClose ? "Revisar ›" : "Cerrar ›"}</span>
             </Link>
           </li>
         ))}

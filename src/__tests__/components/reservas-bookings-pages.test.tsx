@@ -622,6 +622,15 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
       expect(within(dialog()).getByText(/Cobrado: 18,00 €/)).toBeInTheDocument();
     });
 
+    it("«Devolver lo cobrado» rellena el campo con lo cobrado y lo devuelto sale entero", async () => {
+      await openDialog(PAID);
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Devolver lo cobrado (18,00 €)" }));
+      expect(within(dialog()).getByLabelText("Importe a devolver")).toHaveValue("18,00");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Sí, cancelar reserva" }));
+
+      await waitFor(() => expect(svc.bookings.cancel).toHaveBeenCalledWith("b1", undefined, 1800));
+    });
+
     it("lo devuelto va en céntimos junto al motivo", async () => {
       await openDialog(PAID);
       fireEvent.change(within(dialog()).getByPlaceholderText(/Motivo/), { target: { value: "Lluvia" } });
@@ -662,6 +671,7 @@ describe("Cancelar una reserva (UX-08): diálogo centrado, no en línea al final
     ])("%s: no pide devolución", async (_label, booking) => {
       await openDialog(booking);
       expect(within(dialog()).queryByLabelText("Importe a devolver")).not.toBeInTheDocument();
+      expect(within(dialog()).queryByRole("button", { name: /Devolver lo cobrado/ })).not.toBeInTheDocument();
     });
   });
 
@@ -897,6 +907,27 @@ describe("Detalle de reserva con el módulo Cuentas", () => {
     expect(await screen.findByRole("button", { name: /Cobrar/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Por jugadores" })).not.toBeInTheDocument();
     expect(partsSvc.view).not.toHaveBeenCalled();
+  });
+
+  it("con el módulo apagado pero con partes, la ficha sigue enseñando su hoja y se puede operar con ella", async () => {
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING, clubCustomerId: "cc1",
+      partsSummary: { count: 1, paid: 0, pending: 1, debt: 0, invited: 0 },
+    });
+    partsSvc.view.mockResolvedValue({
+      ...PARTS_VIEW,
+      parts: [{
+        id: "p1", position: 1, kind: "NORMAL", partPriceId: null, partPriceName: null, priceCents: 2000, reason: null,
+        status: "PENDING", clubCustomerId: null, customerName: null, label: null, isStudent: false, isMember: false,
+        paymentMethod: null, bizumPartnerId: null, bizumPartnerName: null, paidAt: null, paidByName: null,
+        refundedAt: null, refundAmountCents: null, debtId: null, debtStatus: null,
+      }],
+    });
+    await renderDetail();
+    expect(await screen.findByRole("tab", { name: "Por jugadores" })).toBeInTheDocument();
+    expect(partsSvc.view).toHaveBeenCalled();
+    expect(accountsSvc.partners.list).not.toHaveBeenCalled();
   });
 
   it("cobrada por partes: se lee «Varios» con sus partes y no se ofrece ni cobrar entera, ni bono, ni «no pagada»", async () => {

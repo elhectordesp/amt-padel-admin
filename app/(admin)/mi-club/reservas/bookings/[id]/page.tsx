@@ -245,8 +245,9 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   // Qué botones de cobro le tocan a quien mira: así no queda una fila vacía
   // Con partes, la reserva se cobra, se deshace y se devuelve parte a parte (el back responde 409 si no)
   const hasParts = b.partsSummary != null;
+  // Con el módulo apagado, una reserva que ya tiene partes sigue con su hoja
   const showCollectPanel =
-    accountsOn && canVoucher && b.status !== "CANCELLED" && (hasParts || payment === "markPaid");
+    canVoucher && b.status !== "CANCELLED" && (hasParts || (accountsOn && payment === "markPaid"));
   const showCollectBtn = canWrite && payment === "markPaid" && !hasParts && !showCollectPanel;
   const showVoucherBtn = canVoucher && payment === "markPaid" && !hasParts && !!b.clubCustomerId;
   const showRemoveVoucherBtn = canVoucher && payment === "removeVoucher";
@@ -362,7 +363,7 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
       {/* Cobro por partes: la hoja del club (módulo Cuentas) */}
       {showCollectPanel && (
         <Section title="Cobro">
-          <BookingCollectPanel clubId={clubId} booking={b} onChanged={refreshAfterCollect} />
+          <BookingCollectPanel clubId={clubId} booking={b} accountsOn={accountsOn} onChanged={refreshAfterCollect} />
         </Section>
       )}
 

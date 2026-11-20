@@ -131,6 +131,13 @@ export function CancelBookingDialog({ booking: b, timeZone, onClose }: Props) {
             onChange={(e) => setRefund(e.target.value)}
             className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
           />
+          <button
+            type="button"
+            onClick={() => setRefund((collected / 100).toFixed(2).replace(".", ","))}
+            className="text-xs text-muted-foreground underline hover:text-foreground"
+          >
+            Devolver lo cobrado ({formatCents(collected)})
+          </button>
           {refundError && (
             <p role="alert" className="text-xs text-destructive">
               {refundError}

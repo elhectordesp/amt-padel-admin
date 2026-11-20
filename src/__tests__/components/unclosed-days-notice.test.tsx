@@ -38,8 +38,8 @@ describe("UnclosedDaysNotice", () => {
 
   it("lista los días sin cerrar con su total y el enlace a la caja de ese día", async () => {
     unclosed.mockResolvedValue([
-      { date: "2026-11-19", totalCents: 5000 },
-      { date: "2026-11-16", totalCents: 700 },
+      { date: "2026-11-19", totalCents: 5000, changedSinceClose: false },
+      { date: "2026-11-16", totalCents: 700, changedSinceClose: false },
     ]);
     renderNotice();
     expect(await screen.findByText("Días sin cerrar")).toBeInTheDocument();
@@ -50,6 +50,20 @@ describe("UnclosedDaysNotice", () => {
     expect(links[0]).toHaveTextContent("50,00 € cobrados");
   });
 
+  it("un día cerrado que ha cambiado sale como «Cerrado, pero ha cambiado», con enlace a su caja", async () => {
+    unclosed.mockResolvedValue([
+      { date: "2026-11-19", totalCents: 5000, changedSinceClose: false },
+      { date: "2026-11-18", totalCents: 900, changedSinceClose: true },
+    ]);
+    renderNotice();
+    await screen.findByText("Días sin cerrar");
+    const links = screen.getAllByRole("link");
+    expect(links[1]).toHaveAttribute("href", "/caja?dia=2026-11-18");
+    expect(links[1]).toHaveTextContent("Cerrado, pero ha cambiado");
+    expect(links[1]).toHaveTextContent("Revisar");
+    expect(links[0]).not.toHaveTextContent("Cerrado, pero ha cambiado");
+    expect(links[0]).toHaveTextContent("Cerrar ›");
+  });
   it("sin días pendientes no sale", async () => {
     unclosed.mockResolvedValue([]);
     renderNotice();

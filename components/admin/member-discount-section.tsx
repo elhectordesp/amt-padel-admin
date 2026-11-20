@@ -26,6 +26,7 @@ export function MemberDiscountSection({ clubId }: { clubId: string }) {
   const saved = config.data?.memberDiscountPercent;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved !== undefined) setValue(String(saved));
   }, [saved]);
 

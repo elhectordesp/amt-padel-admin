@@ -28,6 +28,12 @@ type Tab = "all" | "players";
 interface Props {
   clubId:    string;
   booking:   Booking;
+  /**
+   * Módulo Cuentas encendido en el club. Apagado, las partes que ya tiene la
+   * reserva se siguen cobrando y deshaciendo, pero no se reparte de nuevo ni
+   * hay socios a quien dirigir un Bizum.
+   */
+  accountsOn: boolean;
   /** Tras cualquier cambio: recargar la reserva, sus listas y la caja. */
   onChanged: () => void;
 }
@@ -38,10 +44,11 @@ const BIG = "min-h-14 rounded-lg border border-border bg-secondary text-base fon
 /**
  * La «hoja de papel» del club para cobrar una reserva (módulo Cuentas): cobrar
  * todo con un botón o repartirla por jugadores, cada uno con su precio y su
- * forma de pago. Solo se monta con el módulo encendido y una reserva que se
- * puede cobrar por partes (sin cobro entero y sin cancelar).
+ * forma de pago. Se monta con el módulo encendido y una reserva que se puede
+ * cobrar por partes (sin cobro entero y sin cancelar), o con cualquier reserva
+ * que ya tenga partes aunque el módulo se haya apagado.
  */
-export function BookingCollectPanel({ clubId, booking, onChanged }: Props) {
+export function BookingCollectPanel({ clubId, booking, accountsOn, onChanged }: Props) {
   const qc = useQueryClient();
   const bookingId = booking.id;
   const [tab, setTab] = useState<Tab>(booking.partsSummary != null ? "players" : "all");
@@ -57,6 +64,7 @@ export function BookingCollectPanel({ clubId, booking, onChanged }: Props) {
   const partnersQuery = useQuery({
     queryKey: accountsQK.partners(clubId),
     queryFn: () => accountsService.partners.list(clubId),
+    enabled: accountsOn,
   });
   const partners = (partnersQuery.data ?? []).filter((p) => p.active);
 
@@ -128,7 +136,10 @@ export function BookingCollectPanel({ clubId, booking, onChanged }: Props) {
   return (
     <div className="space-y-4">
       <div role="tablist" aria-label="Cómo cobrar" className="flex gap-2 rounded-lg bg-secondary p-1">
-        {([["all", "Cobrar todo"], ["players", "Por jugadores"]] as const).map(([id, text]) => (
+        {([["all", "Cobrar todo"], ["players", "Por jugadores"]] as const)
+          // Sin el módulo no se reparte: «Por jugadores» solo sirve si ya hay partes
+          .filter(([id]) => id === "all" || accountsOn || hasParts)
+          .map(([id, text]) => (
           <button
             key={id}
             role="tab"
@@ -226,28 +237,32 @@ export function BookingCollectPanel({ clubId, booking, onChanged }: Props) {
             </button>
             {wholeOnly && (
               <div className="ml-auto flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  Repartir en
-                  <input
-                    type="number"
-                    aria-label="Número de partes"
-                    min={PARTS_MIN_COUNT}
-                    max={PARTS_MAX_COUNT}
-                    value={chosenCount}
-                    onChange={(e) => setCount(Number(e.target.value))}
-                    className="min-h-11 w-20 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={busy || !countValid || chosenCount === view.parts.length}
-                  onClick={() =>
-                    writeParts(() => bookingPartsService.split(clubId, bookingId, chosenCount))
-                  }
-                  className="min-h-11 rounded-md border border-border px-4 text-sm hover:bg-secondary disabled:opacity-50"
-                >
-                  Cambiar el reparto
-                </button>
+                {accountsOn && (
+                  <>
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      Repartir en
+                      <input
+                        type="number"
+                        aria-label="Número de partes"
+                        min={PARTS_MIN_COUNT}
+                        max={PARTS_MAX_COUNT}
+                        value={chosenCount}
+                        onChange={(e) => setCount(Number(e.target.value))}
+                        className="min-h-11 w-20 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={busy || !countValid || chosenCount === view.parts.length}
+                      onClick={() =>
+                        writeParts(() => bookingPartsService.split(clubId, bookingId, chosenCount))
+                      }
+                      className="min-h-11 rounded-md border border-border px-4 text-sm hover:bg-secondary disabled:opacity-50"
+                    >
+                      Cambiar el reparto
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   disabled={busy}
