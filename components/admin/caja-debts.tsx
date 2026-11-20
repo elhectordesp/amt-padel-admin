@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
+import { ClubDebtPayAll, ClubDebtPayDialog, DebtItemPill } from "@/components/admin/club-debt-pay";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { SchoolFeePayDialog, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
@@ -41,6 +42,7 @@ const AREA_OF: Record<DebtItem["source"], "bookings" | "cash" | "school"> = {
   VOUCHER:       "cash",
   SCHOOL_FEE:    "school",
   PRIVATE_CLASS: "school",
+  CLUB_DEBT:     "cash",
 };
 
 /**
@@ -110,7 +112,14 @@ export function CajaDebts({ clubId, timeZone }: Props) {
             <section key={p.key} className="rounded-lg border border-border bg-card">
               <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <h3 className="font-medium text-foreground">{p.name}</h3>
-                <span className="text-sm font-semibold text-[#D4AF37]">{formatCents(p.totalCents)}</span>
+                <div className="flex items-center gap-3">
+                  <ClubDebtPayAll
+                    clubId={clubId}
+                    personName={p.name}
+                    debts={p.items.filter((i) => i.source === "CLUB_DEBT" && canCollect(i)).map((i) => ({ id: i.refId, amountCents: i.amountCents }))}
+                  />
+                  <span className="text-sm font-semibold text-[#D4AF37]">{formatCents(p.totalCents)}</span>
+                </div>
               </header>
               <ul>
                 {p.items.map((item) => (
@@ -121,6 +130,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-foreground">{item.concept}</p>
                       <p className="text-xs text-muted-foreground">{formatInTimeZone(item.date, timeZone, DAY)}</p>
+                      <DebtItemPill item={item} />
                     </div>
                     <span className="text-sm font-medium text-foreground">{formatCents(item.amountCents)}</span>
                     {item.source === "BOOKING_PART" && item.bookingId ? (
@@ -157,6 +167,15 @@ export function CajaDebts({ clubId, timeZone }: Props) {
             qc.invalidateQueries({ queryKey: ["bookings", "list"] });
             qc.invalidateQueries({ queryKey: ["registrations"] });
           }}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "CLUB_DEBT" && (
+        <ClubDebtPayDialog
+          clubId={clubId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          debtIds={[collecting.item.refId]}
+          totalCents={collecting.item.amountCents}
           onClose={() => setCollecting(null)}
         />
       )}
