@@ -24,7 +24,8 @@ export function paymentMethodLabel(method: BookingPaymentMethod | null): string 
 export function paymentAction(
   method: BookingPaymentMethod | null,
 ): "markPaid" | "markUnpaid" | "removeVoucher" | null {
-  if (method === null) return null;
+  // Varios: cobrada por partes; se deshace parte a parte
+  if (method === null || method === "MIXED") return null;
   if (method === "VOUCHER") return "removeVoucher";
   return method === "PENDING" ? "markPaid" : "markUnpaid";
 }

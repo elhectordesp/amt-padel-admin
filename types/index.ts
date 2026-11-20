@@ -109,6 +109,8 @@ export interface Club {
   lng?:                 number | null;
   // Zona horaria IANA del club: la heredan sus torneos. No viene con un back anterior
   timezone?:            string;
+  // Módulo «Cuentas» (cobro por partes, socios del Bizum, precios especiales): lo enciende AMT. No viene con un back anterior
+  accountsEnabled?:     boolean;
 }
 
 /** Datos fiscales del club: solo para su gestoría (AMT no emite facturas). */
