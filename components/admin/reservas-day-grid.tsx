@@ -23,6 +23,7 @@
 
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Check, CircleAlert } from "lucide-react";
 import { OccupationLegendItems } from "@/components/admin/occupation-legend";
@@ -70,6 +71,14 @@ export function ReservasDayGrid({
   nowMinutes = null,
   touch = false,
 }: Props) {
+  // Hoy, la rejilla arranca en la hora actual (de noche, la apertura quedaba
+  // lejos y la línea de ahora fuera de la vista)
+  const nowRow = useRef<HTMLTableRowElement | null>(null);
+  const isToday = nowMinutes !== null;
+  useEffect(() => {
+    if (isToday) nowRow.current?.scrollIntoView?.({ block: "center" });
+  }, [date, isToday]);
+
   const fullGrid = buildDayGrid({ dayKey: date, courts, bookings, occupations, window, timeZone });
 
   if (!fullGrid) {
@@ -133,7 +142,7 @@ export function ReservasDayGrid({
             const nowHere = now?.row === row ? now.offset : null;
             const lineCell = nowHere === null ? "" : "relative ";
             return (
-              <tr key={t}>
+              <tr key={t} ref={nowHere !== null ? nowRow : undefined}>
                 <td
                   className={`sticky left-0 z-10 ${slotHeight} border-t border-border bg-background py-0 px-2 align-top tabular-nums ${
                     isHour ? "font-medium text-foreground" : "text-muted-foreground/60"
