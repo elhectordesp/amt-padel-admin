@@ -18,6 +18,12 @@ export interface ClubMessagePreview {
   recipients: number;
   withPush:   number;
   withEmail:  number;
+  /** Del segmento, sin app ni email: no les llega nada. Opcional: un back anterior no lo manda. */
+  withoutContact?: number;
+  /** Menores de 14: reciben el email de su tutor. */
+  viaGuardian?:    number;
+  /** Bajas y menores de 14 sin consentimiento del tutor: fuera del envío. */
+  excluded?:       number;
 }
 
 /** Un envío del historial del club. */
