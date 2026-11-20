@@ -899,6 +899,27 @@ describe("Detalle de reserva con el módulo Cuentas", () => {
     expect(partsSvc.view).not.toHaveBeenCalled();
   });
 
+  it("con el módulo apagado pero con partes, la ficha sigue enseñando su hoja y se puede operar con ella", async () => {
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING, clubCustomerId: "cc1",
+      partsSummary: { count: 1, paid: 0, pending: 1, debt: 0, invited: 0 },
+    });
+    partsSvc.view.mockResolvedValue({
+      ...PARTS_VIEW,
+      parts: [{
+        id: "p1", position: 1, kind: "NORMAL", partPriceId: null, partPriceName: null, priceCents: 2000, reason: null,
+        status: "PENDING", clubCustomerId: null, customerName: null, label: null, isStudent: false, isMember: false,
+        paymentMethod: null, bizumPartnerId: null, bizumPartnerName: null, paidAt: null, paidByName: null,
+        refundedAt: null, refundAmountCents: null, debtId: null, debtStatus: null,
+      }],
+    });
+    await renderDetail();
+    expect(await screen.findByRole("tab", { name: "Por jugadores" })).toBeInTheDocument();
+    expect(partsSvc.view).toHaveBeenCalled();
+    expect(accountsSvc.partners.list).not.toHaveBeenCalled();
+  });
+
   it("cobrada por partes: se lee «Varios» con sus partes y no se ofrece ni cobrar entera, ni bono, ni «no pagada»", async () => {
     svc.bookings.detail.mockResolvedValue({
       ...BOOKING, clubCustomerId: "cc1", paymentMethod: "MIXED", paidAt: "2026-11-02T18:00:00.000Z", paidAmountCents: 1500,

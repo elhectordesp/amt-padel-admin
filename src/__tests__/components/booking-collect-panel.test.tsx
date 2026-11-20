@@ -53,11 +53,11 @@ const WITH_PARTS = { ...BOOKING, partsSummary: { count: 4, paid: 0, pending: 4, 
 
 const onChanged = vi.fn();
 
-function renderPanel(booking: Booking = WITH_PARTS) {
+function renderPanel(booking: Booking = WITH_PARTS, accountsOn = true) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <BookingCollectPanel clubId="c1" booking={booking} onChanged={onChanged} />
+      <BookingCollectPanel clubId="c1" booking={booking} accountsOn={accountsOn} onChanged={onChanged} />
     </QueryClientProvider>,
   );
 }
@@ -249,6 +249,29 @@ describe("BookingCollectPanel", () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Deshazla primero/)));
   });
 
+  describe("con el módulo apagado y partes ya creadas", () => {
+    it("la hoja sigue ahí y se puede cobrar, pero no repartir de nuevo ni pedir socios", async () => {
+      renderPanel(WITH_PARTS, false);
+      await screen.findByRole("listitem", { name: "Parte 1" });
+      expect(screen.getByRole("tab", { name: "Por jugadores" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.queryByLabelText("Número de partes")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cambiar el reparto" })).not.toBeInTheDocument();
+      expect(accounts.partners.list).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Todos efectivo" }));
+      await waitFor(() => expect(parts.pay).toHaveBeenCalledWith("c1", "b1", { method: "CASH" }));
+    });
+
+    it("quitar el reparto sigue permitido y, sin partes, ya no se ofrece «Por jugadores»", async () => {
+      renderPanel(WITH_PARTS, false);
+      await screen.findByRole("listitem", { name: "Parte 1" });
+      parts.view.mockResolvedValue(view({ parts: [], totals: { ...TOTALS, partsCents: 0, pendingCents: 0 } }));
+      fireEvent.click(screen.getByRole("button", { name: "Volver a cobrar entera" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Sí, cobrar entera" }));
+      await waitFor(() => expect(parts.removeAll).toHaveBeenCalledWith("c1", "b1"));
+      await waitFor(() => expect(screen.queryByRole("tab", { name: "Por jugadores" })).not.toBeInTheDocument());
+      expect(screen.getByRole("tab", { name: "Cobrar todo" })).toBeInTheDocument();
+    });
+  });
   describe("sin partes (cobrar todo)", () => {
     beforeEach(() => {
       parts.view.mockResolvedValue(view({ parts: [], totals: { ...TOTALS, partsCents: 0, pendingCents: 0 } }));
