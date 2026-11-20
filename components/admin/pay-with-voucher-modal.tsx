@@ -34,7 +34,10 @@ export function PayWithVoucherModal({ clubId, bookingId, subtitle, timeZone, onD
     queryKey: clubVouchersQK.usable(clubId, bookingId),
     queryFn: () => clubVouchersService.booking.usable(clubId, bookingId),
   });
-  const [voucherId, setVoucherId] = useState("");
+  // null: sin tocar. Con un solo bono que sirva, ya sale elegido
+  const [picked, setPicked] = useState<string | null>(null);
+  const vouchers = usable.data ?? [];
+  const voucherId = picked ?? (vouchers.length === 1 ? vouchers[0].id : "");
 
   const pay = useMutation({
     mutationFn: () => clubVouchersService.booking.use(clubId, bookingId, voucherId),
@@ -46,7 +49,6 @@ export function PayWithVoucherModal({ clubId, bookingId, subtitle, timeZone, onD
     onError: (err: unknown) => toast.error(errorText(err)),
   });
 
-  const vouchers = usable.data ?? [];
   // Mientras guarda no se cierra: la respuesta cerraría el modal que se abriera después
   const close = () => { if (!pay.isPending) onClose(); };
   const canPay = voucherId !== "" && !pay.isPending;
@@ -92,7 +94,7 @@ export function PayWithVoucherModal({ clubId, bookingId, subtitle, timeZone, onD
                     name="voucher"
                     value={v.id}
                     checked={voucherId === v.id}
-                    onChange={() => setVoucherId(v.id)}
+                    onChange={() => setPicked(v.id)}
                     disabled={pay.isPending}
                     className="mt-1"
                   />

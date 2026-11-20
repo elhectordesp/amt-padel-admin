@@ -49,6 +49,17 @@ vi.mock("@/lib/services/club-vouchers", async () => {
   return { ...actual, clubVouchersService: voucherSvc };
 });
 
+const partsSvc = vi.hoisted(() => ({ view: vi.fn() }));
+vi.mock("@/lib/services/booking-parts", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/booking-parts")>("@/lib/services/booking-parts");
+  return { ...actual, bookingPartsService: partsSvc };
+});
+const accountsSvc = vi.hoisted(() => ({ partners: { list: vi.fn() } }));
+vi.mock("@/lib/services/accounts", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/accounts")>("@/lib/services/accounts");
+  return { ...actual, accountsService: accountsSvc };
+});
+
 import BookingsListPage from "../../../app/(admin)/mi-club/reservas/bookings/page";
 import BookingDetailPage from "../../../app/(admin)/mi-club/reservas/bookings/[id]/page";
 
@@ -850,5 +861,76 @@ describe("Reservas con un rol de solo lectura", () => {
     await renderDetail();
     expect(await screen.findByText(/6-4/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Corregir resultado|Poner resultado/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Detalle de reserva con el módulo Cuentas", () => {
+  const ON = { ...club("Europe/Madrid"), accountsEnabled: true };
+  const PARTS_VIEW = {
+    bookingId: "b1", priceCents: 2000, courtType: "DOUBLES", defaultCount: 4, status: "CONFIRMED",
+    startsAt: "2026-11-02T17:00:00.000Z", parts: [],
+    totals: { partsCents: 0, discountCents: 0, collectedCents: 0, pendingCents: 0, debtCents: 0, invitedCents: 0 },
+    priceOptions: [], member: { discountPercent: 0, offered: false },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.findOne.mockResolvedValue(ON);
+    meMock.data = { id: "club-admin", name: "Gestor" };
+    svc.bookings.detail.mockResolvedValue({ ...BOOKING, clubCustomerId: "cc1", partsSummary: null });
+    partsSvc.view.mockResolvedValue(PARTS_VIEW);
+    accountsSvc.partners.list.mockResolvedValue([]);
+  });
+
+  it("sin cobrar, enseña la hoja de cobro («Cobrar todo» / «Por jugadores») y no el botón «Cobrar» de siempre", async () => {
+    await renderDetail();
+    expect(await screen.findByRole("tab", { name: "Cobrar todo" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Por jugadores" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Cobrar$/ })).not.toBeInTheDocument();
+    // Una reserva entera sigue pudiéndose pagar con bono
+    expect(screen.getByRole("button", { name: /Pagar con bono/ })).toBeInTheDocument();
+  });
+
+  it("con el módulo apagado, la ficha es la de siempre: «Cobrar» y ninguna hoja", async () => {
+    clubsMock.findOne.mockResolvedValue(club("Europe/Madrid"));
+    await renderDetail();
+    expect(await screen.findByRole("button", { name: /Cobrar/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Por jugadores" })).not.toBeInTheDocument();
+    expect(partsSvc.view).not.toHaveBeenCalled();
+  });
+
+  it("cobrada por partes: se lee «Varios» con sus partes y no se ofrece ni cobrar entera, ni bono, ni «no pagada»", async () => {
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING, clubCustomerId: "cc1", paymentMethod: "MIXED", paidAt: "2026-11-02T18:00:00.000Z", paidAmountCents: 1500,
+      partsSummary: { count: 4, paid: 3, pending: 0, debt: 1, invited: 0 },
+    });
+    partsSvc.view.mockResolvedValue({ ...PARTS_VIEW, parts: [] });
+    await renderDetail();
+    expect(await screen.findByText("(Varios)")).toBeInTheDocument();
+    expect(screen.getByText(/3 cobradas, 1 debe/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pagar con bono|Marcar como no pagada/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Cobrar$/ })).not.toBeInTheDocument();
+  });
+
+  it("un rol sin caja (Recepción sí; Entrenador no) no ve la hoja", async () => {
+    meMock.data = {
+      id: "coach", name: "Profe", activeClubId: "c1",
+      clubs: [{ clubId: "c1", clubName: "Club Centro", roles: ["COACH"] }],
+    } as unknown as typeof meMock.data;
+    await renderDetail();
+    await screen.findByText("Lunes, 2 de noviembre de 2026");
+    expect(screen.queryByRole("tab", { name: "Por jugadores" })).not.toBeInTheDocument();
+  });
+
+  it("cancelar una reserva cobrada por partes no ofrece devolver la reserva entera: avisa de que se devuelve parte a parte", async () => {
+    svc.bookings.detail.mockResolvedValue({
+      ...BOOKING, paymentMethod: "MIXED", paidAt: "2026-11-02T18:00:00.000Z", paidAmountCents: 1500,
+      partsSummary: { count: 4, paid: 3, pending: 0, debt: 1, invited: 0 },
+    });
+    await renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /Cancelar reserva/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByLabelText("Importe a devolver")).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/se cobró por partes/)).toBeInTheDocument();
   });
 });

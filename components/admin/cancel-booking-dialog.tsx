@@ -39,7 +39,9 @@ export function CancelBookingDialog({ booking: b, timeZone, onClose }: Props) {
   const [refund, setRefund] = useState("");
   // Sin cobro (o pagada con bono), 0: nada que devolver
   const collected = collectedCents(b) ?? 0;
-  const canRefund = collected > 0;
+  // Cobrada por partes, el back no devuelve la reserva entera: cada parte se devuelve en su hoja
+  const hasPartsPaid = b.partsSummary != null && b.partsSummary.paid > 0;
+  const canRefund = collected > 0 && !hasPartsPaid;
   const refundCents = refund.trim() === "" ? 0 : eurosToCents(refund);
   const refundError =
     !canRefund || refundCents === 0
@@ -109,6 +111,11 @@ export function CancelBookingDialog({ booking: b, timeZone, onClose }: Props) {
         onChange={(e) => setReason(e.target.value)}
         className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
       />
+      {hasPartsPaid && (
+        <p className="text-xs text-muted-foreground">
+          Esta reserva se cobró por partes: el dinero que quieras devolver se apunta en cada parte, en su ficha.
+        </p>
+      )}
       {canRefund && (
         <div className="space-y-1">
           <label htmlFor="cancel-refund" className="block text-xs text-muted-foreground">
