@@ -110,6 +110,18 @@ describe("CourtsManager", () => {
     });
   });
 
+  it("los iconos de cada pista tienen nombre accesible con la pista y no se esconden en una tablet táctil", async () => {
+    listMock.mockResolvedValueOnce([makeCourt({ id: "c1", name: "Pista Central" }), makeCourt({ id: "c2", name: "Pista 2" })]);
+    renderWithClient(<CourtsManager clubId="club-1" />);
+    const edit = await screen.findByRole("button", { name: "Editar Pista Central" });
+    expect(screen.getByRole("button", { name: "Eliminar Pista 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gestionar bloqueos de Pista 2" })).toBeInTheDocument();
+    // Esconderse al no pasar el ratón solo vale con ratón, nunca con el dedo
+    const bar = edit.parentElement as HTMLElement;
+    expect(bar.className).not.toMatch(/(^|\s)sm:opacity-0/);
+    expect(bar.className).toContain("hover:hover");
+  });
+
   it("clic en 'Añadir pista' abre el formulario inline", async () => {
     renderWithClient(<CourtsManager clubId="club-1" />);
     await waitFor(() =>

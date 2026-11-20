@@ -266,7 +266,8 @@ function CourtRow({
             <p className="text-[10px] text-muted-foreground mt-0.5">Cubierta</p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
+        {/* Solo se esconden con ratón (al pasar o al enfocar); en una tablet táctil siempre se ven */}
+        <div className="flex items-center gap-1.5 sm:gap-1 [@media(hover:hover)_and_(min-width:640px)]:opacity-0 [@media(hover:hover)_and_(min-width:640px)]:group-hover:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:group-focus-within:opacity-100 sm:transition-opacity">
           {canEditCourt && (
             <>
               <button
@@ -274,6 +275,7 @@ function CourtRow({
                 disabled={!canMoveUp}
                 className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
                 title="Subir pista"
+                aria-label={`Subir ${court.name}`}
               >
                 <ChevronUp size={14} className="sm:hidden" />
                 <ChevronUp size={12} className="hidden sm:block" />
@@ -283,6 +285,7 @@ function CourtRow({
                 disabled={!canMoveDown}
                 className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed"
                 title="Bajar pista"
+                aria-label={`Bajar ${court.name}`}
               >
                 <ChevronDown size={14} className="sm:hidden" />
                 <ChevronDown size={12} className="hidden sm:block" />
@@ -296,6 +299,7 @@ function CourtRow({
             }}
             className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
             title={canEditBlocks ? "Gestionar bloqueos" : "Ver bloqueos"}
+            aria-label={`${canEditBlocks ? "Gestionar bloqueos de" : "Ver bloqueos de"} ${court.name}`}
           >
             <CalendarOff size={14} className="sm:hidden" />
             <CalendarOff size={12} className="hidden sm:block" />
@@ -306,6 +310,7 @@ function CourtRow({
                 onClick={() => setEdit(true)}
                 className="p-2 sm:p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                 title="Editar pista"
+                aria-label={`Editar ${court.name}`}
               >
                 <Pencil size={14} className="sm:hidden" />
                 <Pencil size={12} className="hidden sm:block" />
@@ -315,6 +320,7 @@ function CourtRow({
                 disabled={remove.isPending}
                 className="p-2 sm:p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                 title="Eliminar pista"
+                aria-label={`Eliminar ${court.name}`}
               >
                 {remove.isPending ? (
                   <Loader2 size={14} className="animate-spin sm:hidden" />
@@ -376,8 +382,9 @@ function CourtRow({
                     <button
                       onClick={() => setConfirmDeleteBlock(b)}
                       disabled={removeBlock.isPending}
-                      className="p-1.5 sm:p-0.5 sm:opacity-0 sm:group-hover/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
+                      className="p-1.5 sm:p-0.5 [@media(hover:hover)_and_(min-width:640px)]:opacity-0 [@media(hover:hover)_and_(min-width:640px)]:group-hover/block:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:group-focus-within/block:opacity-100 rounded hover:bg-destructive/15 text-destructive sm:transition-opacity"
                       title="Eliminar bloqueo"
+                      aria-label="Eliminar bloqueo"
                     >
                       {removeBlock.isPending ? (
                         <Loader2 size={12} className="animate-spin" />
