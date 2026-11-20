@@ -152,6 +152,8 @@ describe("Escuela: ficha del grupo", () => {
     expect(within(sessions).getByText("Cancelada: Festivo")).toBeInTheDocument();
     // De días que no han llegado no se pasa lista
     expect(within(sessions).queryByText("Pasar lista")).not.toBeInTheDocument();
+    // Pero sí se abre su ficha (ausencias y recuperaciones): una por clase no cancelada
+    expect(within(sessions).getAllByRole("link", { name: "Abrir clase" }).length).toBe(2);
   });
 
   it("un alumno menor lleva el distintivo «Menor» y el nombre y el teléfono de su tutor; el mayor, nada de eso", async () => {

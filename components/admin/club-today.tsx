@@ -196,9 +196,11 @@ export function ClubToday({ clubId }: { clubId: string }) {
               <Plus className="mr-1.5 h-4 w-4" />Nueva reserva
             </Link>
           )}
-          <Link href="/caja" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-            <Wallet className="mr-1.5 h-4 w-4" />Caja del día
-          </Link>
+          {can("cash", "read") && (
+            <Link href="/caja" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+              <Wallet className="mr-1.5 h-4 w-4" />Caja del día
+            </Link>
+          )}
         </div>
       </div>
 

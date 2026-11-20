@@ -118,6 +118,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   // El cliente del club a quien se reserva (opcional) y si paga ya
   const [customer, setCustomer] = useState<ClubCustomer | null>(null);
   const [payNow, setPayNow] = useState(false);
+  const [skipPlayerNotices, setSkipPlayerNotices] = useState(false);
   const [payMethod, setPayMethod] = useState<CounterPaymentMethod>("CASH");
   // El importe cobrado, en euros; sin tocar, el precio de la reserva
   const [payAmount, setPayAmount] = useState<string | null>(null);
@@ -245,6 +246,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     setGuestDraft("");
     setCustomer(null);
     setPayNow(false);
+    setSkipPlayerNotices(false);
     setPayMethod("CASH");
     setPayAmount(null);
     onClose();
@@ -278,6 +280,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
       isCompetitive: isCompetitive && !started,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(customer ? { clubCustomerId: customer.id } : {}),
+      ...(skipPlayerNotices ? { skipPlayerNotices: true } : {}),
       ...(payNow && (pickedSlot?.priceCents ?? 0) > 0
         ? { payNow: { method: payMethod, ...(payCents !== null ? { amountCents: payCents } : {}) } }
         : {}),
@@ -417,6 +420,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando
                 huecos…
               </div>
+            ) : availabilityQuery.isError ? (
+              // El motivo real (un club sin activar, sin reservas…), no un «sin huecos» que engaña
+              <p role="alert" className="mt-1 rounded-md border border-destructive/40 bg-background px-2 py-1.5 text-sm text-destructive">
+                {availabilityQuery.error instanceof Error && availabilityQuery.error.message
+                  ? availabilityQuery.error.message
+                  : "No se pudieron cargar los huecos."}
+              </p>
             ) : slots.length === 0 ? (
               <p className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-muted-foreground">
                 Sin huecos libres para esta pista, fecha y duración.
@@ -622,6 +632,17 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
 
           {/* Cliente del club: se busca, o se da de alta ahí mismo */}
           <BookingCustomerPicker clubId={clubId} value={customer} onChange={setCustomer} />
+
+          {/* Para copiar reservas que ya existen en otro sistema sin avisar dos veces */}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={skipPlayerNotices}
+              onChange={(e) => setSkipPlayerNotices(e.target.checked)}
+              className="h-4 w-4 accent-primary"
+            />
+            No avisar al jugador
+          </label>
 
           {/* Cobrada ahora: solo si la reserva tiene importe */}
           {pickedSlot && pickedSlot.priceCents > 0 && (

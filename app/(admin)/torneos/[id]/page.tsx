@@ -1551,6 +1551,9 @@ export default function TorneoDetailPage() {
   const [resultMatch,        setResultMatch]        = useState<any | null>(null);
   const [resultCorrection,   setResultCorrection]   = useState(false);
   const [savingResultId,     setSavingResultId]     = useState<string | null>(null);
+  // «Confirma para…» del back (torneo no En curso, siguiente ronda ya jugada):
+  // se pregunta en un diálogo del panel, no con el confirm() del navegador
+  const [forceResultAsk, setForceResultAsk] = useState<{ message: string; retry: () => void } | null>(null);
   const [showStandingsCatId,  setShowStandingsCatId]  = useState<string | null>(null);
   const [showRoundFmtCatId,   setShowRoundFmtCatId]   = useState<string | null>(null);
   const [editRoundFormats,    setEditRoundFormats]     = useState<Record<string, string>>({});
@@ -1864,10 +1867,9 @@ export default function TorneoDetailPage() {
       // (dueño del torneo) puede forzar bajo su riesgo: torneo no ONGOING, o corregir
       // un resultado cuya siguiente ronda ya se jugó. Ofrecemos forzar y reintentar.
       const msg: string = err?.message ?? "";
-      if (!force && /Confirma para/i.test(msg) &&
-          typeof window !== "undefined" &&
-          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
-        return saveResult(sets1, sets2, opts, true);
+      if (!force && /Confirma para/i.test(msg)) {
+        setForceResultAsk({ message: msg, retry: () => void saveResult(sets1, sets2, opts, true) });
+        return;
       }
       toast.error(msg || "Error al guardar resultado");
     } finally {
@@ -3258,7 +3260,7 @@ export default function TorneoDetailPage() {
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {(tournament.status === "OPEN" || tournament.status === "DRAW") && (() => {
+            {(tournament.status === "OPEN" || tournament.status === "DRAW" || (league && tournament.status === "DRAFT")) && (() => {
               const st = tournament.status;
               // En DRAW las inscripciones siempre están cerradas
               const deadlinePassed = st === "DRAW"
@@ -3295,9 +3297,12 @@ export default function TorneoDetailPage() {
               // - "ya generado": banner ámbar o rojo según resultados
               // - "inscripciones abiertas": modo read-only con motivo
               // El botón siempre se puede pulsar para abrir el dialog.
-              const blockedReason = !deadlinePassed
-                ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Ciérralas en «Preparación del torneo» (pestaña Resumen) para generar el cuadro.`
-                : null;
+              const prepName = league ? "Preparación de la liga" : "Preparación del torneo";
+              const blockedReason = st === "DRAFT"
+                ? `La liga es un borrador. Publícala y cierra las inscripciones en «${prepName}» (pestaña Resumen) para sortear los grupos.`
+                : !deadlinePassed
+                  ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Ciérralas en «${prepName}» (pestaña Resumen) para ${league ? "sortear los grupos" : "generar el cuadro"}.`
+                  : null;
 
               return (
                 <div className="bg-card border border-border rounded-lg p-5">
@@ -4633,6 +4638,15 @@ export default function TorneoDetailPage() {
         </div>
       );
     })()}
+
+      <ConfirmModal
+        open={!!forceResultAsk}
+        title="¿Registrar el resultado igualmente?"
+        description={`${forceResultAsk?.message ?? ""} Recalculará clasificación y avance.`}
+        confirmLabel="Registrar igualmente"
+        onClose={() => setForceResultAsk(null)}
+        onConfirm={() => { const retry = forceResultAsk?.retry; setForceResultAsk(null); retry?.(); }}
+      />
 
     <ConfirmModal
       open={showDeleteModal}

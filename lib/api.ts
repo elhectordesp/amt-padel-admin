@@ -2,7 +2,7 @@ import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 import { CLUB_ROLE_FORBIDDEN_MESSAGE } from "./club-permissions";
-import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE, isPanelRole, isPlayerSessionPath, tokenRole } from "./session";
+import { LOGIN_REASON_NO_ACCESS, NO_ACCESS_MESSAGE, isPanelRole, isPlayerSessionPath, isPublicPath, tokenRole } from "./session";
 
 const TOKEN_KEY         = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
@@ -90,6 +90,9 @@ function isClubDeactivated(err: unknown): boolean {
 
 function forceLogout(reason?: string) {
   removeTokens();
+  // En una página pública (login, restablecer…) ya se está fuera: recargar
+  // /login desde /login es un bucle de recargas
+  if (typeof window !== "undefined" && isPublicPath(window.location.pathname) && !reason) return;
   const target = reason ? `/login?motivo=${reason}` : "/login";
   try {
     window.location.href = target;

@@ -19,6 +19,7 @@ import { SchoolPrivateClassDialog } from "@/components/admin/school-private-clas
 import { SchoolStudentPayDialog } from "@/components/admin/school-pay-dialogs";
 import { Button } from "@/components/ui/button";
 import { invalidateSchoolBilling, schoolBillingQK, schoolBillingService } from "@/lib/services/school-billing";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
@@ -40,6 +41,7 @@ export function SchoolPrivateClassesSection({ clubId, canWrite }: { clubId: stri
 }
 
 function PrivateClassesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: string; canWrite: boolean }) {
+  const showMoney = useClubAccess().can("cash");
   const qc = useQueryClient();
   const [range, setRange] = useState(() => defaultPrivateClassRange(new Date(), timeZone));
   const [creating, setCreating] = useState(false);
@@ -170,9 +172,12 @@ function PrivateClassesList({ clubId, timeZone, canWrite }: { clubId: string; ti
                         <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                           <span>
                             <span className="font-medium">{s.name ?? "Sin nombre"}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {formatCents(s.priceCents)} · {studentPaymentText(s)}
-                            </span>
+                            {/* El dinero es de recepción: el entrenador ve a quién da clase, no lo que paga */}
+                            {showMoney && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {formatCents(s.priceCents)} · {studentPaymentText(s)}
+                              </span>
+                            )}
                           </span>
                           {canWrite && c.status === "SCHEDULED" && (
                             <span className="flex items-center gap-1">

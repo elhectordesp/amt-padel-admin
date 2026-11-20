@@ -86,6 +86,15 @@ describe("Horarios: cierre a medianoche", () => {
     expect(screen.getByLabelText("Cierre de Viernes")).toHaveValue("23:00");
   });
 
+  it("un club sin horario guardado empieza con todos los días abiertos", async () => {
+    svc.operatingHours.list.mockResolvedValue([]);
+    renderPage();
+    const monday = await screen.findByLabelText("Cierra a medianoche (Lunes)");
+    expect(monday).toBeEnabled();
+    for (const day of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
+      expect(screen.getByLabelText(`Cierre de ${day}`)).toBeEnabled();
+  });
+
   it("una excepción también puede cerrar a medianoche", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));

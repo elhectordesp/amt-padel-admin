@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { getToken } from "@/lib/api";
 import { adminService, type AccountRole, type AdminUser } from "@/lib/services/admin";
 
 export type { AccountRole };
@@ -20,6 +21,8 @@ export function useMe() {
     queryFn:              adminService.me,
     staleTime:            60_000,
     refetchOnWindowFocus: true,
+    // Sin sesión no hay cuenta que pedir: el 401 recargaba /login en bucle
+    enabled:              !!getToken(),
   });
 }
 

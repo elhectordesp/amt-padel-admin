@@ -235,7 +235,9 @@ describe("Escuela: pasar lista", () => {
     );
     await renderPage();
     expect(await screen.findByRole("status", {}, WAIT)).toHaveTextContent("Aún no es el día de la clase");
-    expect(within(student("Ana Prueba")).getByRole("button", { name: "Presente" })).toBeDisabled();
+    // Ni los botones: no se pueden pulsar
+    expect(screen.queryByRole("group", { name: /Asistencia de/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Presente" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Guardar asistencia" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Marcar todos presentes/ })).not.toBeInTheDocument();
   });

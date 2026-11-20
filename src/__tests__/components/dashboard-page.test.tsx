@@ -150,3 +150,28 @@ describe("DashboardPage — tarjetas y lista de torneos", () => {
     }
   });
 });
+
+describe("DashboardPage — el entrenador no pide lo que no puede leer (F15)", () => {
+  it("un club con solo escuela y reservas no lanza /admin/stats ni al principio", async () => {
+    vi.clearAllMocks();
+    useRoleMock.mockReturnValue({ role: "club", clubId: "club-1" });
+    document.cookie = "amt_admin_token=x; path=/"; // con sesión, /auth/me se pide
+    vi.mocked(adminService.me).mockResolvedValue({
+      id: "u", name: "Coach", email: "c@x", activeClubId: "club-1",
+      clubs: [{ clubId: "club-1", clubName: "C", roles: ["COACH"] }],
+    } as never);
+    renderWithClient(<DashboardPage />);
+    await screen.findByText(/Bienvenido/);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(adminService.stats).not.toHaveBeenCalled();
+    document.cookie = "amt_admin_token=; path=/; max-age=0";
+  });
+
+  it("el rol aún sin conocer (primer pintado) tampoco pide estadísticas", async () => {
+    vi.clearAllMocks();
+    useRoleMock.mockReturnValue({ role: null, clubId: null });
+    renderWithClient(<DashboardPage />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(adminService.stats).not.toHaveBeenCalled();
+  });
+});

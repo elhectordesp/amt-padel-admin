@@ -95,6 +95,19 @@ describe("Mensajes del club", () => {
     await waitFor(() => expect(sendButton.disabled).toBe(true), WAIT);
   });
 
+  it("antes de enviar avisa de quién se queda fuera: sin canal, menores por su tutor y bajas (F21)", async () => {
+    service.preview.mockResolvedValue({
+      recipients: 14, withPush: 8, withEmail: 12, withoutContact: 2, viaGuardian: 3, excluded: 4,
+    });
+    renderPage();
+    await screen.findByText("Cerramos el sábado", {}, WAIT);
+    fill();
+    fireEvent.click(screen.getByRole("button", { name: /Ver a cuántos llega/ }));
+    expect(await screen.findByText(/2 clientes sin app ni email: no recibirán nada/, {}, WAIT)).toBeTruthy();
+    expect(screen.getByText(/3 menores de 14: el mensaje va por email a su tutor/)).toBeTruthy();
+    expect(screen.getByText(/4 clientes quedan fuera: de baja o menor de 14 sin consentimiento/)).toBeTruthy();
+  });
+
   it("confirma con el número de clientes y manda título, texto, canales y filtros", async () => {
     renderPage();
     await screen.findByText("Cerramos el sábado", {}, WAIT);

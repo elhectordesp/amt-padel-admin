@@ -257,4 +257,18 @@ describe("EnrollTeamModal — alta confirmada en un torneo que exige el pago (B4
     });
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("«No avisar a los jugadores» viene desmarcada y, marcada, se manda", async () => {
+    vi.mocked(adminService.registrations.enroll).mockRejectedValue(new Error("x"));
+    renderModal();
+    fireEvent.change(searchBoxes()[0], { target: { value: "Car" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Carla Gil/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Sin pareja/ }));
+    const box = screen.getByRole("checkbox", { name: "No avisar a los jugadores" });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: /Inscribir pareja/ }));
+    await waitFor(() => expect(adminService.registrations.enroll).toHaveBeenCalled());
+    expect(vi.mocked(adminService.registrations.enroll).mock.calls[0][1]).toMatchObject({ skipPlayerNotices: true });
+  });
 });

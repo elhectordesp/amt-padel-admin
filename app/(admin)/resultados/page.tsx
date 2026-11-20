@@ -64,6 +64,9 @@ export default function ResultadosPage() {
   // Como en la ficha del torneo: también walkover, y la convención
   // "Confirma para…" del back (torneo que no está en curso, siguiente ronda ya
   // jugada) se puede forzar. Antes aquí solo salía el toast, sin salida
+  // «Confirma para…» del back (torneo no En curso, siguiente ronda ya jugada):
+  // se pregunta en un diálogo del panel, no con el confirm() del navegador
+  const [forceResultAsk, setForceResultAsk] = useState<{ message: string; retry: () => void } | null>(null);
   const saveResult = async (
     match: MatchResult,
     sets1: number[],
@@ -89,9 +92,9 @@ export default function ResultadosPage() {
       setSelectedMatch(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      if (!force && /Confirma para/i.test(msg) &&
-          window.confirm(`${msg}\n\n¿Continuar de todas formas? Recalculará clasificación y avance.`)) {
-        return await saveResult(match, sets1, sets2, opts, true);
+      if (!force && /Confirma para/i.test(msg)) {
+        setForceResultAsk({ message: msg, retry: () => void saveResult(match, sets1, sets2, opts, true) });
+        return;
       }
       toast.error(msg || "Error al guardar resultado");
     } finally {
@@ -349,6 +352,15 @@ export default function ResultadosPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!forceResultAsk}
+        title="¿Registrar el resultado igualmente?"
+        description={`${forceResultAsk?.message ?? ""} Recalculará clasificación y avance.`}
+        confirmLabel="Registrar igualmente"
+        onClose={() => setForceResultAsk(null)}
+        onConfirm={() => { const retry = forceResultAsk?.retry; setForceResultAsk(null); retry?.(); }}
+      />
 
       {/* Confirm overwrite existing result */}
       <ConfirmModal

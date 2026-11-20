@@ -124,6 +124,24 @@ describe("BookingCreateDialog", () => {
     );
   });
 
+  it("«No avisar al jugador» viene desmarcada y, sin tocarla, no va en el payload", async () => {
+    renderDialog();
+    await screen.findByDisplayValue("18:00");
+    expect(screen.getByRole("checkbox", { name: "No avisar al jugador" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
+    await waitFor(() => expect(svc.bookings.create).toHaveBeenCalledTimes(1));
+    expect(svc.bookings.create.mock.calls[0][0]).not.toHaveProperty("skipPlayerNotices");
+  });
+
+  it("marcada, «No avisar al jugador» se manda", async () => {
+    renderDialog();
+    await screen.findByDisplayValue("18:00");
+    fireEvent.click(screen.getByRole("checkbox", { name: "No avisar al jugador" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
+    await waitFor(() => expect(svc.bookings.create).toHaveBeenCalledTimes(1));
+    expect(svc.bookings.create.mock.calls[0][0]).toMatchObject({ skipPlayerNotices: true });
+  });
+
   async function addGuests(names: string[]) {
     // «Por teléfono» es el modo por defecto: los invitados son de «Con jugadores»
     fireEvent.click(screen.getByRole("radio", { name: /Con jugadores/ }));
@@ -254,6 +272,21 @@ describe("BookingCreateDialog", () => {
     expect(await screen.findByDisplayValue("18:00")).toHaveValue(SLOT);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Crear reserva" })).toBeEnabled());
+  });
+});
+
+describe("BookingCreateDialog — el club no admite reservas", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    courtsList.mockResolvedValue([{ id: "p1", name: "Pista 1", active: true, type: "DOUBLES" }]);
+    svc.courtDurations.list.mockResolvedValue([{ id: "d", courtId: "p1", minutes: 90, isDefault: true }]);
+  });
+
+  it("si /availability falla, enseña el motivo y no «Sin huecos libres»", async () => {
+    svc.availability.mockRejectedValue(new Error("Este club no tiene reservas habilitadas"));
+    renderDialog({ courtId: "p1", date: "2026-11-02" });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Este club no tiene reservas habilitadas");
+    expect(screen.queryByText(/Sin huecos libres/)).not.toBeInTheDocument();
   });
 });
 

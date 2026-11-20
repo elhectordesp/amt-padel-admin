@@ -314,6 +314,22 @@ export default function MensajesPage() {
                       {plural(currentPreview.withPush, "con la app", "con la app")} y{" "}
                       {plural(currentPreview.withEmail, "con email", "con email")}.
                       {channelOk && reachable === 0 && " Por los canales elegidos no llega a nadie."}
+                    
+                      {(currentPreview.withoutContact ?? 0) > 0 && (
+                        <span className="block text-amber-500">
+                          {plural(currentPreview.withoutContact!, "cliente", "clientes")} sin app ni email: no recibirán nada.
+                        </span>
+                      )}
+                      {(currentPreview.viaGuardian ?? 0) > 0 && (
+                        <span className="block">
+                          {plural(currentPreview.viaGuardian!, "menor de 14", "menores de 14")}: el mensaje va por email a su tutor.
+                        </span>
+                      )}
+                      {(currentPreview.excluded ?? 0) > 0 && (
+                        <span className="block">
+                          {plural(currentPreview.excluded!, "cliente queda", "clientes quedan")} fuera: de baja o menor de 14 sin consentimiento del tutor.
+                        </span>
+                      )}
                     </span>
                   )
                 ) : (

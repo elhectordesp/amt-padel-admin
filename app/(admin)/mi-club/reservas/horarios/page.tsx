@@ -119,9 +119,13 @@ function WeeklyHoursSection({ clubId }: { clubId: string }) {
     const map = new Map<number, ClubOperatingHours>(
       query.data.map((h) => [h.dayOfWeek, h]),
     );
+    // Un club sin horario guardado empieza con todos los días abiertos (se
+    // desmarca el que cierra); con horario, lo que falta es un día cerrado
+    const firstTime = map.size === 0;
     setRows(
       DEFAULT_DAY_ROWS.map((d) => {
         const found = map.get(d.dayOfWeek);
+        if (firstTime) return { ...d, active: true };
         return found
           ? {
               dayOfWeek: d.dayOfWeek,

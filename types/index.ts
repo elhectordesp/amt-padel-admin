@@ -477,6 +477,8 @@ export interface AdminEnrollTeamPayload {
   status?:      "PENDING" | "CONFIRMED";
   paid?:        boolean;
   forceEnroll?: boolean;
+  /** No avisar a los jugadores (copias de inscripciones que ya existen en otro sistema). */
+  skipPlayerNotices?: boolean;
 }
 
 export interface AdminEnrollResult {
