@@ -7,6 +7,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { AccountsDebtsSection } from "@/components/admin/accounts-debts-section";
 import { AccountsConfigSection } from "@/components/admin/accounts-config-section";
 import { AccountsPartPricesSection } from "@/components/admin/accounts-part-prices-section";
 import { AccountsPartnersSection } from "@/components/admin/accounts-partners-section";
@@ -53,6 +54,7 @@ export default function CuentasPage() {
             <AccountsPartnersSection clubId={clubId} />
             <AccountsPartPricesSection clubId={clubId} />
             <AccountsConfigSection clubId={clubId} />
+            <AccountsDebtsSection clubId={clubId} />
           </>
         )}
       </div>
