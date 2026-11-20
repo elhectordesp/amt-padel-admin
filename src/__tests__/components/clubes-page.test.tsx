@@ -558,3 +558,30 @@ describe("ClubesPage — alta guiada: club y primer propietario", () => {
     expect(clubsMock.create).not.toHaveBeenCalled();
   });
 });
+
+describe("ClubesPage — clubes por configurar (alta con la invitación fallida)", () => {
+  const CREATED = {
+    ...base, id: "c-nuevo", name: "Club Nuevo", active: false, deactivatedAt: null,
+    status: "pending", pendingSetup: false, hasOwner: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clubsMock.list.mockResolvedValue([ACTIVE, OFF, CREATED]);
+    clubsMock.update.mockResolvedValue({ ...CREATED, active: true, status: "active" });
+  });
+
+  it("se ve en la lista sin pulsar «Ver inactivos» y el desactivado no", async () => {
+    renderPage();
+    expect(await screen.findByText("Club Nuevo", { selector: "p" })).toBeTruthy();
+    expect(screen.queryByText("Club Apagado", { selector: "p" })).toBeNull();
+  });
+
+  it("«Activar club» lo activa; «Invitar al propietario» abre sus administradores", async () => {
+    renderPage();
+    const card = await cardOf("Club Nuevo");
+    expect(within(card).getByRole("button", { name: "Invitar al propietario" })).toBeTruthy();
+    fireEvent.click(within(card).getByRole("button", { name: "Activar club" }));
+    await waitFor(() => expect(clubsMock.update).toHaveBeenCalledWith("c-nuevo", { active: true }));
+  });
+});

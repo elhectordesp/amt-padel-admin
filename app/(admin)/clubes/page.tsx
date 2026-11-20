@@ -569,7 +569,11 @@ function ClubStatusNote({ club }: { club: Club }) {
     return (
       <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
         <ClubStatusBadge status={status} />
-        <p>Se activará y saldrá en la app en cuanto se guarden su nombre y su ciudad reales (también si lo haces tú aquí).</p>
+        {club.pendingSetup === false ? (
+          <p>Ya tiene sus datos, pero sigue sin activar y no sale en la app. Actívalo con «Activar club» en su tarjeta.</p>
+        ) : (
+          <p>Tiene el nombre o la ciudad de relleno. Se activará y saldrá en la app en cuanto se guarden su nombre y su ciudad reales (también si lo haces tú aquí).</p>
+        )}
       </div>
     );
   return null;
@@ -723,6 +727,29 @@ function ClubCard({
         </div>
       </div>
 
+      {/* Un club por configurar: lo que falta, a la vista */}
+      {status === "pending" && (club.pendingSetup === false || club.hasOwner === false) && (
+        <div className="flex flex-wrap gap-2">
+          {club.pendingSetup === false && (
+            <button
+              onClick={() => toggle.mutate({ id: club.id, action: "activate" })}
+              disabled={toggle.isPending}
+              className="px-3 py-1.5 text-xs rounded-md bg-[#D4AF37] text-[#0C0C0C] font-semibold hover:bg-[#C9A227] disabled:opacity-50"
+            >
+              Activar club
+            </button>
+          )}
+          {club.hasOwner === false && (
+            <button
+              onClick={() => onAdmins(club)}
+              className="px-3 py-1.5 text-xs rounded-md border border-[rgba(212,175,55,0.4)] text-[#D4AF37] font-semibold hover:bg-[rgba(212,175,55,0.08)]"
+            >
+              Invitar al propietario
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Details */}
       <div className="space-y-1 text-xs text-muted-foreground">
         {club.address && (
@@ -776,13 +803,16 @@ export default function ClubesPage() {
   const { page, setPage, pageSize, setPageSize } = usePagination();
 
   const { data: clubs = [], isLoading } = useQuery({
-    queryKey:  ["admin-clubs", showInactive],
-    queryFn:   () => adminService.clubs.list(showInactive),
+    queryKey:  ["admin-clubs"],
+    queryFn:   () => adminService.clubs.list(true),
   });
 
+  // Los «por configurar» (el alta con la invitación fallida, por ejemplo) se
+  // ven siempre: tienen cosas pendientes (activar, invitar al propietario)
   const active   = clubs.filter((c) => c.active !== false);
-  const inactive = clubs.filter((c) => c.active === false);
-  const displayed = showInactive ? clubs : active;
+  const pending  = clubs.filter((c) => clubStatus(c) === "pending");
+  const inactive = clubs.filter((c) => c.active === false && clubStatus(c) !== "pending");
+  const displayed = showInactive ? clubs : [...active, ...pending];
   const noCoords  = displayed.filter((c) => c.lat == null || c.lng == null);
   // Por nombre, ciudad o provincia, sin tildes
   const found = displayed.filter((c) => matchesSearch(search, c.name, c.city, c.province));
@@ -837,14 +867,15 @@ export default function ClubesPage() {
           <div className="flex items-center gap-3">
             <p className="text-sm text-muted-foreground">
               {active.length} club{active.length !== 1 ? "s" : ""} activo{active.length !== 1 ? "s" : ""}
-              {inactive.length > 0 && ` · ${inactive.length} inactivo${inactive.length !== 1 ? "s" : ""}`}
+              {pending.length > 0 && ` · ${pending.length} por configurar`}
+              {inactive.length > 0 && ` · ${inactive.length} desactivado${inactive.length !== 1 ? "s" : ""}`}
             </p>
-            <button
+            {inactive.length > 0 && <button
               onClick={() => { setShowInactive((v) => !v); setPage(1); }}
               className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
               {showInactive ? "Ocultar inactivos" : "Ver inactivos"}
-            </button>
+            </button>}
           </div>
           <div className="flex items-center gap-2">
             {noCoords.length > 0 && (
