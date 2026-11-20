@@ -18,6 +18,7 @@ import Link from "next/link";
 import { AlertTriangle, Archive, ArchiveRestore, Loader2, Save, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { CustomerDebtsSection } from "@/components/admin/customer-debts-section";
 import { CustomerVouchersSection } from "@/components/admin/customer-vouchers-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Field, Input } from "@/components/admin/form";
@@ -433,6 +434,8 @@ function CustomerView({
           <CustomerVouchersSection clubId={clubId} customerId={c.id} timeZone={timeZone} />
         </div>
       )}
+
+      <CustomerDebtsSection clubId={clubId} customerId={c.id} />
 
       <div className="mt-6 flex gap-2">
         <TabButton active={tab === "bookings"} onClick={() => setTab("bookings")}>Reservas</TabButton>

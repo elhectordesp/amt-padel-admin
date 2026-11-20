@@ -15,8 +15,9 @@ export interface CashMovement {
    * SCHOOL_FEE: una cuota de la escuela. PRIVATE_CLASS: un alumno de una clase privada
    * (con bono, método VOUCHER e importe 0). BOOKING_PART: la parte de una reserva
    * cobrada por partes (módulo Cuentas); `refId` es la parte y `bookingId` su reserva.
+   * CLUB_DEBT: una deuda del club cobrada (`refId` es la deuda).
    */
-  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS";
+  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS" | "CLUB_DEBT";
   refId:       string;
   /** Cuándo se cobró (ISO). */
   at:          string;
@@ -42,7 +43,7 @@ export interface CashOfDay {
 }
 
 export interface DebtItem {
-  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS";
+  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS" | "CLUB_DEBT";
   /** La reserva, la parte de una reserva, la inscripción, la cuota o, en una clase privada, el alumno de la clase. */
   refId:       string;
   /** Solo partes de una reserva: la reserva a la que se cobran. */
@@ -56,6 +57,11 @@ export interface DebtItem {
   playerId?:   string;
   /** Solo clases privadas: la clase del alumno. */
   privateClassId?: string;
+  /** Solo CLUB_DEBT (`refId` es la deuda): el día de la deuda, si es el último y el plazo del club. */
+  dayNumber?:  number;
+  lastDay?:    boolean;
+  expiryDays?: number | null;
+  longTerm?:   boolean;
 }
 
 export interface DebtPerson {
