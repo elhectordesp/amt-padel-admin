@@ -941,15 +941,6 @@ function CalendarTab({
       />
 
       <ConfirmModal
-        open={!!forceResultAsk}
-        title="¿Registrar el resultado igualmente?"
-        description={`${forceResultAsk?.message ?? ""} Recalculará clasificación y avance.`}
-        confirmLabel="Registrar igualmente"
-        onClose={() => setForceResultAsk(null)}
-        onConfirm={() => { const retry = forceResultAsk?.retry; setForceResultAsk(null); retry?.(); }}
-      />
-
-      <ConfirmModal
         open={!!unpublishCatId}
         title="Despublicar horario"
         description="Los partidos de esta categoría dejan de verse con su hora en la app, se avisa a los inscritos de que el cuadro va a cambiar y sus grupos se desbloquean. Cuando acabes, vuelve a publicarlo (se les avisa otra vez)."
@@ -4647,6 +4638,15 @@ export default function TorneoDetailPage() {
         </div>
       );
     })()}
+
+      <ConfirmModal
+        open={!!forceResultAsk}
+        title="¿Registrar el resultado igualmente?"
+        description={`${forceResultAsk?.message ?? ""} Recalculará clasificación y avance.`}
+        confirmLabel="Registrar igualmente"
+        onClose={() => setForceResultAsk(null)}
+        onConfirm={() => { const retry = forceResultAsk?.retry; setForceResultAsk(null); retry?.(); }}
+      />
 
     <ConfirmModal
       open={showDeleteModal}
