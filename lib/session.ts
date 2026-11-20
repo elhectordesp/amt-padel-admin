@@ -43,3 +43,33 @@ export function tokenRole(token: string | null | undefined): string | null {
     return null;
   }
 }
+
+// Rutas públicas (sin login): login/gestión de cuenta (también /restablecer, la
+// del enlace del email de la contraseña) + visor de torneo (modo espectador y
+// Widget TV), que usan solo endpoints públicos sin datos sensibles.
+export const PUBLIC_PATHS = [
+  "/login",
+  "/eliminar-cuenta",
+  "/privacidad",
+  "/ayuda",
+  "/aceptar-invitacion",
+  // Invitación al equipo de un club: la página misma lleva a /login (con el
+  // enlace de vuelta, token incluido) si no hay sesión
+  "/invitacion-equipo",
+  "/restablecer",
+  "/torneo",
+];
+
+/**
+ * Si `pathname` es la ruta `base` o cuelga de ella. Con startsWith pelado,
+ * "/torneo" (el visor público) dejaba pasar sin sesión "/torneos" y
+ * "/torneos/:id" (páginas del admin).
+ */
+export function isUnder(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
+/** Páginas que se ven sin sesión: ahí un 401 no debe mandar a /login (sería un bucle de recargas). */
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => isUnder(pathname, p));
+}

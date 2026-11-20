@@ -1,24 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { LOGIN_REASON_NO_ACCESS, isPanelRole, isPlayerSessionPath } from "./lib/session";
+import { LOGIN_REASON_NO_ACCESS, isPanelRole, isPlayerSessionPath, isPublicPath, isUnder } from "./lib/session";
 
 const TOKEN_KEY = "amt_admin_token";
 const REFRESH_TOKEN_KEY = "amt_admin_refresh";
-// Rutas públicas (sin login): login/gestión de cuenta (también /restablecer, la
-// del enlace del email de la contraseña) + visor de torneo (modo espectador y
-// Widget TV), que usan solo endpoints públicos sin datos sensibles.
-const PUBLIC_PATHS = [
-  "/login",
-  "/eliminar-cuenta",
-  "/privacidad",
-  "/ayuda",
-  "/aceptar-invitacion",
-  // Invitación al equipo de un club: la página misma lleva a /login (con el
-  // enlace de vuelta, token incluido) si no hay sesión
-  "/invitacion-equipo",
-  "/restablecer",
-  "/torneo",
-];
 
 // Páginas del admin a las que un user CLUB NO debe entrar — operaciones
 // globales del circuito (estadísticas globales, finanzas, config, etc).
@@ -62,18 +47,10 @@ function isExpValid(payload: JwtPayload | null): boolean {
   );
 }
 
-/**
- * Si `pathname` es la ruta `base` o cuelga de ella. Con startsWith pelado,
- * "/torneo" (el visor público) dejaba pasar sin sesión "/torneos" y
- * "/torneos/:id" (páginas del admin).
- */
-function isUnder(pathname: string, base: string): boolean {
-  return pathname === base || pathname.startsWith(`${base}/`);
-}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((p) => isUnder(pathname, p));
+  const isPublic = isPublicPath(pathname);
   const token = request.cookies.get(TOKEN_KEY)?.value;
   const payload = token ? decodePayload(token) : null;
 

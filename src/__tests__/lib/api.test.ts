@@ -110,3 +110,25 @@ describe("api: un admin al que le quitan el rol renueva como jugador (P2-16)", (
     expect(Cookies.set).not.toHaveBeenCalled();
   });
 });
+
+describe("api: sin sesión en una página pública", () => {
+  const originalLocation = window.location;
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", { value: originalLocation });
+  });
+
+  it.each(["/login", "/aceptar-invitacion", "/invitacion-equipo", "/restablecer"])(
+    "un 401 en %s no recarga la página (bucle de recargas)",
+    async (pathname) => {
+      Object.defineProperty(window, "location", { value: { href: "", pathname }, writable: true });
+      vi.mocked(Cookies.get).mockReturnValue(undefined as never);
+      backAnswers(401, { success: false, error: "No autorizado" });
+
+      await expect(api.get("/auth/me")).rejects.toBeDefined();
+
+      expect(window.location.href).toBe("");
+      vi.mocked(Cookies.get).mockReturnValue("refresh-token" as never);
+    },
+  );
+});
