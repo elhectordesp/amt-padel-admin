@@ -120,6 +120,8 @@ describe("Nueva liga", () => {
       groupsEndDate: "2100-02-01",
       startDate: "2099-12-01",
       endDate: "2100-03-01",
+      // El formato del club (aquí, eliminatoria) no es el de una liga: grupos + fase final
+      format: "grupos+eliminatoria",
     });
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/ligas/l-new"), WAIT);
   }, 60_000);

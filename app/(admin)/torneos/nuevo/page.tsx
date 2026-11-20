@@ -177,6 +177,9 @@ const LEVELS: { value: CategoryLevel; label: string }[] = [
   { value: "iniciacion", label: "Iniciación" },
 ];
 
+/** El formato de toda liga: fase de grupos (la liga) y fase final. */
+const LEAGUE_FORMAT = "grupos+eliminatoria";
+
 const FORMAT_LABEL: Record<string, string> = {
   "eliminatoria":        "Eliminatoria + Consolación",
   "grupos+eliminatoria": "Grupos + Eliminatoria",
@@ -459,7 +462,7 @@ export default function NuevoTorneoPage() {
       description: plainText(infoData!.description) || undefined,
       rules:       plainText(infoData!.rules) || undefined,
       tier:        configData!.tier,
-      format:      configData!.format,
+      format:      league ? LEAGUE_FORMAT : configData!.format,
       scoringSystem: configData!.scoringSystem,
       matchDuration: configData!.matchDuration,
       // Como instante: lo escrito es hora de la zona del torneo (sin zona, un
@@ -893,22 +896,25 @@ export default function NuevoTorneoPage() {
               {/* Grupo 1: Formato del torneo */}
               <div className="space-y-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-border pb-2">
-                  Formato del torneo
+                  {league ? "Formato de la liga" : "Formato del torneo"}
                 </p>
-                <Field label="Tier del torneo">
+                <Field label={league ? "Tier de la liga" : "Tier del torneo"}>
                   <TierPicker
                     value={configForm.watch("tier")}
                     onChange={(v) => configForm.setValue("tier", v as ConfigData["tier"], { shouldValidate: true })}
                   />
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Formato" error={configForm.formState.errors.format?.message}>
-                    <CustomSelect
-                      options={WIZARD_FORMAT_OPTIONS}
-                      value={configForm.watch("format")}
-                      onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
-                    />
-                  </Field>
+                  {/* Una liga siempre es grupos + fase final: no hay formato que elegir */}
+                  {!league && (
+                    <Field label="Formato" error={configForm.formState.errors.format?.message}>
+                      <CustomSelect
+                        options={WIZARD_FORMAT_OPTIONS}
+                        value={configForm.watch("format")}
+                        onChange={(v) => configForm.setValue("format", v, { shouldValidate: true })}
+                      />
+                    </Field>
+                  )}
                   <Field label="Sistema de puntuación" error={configForm.formState.errors.scoringSystem?.message}>
                     <CustomSelect
                       options={[
@@ -929,7 +935,7 @@ export default function NuevoTorneoPage() {
                   />
                   <p className="text-xs text-muted-foreground">
                     {typicalDurationText(configForm.watch("scoringFormat"))}. La «Duración por partido» de más abajo no cambia sola: ajústala tú si hace falta.
-                    Vale para todas las categorías; luego se puede cambiar en cada una, o en cada fase, desde la ficha del torneo.
+                    Vale para todas las categorías; luego se puede cambiar en cada una, o en cada fase, desde la ficha {league ? "de la liga" : "del torneo"}.
                   </p>
                 </Field>
                 <label className="flex items-center gap-3 p-3 rounded-md border border-border bg-secondary/40 cursor-pointer hover:bg-secondary/70 transition-colors">
@@ -965,7 +971,7 @@ export default function NuevoTorneoPage() {
                       onChange={(v) => configForm.setValue("timezone", v, { shouldValidate: true, shouldDirty: true })}
                     />
                     <p className="text-xs text-muted-foreground">
-                      La de su club, salvo que la cambies. Las horas del torneo (jornadas, partidos y cierre) van en esta zona.
+                      La de su club, salvo que la cambies. Las horas {league ? "de la liga" : "del torneo"} (jornadas, partidos y cierre) van en esta zona.
                     </p>
                   </Field>
                   <Field label="Cierre de inscripciones" error={configForm.formState.errors.registrationDeadline?.message}>
@@ -974,7 +980,7 @@ export default function NuevoTorneoPage() {
                       type="datetime-local"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Hora del torneo ({timeZoneLabel(configForm.watch("timezone"))})
+                      Hora {league ? "de la liga" : "del torneo"} ({timeZoneLabel(configForm.watch("timezone"))})
                     </p>
                   </Field>
                 </div>
@@ -1249,7 +1255,7 @@ export default function NuevoTorneoPage() {
                     </div>
                   ))}
                   {/* Los textos, como se mandan (sin los espacios de los bordes) */}
-                  {([["Sobre el torneo", infoData.description], ["Normas", infoData.rules]] as const).map(([k, v]) =>
+                  {([[league ? "Sobre la liga" : "Sobre el torneo", infoData.description], ["Normas", infoData.rules]] as const).map(([k, v]) =>
                     plainText(v) ? (
                       <div key={k} className="text-sm space-y-0.5">
                         <span className="text-muted-foreground">{k}</span>
@@ -1295,7 +1301,7 @@ export default function NuevoTorneoPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Configuración</p>
                   {[
                     ["Tier",         TIER_LABEL[configData.tier] ?? configData.tier],
-                    ["Formato",      FORMAT_LABEL[configData.format] ?? configData.format],
+                    ["Formato",      FORMAT_LABEL[league ? LEAGUE_FORMAT : configData.format] ?? configData.format],
                     ["Formato de partido", scoringFormatLabel(configData.scoringFormat)],
                     ["Puntuación",   SCORING_LABEL[configData.scoringSystem] ?? configData.scoringSystem],
                     ["Duración part.", `${configData.matchDuration} mins`],
