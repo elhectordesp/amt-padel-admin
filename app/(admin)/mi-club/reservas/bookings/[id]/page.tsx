@@ -17,6 +17,7 @@ import {
   Loader2, MapPin, Ticket, Trophy, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BookingCollectPanel } from "@/components/admin/booking-collect-panel";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import CollectModal from "@/components/admin/collect-modal";
@@ -27,11 +28,13 @@ import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { clubVouchersQK, clubVouchersService } from "@/lib/services/club-vouchers";
+import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
 import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { MODE_LABELS } from "@/lib/utils/booking-labels";
 import { bookingCapacity } from "@/lib/utils/booking-participants";
+import { partsDescription } from "@/lib/utils/booking-parts";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
 import {
@@ -125,6 +128,8 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
   const { can } = useClubAccess();
   const canWrite = can("bookings", "write");
   const canVoucher = can("cash", "write");
+  // Con el módulo Cuentas, cobrar es la hoja de partes (el back la pide en el área «cash»)
+  const accountsOn = useAccountsEnabled(clubId, isClub(role));
 
   const query = useQuery({
     queryKey: bookingsQK.bookingDetail(id),
@@ -148,6 +153,13 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
       toast.error(msg);
     },
   });
+
+  // Qué cambia al cobrar con la hoja de partes: la reserva, sus listas y la caja
+  const refreshAfterCollect = () => {
+    qc.invalidateQueries({ queryKey: bookingsQK.bookingDetail(id) });
+    qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+    qc.invalidateQueries({ queryKey: ["club-cash"] });
+  };
 
   // Qué cambia al pagar con bono o quitárselo: la reserva, sus listas, la caja y los bonos
   const refreshAfterVoucher = () => {
@@ -230,10 +242,14 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
     canWrite && ["PENDING_INVITES", "CONFIRMED"].includes(b.status) && new Date(b.startsAt) > new Date();
   const payment = b.status === "CANCELLED" ? null : paymentAction(b.paymentMethod);
   // Qué botones de cobro le tocan a quien mira: así no queda una fila vacía
-  const showCollectBtn = canWrite && payment === "markPaid";
-  const showVoucherBtn = canVoucher && payment === "markPaid" && !!b.clubCustomerId;
+  // Con partes, la reserva se cobra, se deshace y se devuelve parte a parte (el back responde 409 si no)
+  const hasParts = b.partsSummary != null;
+  const showCollectPanel =
+    accountsOn && canVoucher && b.status !== "CANCELLED" && (hasParts || payment === "markPaid");
+  const showCollectBtn = canWrite && payment === "markPaid" && !hasParts && !showCollectPanel;
+  const showVoucherBtn = canVoucher && payment === "markPaid" && !hasParts && !!b.clubCustomerId;
   const showRemoveVoucherBtn = canVoucher && payment === "removeVoucher";
-  const showUnpaidBtn = canWrite && payment === "markUnpaid";
+  const showUnpaidBtn = canWrite && payment === "markUnpaid" && !hasParts;
 
   return (
     <ReservasPage title={`Reserva ${b.shortCode}`} back={back} className="max-w-4xl">
@@ -296,6 +312,9 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
           <span className="ml-2 text-xs text-muted-foreground">
             ({paymentMethodLabel(b.paymentMethod)})
           </span>
+          {b.partsSummary && (
+            <span className="ml-2 text-xs text-muted-foreground">· {partsDescription(b.partsSummary)}</span>
+          )}
           {b.paidAt && (
             <span className="ml-2 text-xs text-green-500">
               · pagada {formatInTimeZone(b.paidAt, tz, DATE)}
@@ -338,6 +357,13 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
           </Row>
         )}
       </Section>
+
+      {/* Cobro por partes: la hoja del club (módulo Cuentas) */}
+      {showCollectPanel && (
+        <Section title="Cobro">
+          <BookingCollectPanel clubId={clubId} booking={b} onChanged={refreshAfterCollect} />
+        </Section>
+      )}
 
       {/* Participantes */}
       <Section title={`Participantes (${b.participants?.length ?? 0})`}>

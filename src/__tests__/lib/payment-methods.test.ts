@@ -6,7 +6,7 @@ import {
   methodLabel,
   playerShareCents,
 } from "@/lib/utils/payment-methods";
-import { buildCashHtml, dayLabel, methodsWithTotals } from "@/lib/utils/print-cash";
+import { bizumReceiverTotals, buildCashHtml, dayLabel, methodsWithTotals, movementMethodLabel } from "@/lib/utils/print-cash";
 import type { CashOfDay } from "@/lib/services/cash";
 
 describe("catálogo de métodos de cobro", () => {
@@ -82,6 +82,31 @@ describe("cierre de caja para imprimir", () => {
     expect(html).toContain("Bono");
     expect(html).toContain("Devolución del bono Bono 5");
     expect(html).toContain("-30,00");
+  });
+
+  it("el Bizum por receptor sale al imprimir, con «Club» primero y el móvil en cada movimiento", () => {
+    const withBizum: CashOfDay = {
+      ...cash,
+      movements: [
+        { source: "BOOKING_PART", refId: "p1", bookingId: "b1", at: "2026-11-10T09:30:00.000Z", concept: "Pista 1 · 10:30", person: "Ana", method: "BIZUM", amountCents: 500, bizumReceiver: "Marta" },
+        { source: "BOOKING", refId: "b2", at: "2026-11-10T10:30:00.000Z", concept: "Reserva Pista 2", person: "Luis", method: "BIZUM", amountCents: 1800, bizumReceiver: "Club" },
+      ],
+      totalsByMethod: { BIZUM: 2300 },
+      bizumByReceiver: { Marta: 500, Club: 1800 },
+      totalCents: 2300,
+    };
+    expect(bizumReceiverTotals(withBizum)).toEqual([["Club", 1800], ["Marta", 500]]);
+    expect(movementMethodLabel(withBizum.movements[0])).toBe("Bizum · Marta");
+    const html = buildCashHtml(withBizum, "Club Norte");
+    expect(html).toContain("Bizum por receptor");
+    expect(html).toContain("Bizum · Marta");
+    expect(html.indexOf("Club</td>")).toBeLessThan(html.indexOf("Marta</td>"));
+  });
+
+  it("sin desglose de Bizum (módulo apagado), el cierre impreso no lleva esa sección", () => {
+    expect(bizumReceiverTotals(cash)).toEqual([]);
+    expect(buildCashHtml(cash, "Club Norte")).not.toContain("Bizum por receptor");
+    expect(movementMethodLabel({ method: "BIZUM" })).toBe("Bizum");
   });
 
   it("lleva el día, las horas del club, los totales y escapa lo que viene del back", () => {

@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Loader2 } from "lucide-react";
+import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { SchoolFeePayDialog, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
 import { Button } from "@/components/ui/button";
+import { accountsQK, accountsService } from "@/lib/services/accounts";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService } from "@/lib/services/bookings";
 import { cashQK, cashService, type DebtItem } from "@/lib/services/cash";
 import { clubVouchersQK } from "@/lib/services/club-vouchers";
 import { invalidateSchoolBilling } from "@/lib/services/school-billing";
+import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
@@ -33,16 +36,29 @@ const isCounterDebt = (item: DebtItem): item is CounterDebt =>
 /** El área que escribe cada cobro en el back: la reserva, «bookings»; la inscripción, «cash»; la escuela, «school». */
 const AREA_OF: Record<DebtItem["source"], "bookings" | "cash" | "school"> = {
   BOOKING:       "bookings",
+  BOOKING_PART:  "cash",
   REGISTRATION:  "cash",
   VOUCHER:       "cash",
   SCHOOL_FEE:    "school",
   PRIVATE_CLASS: "school",
 };
 
-/** Cobra una reserva o un jugador de una inscripción, con el método y el importe elegidos. */
-export function collectDebt(item: CounterDebt, method: CounterPaymentMethod, amountCents: number) {
+/**
+ * Cobra una reserva o un jugador de una inscripción, con el método y el importe
+ * elegidos. Un Bizum de reserva lleva a qué móvil llegó (módulo Cuentas).
+ */
+export function collectDebt(
+  item: CounterDebt,
+  method: CounterPaymentMethod,
+  amountCents: number,
+  bizumPartnerId?: string | null,
+) {
   return item.source === "BOOKING"
-    ? bookingsService.bookings.markPaid(item.refId, { method, amountCents })
+    ? bookingsService.bookings.markPaid(item.refId, {
+        method,
+        amountCents,
+        ...(method === "BIZUM" && bizumPartnerId !== undefined ? { bizumPartnerId } : {}),
+      })
     : adminService.registrations.updatePayment(item.refId, {
         paid: true,
         paymentMethod: method,
@@ -59,6 +75,13 @@ export function CajaDebts({ clubId, timeZone }: Props) {
   // Cada cobro va al área que lo escribe en el back
   const canCollect = (item: DebtItem) => can(AREA_OF[item.source], "write");
   const [collecting, setCollecting] = useState<{ person: string; item: DebtItem } | null>(null);
+  // Con el módulo Cuentas, un Bizum pregunta a qué móvil llegó (los socios activos)
+  const accountsOn = useAccountsEnabled(clubId);
+  const partners = useQuery({
+    queryKey: accountsQK.partners(clubId),
+    queryFn: () => accountsService.partners.list(clubId),
+    enabled: accountsOn,
+  });
 
   const query = useQuery({
     queryKey: cashQK.debts(clubId),
@@ -100,7 +123,15 @@ export function CajaDebts({ clubId, timeZone }: Props) {
                       <p className="text-xs text-muted-foreground">{formatInTimeZone(item.date, timeZone, DAY)}</p>
                     </div>
                     <span className="text-sm font-medium text-foreground">{formatCents(item.amountCents)}</span>
-                    {canCollect(item) && (
+                    {item.source === "BOOKING_PART" && item.bookingId ? (
+                      // La parte se cobra en la hoja de su reserva (precio, quién y cómo paga)
+                      <Link
+                        href={`/mi-club/reservas/bookings/${item.bookingId}`}
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm hover:bg-secondary"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Abrir la reserva
+                      </Link>
+                    ) : canCollect(item) && (
                       <Button variant="outline" size="sm" onClick={() => setCollecting({ person: p.name, item })}>
                         <CreditCard className="h-3.5 w-3.5" /> Cobrar
                       </Button>
@@ -118,7 +149,9 @@ export function CajaDebts({ clubId, timeZone }: Props) {
           title="Cobrar"
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
           defaultCents={collecting.item.amountCents}
-          onSubmit={(method, amountCents) => collectDebt(collecting.item as CounterDebt, method, amountCents)}
+          bizumReceivers={accountsOn && collecting.item.source === "BOOKING" && partners.data ? partners.data.filter((p) => p.active) : undefined}
+          onSubmit={(method, amountCents, bizumPartnerId) =>
+            collectDebt(collecting.item as CounterDebt, method, amountCents, bizumPartnerId)}
           onDone={() => {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: ["bookings", "list"] });

@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { X, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
+import { BizumReceiverPicker, type BizumReceiver } from "@/components/admin/bizum-receiver";
 import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
+import type { ClubPartner } from "@/lib/services/accounts";
 import { centsToEurosInput, eurosToCents, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
 
 interface Props {
@@ -13,8 +15,14 @@ interface Props {
   subtitle:     string;
   /** El importe que se propone, en céntimos; se puede cambiar. */
   defaultCents: number;
+  /**
+   * Con el módulo Cuentas: los socios activos del club. Al elegir Bizum se
+   * pregunta a qué móvil llegó (un socio o «Club») y se manda como tercer
+   * argumento (solo con Bizum).
+   */
+  bizumReceivers?: ClubPartner[];
   /** Hace el cobro; si falla, el modal sigue abierto con lo escrito. */
-  onSubmit:     (method: CounterPaymentMethod, amountCents: number) => Promise<unknown>;
+  onSubmit:     (method: CounterPaymentMethod, amountCents: number, bizumPartnerId?: string | null) => Promise<unknown>;
   /** Tras cobrar: recargar lo que corresponda. */
   onDone:       () => void;
   onClose:      () => void;
@@ -26,13 +34,19 @@ interface Props {
  * caja; el modal de «Estado de pago» y «Cobrar pareja» llevan los mismos
  * campos (payment-fields.tsx).
  */
-export default function CollectModal({ title, subtitle, defaultCents, onSubmit, onDone, onClose }: Props) {
+export default function CollectModal({ title, subtitle, defaultCents, bizumReceivers, onSubmit, onDone, onClose }: Props) {
   const [method, setMethod] = useState<CounterPaymentMethod | "">("");
   const [amount, setAmount] = useState(centsToEurosInput(defaultCents));
+  const [receiver, setReceiver] = useState<BizumReceiver>(undefined);
   const cents = eurosToCents(amount);
+  // Con el módulo encendido, un Bizum sin saber a qué móvil llegó no se guarda
+  const askReceiver = method === "BIZUM" && bizumReceivers !== undefined;
 
   const saveMut = useMutation({
-    mutationFn: () => onSubmit(method as CounterPaymentMethod, cents as number),
+    mutationFn: () =>
+      askReceiver
+        ? onSubmit(method as CounterPaymentMethod, cents as number, receiver as string | null)
+        : onSubmit(method as CounterPaymentMethod, cents as number),
     onSuccess: () => {
       toast.success("Cobrado");
       onDone();
@@ -43,7 +57,7 @@ export default function CollectModal({ title, subtitle, defaultCents, onSubmit, 
 
   // Mientras guarda no se cierra: la respuesta cerraría el modal que se abriera después
   const close = () => { if (!saveMut.isPending) onClose(); };
-  const canSave = method !== "" && cents !== null && !saveMut.isPending;
+  const canSave = method !== "" && cents !== null && (!askReceiver || receiver !== undefined) && !saveMut.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -61,6 +75,9 @@ export default function CollectModal({ title, subtitle, defaultCents, onSubmit, 
 
         <div className="p-5 flex flex-col gap-4">
           <PaymentMethodPicker value={method} onChange={setMethod} disabled={saveMut.isPending} />
+          {askReceiver && (
+            <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} disabled={saveMut.isPending} />
+          )}
           <AmountField value={amount} onChange={setAmount} invalid={cents === null} disabled={saveMut.isPending} />
         </div>
 

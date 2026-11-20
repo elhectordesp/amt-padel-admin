@@ -26,6 +26,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Check, CircleAlert } from "lucide-react";
+import { BookingPartsDots, PartsLegendItems } from "@/components/admin/booking-parts-dots";
 import { OccupationLegendItems } from "@/components/admin/occupation-legend";
 import {
   buildDayGrid,
@@ -244,7 +245,7 @@ export function ReservasDayGrid({
           })}
         </tbody>
       </table>
-      <Legend />
+      <Legend showParts={bookings.some((b) => b.partsSummary != null)} />
     </>
   );
 }
@@ -255,7 +256,7 @@ export function calendarDayHref(date: string, period: DayPeriod): string {
   return `/mi-club/reservas/calendario?fecha=${date}${franja}`;
 }
 
-function Legend() {
+function Legend({ showParts }: { showParts: boolean }) {
   return (
     <ul aria-label="Leyenda" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
       <li className="flex items-center gap-1.5">
@@ -273,6 +274,7 @@ function Legend() {
       <li className="flex items-center gap-1.5">
         <CircleAlert className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden /> Sin cobrar
       </li>
+      {showParts && <PartsLegendItems />}
       <OccupationLegendItems />
     </ul>
   );
@@ -344,6 +346,7 @@ function BookingBlock({
       </span>
       <span className="truncate opacity-80">{holder ?? people}</span>
       {holder && !isOpen && <span className="truncate text-[11px] opacity-60">{people}</span>}
+      {b.partsSummary && <BookingPartsDots summary={b.partsSummary} />}
     </Link>
   );
 }

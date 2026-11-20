@@ -24,6 +24,8 @@ export const CLUB_AREAS = [
   "club", "tournaments", "results", "bookings", "customers", "cash", "settings", "staff",
   // Escuela del club: grupos, alumnos, clases y asistencia
   "school",
+  // Cuentas del club (módulo F8): socios del Bizum y precios especiales. Solo propietario y gestor
+  "accounts",
 ] as const;
 export type ClubArea = (typeof CLUB_AREAS)[number];
 
@@ -58,7 +60,7 @@ type Grant = Partial<Record<ClubArea, AccessLevel>>;
 
 const ALL_WRITE: Grant = {
   club: "write", tournaments: "write", results: "write", bookings: "write", customers: "write",
-  cash: "write", settings: "write", staff: "write", school: "write",
+  cash: "write", settings: "write", staff: "write", school: "write", accounts: "write",
 };
 
 const PERMISSIONS: Record<ClubStaffRole, Grant> = {
@@ -111,6 +113,7 @@ export function areaForPath(pathname: string): ClubArea | null {
   const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
   if (under("/mi-club/equipo") || under("/historial")) return "staff";
   if (under("/mi-club/escuela")) return "school";
+  if (under("/mi-club/cuentas")) return "accounts";
   if (under("/mi-club/clientes") || under("/mi-club/mensajes")) return "customers";
   // Patrocinadores: el back los lee y los escribe con «tournaments»
   if (
