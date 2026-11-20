@@ -28,7 +28,7 @@ import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useMe } from "@/lib/use-me";
 import { useRole, isClub } from "@/lib/use-role";
-import { slotsSummary } from "@/lib/utils/school";
+import { monthlyFeeText, slotsSummary } from "@/lib/utils/school";
 import { formatDayKey } from "@/lib/utils/time-zone";
 import type { SchoolGroupListItem } from "@/types/school";
 
@@ -56,6 +56,7 @@ function GroupCard({ group }: { group: SchoolGroupListItem }) {
         <div className="text-xs text-muted-foreground">{slotsSummary(group.slots)}</div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>{group.coach ? `Entrenador: ${group.coach.name}` : "Sin entrenador"}</span>
+          <span>{monthlyFeeText(group.monthlyFeeCents)}</span>
           <span>
             {formatDayKey(group.startDate, SEASON_FMT)} – {formatDayKey(group.endDate, SEASON_FMT)}
           </span>

@@ -26,6 +26,14 @@ export interface SchoolFee {
   createdAt:      string;
 }
 
+/** Qué ha pasado al cobrar de golpe las cuotas pendientes de un mes. */
+export interface PayPendingFeesResult {
+  /** Cuántas cuotas se han cobrado. */
+  paid:       number;
+  /** Su total, en céntimos. */
+  totalCents: number;
+}
+
 /** Qué ha pasado al generar las cuotas de un mes. */
 export interface GenerateFeesResult {
   month:    string;
@@ -45,6 +53,7 @@ export interface SchoolFeeFilters {
 }
 
 /** Un alumno de una clase privada con lo que paga. */
+/** Un entrenador (sin recepción ni gestión) recibe los alumnos sin precio ni cobro: los campos de dinero solo los ven quienes cobran. */
 export interface SchoolPrivateClassStudent {
   id:             string;
   clubCustomerId: string;

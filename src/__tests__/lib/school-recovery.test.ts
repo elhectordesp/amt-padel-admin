@@ -90,11 +90,13 @@ describe("creditChoices", () => {
 describe("textos", () => {
   it("creditText: de dónde viene y hasta cuándo vale, en la zona del club", () => {
     expect(creditText(credit(), "Europe/Madrid")).toBe(
-      "Ausencia avisada · Iniciación, lun, 23 nov · vale hasta el 22 ene 2027",
+      "Faltó y avisó con tiempo · clase de Iniciación, lun, 23 nov · caduca el 22 ene 2027",
     );
     expect(creditText(credit({ origin: "MANUAL", sourceSession: null }), "Europe/Madrid")).toBe(
-      "Concedida a mano · vale hasta el 22 ene 2027",
+      "Concedida a mano por el club · caduca el 22 ene 2027",
     );
+    expect(creditText(credit({ status: "expired" }), "Europe/Madrid")).toContain("caducó el 22 ene 2027");
+    expect(creditText(credit({ status: "used" }), "Europe/Madrid")).not.toContain("22 ene");
   });
 
   it("requestWho: el cliente del club o el nombre que se apuntó", () => {

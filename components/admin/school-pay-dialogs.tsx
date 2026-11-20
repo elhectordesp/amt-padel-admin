@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Cobros de la escuela: una cuota mensual (en el mostrador) y un alumno de una
+ * Cobros de la escuela: una cuota mensual o todas las pendientes de un mes (en el mostrador) y un alumno de una
  * clase privada (en el mostrador o con una sesión de un bono suyo de clases
  * privadas). Los usan las pestañas de Escuela y «Pendiente de cobro» de la
  * caja. El importe es el de la cuota o el del alumno: para cambiarlo se edita
@@ -63,6 +63,47 @@ export function SchoolFeePayDialog({
         <Button type="button" size="sm" disabled={method === "" || pay.isPending} onClick={() => pay.mutate()}>
           {pay.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
           Cobrar
+        </Button>
+      </div>
+    </SchoolDialog>
+  );
+}
+
+/** Cobrar de golpe las cuotas pendientes de un mes (de un grupo o de todos): un método y el total a la vista. */
+export function SchoolFeesPayAllDialog({
+  clubId, month, groupId, subtitle, count, totalCents, onDone, onClose,
+}: Common & { month: string; groupId?: string; count: number; totalCents: number }) {
+  const [method, setMethod] = useState<CounterPaymentMethod | "">("");
+
+  const pay = useMutation({
+    mutationFn: () => schoolBillingService.fees.payPending(clubId, month, method, groupId),
+    onSuccess: (result) => {
+      toast.success(
+        result.paid === 0
+          ? "No quedaba ninguna cuota pendiente"
+          : `${result.paid} ${result.paid === 1 ? "cuota cobrada" : "cuotas cobradas"}: ${formatCents(result.totalCents)}`,
+      );
+      onDone();
+      onClose();
+    },
+    onError: (err: unknown) => toast.error(errorText(err)),
+  });
+  const close = () => { if (!pay.isPending) onClose(); };
+
+  return (
+    <SchoolDialog title="Cobrar todas las cuotas pendientes" onClose={close} busy={pay.isPending}>
+      <p className="text-sm text-muted-foreground">
+        {subtitle}: {count} {count === 1 ? "cuota" : "cuotas"}, <strong className="text-foreground">{formatCents(totalCents)}</strong> en total.
+        Se cobran todas con el mismo método.
+      </p>
+      <PaymentMethodPicker value={method} onChange={setMethod} disabled={pay.isPending} />
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={close} disabled={pay.isPending}>
+          Cancelar
+        </Button>
+        <Button type="button" size="sm" disabled={method === "" || pay.isPending} onClick={() => pay.mutate()}>
+          {pay.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+          Cobrar {formatCents(totalCents)}
         </Button>
       </div>
     </SchoolDialog>

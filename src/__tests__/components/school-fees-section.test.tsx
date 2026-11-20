@@ -19,7 +19,7 @@ vi.mock("@/lib/services/school", async (orig) => {
   return { ...actual, schoolService: { ...actual.schoolService, ...school } };
 });
 const billing = vi.hoisted(() => ({
-  fees: { list: vi.fn(), generate: vi.fn(), update: vi.fn(), pay: vi.fn(), unpay: vi.fn(), cancel: vi.fn() },
+  fees: { list: vi.fn(), generate: vi.fn(), update: vi.fn(), pay: vi.fn(), unpay: vi.fn(), cancel: vi.fn(), payPending: vi.fn() },
 }));
 vi.mock("@/lib/services/school-billing", async (orig) => {
   const actual = await orig<typeof import("@/lib/services/school-billing")>();
@@ -66,6 +66,7 @@ describe("SchoolFeesSection", () => {
     billing.fees.list.mockResolvedValue([PENDING, PAID, CANCELLED]);
     billing.fees.generate.mockResolvedValue({ month: "2026-11", groups: 1, due: 3, created: 3, existing: 0 });
     billing.fees.pay.mockResolvedValue(PAID);
+    billing.fees.payPending.mockResolvedValue({ paid: 1, totalCents: 4500 });
     billing.fees.unpay.mockResolvedValue(PENDING);
     billing.fees.cancel.mockResolvedValue(CANCELLED);
     billing.fees.update.mockResolvedValue(PENDING);
@@ -209,5 +210,27 @@ describe("SchoolFeesSection", () => {
     renderSection();
     expect(await screen.findByText(/No hay cuotas de este mes/, {}, WAIT)).toBeInTheDocument();
     expect(await screen.findByText(/Ningún grupo tiene cuota mensual/, {}, WAIT)).toBeInTheDocument();
+  });
+
+  it("cobrar todas las pendientes del mes: enseña cuántas y el total, pide el método y llama con el mes y el grupo", async () => {
+    renderSection();
+    await screen.findByText("Marta", {}, WAIT);
+    fireEvent.change(screen.getByLabelText("Grupo"), { target: { value: "g1" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Cobrar todas (1)" }));
+    const dialog = await screen.findByRole("dialog", { name: "Cobrar todas las cuotas pendientes" });
+    expect(dialog).toHaveTextContent("Noviembre de 2026, Iniciación: 1 cuota, 45,00 € en total");
+    const confirm = within(dialog).getByRole("button", { name: "Cobrar 45,00 €" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Bizum" }));
+    fireEvent.click(confirm);
+    await waitFor(() => expect(billing.fees.payPending).toHaveBeenCalledWith("c1", "2026-11", "BIZUM", "g1"), WAIT);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("1 cuota cobrada: 45,00 €"), WAIT);
+  });
+
+  it("sin cuotas pendientes o sin permiso de escritura no hay «Cobrar todas»", async () => {
+    billing.fees.list.mockResolvedValue([PAID]);
+    renderSection();
+    await screen.findByText("Pablo", {}, WAIT);
+    expect(screen.queryByRole("button", { name: /Cobrar todas/ })).not.toBeInTheDocument();
   });
 });
