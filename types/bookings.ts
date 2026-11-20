@@ -36,9 +36,20 @@ export type BookingPaymentMethod =
   | "ONLINE"
   // Pagada con una sesión de un bono del club: solo la pone el uso del bono
   | "VOUCHER"
+  // Cobrada por partes con más de un método (módulo Cuentas): solo se lee
+  | "MIXED"
   // Solo reservas antiguas
   | "CASH_AT_VENUE"
   | "PAID_MANUAL";
+
+/** Cuántas partes de una reserva hay en cada estado (módulo Cuentas). */
+export interface BookingPartsSummary {
+  count:   number;
+  paid:    number;
+  pending: number;
+  debt:    number;
+  invited: number;
+}
 export type BookingParticipantStatus =
   | "INVITED"
   | "ACCEPTED"
@@ -307,6 +318,8 @@ export interface Booking {
   paymentNotes: string | null;
   refundedAt: string | null;
   refundAmountCents: number | null;
+  /** Sus partes por estado; null: sin partes (se cobra entera). No viene con un back anterior. */
+  partsSummary?: BookingPartsSummary | null;
   amtCommissionCents: number | null;
   clubPayoutCents: number | null;
   cancellationFeeChargedCents: number | null;

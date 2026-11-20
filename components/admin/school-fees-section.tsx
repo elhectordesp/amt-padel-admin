@@ -16,7 +16,7 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { AmountField } from "@/components/admin/payment-fields";
 import { errorText } from "@/components/admin/price-seasons-panel";
-import { SchoolFeePayDialog } from "@/components/admin/school-pay-dialogs";
+import { SchoolFeePayDialog, SchoolFeesPayAllDialog } from "@/components/admin/school-pay-dialogs";
 import { SchoolDialog, schoolInputCls } from "@/components/admin/school-dialog";
 import { Button } from "@/components/ui/button";
 import { schoolQK, schoolService } from "@/lib/services/school";
@@ -56,6 +56,7 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
   const [groupId, setGroupId] = useState("");
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [paying, setPaying] = useState<SchoolFee | null>(null);
+  const [payingAll, setPayingAll] = useState(false);
   const [editing, setEditing] = useState<SchoolFee | null>(null);
   const [unpaying, setUnpaying] = useState<SchoolFee | null>(null);
   const [toCancel, setToCancel] = useState<SchoolFee | null>(null);
@@ -162,9 +163,16 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
           </label>
         </div>
         {canWrite && (
-          <Button size="sm" onClick={() => setConfirmGenerate(true)} disabled={generate.isPending}>
-            <WandSparkles className="h-3.5 w-3.5" /> Generar cuotas de {monthLabel(month).toLowerCase()}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {totals.pendingCount > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setPayingAll(true)}>
+                <CreditCard className="h-3.5 w-3.5" /> Cobrar todas ({totals.pendingCount})
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setConfirmGenerate(true)} disabled={generate.isPending}>
+              <WandSparkles className="h-3.5 w-3.5" /> Generar cuotas de {monthLabel(month).toLowerCase()}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -237,6 +245,18 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
           amountCents={paying.amountCents}
           onDone={refresh}
           onClose={() => setPaying(null)}
+        />
+      )}
+      {payingAll && (
+        <SchoolFeesPayAllDialog
+          clubId={clubId}
+          month={month}
+          groupId={groupId || undefined}
+          subtitle={`${monthLabel(month)}, ${groupId ? (groups.data ?? []).find((g) => g.id === groupId)?.name ?? "grupo elegido" : "todos los grupos"}`}
+          count={totals.pendingCount}
+          totalCents={totals.pendingCents}
+          onDone={refresh}
+          onClose={() => setPayingAll(false)}
         />
       )}
       {editing && (

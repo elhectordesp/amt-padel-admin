@@ -66,6 +66,19 @@ describe("canAccess", () => {
     expect(rw(["MANAGER"], "school")).toEqual([true, true]);
   });
 
+  it("cuentas: solo propietario y gestor; recepción y el resto, nada", () => {
+    expect(rw(["OWNER"], "accounts")).toEqual([true, true]);
+    expect(rw(["MANAGER"], "accounts")).toEqual([true, true]);
+    for (const role of ["TOURNAMENTS", "RESULTS", "RECEPTION", "COACH"] as const) {
+      expect(rw([role], "accounts")).toEqual([false, false]);
+    }
+  });
+
+  it("la página de cuentas es del área «accounts», no de ajustes", () => {
+    expect(areaForPath("/mi-club/cuentas")).toBe("accounts");
+    expect(areaForPath("/mi-club")).toBe("settings");
+  });
+
   it("los roles se combinan: gana el nivel más alto de cada área", () => {
     const r: ClubStaffRole[] = ["COACH", "RECEPTION"];
     expect(rw(r, "bookings")).toEqual([true, true]);

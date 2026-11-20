@@ -7,13 +7,14 @@ import {
   LayoutDashboard, Trophy, Users, BarChart3, LineChart,
   Building2, Landmark, Calendar, DollarSign, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, X, Handshake, MessageSquare, CalendarRange,
-  History, Contact, CalendarDays, Wallet, UsersRound, Megaphone, Medal, GraduationCap,
+  History, Contact, CalendarDays, Wallet, UsersRound, Megaphone, Medal, GraduationCap, Scale,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/admin/logout-modal";
 import { useRole, isClub, type Role } from "@/lib/use-role";
 import { useMe, ME_QUERY_KEY } from "@/lib/use-me";
 import { useClubAccess, type ClubAccess } from "@/lib/use-club-access";
+import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
 import { activateClub } from "@/lib/auth";
 import type { ClubArea } from "@/lib/club-permissions";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,7 +40,7 @@ const NAV = [
 // Menú del gestor del club, lo diario arriba. El backend ya enforce el
 // aislamiento — esto es UX para no enseñar botones que devolverían 403.
 // «Inscripciones» y «Resultados» siguen dentro de cada torneo.
-const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubArea }[] = [
+const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubArea; needsAccounts?: true }[] = [
   { href: "/dashboard",                    icon: LayoutDashboard, label: "Hoy"            },
   { href: "/mi-club/reservas/calendario",  icon: CalendarDays,    label: "Calendario",     area: "bookings"  },
   { href: "/mi-club/reservas/bookings",    icon: CalendarRange,   label: "Reservas",       area: "bookings"  },
@@ -49,22 +50,27 @@ const CLUB_NAV: { href: string; icon: typeof Trophy; label: string; area?: ClubA
   { href: "/mi-club/escuela",              icon: GraduationCap,   label: "Escuela",        area: "school"    },
   { href: "/torneos",                     icon: Trophy,          label: "Torneos",        area: "tournaments" },
   { href: "/ligas",                        icon: Medal,           label: "Ligas",          area: "tournaments" },
+  { href: "/mi-club/cuentas",              icon: Scale,           label: "Cuentas",        area: "accounts", needsAccounts: true },
   { href: "/mi-club",                      icon: Landmark,        label: "Mi club",        area: "settings"  },
   { href: "/mi-club/equipo",               icon: UsersRound,      label: "Equipo",         area: "staff"     },
   { href: "/historial",                    icon: History,         label: "Historial",      area: "staff"     },
   { href: "/patrocinadores",               icon: Handshake,       label: "Patrocinadores", area: "tournaments" },
 ];
 
-/** El menú que ve cada rol: el del club, el suyo; el resto (AMT), el completo. */
-export function navForRole(role: Role, access?: Pick<ClubAccess, "can">) {
+/**
+ * El menú que ve cada rol: el del club, el suyo; el resto (AMT), el completo.
+ * «Cuentas» solo sale con el módulo encendido en el club.
+ */
+export function navForRole(role: Role, access?: Pick<ClubAccess, "can">, accountsEnabled = false) {
   if (!isClub(role)) return NAV;
+  const items = CLUB_NAV.filter((i) => !i.needsAccounts || accountsEnabled);
   // Al equipo del club solo se le enseña lo que su rol puede leer
-  return access ? CLUB_NAV.filter((i) => !i.area || access.can(i.area, "read")) : CLUB_NAV;
+  return access ? items.filter((i) => !i.area || access.can(i.area, "read")) : items;
 }
 
 export function Sidebar() {
   const pathname    = usePathname();
-  const { role }    = useRole();
+  const { role, clubId } = useRole();
   const [showLogout,  setShowLogout]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(false); // desktop collapse
   const [mobileOpen,  setMobileOpen]  = useState(false); // mobile drawer
@@ -74,7 +80,8 @@ export function Sidebar() {
   const wasOpenRef     = useRef(false);
 
   const access     = useClubAccess();
-  const visibleNav = navForRole(role, access);
+  const accountsEnabled = useAccountsEnabled(clubId, isClub(role));
+  const visibleNav = navForRole(role, access, accountsEnabled);
 
   const activeHref = computeActiveHref(visibleNav.map((i) => i.href), pathname);
 

@@ -36,6 +36,7 @@ import { ReservasPage } from "@/components/admin/reservas-page";
 import { Button } from "@/components/ui/button";
 import { BookingCreateDialog, type BookingCreateInitial } from "@/components/admin/booking-create-dialog";
 import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
+import { ShopSellButton } from "@/components/admin/shop-day-sales";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
 import { useClubAccess } from "@/lib/use-club-access";
@@ -346,6 +347,7 @@ function DayView({ clubId, timeZone }: { clubId: string; timeZone: string }) {
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva reserva
             </Button>
           )}
+          <ShopSellButton clubId={clubId} className={tapText} />
           <Button
             ref={counterButtonRef}
             variant="outline"

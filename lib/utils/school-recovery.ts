@@ -23,15 +23,15 @@ export const SCHOOL_CREDIT_NOTE_MAX = 200;
 const HOUR_MS = 3_600_000;
 
 export const CREDIT_ORIGIN_LABEL: Record<SchoolCreditOrigin, string> = {
-  ABSENCE: "Ausencia avisada",
-  CLUB_CANCELLED: "Clase cancelada por el club",
-  MANUAL: "Concedida a mano",
+  ABSENCE: "Faltó y avisó con tiempo",
+  CLUB_CANCELLED: "El club canceló su clase",
+  MANUAL: "Concedida a mano por el club",
 };
 
 export const CREDIT_STATUS_LABEL: Record<SchoolCreditStatus, string> = {
   available: "Disponible",
   used: "Usada",
-  expired: "Caducada",
+  expired: "Caducada sin usar",
   voided: "Anulada",
 };
 
@@ -81,12 +81,18 @@ export function dateTimeText(value: string, tz: string): string {
   return formatInTimeZone(value, tz, DATETIME_FMT);
 }
 
-/** De dónde viene un crédito y hasta cuándo vale, en una línea. */
+/**
+ * De dónde viene un crédito y, si sigue sin gastar, cuándo caduca, en una
+ * línea. Una usada o anulada ya no caduca: no se dice.
+ */
 export function creditText(credit: SchoolCredit, tz: string): string {
   const source = credit.sourceSession
-    ? `${CREDIT_ORIGIN_LABEL[credit.origin]} · ${credit.sourceSession.groupName}, ${classDayText(credit.sourceSession.startsAt, tz)}`
+    ? `${CREDIT_ORIGIN_LABEL[credit.origin]} · clase de ${credit.sourceSession.groupName}, ${classDayText(credit.sourceSession.startsAt, tz)}`
     : CREDIT_ORIGIN_LABEL[credit.origin];
-  return `${source} · vale hasta el ${expiryText(credit.expiresAt, tz)}`;
+  const expiry = expiryText(credit.expiresAt, tz);
+  if (credit.status === "available") return `${source} · caduca el ${expiry}`;
+  if (credit.status === "expired") return `${source} · caducó el ${expiry}`;
+  return source;
 }
 
 /**

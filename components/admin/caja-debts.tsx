@@ -1,17 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Loader2 } from "lucide-react";
+import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
+import { ClubDebtPayAll, ClubDebtPayDialog, DebtItemPill } from "@/components/admin/club-debt-pay";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { SchoolFeePayDialog, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
+import { ShopSalePayDialog } from "@/components/admin/shop-sale-pay-dialog";
 import { Button } from "@/components/ui/button";
+import { accountsQK, accountsService } from "@/lib/services/accounts";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService } from "@/lib/services/bookings";
 import { cashQK, cashService, type DebtItem } from "@/lib/services/cash";
 import { clubVouchersQK } from "@/lib/services/club-vouchers";
 import { invalidateSchoolBilling } from "@/lib/services/school-billing";
+import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
@@ -33,16 +38,31 @@ const isCounterDebt = (item: DebtItem): item is CounterDebt =>
 /** El área que escribe cada cobro en el back: la reserva, «bookings»; la inscripción, «cash»; la escuela, «school». */
 const AREA_OF: Record<DebtItem["source"], "bookings" | "cash" | "school"> = {
   BOOKING:       "bookings",
+  BOOKING_PART:  "cash",
   REGISTRATION:  "cash",
   VOUCHER:       "cash",
+  SALE:          "cash",
   SCHOOL_FEE:    "school",
   PRIVATE_CLASS: "school",
+  CLUB_DEBT:     "cash",
 };
 
-/** Cobra una reserva o un jugador de una inscripción, con el método y el importe elegidos. */
-export function collectDebt(item: CounterDebt, method: CounterPaymentMethod, amountCents: number) {
+/**
+ * Cobra una reserva o un jugador de una inscripción, con el método y el importe
+ * elegidos. Un Bizum de reserva lleva a qué móvil llegó (módulo Cuentas).
+ */
+export function collectDebt(
+  item: CounterDebt,
+  method: CounterPaymentMethod,
+  amountCents: number,
+  bizumPartnerId?: string | null,
+) {
   return item.source === "BOOKING"
-    ? bookingsService.bookings.markPaid(item.refId, { method, amountCents })
+    ? bookingsService.bookings.markPaid(item.refId, {
+        method,
+        amountCents,
+        ...(method === "BIZUM" && bizumPartnerId !== undefined ? { bizumPartnerId } : {}),
+      })
     : adminService.registrations.updatePayment(item.refId, {
         paid: true,
         paymentMethod: method,
@@ -59,6 +79,13 @@ export function CajaDebts({ clubId, timeZone }: Props) {
   // Cada cobro va al área que lo escribe en el back
   const canCollect = (item: DebtItem) => can(AREA_OF[item.source], "write");
   const [collecting, setCollecting] = useState<{ person: string; item: DebtItem } | null>(null);
+  // Con el módulo Cuentas, un Bizum pregunta a qué móvil llegó (los socios activos)
+  const accountsOn = useAccountsEnabled(clubId);
+  const partners = useQuery({
+    queryKey: accountsQK.partners(clubId),
+    queryFn: () => accountsService.partners.list(clubId),
+    enabled: accountsOn,
+  });
 
   const query = useQuery({
     queryKey: cashQK.debts(clubId),
@@ -87,7 +114,15 @@ export function CajaDebts({ clubId, timeZone }: Props) {
             <section key={p.key} className="rounded-lg border border-border bg-card">
               <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <h3 className="font-medium text-foreground">{p.name}</h3>
-                <span className="text-sm font-semibold text-[#D4AF37]">{formatCents(p.totalCents)}</span>
+                <div className="flex items-center gap-3">
+                  <ClubDebtPayAll
+                    clubId={clubId}
+                    personName={p.name}
+                    debts={p.items.filter((i) => i.source === "CLUB_DEBT" && canCollect(i)).map((i) => ({ id: i.refId, amountCents: i.amountCents }))}
+                    showTotal
+                  />
+                  <span className="text-sm font-semibold text-[#D4AF37]">{formatCents(p.totalCents)}</span>
+                </div>
               </header>
               <ul>
                 {p.items.map((item) => (
@@ -98,9 +133,18 @@ export function CajaDebts({ clubId, timeZone }: Props) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-foreground">{item.concept}</p>
                       <p className="text-xs text-muted-foreground">{formatInTimeZone(item.date, timeZone, DAY)}</p>
+                      <DebtItemPill item={item} />
                     </div>
                     <span className="text-sm font-medium text-foreground">{formatCents(item.amountCents)}</span>
-                    {canCollect(item) && (
+                    {item.source === "BOOKING_PART" && item.bookingId ? (
+                      // La parte se cobra en la hoja de su reserva (precio, quién y cómo paga)
+                      <Link
+                        href={`/mi-club/reservas/bookings/${item.bookingId}`}
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm hover:bg-secondary"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Abrir la reserva
+                      </Link>
+                    ) : canCollect(item) && (
                       <Button variant="outline" size="sm" onClick={() => setCollecting({ person: p.name, item })}>
                         <CreditCard className="h-3.5 w-3.5" /> Cobrar
                       </Button>
@@ -118,12 +162,23 @@ export function CajaDebts({ clubId, timeZone }: Props) {
           title="Cobrar"
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
           defaultCents={collecting.item.amountCents}
-          onSubmit={(method, amountCents) => collectDebt(collecting.item as CounterDebt, method, amountCents)}
+          bizumReceivers={accountsOn && collecting.item.source === "BOOKING" && partners.data ? partners.data.filter((p) => p.active) : undefined}
+          onSubmit={(method, amountCents, bizumPartnerId) =>
+            collectDebt(collecting.item as CounterDebt, method, amountCents, bizumPartnerId)}
           onDone={() => {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: ["bookings", "list"] });
             qc.invalidateQueries({ queryKey: ["registrations"] });
           }}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "CLUB_DEBT" && (
+        <ClubDebtPayDialog
+          clubId={clubId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          debtIds={[collecting.item.refId]}
+          totalCents={collecting.item.amountCents}
           onClose={() => setCollecting(null)}
         />
       )}
@@ -137,6 +192,15 @@ export function CajaDebts({ clubId, timeZone }: Props) {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: clubVouchersQK.all(clubId) });
           }}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "SALE" && (
+        <ShopSalePayDialog
+          clubId={clubId}
+          saleId={collecting.item.refId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          amountCents={collecting.item.amountCents}
           onClose={() => setCollecting(null)}
         />
       )}

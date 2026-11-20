@@ -65,11 +65,11 @@ describe("Escuela: recuperaciones", () => {
     const [ana, beto, carla] = within(list).getAllByRole("listitem");
     expect(ana).toHaveTextContent("Ana Prueba");
     expect(ana).toHaveTextContent("Disponible");
-    expect(ana).toHaveTextContent("Ausencia avisada · Iniciación, lun, 23 nov · vale hasta el 22 ene 2027");
+    expect(ana).toHaveTextContent("Faltó y avisó con tiempo · clase de Iniciación, lun, 23 nov · caduca el 22 ene 2027");
     expect(beto).toHaveTextContent("Usada");
-    expect(beto).toHaveTextContent("Clase cancelada por el club");
+    expect(beto).toHaveTextContent("El club canceló su clase");
     expect(beto).toHaveTextContent("Gastada en Avanzado, mar, 1 dic");
-    expect(carla).toHaveTextContent("Concedida a mano");
+    expect(carla).toHaveTextContent("Concedida a mano por el club");
     expect(carla).toHaveTextContent("Motivo: Lesión");
     // Solo las disponibles se pueden anular
     expect(within(ana).getByRole("button", { name: "Anular la recuperación de Ana Prueba" })).toBeInTheDocument();

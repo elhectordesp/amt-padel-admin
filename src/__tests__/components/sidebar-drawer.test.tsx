@@ -13,6 +13,7 @@ vi.mock("@/lib/use-role", () => ({
   isClub: (r: string) => r === "club",
 }));
 vi.mock("@/lib/use-club-access", () => ({ useClubAccess: () => ({ roles: null, can: () => true }) }));
+vi.mock("@/lib/use-accounts-enabled", () => ({ useAccountsEnabled: () => false }));
 vi.mock("@/lib/use-me", () => ({ useMe: () => ({ data: undefined }), ME_QUERY_KEY: ["admin-me"] }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ clear: vi.fn(), invalidateQueries: vi.fn() }) }));
 vi.mock("@/components/admin/logout-modal", () => ({ LogoutModal: () => null }));

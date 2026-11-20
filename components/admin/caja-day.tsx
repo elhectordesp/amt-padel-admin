@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { CalendarDays, Loader2, Printer } from "lucide-react";
+import { CashClosurePanel } from "@/components/admin/cash-closure-panel";
 import { ErrorState } from "@/components/admin/error-state";
+import { ShopDaySales } from "@/components/admin/shop-day-sales";
 import { Button } from "@/components/ui/button";
 import { cashQK, cashService } from "@/lib/services/cash";
 import { formatCents } from "@/lib/utils/booking-price";
 import { methodLabel } from "@/lib/utils/payment-methods";
-import { methodsWithTotals, printCash } from "@/lib/utils/print-cash";
+import { bizumReceiverTotals, methodsWithTotals, movementMethodLabel, printCash } from "@/lib/utils/print-cash";
 import { zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 
 interface Props {
@@ -22,6 +25,13 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
   // null = sin tocar: hoy, en la zona del club
   const [picked, setPicked] = useState<string | null>(null);
   const date = picked ?? zonedDayKey(new Date(), timeZone);
+
+  // El aviso «Días sin cerrar» de la portada llega con ?dia=AAAA-MM-DD
+  useEffect(() => {
+    const day = new URLSearchParams(window.location.search).get("dia");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setPicked(day);
+  }, []);
 
   const query = useQuery({
     queryKey: cashQK.day(clubId, date),
@@ -56,6 +66,8 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
         </Button>
       </div>
 
+      <CashClosurePanel clubId={clubId} date={date} timeZone={timeZone} />
+
       {query.isError && !cash ? (
         <ErrorState title="No se pudo cargar la caja" onRetry={() => query.refetch()} />
       ) : !cash ? (
@@ -74,6 +86,19 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
               <p className="mt-1 text-lg font-semibold text-[#D4AF37]">{formatCents(cash.totalCents)}</p>
             </div>
           </div>
+
+          {bizumReceiverTotals(cash).length > 0 && (
+            <section aria-label="Bizum por receptor" className="rounded-lg border border-border bg-card p-3">
+              <h3 className="text-xs uppercase tracking-wide text-muted-foreground">Bizum por receptor</h3>
+              <ul className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                {bizumReceiverTotals(cash).map(([name, cents]) => (
+                  <li key={name} className="text-foreground">
+                    {name}: <span className="font-semibold">{formatCents(cents)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {cash.movements.length === 0 ? (
             <p className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -95,9 +120,17 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
                   {cash.movements.map((m, i) => (
                     <tr key={`${m.source}-${m.refId}-${i}`} className="border-b border-border last:border-0">
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{zonedTime(m.at, cash.timezone)}</td>
-                      <td className="px-3 py-2 text-foreground">{m.concept}</td>
+                      <td className="px-3 py-2 text-foreground">
+                        {(m.source === "BOOKING_PART" || m.source === "SALE") && m.bookingId ? (
+                          <Link href={`/mi-club/reservas/bookings/${m.bookingId}`} className="underline underline-offset-2 hover:text-[#D4AF37]">
+                            {m.concept}
+                          </Link>
+                        ) : (
+                          m.concept
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-foreground">{m.person}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{methodLabel(m.method)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{movementMethodLabel(m)}</td>
                       <td className="px-3 py-2 text-right font-medium text-foreground whitespace-nowrap">{formatCents(m.amountCents)}</td>
                     </tr>
                   ))}
@@ -105,6 +138,8 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
               </table>
             </div>
           )}
+
+          <ShopDaySales clubId={clubId} date={date} />
         </>
       )}
     </div>

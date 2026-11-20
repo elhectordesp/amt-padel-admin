@@ -404,6 +404,8 @@ export const bookingsService = {
         method: BookingPaymentMethod;
         amountCents?: number;
         notes?: string;
+        /** Solo con Bizum y el módulo Cuentas: el socio a cuyo móvil llegó, o null para «Club». */
+        bizumPartnerId?: string | null;
       },
     ) =>
       api
