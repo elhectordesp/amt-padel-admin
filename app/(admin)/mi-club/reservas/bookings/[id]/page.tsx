@@ -367,7 +367,7 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
         </Section>
       )}
 
-      <BookingShopSales clubId={clubId} bookingId={b.id} status={b.status} onChanged={refreshAfterCollect} />
+      <BookingShopSales clubId={clubId} bookingId={b.id} status={b.status} hasCustomer={!!b.clubCustomerId} onChanged={refreshAfterCollect} />
 
       {/* Participantes */}
       <Section title={`Participantes (${b.participants?.length ?? 0})`}>

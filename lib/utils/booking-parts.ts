@@ -124,6 +124,10 @@ export function canCollectWhole(parts: Pick<BookingPart, "status">[]): boolean {
   return parts.every((p) => p.status === "PENDING");
 }
 
+/** El motivo de una devolución: de 3 a 200 caracteres (como en el back). */
+export const REFUND_REASON_MIN = 3;
+export const REFUND_REASON_MAX = 200;
+
 /** Lo que aún se puede devolver de una parte cobrada. */
 export function refundableOfPart(part: Pick<BookingPart, "status" | "priceCents" | "refundAmountCents">): number {
   return part.status === "PAID" ? Math.max(0, part.priceCents - (part.refundAmountCents ?? 0)) : 0;

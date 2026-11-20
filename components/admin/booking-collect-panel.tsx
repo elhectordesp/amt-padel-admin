@@ -16,11 +16,14 @@ import {
   type BookingPartsView, type PayPartsPayload, type UpdatePartPayload,
 } from "@/lib/services/booking-parts";
 import { bookingsService } from "@/lib/services/bookings";
+import { useClubAccess } from "@/lib/use-club-access";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import {
   PARTS_MAX_COUNT, PARTS_MIN_COUNT, accountsErrorText, canCollectWhole,
 } from "@/lib/utils/booking-parts";
 import { formatCents } from "@/lib/utils/booking-price";
 import { PAYMENT_METHOD_OPTIONS, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
+import { isBeforeToday } from "@/lib/utils/time-zone";
 import type { Booking } from "@/types/bookings";
 
 type Tab = "all" | "players";
@@ -51,6 +54,9 @@ const BIG = "min-h-14 rounded-lg border border-border bg-secondary text-base fon
 export function BookingCollectPanel({ clubId, booking, accountsOn, onChanged }: Props) {
   const qc = useQueryClient();
   const bookingId = booking.id;
+  // Devolver un cobro de otro día es del área «accounts»; el de hoy, de la caja
+  const canAccounts = useClubAccess().can("accounts", "write");
+  const { timeZone } = useClubTimeZone(clubId);
   const [tab, setTab] = useState<Tab>(booking.partsSummary != null ? "players" : "all");
   const [count, setCount] = useState<number | null>(null);
   const [bizumAll, setBizumAll] = useState(false);
@@ -73,6 +79,9 @@ export function BookingCollectPanel({ clubId, booking, accountsOn, onChanged }: 
     mutationFn: (run: () => Promise<BookingPartsView>) => run(),
     onSuccess: (view) => {
       qc.setQueryData(bookingPartsQK.view(clubId, bookingId), view);
+      // Una deuda que nace vencida se apunta de largo plazo: se dice por qué
+      if (view.debtNotice)
+        toast.info(`Se apunta como de largo plazo porque ya ha pasado el plazo de ${view.debtNotice.expiryDays} días`);
       onChanged();
     },
     onError: (err: unknown) => toast.error(accountsErrorText(err)),
@@ -127,8 +136,8 @@ export function BookingCollectPanel({ clubId, booking, accountsOn, onChanged }: 
     onDebt: (partId: string, who: { clubCustomerId?: string; personName?: string }) =>
       writeParts(() => bookingPartsService.debt(clubId, bookingId, partId, who)),
     onUndo: (partId: string) => writeParts(() => bookingPartsService.undo(clubId, bookingId, partId)),
-    onRefund: (partId: string, amountCents: number) =>
-      writeParts(() => bookingPartsService.refund(clubId, bookingId, partId, amountCents)),
+    onRefund: (partId: string, amountCents: number, reason: string) =>
+      writeParts(() => bookingPartsService.refund(clubId, bookingId, partId, amountCents, reason)),
   };
 
   const subtitle = `${booking.shortCode} · ${formatCents(toCollect)}`;
@@ -284,6 +293,7 @@ export function BookingCollectPanel({ clubId, booking, accountsOn, onChanged }: 
                 view={view}
                 partners={partners}
                 busy={busy}
+                canRefund={canAccounts || !part.paidAt || !isBeforeToday(part.paidAt, timeZone)}
                 {...rowActions}
               />
             ))}

@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { DebtStatus } from "@/lib/services/club-debts";
 import type { CounterPaymentMethod } from "@/lib/utils/payment-methods";
 
 /**
@@ -75,6 +76,8 @@ export interface ShopSale {
   bizumPartnerName:  string | null;
   paidAt:            string | null;
   debtId:            string | null;
+  /** Cómo va la deuda de una venta a deber; null si no es a deber. */
+  debtStatus:        DebtStatus | null;
   cancelledAt:       string | null;
   refundAmountCents: number | null;
   soldByName:        string;
@@ -138,8 +141,11 @@ export const shopService = {
     /** Solo una venta pendiente. */
     pay: (clubId: string, id: string, data: { method: CounterPaymentMethod; bizumPartnerId?: string | null }) =>
       api.post<ShopSale>(`${base(clubId)}/sales/${id}/pay`, data).then((r) => r.data),
-    /** Pendiente: sin más; cobrada: con devolución entera; a deber: solo con la deuda abierta. */
-    cancel: (clubId: string, id: string) =>
-      api.post<ShopSale>(`${base(clubId)}/sales/${id}/cancel`).then((r) => r.data),
+    /**
+     * Pendiente: sin más; cobrada: con devolución entera, con motivo (3-200) y, si se cobró
+     * otro día, solo con el área «accounts»; a deber: solo con la deuda abierta.
+     */
+    cancel: (clubId: string, id: string, reason?: string) =>
+      api.post<ShopSale>(`${base(clubId)}/sales/${id}/cancel`, reason ? { reason } : {}).then((r) => r.data),
   },
 };

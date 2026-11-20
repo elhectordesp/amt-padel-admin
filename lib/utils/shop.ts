@@ -7,6 +7,11 @@ import type { ProductMove, ShopProduct, ShopSale } from "@/lib/services/shop";
 import { accountsErrorText } from "@/lib/utils/booking-parts";
 import { formatCents } from "@/lib/utils/booking-price";
 import { methodLabel } from "@/lib/utils/payment-methods";
+import { isBeforeToday } from "@/lib/utils/time-zone";
+
+/** Lo mínimo y lo máximo del motivo de anular una venta cobrada (como en el back). */
+export const SALE_REASON_MIN = 3;
+export const SALE_REASON_MAX = 200;
 
 /** Lo máximo que admite el back en una venta. */
 export const SALE_MAX_QUANTITY = 99;
@@ -40,12 +45,18 @@ export function stockAfterWarning(productName: string, stockAfter: number, thres
 }
 
 /** Cómo se enseña el estado de una venta. */
-export function saleStatusInfo(s: Pick<ShopSale, "status" | "cancelledAt" | "paymentMethod" | "bizumPartnerName">): {
+export function saleStatusInfo(s: Pick<ShopSale, "status" | "cancelledAt" | "paymentMethod" | "bizumPartnerName" | "debtStatus">): {
   label: string;
   tone: "paid" | "debt" | "pending" | "cancelled";
 } {
   if (s.cancelledAt) return { label: "Anulada", tone: "cancelled" };
-  if (s.status === "DEBT") return { label: "A deber", tone: "debt" };
+  if (s.status === "DEBT") {
+    // La venta sigue «a deber», pero su deuda puede haberse cobrado, perdonado o perdido
+    if (s.debtStatus === "PAID") return { label: "Deuda cobrada", tone: "paid" };
+    if (s.debtStatus === "FORGIVEN") return { label: "Deuda perdonada", tone: "cancelled" };
+    if (s.debtStatus === "LOST") return { label: "Deuda perdida", tone: "cancelled" };
+    return { label: "A deber", tone: "debt" };
+  }
   if (s.status === "PENDING") return { label: "Pendiente de cobro", tone: "pending" };
   const method = methodLabel(s.paymentMethod);
   return {
@@ -59,10 +70,32 @@ export function saleTitle(s: Pick<ShopSale, "quantity" | "productName" | "amount
   return `${s.quantity} × ${s.productName} · ${formatCents(s.amountCents)}`;
 }
 
-/** Qué se puede hacer con una venta: cobrar si está pendiente y anular si no lo está. */
-export function saleActions(s: Pick<ShopSale, "status" | "cancelledAt">): { pay: boolean; cancel: boolean } {
+/**
+ * Qué se puede hacer con una venta: cobrar si está pendiente y anular si no
+ * está anulada. Una a deber solo se anula con su deuda abierta: cobrada,
+ * perdonada o perdida, antes hay que deshacer eso en Deudas.
+ */
+export function saleActions(s: Pick<ShopSale, "status" | "cancelledAt" | "debtStatus">): { pay: boolean; cancel: boolean } {
   if (s.cancelledAt) return { pay: false, cancel: false };
-  return { pay: s.status === "PENDING", cancel: true };
+  const debtOpen = s.status !== "DEBT" || s.debtStatus === null || s.debtStatus === "OPEN";
+  return { pay: s.status === "PENDING", cancel: debtOpen };
+}
+
+/** Anular una venta cobrada necesita un motivo. */
+export function saleNeedsReason(s: Pick<ShopSale, "status">): boolean {
+  return s.status === "PAID";
+}
+
+/**
+ * Anular una venta cobrada en un día anterior al de hoy (en la zona del club)
+ * es del área «accounts»; la de hoy, de la caja.
+ */
+export function cancelNeedsAccounts(
+  s: Pick<ShopSale, "status" | "paidAt">,
+  timeZone: string | null,
+  now: Date = new Date(),
+): boolean {
+  return s.status === "PAID" && s.paidAt !== null && isBeforeToday(s.paidAt, timeZone, now);
 }
 
 /** Lo que avisa el diálogo antes de anular, según el estado de la venta. */

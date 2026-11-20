@@ -35,16 +35,16 @@ const PRODUCTS = [
   product({ id: "p2", name: "Grips", priceCents: 300, unitsPerBox: 60, stock: 70 }),
   product({ id: "p3", name: "Viejo", active: false }),
 ];
-const SALE = { id: "s1", productName: "Bolas", quantity: 1 } as ShopSale;
+const SALE = { id: "s1", productName: "Bolas", quantity: 1, amountCents: 600 } as ShopSale;
 
 const onClose = vi.fn();
 const onDone = vi.fn();
 
-function renderDialog(bookingId?: string) {
+function renderDialog(bookingId?: string, bookingHasCustomer = false) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <ShopSellDialog clubId="c1" bookingId={bookingId} onDone={onDone} onClose={onClose} />
+      <ShopSellDialog clubId="c1" bookingId={bookingId} bookingHasCustomer={bookingHasCustomer} onDone={onDone} onClose={onClose} />
     </QueryClientProvider>,
   );
 }
@@ -146,10 +146,32 @@ describe("ShopSellDialog", () => {
     }));
   });
 
-  it("dentro de una reserva: lleva su id, a deber no pide persona y existe «Pendiente»", async () => {
-    renderDialog("b9");
+  it("el aviso de venta hecha enseña el importe que devolvió el servidor, no el calculado", async () => {
+    shop.sales.sell.mockResolvedValue({ sale: { ...SALE, quantity: 2, amountCents: 1150 }, stockAfter: 47 });
+    renderDialog();
+    await pickProduct("Bolas");
+    way("Efectivo");
+    fireEvent.click(submit(/Cobrar/));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Vendido: 2 × Bolas · 11,50 €"));
+  });
+
+  it("dentro de una reserva sin cliente del club, «Debe» pide elegir a alguien y no promete «quien reservó»", async () => {
+    renderDialog("b9", false);
     await pickProduct("Bolas");
     way("Debe");
+    expect(submit(/Dejar a deber/)).toBeDisabled();
+    expect(screen.queryByText(/debe quien reservó/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Elige quién debe/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Nombre de quien compra"), { target: { value: "Pablo" } });
+    expect(submit(/Dejar a deber/)).toBeEnabled();
+  });
+
+  it("dentro de una reserva: lleva su id, a deber no pide persona y existe «Pendiente»", async () => {
+    renderDialog("b9", true);
+    await pickProduct("Bolas");
+    way("Debe");
+    expect(screen.getByText(/debe quien reservó/)).toBeInTheDocument();
     expect(submit(/Dejar a deber/)).toBeEnabled();
     way("Pendiente");
     fireEvent.click(submit(/Dejar pendiente/));

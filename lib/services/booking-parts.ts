@@ -70,6 +70,11 @@ export interface BookingPartsView {
   totals:       BookingPartsTotals;
   priceOptions: PartPriceOption[];
   member:       { discountPercent: number; offered: boolean };
+  /**
+   * Solo en lo que devuelve «Debe»: la deuda nació ya vencida y se apuntó de
+   * largo plazo; `expiryDays` es el plazo del club que se había pasado.
+   */
+  debtNotice?:  { longTermAuto: true; expiryDays: number };
 }
 
 export interface UpdatePartPayload {
@@ -113,6 +118,7 @@ export const bookingPartsService = {
     api.post<BookingPartsView>(`${base(clubId, bookingId)}/${partId}/debt`, who).then((r) => r.data),
   undo: (clubId: string, bookingId: string, partId: string) =>
     api.post<BookingPartsView>(`${base(clubId, bookingId)}/${partId}/undo`).then((r) => r.data),
-  refund: (clubId: string, bookingId: string, partId: string, amountCents: number) =>
-    api.post<BookingPartsView>(`${base(clubId, bookingId)}/${partId}/refund`, { amountCents }).then((r) => r.data),
+  /** Con motivo (3-200, al historial) y, si la parte se cobró otro día, solo con el área «accounts». */
+  refund: (clubId: string, bookingId: string, partId: string, amountCents: number, reason: string) =>
+    api.post<BookingPartsView>(`${base(clubId, bookingId)}/${partId}/refund`, { amountCents, reason }).then((r) => r.data),
 };
