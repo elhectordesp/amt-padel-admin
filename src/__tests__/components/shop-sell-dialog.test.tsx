@@ -146,6 +146,18 @@ describe("ShopSellDialog", () => {
     }));
   });
 
+  it("«Cobrar» apagado dice por qué: elegir cómo paga y, con Bizum, a qué móvil llegó", async () => {
+    renderDialog();
+    await pickProduct("Bolas");
+    expect(submit(/Cobrar/)).toBeDisabled();
+    expect(screen.getByText("Elige cómo paga")).toBeInTheDocument();
+    way("Efectivo");
+    expect(screen.queryByText("Elige cómo paga")).not.toBeInTheDocument();
+    expect(submit(/Cobrar/)).toBeEnabled();
+    way("Bizum");
+    expect(screen.getByText("Elige a qué móvil llegó el Bizum")).toBeInTheDocument();
+  });
+
   it("el aviso de venta hecha enseña el importe que devolvió el servidor, no el calculado", async () => {
     shop.sales.sell.mockResolvedValue({ sale: { ...SALE, quantity: 2, amountCents: 1150 }, stockAfter: 47 });
     renderDialog();

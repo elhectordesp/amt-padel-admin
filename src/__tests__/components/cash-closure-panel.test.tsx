@@ -93,11 +93,34 @@ describe("CashClosurePanel", () => {
 
     fireEvent.change(within(dialog).getByLabelText("Nota del cierre"), { target: { value: "  Falta un euro  " } });
     fireEvent.click(within(dialog).getByRole("button", { name: /Confirmar cierre/ }));
+    // Hay diferencia (faltan 1,50 € en efectivo, sobran 2,25 € en tarjeta): pide confirmar
+    expect(svc.close).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Faltan 1,50 € en efectivo y sobran 2,25 € en tarjeta. ¿Cerrar igualmente?");
+    fireEvent.click(within(dialog).getByRole("button", { name: /Cerrar igualmente/ }));
     await waitFor(() =>
       expect(svc.close).toHaveBeenCalledWith("club-1", {
         date: DATE, countedCashCents: 11850, cardTerminalCents: 8225, notes: "Falta un euro",
       }),
     );
+  });
+
+  it("con diferencia pide confirmar, sugiere una nota y deja volver a contar", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /Cerrar el día/ }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Efectivo contado"), { target: { value: "115" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Confirmar cierre/ }));
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Faltan 5,00 € en efectivo. ¿Cerrar igualmente?");
+    expect(within(dialog).getByText(/sugerimos anotar el motivo/)).toBeInTheDocument();
+    expect(svc.close).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Volver a contar" }));
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    // Al cuadrar, se cierra de una vez
+    fireEvent.change(within(dialog).getByLabelText("Efectivo contado"), { target: { value: "120" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Confirmar cierre/ }));
+    await waitFor(() => expect(svc.close).toHaveBeenCalledTimes(1));
   });
 
   it("datáfono en blanco: se manda null; un importe que no vale no deja confirmar", async () => {

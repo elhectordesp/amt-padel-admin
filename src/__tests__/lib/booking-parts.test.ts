@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   PRICE_CUSTOM, PRICE_MEMBER, PRICE_NORMAL, accountsErrorText, canCollectWhole, namedPriceChoice,
-  partDots, partWho, partsDescription, priceChoiceOf, refundableOfPart, studentOption,
+  partDots, partWho, partsDebtLabel, partsDescription, partsOpenDebtCents, priceChoiceOf, refundableOfPart, studentOption,
   studentSuggestion, updateForChoice,
 } from "@/lib/utils/booking-parts";
 import { paymentAction } from "@/lib/utils/booking-payment";
+import { daysText } from "@/lib/utils/accounts-config";
 import { methodLabel } from "@/lib/utils/payment-methods";
 import type { PartPriceOption } from "@/lib/services/booking-parts";
 
@@ -97,6 +98,29 @@ describe("errores del módulo", () => {
 
   it("un código que no es del módulo conserva el mensaje del back", () => {
     expect(accountsErrorText(Object.assign(new Error("Error de conexión"), { code: "OTRO" }))).toBe("Error de conexión");
+  });
+});
+
+describe("lo que queda a deber de una reserva con partes", () => {
+  const base = { count: 4, paid: 3, pending: 0, debt: 1, invited: 0, debtCents: 550 };
+
+  it("solo cuenta cuando no queda nada sin cobrar", () => {
+    expect(partsOpenDebtCents(base)).toBe(550);
+    expect(partsOpenDebtCents({ ...base, pending: 1, paid: 2 })).toBe(0);
+    expect(partsOpenDebtCents({ ...base, debt: 0, debtCents: 0 })).toBe(0);
+    expect(partsOpenDebtCents(null)).toBe(0);
+  });
+
+  it("«Cobrada · 5,50 € a deber»; sin ninguna cobrada, solo lo que se debe", () => {
+    expect(partsDebtLabel(base)).toBe("Cobrada · 5,50 € a deber");
+    expect(partsDebtLabel({ ...base, paid: 0, count: 1 })).toBe("5,50 € a deber");
+  });
+});
+
+describe("plural de los días de un plazo", () => {
+  it("1 día, 5 días", () => {
+    expect(daysText(1)).toBe("1 día");
+    expect(daysText(10)).toBe("10 días");
   });
 });
 

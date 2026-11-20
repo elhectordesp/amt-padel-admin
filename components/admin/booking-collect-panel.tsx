@@ -21,6 +21,7 @@ import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import {
   PARTS_MAX_COUNT, PARTS_MIN_COUNT, accountsErrorText, canCollectWhole,
 } from "@/lib/utils/booking-parts";
+import { daysText } from "@/lib/utils/accounts-config";
 import { formatCents } from "@/lib/utils/booking-price";
 import { PAYMENT_METHOD_OPTIONS, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
 import { isBeforeToday } from "@/lib/utils/time-zone";
@@ -81,7 +82,7 @@ export function BookingCollectPanel({ clubId, booking, accountsOn, onChanged }: 
       qc.setQueryData(bookingPartsQK.view(clubId, bookingId), view);
       // Una deuda que nace vencida se apunta de largo plazo: se dice por qué
       if (view.debtNotice)
-        toast.info(`Se apunta como de largo plazo porque ya ha pasado el plazo de ${view.debtNotice.expiryDays} días`);
+        toast.info(`Se apunta como de largo plazo porque ya ha pasado el plazo de ${daysText(view.debtNotice.expiryDays)}`);
       onChanged();
     },
     onError: (err: unknown) => toast.error(accountsErrorText(err)),

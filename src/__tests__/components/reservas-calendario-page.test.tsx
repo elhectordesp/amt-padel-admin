@@ -292,6 +292,19 @@ describe("Calendario de reservas — vista Día", () => {
     expect(within(p2Block).getByText("Marta 600 000 000")).toBeInTheDocument();
   });
 
+  it("una reserva con partes a deber no sale cobrada en verde: avisa de lo que se debe", async () => {
+    svc.bookings.listAll.mockResolvedValue([
+      booking({
+        id: "conDeuda", paymentMethod: "MIXED", paidAt: "2026-10-25T17:00:00.000Z", priceCents: 2000,
+        partsSummary: { count: 4, paid: 3, pending: 0, debt: 1, invited: 0, debtCents: 550 },
+      }),
+    ]);
+    renderPage();
+    const block = await screen.findByRole("link", { name: /18:00–19:30/ });
+    expect(within(block).getByText("Cobrada · 5,50 € a deber")).toBeInTheDocument();
+    expect(within(block).queryByText("Cobrada")).not.toBeInTheDocument();
+  });
+
   it("un día cerrado por excepción lo dice", async () => {
     svc.exceptions.list.mockResolvedValue([
       { id: "e1", clubId: "c1", date: "2026-10-25T00:00:00.000Z", isClosed: true, customOpen: null, customClose: null, reason: null },

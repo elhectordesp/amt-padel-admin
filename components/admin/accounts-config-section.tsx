@@ -18,7 +18,7 @@ import { clubDebtsService, type ExpiryPreview } from "@/lib/services/club-debts"
 import { formatCents } from "@/lib/utils/booking-price";
 import { useClubAccess } from "@/lib/use-club-access";
 import {
-  bpsToFeeText, DEBT_MAX_DAYS, feePercentToBps, parseWarnDays, warnDaysText,
+  bpsToFeeText, DEBT_MAX_DAYS, daysText, feePercentToBps, parseWarnDays, warnDaysText,
 } from "@/lib/utils/accounts-config";
 
 const fieldClass =
@@ -124,7 +124,7 @@ export function AccountsConfigSection({ clubId }: { clubId: string }) {
                 onChange={(e) => setDays(e.target.value)}
                 className={`w-20 ${fieldClass}`}
               />
-              días
+              {Number(days) === 1 ? "día" : "días"}
             </label>
             {expires && !expiryValid && (
               <p className="text-xs text-destructive">Un número entero de 1 a {DEBT_MAX_DAYS}</p>
@@ -152,7 +152,7 @@ export function AccountsConfigSection({ clubId }: { clubId: string }) {
               </span>
             ) : !warnValid ? (
               <span className="block text-xs text-destructive">
-                Ningún aviso puede pasar del plazo de la deuda ({expiryDays} días)
+                Ningún aviso puede pasar del plazo de la deuda ({daysText(expiryDays as number)})
               </span>
             ) : (
               <span className="block text-xs text-muted-foreground">
@@ -203,7 +203,7 @@ export function AccountsConfigSection({ clubId }: { clubId: string }) {
         title="Algunas deudas se perderían ya"
         description={
           confirming
-            ? `Con un plazo de ${confirming.next.debtExpiryDays} días, ${confirming.preview.count} ${
+            ? `Con un plazo de ${daysText(confirming.next.debtExpiryDays as number)}, ${confirming.preview.count} ${
                 confirming.preview.count === 1 ? "deuda abierta" : "deudas abiertas"
               } (${formatCents(confirming.preview.totalCents)}) pasarían a perdidas hoy, en la próxima hora. Las de largo plazo no. Un propietario o gestor puede reabrirlas después.`
             : ""

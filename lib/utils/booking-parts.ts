@@ -4,6 +4,7 @@
  * precio tiene elegido una parte y cuándo se avisa de que es un alumno.
  */
 import type { BookingPart, BookingPartsView, PartPriceOption, UpdatePartPayload } from "@/lib/services/booking-parts";
+import { formatCents } from "@/lib/utils/booking-price";
 import type { BookingPartsSummary } from "@/types/bookings";
 
 /** Lo más que admite el back al repartir una reserva. */
@@ -60,6 +61,22 @@ export function partsDescription(summary: BookingPartsSummary): string {
     pending: (n) => `${n} sin cobrar`,
   };
   return DOT_ORDER.filter((key) => summary[key] > 0).map((key) => words[key](summary[key])).join(", ");
+}
+
+/**
+ * Lo que queda a deber de una reserva con partes cuando ya no hay ninguna sin
+ * cobrar: entonces no está «pagada» del todo y se dice cuánto falta. Con algo
+ * sin cobrar, 0 (la reserva sigue «Sin cobrar»).
+ */
+export function partsOpenDebtCents(summary: BookingPartsSummary | null | undefined): number {
+  if (!summary || summary.pending > 0 || summary.debt === 0) return 0;
+  return summary.debtCents ?? 0;
+}
+
+/** «Cobrada · 5,50 € a deber» (sin ninguna parte cobrada, solo «5,50 € a deber»). */
+export function partsDebtLabel(summary: BookingPartsSummary): string {
+  const owed = `${formatCents(partsOpenDebtCents(summary))} a deber`;
+  return summary.paid > 0 ? `Cobrada · ${owed}` : owed;
 }
 
 // ── Precio de una parte ──────────────────────────────────────────────────────

@@ -7,6 +7,11 @@
 export const DEBT_MAX_DAYS = 365;
 export const CARD_FEE_MAX_PERCENT = 10;
 
+/** «1 día», «5 días»: el plural correcto de un plazo. */
+export function daysText(n: number): string {
+  return `${n} ${n === 1 ? "día" : "días"}`;
+}
+
 /** «5, 7 9» → [5, 7, 9] (ordenados y sin repetidos); null si algo no es un día de 1 a 365. */
 export function parseWarnDays(text: string): number[] | null {
   const parts = text.split(/[\s,;]+/).filter(Boolean);

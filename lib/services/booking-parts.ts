@@ -40,13 +40,19 @@ export interface BookingPart {
 
 export interface BookingPartsTotals {
   partsCents:     number;
-  /** Precio menos la suma de las partes no invitadas (mínimo 0). */
+  /** Precio menos la suma de las partes no invitadas (mínimo 0). Ya no se enseña: ver `adjustmentCents`. */
   discountCents:  number;
   /** Lo cobrado menos lo devuelto. */
   collectedCents: number;
   pendingCents:   number;
   debtCents:      number;
   invitedCents:   number;
+  /**
+   * Lo que suman las partes menos el precio de la reserva, con signo (negativo
+   * si los otros precios —alumno, socio, a mano— rebajan el reparto).
+   * Precio = a cobrar + invitaciones − ajuste.
+   */
+  adjustmentCents: number;
 }
 
 export interface PartPriceOption {

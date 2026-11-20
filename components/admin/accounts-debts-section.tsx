@@ -29,6 +29,7 @@ import { accountsConfigQK, accountsConfigService } from "@/lib/services/accounts
 import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { formatCents } from "@/lib/utils/booking-price";
+import { daysText } from "@/lib/utils/accounts-config";
 import { DEBT_FILTERS, DEBT_ORIGIN_LABEL, DEBT_STATUS_LABEL } from "@/lib/utils/club-debts";
 import { eurosToCents, methodLabel } from "@/lib/utils/payment-methods";
 import { formatDayKey, formatInTimeZone, zonedDayKey } from "@/lib/utils/time-zone";
@@ -430,7 +431,7 @@ function NewDebtDialog({ clubId, timeZone, onClose }: { clubId: string; timeZone
       if (created.longTermAuto)
         toast.info(
           created.expiryDays !== null
-            ? `Se apunta como de largo plazo porque ya ha pasado el plazo de ${created.expiryDays} días`
+            ? `Se apunta como de largo plazo porque ya ha pasado el plazo de ${daysText(created.expiryDays)}`
             : "Se apunta como de largo plazo porque ya ha pasado su plazo",
         );
       invalidateClubDebts(qc, clubId);
