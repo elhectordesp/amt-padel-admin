@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { DebtPill } from "@/components/admin/club-debt-pay";
+import { ErrorState } from "@/components/admin/error-state";
 import { clubDebtsQK, clubDebtsService } from "@/lib/services/club-debts";
 import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
 import { useClubAccess } from "@/lib/use-club-access";
@@ -27,7 +28,10 @@ export function DebtWarningsNotice({ clubId }: { clubId: string }) {
     refetchInterval: REFRESH_MS,
   });
 
-  if (!accountsEnabled || !canSeeCash || !query.data || query.data.length === 0) return null;
+  if (!accountsEnabled || !canSeeCash) return null;
+  // Un fallo no se pinta como «no hay avisos»
+  if (query.isError) return <ErrorState title="No se pudieron cargar los avisos de deudas" onRetry={() => query.refetch()} />;
+  if (!query.data || query.data.length === 0) return null;
   return (
     <section aria-label="Deudas que avisan hoy" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
       <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">

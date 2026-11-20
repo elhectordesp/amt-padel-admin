@@ -47,6 +47,7 @@ export function AccountsDebtsSection({ clubId }: { clubId: string }) {
   const [paying, setPaying] = useState<{ person: string; debt: ClubDebt } | null>(null);
   const [editing, setEditing] = useState<ClubDebt | null>(null);
   const [forgiving, setForgiving] = useState<{ person: string; debt: ClubDebt } | null>(null);
+  const [undoing, setUndoing] = useState<{ person: string; debt: ClubDebt } | null>(null);
 
   const list = useQuery({
     queryKey: clubDebtsQK.list(clubId, status),
@@ -61,8 +62,8 @@ export function AccountsDebtsSection({ clubId }: { clubId: string }) {
 
   const undo = useMutation({
     mutationFn: (id: string) => clubDebtsService.undoPay(clubId, id),
-    onSuccess: () => { toast.success("Cobro deshecho: la deuda vuelve a estar abierta"); invalidateClubDebts(qc, clubId); },
-    onError: (err: unknown) => toast.error(errorText(err)),
+    onSuccess: () => { setUndoing(null); toast.success("Cobro deshecho: la deuda vuelve a estar abierta"); invalidateClubDebts(qc, clubId); },
+    onError: (err: unknown) => { setUndoing(null); toast.error(errorText(err)); },
   });
   const reopen = useMutation({
     mutationFn: (id: string) => clubDebtsService.reopen(clubId, id),
@@ -140,7 +141,7 @@ export function AccountsDebtsSection({ clubId }: { clubId: string }) {
                 clubId={clubId}
                 busy={undo.isPending || reopen.isPending || longTerm.isPending}
                 onPay={(debt) => setPaying({ person: p.name, debt })}
-                onUndo={(d) => undo.mutate(d.id)}
+                onUndo={(debt) => setUndoing({ person: p.name, debt })}
                 onReopen={(d) => reopen.mutate(d.id)}
                 onToggleLongTerm={(d) => longTerm.mutate(d)}
                 onEdit={setEditing}
@@ -163,6 +164,20 @@ export function AccountsDebtsSection({ clubId }: { clubId: string }) {
           onClose={() => setPaying(null)}
         />
       )}
+      <ConfirmModal
+        open={undoing !== null}
+        title="Deshacer el cobro"
+        description={
+          undoing
+            ? `${undoing.person} · ${undoing.debt.concept} · ${formatCents(undoing.debt.amountCents)}. La deuda vuelve a estar abierta y deja de contar en la caja.`
+            : ""
+        }
+        confirmLabel="Deshacer el cobro"
+        danger
+        loading={undo.isPending}
+        onClose={() => setUndoing(null)}
+        onConfirm={() => undoing && undo.mutate(undoing.debt.id)}
+      />
       {editing && <EditDebtDialog clubId={clubId} debt={editing} onClose={() => setEditing(null)} />}
       {forgiving && (
         <ForgiveFlow
@@ -409,7 +424,18 @@ function NewDebtDialog({ clubId, timeZone, onClose }: { clubId: string; timeZone
         ...(notes.trim() !== "" ? { notes: notes.trim() } : {}),
         ...(longTerm ? { longTerm: true } : {}),
       }),
-    onSuccess: () => { toast.success("Deuda apuntada"); invalidateClubDebts(qc, clubId); onClose(); },
+    onSuccess: (created) => {
+      toast.success("Deuda apuntada");
+      // Ya vencida al nacer: el back la apunta de largo plazo para que no se pierda sola
+      if (created.longTermAuto)
+        toast.info(
+          created.expiryDays !== null
+            ? `Se apunta como de largo plazo porque ya ha pasado el plazo de ${created.expiryDays} días`
+            : "Se apunta como de largo plazo porque ya ha pasado su plazo",
+        );
+      invalidateClubDebts(qc, clubId);
+      onClose();
+    },
     onError: (err: unknown) => toast.error(errorText(err)),
   });
   const close = () => { if (!create.isPending) onClose(); };

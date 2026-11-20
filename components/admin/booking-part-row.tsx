@@ -10,7 +10,7 @@ import type {
   BookingPart, BookingPartsView, UpdatePartPayload,
 } from "@/lib/services/booking-parts";
 import {
-  PRICE_CUSTOM, PRICE_MEMBER, PRICE_NORMAL, namedPriceChoice, partWho, priceChoiceOf,
+  PRICE_CUSTOM, PRICE_MEMBER, PRICE_NORMAL, REFUND_REASON_MAX, REFUND_REASON_MIN, namedPriceChoice, partWho, priceChoiceOf,
   refundableOfPart, studentSuggestion, updateForChoice,
 } from "@/lib/utils/booking-parts";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -29,7 +29,9 @@ interface Props {
   onInvite: (partId: string, reason: string) => void;
   onDebt:   (partId: string, who: { clubCustomerId?: string; personName?: string }) => void;
   onUndo:   (partId: string) => void;
-  onRefund: (partId: string, amountCents: number) => void;
+  onRefund: (partId: string, amountCents: number, reason: string) => void;
+  /** Devolver un cobro de otro día es del área «accounts»; el de hoy, de la caja. */
+  canRefund: boolean;
 }
 
 const FIELD =
@@ -66,7 +68,7 @@ function resolvedLine(part: BookingPart): string | null {
 }
 
 export function BookingPartRow({
-  clubId, part, view, partners, busy, onUpdate, onPay, onInvite, onDebt, onUndo, onRefund,
+  clubId, part, view, partners, busy, onUpdate, onPay, onInvite, onDebt, onUndo, onRefund, canRefund,
 }: Props) {
   const pending = part.status === "PENDING";
   const who = partWho(part);
@@ -82,6 +84,7 @@ export function BookingPartRow({
   const [inviteReason, setInviteReason] = useState("");
   const [debtName, setDebtName] = useState("");
   const [refundText, setRefundText] = useState("");
+  const [refundReason, setRefundReason] = useState("");
 
   const closeDialog = () => setDialog(null);
   const refundable = refundableOfPart(part);
@@ -270,11 +273,11 @@ export function BookingPartRow({
             {part.partPriceName && part.kind === "SPECIAL" ? `${part.partPriceName}. ` : ""}
             {resolvedLine(part)}
           </p>
-          {refundable > 0 && (
+          {refundable > 0 && canRefund && (
             <button
               type="button"
               disabled={busy}
-              onClick={() => { setRefundText(centsToEurosInput(refundable)); setDialog("refund"); }}
+              onClick={() => { setRefundText(centsToEurosInput(refundable)); setRefundReason(""); setDialog("refund"); }}
               className="min-h-11 rounded-md border border-border px-4 text-sm hover:bg-secondary disabled:opacity-50"
             >
               Devolver
@@ -378,9 +381,12 @@ export function BookingPartRow({
         title="Devolver dinero de esta parte"
         description={`Se cobraron ${formatCents(part.priceCents)}. Puedes devolver hasta ${formatCents(refundable)}.`}
         confirmLabel="Devolver"
-        confirmDisabled={refundCents === null || refundCents <= 0 || refundCents > refundable}
+        confirmDisabled={
+          refundCents === null || refundCents <= 0 || refundCents > refundable ||
+          refundReason.trim().length < REFUND_REASON_MIN
+        }
         onClose={closeDialog}
-        onConfirm={() => { closeDialog(); onRefund(part.id, refundCents as number); }}
+        onConfirm={() => { closeDialog(); onRefund(part.id, refundCents as number, refundReason.trim()); }}
       >
         <input
           type="text"
@@ -389,6 +395,15 @@ export function BookingPartRow({
           value={refundText}
           onChange={(e) => setRefundText(e.target.value)}
           className={FIELD}
+        />
+        <input
+          type="text"
+          aria-label="Motivo de la devolución"
+          placeholder="Motivo (queda en el historial)"
+          value={refundReason}
+          maxLength={REFUND_REASON_MAX}
+          onChange={(e) => setRefundReason(e.target.value)}
+          className={`${FIELD} mt-3`}
         />
       </ConfirmModal>
     </li>

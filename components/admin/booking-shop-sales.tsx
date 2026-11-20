@@ -16,6 +16,8 @@ interface Props {
   clubId:    string;
   bookingId: string;
   status:    BookingStatus;
+  /** La reserva tiene cliente del club (a quien se apunta «Debe» si no se elige a nadie). */
+  hasCustomer?: boolean;
   /** Tras vender, cobrar o anular: recargar la reserva y la caja. */
   onChanged: () => void;
 }
@@ -25,7 +27,7 @@ interface Props {
  * que se puede cobrar o anular, y «Vender en esta reserva». Solo con el módulo
  * Cuentas encendido; en una reserva cancelada solo se ve lo que hubo.
  */
-export function BookingShopSales({ clubId, bookingId, status, onChanged }: Props) {
+export function BookingShopSales({ clubId, bookingId, status, hasCustomer = false, onChanged }: Props) {
   const accountsOn = useAccountsEnabled(clubId);
   const canSell = useShopAccess(clubId);
   const [selling, setSelling] = useState(false);
@@ -59,7 +61,7 @@ export function BookingShopSales({ clubId, bookingId, status, onChanged }: Props
       ) : (
         <ShopSaleList clubId={clubId} sales={sales} canWrite={canSell} onChanged={onChanged} />
       )}
-      {selling && <ShopSellDialog clubId={clubId} bookingId={bookingId} onDone={onChanged} onClose={() => setSelling(false)} />}
+      {selling && <ShopSellDialog clubId={clubId} bookingId={bookingId} bookingHasCustomer={hasCustomer} onDone={onChanged} onClose={() => setSelling(false)} />}
     </div>
   );
 }

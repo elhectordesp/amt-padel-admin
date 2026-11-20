@@ -3,7 +3,7 @@
  * (módulo Cuentas, M4): cobrar las pendientes, anular según su estado y quién
  * puede hacerlo.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -18,10 +18,13 @@ vi.mock("@/lib/services/accounts", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/accounts")>()),
   accountsService: accounts,
 }));
-const flags = vi.hoisted(() => ({ on: true, cashWrite: true }));
+const flags = vi.hoisted(() => ({ on: true, cashWrite: true, accounts: true }));
+vi.mock("@/lib/use-club-time-zone", () => ({
+  useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
+}));
 vi.mock("@/lib/use-accounts-enabled", () => ({ useAccountsEnabled: () => flags.on }));
 vi.mock("@/lib/use-club-access", () => ({
-  useClubAccess: () => ({ roles: null, can: (area: string, level = "read") => (area === "cash" && level === "write" ? flags.cashWrite : true) }),
+  useClubAccess: () => ({ roles: null, can: (area: string, level = "read") => (area === "cash" && level === "write" ? flags.cashWrite : area === "accounts" && level === "write" ? flags.accounts : true) }),
 }));
 vi.mock("@/lib/services/club-customers", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/club-customers")>()),
@@ -36,11 +39,11 @@ import type { ShopSale } from "@/lib/services/shop";
 const sale = (patch: Partial<ShopSale> = {}): ShopSale => ({
   id: "s1", productName: "Bolas", quantity: 2, unitPriceCents: 600, amountCents: 1200, bookingId: "b1",
   personName: null, status: "PAID", paymentMethod: "CASH", bizumPartnerName: null, paidAt: "2026-11-20T10:00:00.000Z",
-  debtId: null, cancelledAt: null, refundAmountCents: null, soldByName: "Recepción", createdAt: "2026-11-20T10:00:00.000Z",
+  debtId: null, debtStatus: null, cancelledAt: null, refundAmountCents: null, soldByName: "Recepción", createdAt: "2026-11-20T10:00:00.000Z",
   ...patch,
 });
 const PENDING = sale({ id: "s2", status: "PENDING", paymentMethod: null, paidAt: null, productName: "Grips", quantity: 1, amountCents: 300 });
-const DEBT = sale({ id: "s3", status: "DEBT", paymentMethod: null, paidAt: null, debtId: "d1", productName: "Cuerdas", personName: "Pablo" });
+const DEBT = sale({ id: "s3", status: "DEBT", paymentMethod: null, paidAt: null, debtId: "d1", debtStatus: "OPEN", productName: "Cuerdas", personName: "Pablo" });
 const CANCELLED = sale({ id: "s4", productName: "Bote", cancelledAt: "2026-11-20T11:00:00.000Z", refundAmountCents: 1200 });
 
 const wrap = (ui: React.ReactNode) =>
@@ -52,12 +55,17 @@ describe("tienda en la ficha de la reserva", () => {
     vi.clearAllMocks();
     flags.on = true;
     flags.cashWrite = true;
+    flags.accounts = true;
+    // El «hoy» de estas pruebas es el día de las ventas
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-20T18:00:00.000Z") });
     shop.sales.list.mockResolvedValue([sale(), PENDING, DEBT, CANCELLED]);
     shop.products.list.mockResolvedValue([]);
     accounts.partners.list.mockResolvedValue([]);
     shop.sales.cancel.mockResolvedValue(sale());
     shop.sales.pay.mockResolvedValue(sale());
   });
+
+  afterEach(() => vi.useRealTimers());
 
   const renderBooking = (status: "CONFIRMED" | "CANCELLED" = "CONFIRMED") =>
     wrap(<BookingShopSales clubId="c1" bookingId="b1" status={status} onChanged={onChanged} />);
@@ -100,9 +108,14 @@ describe("tienda en la ficha de la reserva", () => {
     await screen.findByText(/2 × Bolas/);
     fireEvent.click(screen.getByRole("button", { name: /Anular 2 × Bolas/ }));
     expect(await screen.findByText(/Se devolverán 12,00/)).toBeInTheDocument();
+    // Una cobrada pide motivo: sin él no se puede anular
+    expect(screen.getByRole("button", { name: "Anular venta" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Motivo de la anulación"), { target: { value: "ab" } });
+    expect(screen.getByRole("button", { name: "Anular venta" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Motivo de la anulación"), { target: { value: "Cobrada por error" } });
     fireEvent.click(screen.getByRole("button", { name: "Anular venta" }));
 
-    await waitFor(() => expect(shop.sales.cancel).toHaveBeenCalledWith("c1", "s1"));
+    await waitFor(() => expect(shop.sales.cancel).toHaveBeenCalledWith("c1", "s1", "Cobrada por error"));
     expect(toast.success).toHaveBeenCalledWith("Venta anulada");
     expect(onChanged).toHaveBeenCalled();
   });
@@ -112,8 +125,40 @@ describe("tienda en la ficha de la reserva", () => {
     renderBooking();
     await screen.findByText(/2 × Bolas/);
     fireEvent.click(screen.getByRole("button", { name: /Anular 2 × Cuerdas/ }));
+    // Una a deber no pide motivo
+    expect(screen.queryByLabelText("Motivo de la anulación")).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Anular venta" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("La deuda de la venta ya se ha cobrado o cerrado"));
+  });
+
+  it("una venta cobrada otro día solo se anula con el área accounts; una pendiente o a deber, con la caja", async () => {
+    flags.accounts = false;
+    shop.sales.list.mockResolvedValue([
+      sale({ paidAt: "2026-11-19T10:00:00.000Z" }),
+      sale({ id: "s5", productName: "Grips", paidAt: "2026-11-20T10:00:00.000Z" }),
+      PENDING, DEBT,
+    ]);
+    renderBooking();
+    await screen.findByText(/2 × Bolas/);
+    expect(screen.queryByRole("button", { name: /Anular 2 × Bolas/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Anular 2 × Grips/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Anular 1 × Grips/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Anular 2 × Cuerdas/ })).toBeInTheDocument();
+  });
+
+  it("una venta a deber con la deuda cobrada, perdonada o perdida lo dice y no ofrece anular", async () => {
+    shop.sales.list.mockResolvedValue([
+      { ...DEBT, id: "s6", productName: "Cuerdas", debtStatus: "PAID" },
+      { ...DEBT, id: "s7", productName: "Overgrips", debtStatus: "FORGIVEN" },
+      { ...DEBT, id: "s8", productName: "Pelotas", debtStatus: "LOST" },
+    ]);
+    renderBooking();
+    await screen.findByText(/2 × Cuerdas/);
+    expect(screen.getByText("Deuda cobrada")).toBeInTheDocument();
+    expect(screen.getByText("Deuda perdonada")).toBeInTheDocument();
+    expect(screen.getByText("Deuda perdida")).toBeInTheDocument();
+    expect(screen.queryByText("A deber")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Anular/ })).not.toBeInTheDocument();
   });
 
   it("quien solo lee ve lo vendido pero no vende, cobra ni anula", async () => {

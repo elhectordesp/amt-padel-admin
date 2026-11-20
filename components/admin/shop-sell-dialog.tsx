@@ -20,6 +20,11 @@ interface Props {
   clubId:     string;
   /** Vender dentro de una reserva: se ve en su ficha y admite «Pendiente» para cobrarlo al final. */
   bookingId?: string;
+  /**
+   * La reserva tiene cliente del club: si no se elige a nadie, «Debe» lo apunta a él. Sin cliente
+   * (la reservó un jugador de la app o no consta), «Debe» pide elegir a alguien.
+   */
+  bookingHasCustomer?: boolean;
   /** Tras vender: recargar lo que corresponda además de la tienda y la caja. */
   onDone?:    () => void;
   onClose:    () => void;
@@ -34,7 +39,7 @@ const OFF = "bg-secondary text-muted-foreground border-border hover:border-[rgba
  * quién compra (opcional) y cómo se cobra: método, «Debe» o, dentro de una
  * reserva, «Pendiente». Avisa si no queda stock, pero deja vender.
  */
-export function ShopSellDialog({ clubId, bookingId, onDone, onClose }: Props) {
+export function ShopSellDialog({ clubId, bookingId, bookingHasCustomer = false, onDone, onClose }: Props) {
   const qc = useQueryClient();
   const [productId, setProductId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -72,7 +77,7 @@ export function ShopSellDialog({ clubId, bookingId, onDone, onClose }: Props) {
       });
     },
     onSuccess: (res) => {
-      toast.success(`Vendido: ${res.sale.quantity} × ${res.sale.productName}`);
+      toast.success(`Vendido: ${res.sale.quantity} × ${res.sale.productName} · ${formatCents(res.sale.amountCents)}`);
       const after = product ? stockAfterWarning(product.name, res.stockAfter, lowStockThreshold(product)) : null;
       if (after) toast.warning(after);
       qc.invalidateQueries({ queryKey: shopQK.all(clubId) });
@@ -84,8 +89,9 @@ export function ShopSellDialog({ clubId, bookingId, onDone, onClose }: Props) {
   });
 
   const close = () => { if (!sell.isPending) onClose(); };
-  // A deber sin reserva no sabe quién debe; con reserva, debe quien reservó si no se elige a nadie
-  const needsPerson = way === "DEBT" && !bookingId && !customer && personName === "";
+  // A deber no sabe quién debe si no se elige a nadie y no hay un cliente de la reserva al que apuntarlo
+  const debtFallsOnBooking = bookingId !== undefined && bookingHasCustomer;
+  const needsPerson = way === "DEBT" && !debtFallsOnBooking && !customer && personName === "";
   const needsReceiver = way === "BIZUM" && (receiver === undefined || partners.data === undefined);
   const canSell = product !== null && way !== "" && !needsPerson && !needsReceiver && !sell.isPending;
 
@@ -198,7 +204,7 @@ export function ShopSellDialog({ clubId, bookingId, onDone, onClose }: Props) {
                 </div>
                 {way === "DEBT" && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {bookingId
+                    {debtFallsOnBooking
                       ? "Debe quien elijas arriba; si no eliges a nadie, debe quien reservó."
                       : "Elige quién debe: un cliente o un nombre."}
                   </p>

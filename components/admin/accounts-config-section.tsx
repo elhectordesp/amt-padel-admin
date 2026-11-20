@@ -10,9 +10,12 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { errorText } from "@/components/admin/price-seasons-panel";
 import { Button } from "@/components/ui/button";
 import { accountsConfigQK, accountsConfigService, type AccountsConfig } from "@/lib/services/accounts-config";
+import { clubDebtsService, type ExpiryPreview } from "@/lib/services/club-debts";
+import { formatCents } from "@/lib/utils/booking-price";
 import { useClubAccess } from "@/lib/use-club-access";
 import {
   bpsToFeeText, DEBT_MAX_DAYS, feePercentToBps, parseWarnDays, warnDaysText,
@@ -62,14 +65,32 @@ export function AccountsConfigSection({ clubId }: { clubId: string }) {
     next.cardFeeBps === saved.cardFeeBps &&
     next.debtWarnDays.join() === saved.debtWarnDays.join();
 
+  // Al poner un plazo o acortarlo, las deudas ya vencidas con él pasarían a
+  // perdidas: antes de guardar se enseña cuántas son
+  const [confirming, setConfirming] = useState<{ next: AccountsConfig; preview: ExpiryPreview } | null>(null);
+  const shortens = (input: AccountsConfig) =>
+    input.debtExpiryDays !== null &&
+    (!saved || saved.debtExpiryDays === null || input.debtExpiryDays < saved.debtExpiryDays);
+
   const save = useMutation({
     mutationFn: (input: AccountsConfig) => accountsConfigService.update(clubId, input),
     onSuccess: () => {
+      setConfirming(null);
       toast.success("Ajustes de cuentas guardados");
       qc.invalidateQueries({ queryKey: accountsConfigQK.config(clubId) });
     },
-    onError: (err: unknown) => toast.error(errorText(err)),
+    onError: (err: unknown) => { setConfirming(null); toast.error(errorText(err)); },
   });
+  const preview = useMutation({
+    mutationFn: (input: AccountsConfig) =>
+      clubDebtsService.expiryPreview(clubId, input.debtExpiryDays as number).then((p) => ({ input, p })),
+    onSuccess: ({ input, p }) => {
+      if (p.count > 0) setConfirming({ next: input, preview: p });
+      else save.mutate(input);
+    },
+    onError: () => toast.error("No se pudo comprobar cuántas deudas se perderían con ese plazo: no se ha guardado nada"),
+  });
+  const onSave = (input: AccountsConfig) => (shortens(input) ? preview.mutate(input) : save.mutate(input));
 
   return (
     <section aria-label="Ajustes de cuentas">
@@ -168,14 +189,30 @@ export function AccountsConfigSection({ clubId }: { clubId: string }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={!next || unchanged || save.isPending}
-              onClick={() => next && save.mutate(next)}
+              disabled={!next || unchanged || save.isPending || preview.isPending}
+              onClick={() => next && onSave(next)}
             >
               Guardar ajustes
             </Button>
           )}
         </div>
       )}
+      <ConfirmModal
+        open={confirming !== null}
+        danger
+        title="Algunas deudas se perderían ya"
+        description={
+          confirming
+            ? `Con un plazo de ${confirming.next.debtExpiryDays} días, ${confirming.preview.count} ${
+                confirming.preview.count === 1 ? "deuda abierta" : "deudas abiertas"
+              } (${formatCents(confirming.preview.totalCents)}) pasarían a perdidas hoy, en la próxima hora. Las de largo plazo no. Un propietario o gestor puede reabrirlas después.`
+            : ""
+        }
+        confirmLabel="Guardar el plazo"
+        loading={save.isPending}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => confirming && save.mutate(confirming.next)}
+      />
     </section>
   );
 }

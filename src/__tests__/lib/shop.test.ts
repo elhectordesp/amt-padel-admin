@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import type { ShopProduct, ShopSale } from "@/lib/services/shop";
 import {
-  cancelSaleText, countDifference, lowStockThreshold, moveLabel, parseCount, purchaseUnits,
+  cancelNeedsAccounts, cancelSaleText, countDifference, lowStockThreshold, moveLabel, parseCount, purchaseUnits,
   saleActions, saleStatusInfo, saleStockWarning, shopErrorText, signedUnits, stockAfterWarning,
 } from "@/lib/utils/shop";
 
@@ -17,7 +17,7 @@ const product = (patch: Partial<ShopProduct> = {}): ShopProduct => ({
 const sale = (patch: Partial<ShopSale> = {}): ShopSale => ({
   id: "s1", productName: "Bolas", quantity: 2, unitPriceCents: 600, amountCents: 1200, bookingId: null,
   personName: null, status: "PAID", paymentMethod: "CASH", bizumPartnerName: null, paidAt: "2026-11-20T10:00:00.000Z",
-  debtId: null, cancelledAt: null, refundAmountCents: null, soldByName: "Recepción", createdAt: "2026-11-20T10:00:00.000Z",
+  debtId: null, debtStatus: null, cancelledAt: null, refundAmountCents: null, soldByName: "Recepción", createdAt: "2026-11-20T10:00:00.000Z",
   ...patch,
 });
 
@@ -58,6 +58,33 @@ describe("estado de una venta", () => {
     expect(saleStatusInfo(sale({ status: "DEBT", paymentMethod: null }))).toEqual({ label: "A deber", tone: "debt" });
     expect(saleStatusInfo(sale({ status: "PENDING", paymentMethod: null })).tone).toBe("pending");
     expect(saleStatusInfo(sale({ cancelledAt: "2026-11-20T11:00:00.000Z" })).tone).toBe("cancelled");
+  });
+
+  it("una venta a deber enseña cómo va su deuda: cobrada, perdonada o perdida", () => {
+    const debt = (debtStatus: ShopSale["debtStatus"]) => sale({ status: "DEBT", paymentMethod: null, debtStatus });
+    expect(saleStatusInfo(debt("OPEN")).label).toBe("A deber");
+    expect(saleStatusInfo(debt("PAID"))).toEqual({ label: "Deuda cobrada", tone: "paid" });
+    expect(saleStatusInfo(debt("FORGIVEN")).label).toBe("Deuda perdonada");
+    expect(saleStatusInfo(debt("LOST")).label).toBe("Deuda perdida");
+  });
+
+  it("una venta a deber no se anula si su deuda no está abierta", () => {
+    const debt = (debtStatus: ShopSale["debtStatus"]) => sale({ status: "DEBT", debtStatus });
+    expect(saleActions(debt("OPEN")).cancel).toBe(true);
+    for (const closed of ["PAID", "FORGIVEN", "LOST"] as const)
+      expect(saleActions(debt(closed)).cancel).toBe(false);
+  });
+
+  it("anular una cobrada de otro día necesita el área accounts; la de hoy, no", () => {
+    const now = new Date("2026-11-20T18:00:00.000Z");
+    expect(cancelNeedsAccounts(sale({ paidAt: "2026-11-20T10:00:00.000Z" }), "Europe/Madrid", now)).toBe(false);
+    expect(cancelNeedsAccounts(sale({ paidAt: "2026-11-19T10:00:00.000Z" }), "Europe/Madrid", now)).toBe(true);
+    // 23:30 UTC del 19 ya es el 20 en Madrid: es de hoy
+    expect(cancelNeedsAccounts(sale({ paidAt: "2026-11-19T23:30:00.000Z" }), "Europe/Madrid", now)).toBe(false);
+    // Una pendiente no tiene cobro que devolver
+    expect(cancelNeedsAccounts(sale({ status: "PENDING", paidAt: null }), "Europe/Madrid", now)).toBe(false);
+    // Sin saber la zona, lo estricto
+    expect(cancelNeedsAccounts(sale({ paidAt: "2026-11-20T10:00:00.000Z" }), null, now)).toBe(true);
   });
 
   it("acciones: cobrar solo si está pendiente; anular mientras no esté anulada", () => {

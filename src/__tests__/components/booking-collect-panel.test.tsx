@@ -3,11 +3,18 @@
  * «Cobrar todo» con sus cinco botones, el reparto por jugadores, los atajos,
  * el aviso de alumno, el Bizum con su receptor y los totales.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+const access = vi.hoisted(() => ({ accounts: true }));
+vi.mock("@/lib/use-club-access", () => ({
+  useClubAccess: () => ({ roles: null, can: (area: string) => (area === "accounts" ? access.accounts : true) }),
+}));
+vi.mock("@/lib/use-club-time-zone", () => ({
+  useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
+}));
 const parts = vi.hoisted(() => ({
   view: vi.fn(), split: vi.fn(), removeAll: vi.fn(), update: vi.fn(), pay: vi.fn(),
   invite: vi.fn(), debt: vi.fn(), undo: vi.fn(), refund: vi.fn(),
@@ -186,6 +193,61 @@ describe("BookingCollectPanel", () => {
     await screen.findByRole("listitem", { name: "Parte 1" });
     fireEvent.click(within(row(1)).getByRole("button", { name: "Debe" }));
     await waitFor(() => expect(parts.debt).toHaveBeenCalledWith("c1", "b1", "p1", {}));
+  });
+
+  it("si la deuda nace ya vencida, avisa de que se apunta de largo plazo y por qué", async () => {
+    parts.view.mockResolvedValue(view({ parts: [part(1, { customerName: "Ana", clubCustomerId: "cc1" })] }));
+    parts.debt.mockImplementation(async () => view({ debtNotice: { longTermAuto: true, expiryDays: 10 } }));
+    renderPanel();
+    await screen.findByRole("listitem", { name: "Parte 1" });
+    fireEvent.click(within(row(1)).getByRole("button", { name: "Debe" }));
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith("Se apunta como de largo plazo porque ya ha pasado el plazo de 10 días"),
+    );
+  });
+
+  describe("devolver dinero de una parte cobrada", () => {
+    const paid = (paidAt: string) =>
+      view({ parts: [part(1, { status: "PAID", paymentMethod: "CASH", paidAt, priceCents: 500 })] });
+    const NOW = new Date("2026-11-20T18:00:00.000Z");
+
+    beforeEach(() => {
+      access.accounts = true;
+      vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+      parts.refund.mockImplementation(async () => view());
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("pide el motivo (3 caracteres como mínimo) y lo manda con el importe", async () => {
+      parts.view.mockResolvedValue(paid("2026-11-20T10:00:00.000Z"));
+      renderPanel();
+      await screen.findByRole("listitem", { name: "Parte 1" });
+      fireEvent.click(within(row(1)).getByRole("button", { name: "Devolver" }));
+      const confirm = within(await screen.findByRole("dialog")).getByRole("button", { name: "Devolver" });
+      expect(confirm).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("Motivo de la devolución"), { target: { value: "ab" } });
+      expect(confirm).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("Motivo de la devolución"), { target: { value: "Cobro por error" } });
+      fireEvent.change(screen.getByLabelText("Importe a devolver"), { target: { value: "2" } });
+      fireEvent.click(confirm);
+      await waitFor(() => expect(parts.refund).toHaveBeenCalledWith("c1", "b1", "p1", 200, "Cobro por error"));
+    });
+
+    it("un cobro de otro día solo se devuelve con el área accounts", async () => {
+      access.accounts = false;
+      parts.view.mockResolvedValue(paid("2026-11-19T10:00:00.000Z"));
+      renderPanel();
+      await screen.findByRole("listitem", { name: "Parte 1" });
+      expect(within(row(1)).queryByRole("button", { name: "Devolver" })).not.toBeInTheDocument();
+    });
+
+    it("un cobro de hoy se devuelve con la caja, sin el área accounts", async () => {
+      access.accounts = false;
+      parts.view.mockResolvedValue(paid("2026-11-20T10:00:00.000Z"));
+      renderPanel();
+      await screen.findByRole("listitem", { name: "Parte 1" });
+      expect(within(row(1)).getByRole("button", { name: "Devolver" })).toBeInTheDocument();
+    });
   });
 
   it("«Debe» en una parte sin nadie pide quién debe", async () => {

@@ -119,6 +119,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
                     clubId={clubId}
                     personName={p.name}
                     debts={p.items.filter((i) => i.source === "CLUB_DEBT" && canCollect(i)).map((i) => ({ id: i.refId, amountCents: i.amountCents }))}
+                    showTotal
                   />
                   <span className="text-sm font-semibold text-[#D4AF37]">{formatCents(p.totalCents)}</span>
                 </div>

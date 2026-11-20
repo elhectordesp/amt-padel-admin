@@ -112,6 +112,16 @@ export function zonedDayKey(value: string | Date, tz: string): string {
   return `${w.year}-${pad2(w.month)}-${pad2(w.day)}`;
 }
 
+/**
+ * ¿Cae ese instante en un día anterior al de hoy, en la zona del club? Sin la
+ * zona (aún no se sabe), se supone que sí: lo estricto, que es lo que pide
+ * permiso de más y no de menos.
+ */
+export function isBeforeToday(value: string | Date, tz: string | null, now: Date = new Date()): boolean {
+  if (!tz) return true;
+  return zonedDayKey(value, tz) < zonedDayKey(now, tz);
+}
+
 /** «HH:mm» del instante en la zona. */
 export function zonedTime(value: string | Date, tz: string): string {
   const w = wallClock(new Date(value), tz);

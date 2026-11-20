@@ -132,25 +132,32 @@ export function ClubDebtPayDialog({ clubId, subtitle, debtIds, totalCents, onClo
 }
 
 /** «Cobrar todo» de una persona: todas sus deudas abiertas de una vez, con un solo método. */
-export function ClubDebtPayAll({ clubId, personName, debts }: {
+export function ClubDebtPayAll({ clubId, personName, debts, showTotal = false }: {
   clubId:     string;
   personName: string;
   /** Sus deudas abiertas (id e importe). */
   debts:      { id: string; amountCents: number }[];
+  /**
+   * «Cobrar deudas (X €)» en lugar de «Cobrar todo»: donde la persona tiene
+   * además otras cosas por cobrar (la caja), para que se vea que solo cobra
+   * sus deudas del club y cuánto suman.
+   */
+  showTotal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   if (debts.length === 0) return null;
+  const total = debts.reduce((sum, d) => sum + d.amountCents, 0);
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <CreditCard className="h-3.5 w-3.5" /> Cobrar todo
+        <CreditCard className="h-3.5 w-3.5" /> {showTotal ? `Cobrar deudas (${formatCents(total)})` : "Cobrar todo"}
       </Button>
       {open && (
         <ClubDebtPayDialog
           clubId={clubId}
           subtitle={`${personName} · ${debts.length} ${debts.length === 1 ? "deuda" : "deudas"}`}
           debtIds={debts.map((d) => d.id)}
-          totalCents={debts.reduce((sum, d) => sum + d.amountCents, 0)}
+          totalCents={total}
           onClose={() => setOpen(false)}
         />
       )}

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { ClubDebtPayAll, DebtPill } from "@/components/admin/club-debt-pay";
+import { ErrorState } from "@/components/admin/error-state";
 import { clubDebtsQK, clubDebtsService } from "@/lib/services/club-debts";
 import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
 import { useClubAccess } from "@/lib/use-club-access";
@@ -28,6 +29,8 @@ export function CustomerDebtsSection({ clubId, customerId }: { clubId: string; c
   });
 
   if (!accountsEnabled || !canSeeCash) return null;
+  // Un fallo no se pinta como «no debe nada»
+  if (query.isError) return <ErrorState title="No se pudieron cargar las deudas del cliente" onRetry={() => query.refetch()} />;
   if (query.isPending) return <Loader2 className="mt-4 h-5 w-5 animate-spin text-muted-foreground" />;
   const person = query.data?.[0];
   if (!person) return null;
