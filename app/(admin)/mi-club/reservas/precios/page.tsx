@@ -20,6 +20,7 @@ import Link from "next/link";
 import { Copy, Loader2, Plus, Save, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { MemberDiscountSection } from "@/components/admin/member-discount-section";
 import { PriceOffersSection } from "@/components/admin/price-offers-section";
 import { PriceSeasonsPanel } from "@/components/admin/price-seasons-panel";
 import { ReservasPage } from "@/components/admin/reservas-page";
@@ -173,6 +174,10 @@ export default function PreciosPage() {
 
       <div className="mt-10">
         <PriceOffersSection clubId={clubId} courts={courts} />
+      </div>
+
+      <div className="mt-10">
+        <MemberDiscountSection clubId={clubId} />
       </div>
     </ReservasPage>
   );

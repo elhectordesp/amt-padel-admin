@@ -28,6 +28,7 @@ const svc = vi.hoisted(() => ({
   operatingHours: { list: vi.fn() },
   seasons: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   priceOffers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+  config: { get: vi.fn(), update: vi.fn() },
 }));
 const pricing = svc.courtPricing;
 vi.mock("@/lib/services/bookings", async () => {
@@ -68,6 +69,8 @@ describe("Precios de las pistas", () => {
     svc.seasons.list.mockResolvedValue([]);
     svc.seasons.remove.mockResolvedValue(undefined);
     svc.priceOffers.list.mockResolvedValue([]);
+    svc.config.get.mockResolvedValue({ memberDiscountPercent: 10 });
+    svc.config.update.mockResolvedValue({ memberDiscountPercent: 15 });
   });
 
   it("se teclea «25» y se guarda 2500 céntimos", async () => {
@@ -282,5 +285,20 @@ describe("Precios de las pistas", () => {
         expect(await screen.findByRole("button", { name })).toBeInTheDocument();
       }
     });
+  });
+
+  it("el descuento de socios se ve y se cambia aquí, aclarando que no se suma a las ofertas", async () => {
+    renderPage();
+    const input = await screen.findByLabelText("Descuento para socios (%)");
+    expect(input).toHaveValue("10");
+    expect(screen.getByText(/No se\s+suma a las ofertas/)).toBeTruthy();
+
+    const apply = screen.getByRole("button", { name: "Aplicar" });
+    expect(apply).toBeDisabled();
+    fireEvent.change(input, { target: { value: "150" } });
+    expect(apply).toBeDisabled();
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.click(apply);
+    await waitFor(() => expect(svc.config.update).toHaveBeenCalledWith("c1", { memberDiscountPercent: 15 }));
   });
 });
