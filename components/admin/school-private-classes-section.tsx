@@ -155,7 +155,7 @@ function PrivateClassesList({ clubId, timeZone, canWrite }: { clubId: string; ti
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {c.coachName ? `Entrenador: ${c.coachName}` : "Sin entrenador"}
-                        {c.status === "SCHEDULED" && ` · ${classPaymentSummary(c)}`}
+                        {showMoney && c.status === "SCHEDULED" && ` · ${classPaymentSummary(c)}`}
                       </span>
                     </div>
                     {c.status === "CANCELLED" && c.cancelReason && (
