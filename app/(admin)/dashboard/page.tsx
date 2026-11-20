@@ -82,14 +82,18 @@ export default function DashboardPage() {
   const { role } = useRole();
   const isClubUser = isClub(role);
 
-  const { data: adminUser } = useMe();
+  const { data: adminUser, isLoading: meLoading } = useMe();
   const { clubId } = useRole();
   // Un club a medio configurar no está «en orden» aunque el back no tenga alertas
   // Al equipo del club solo se le enseña lo que su rol puede leer
   const access = useClubAccess();
-  const canSeeSettings = !isClubUser || access.can("settings");
-  const canSeeBookings = !isClubUser || access.can("bookings");
-  const showTournaments = !isClubUser || access.can("tournaments");
+  // Hasta saber quién es (el rol sale del token tras el primer pintado y los roles
+  // del equipo, de /auth/me) no se pide nada: un entrenador lanzaba /admin/stats
+  // por un instante y recibía un 403
+  const ready = role !== null && (!isClubUser || !meLoading);
+  const canSeeSettings = ready && (!isClubUser || access.can("settings"));
+  const canSeeBookings = ready && (!isClubUser || access.can("bookings"));
+  const showTournaments = ready && (!isClubUser || access.can("tournaments"));
   const launch = useLaunchSteps(isClubUser && canSeeSettings ? clubId : null);
 
   const { data: stats, isLoading, isError: statsError } = useQuery({

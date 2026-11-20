@@ -44,6 +44,8 @@ const rowOf = (name: string) => screen.getByText(name).closest("tr")!;
 describe("AdminsTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Con sesión se pide /auth/me (sin ella useMe no lo pide)
+    document.cookie = "amt_admin_token=x; path=/";
     adminMock.admins.list.mockResolvedValue(ADMINS);
   });
 
