@@ -358,6 +358,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
   const [status,      setStatus]      = useState<"PENDING" | "CONFIRMED">("PENDING");
   const [paid,        setPaid]        = useState(false);
   const [forceEnroll, setForceEnroll] = useState(false);
+  const [skipPlayerNotices, setSkipPlayerNotices] = useState(false);
 
   const selectedCategory = tournament.categories?.find((c) => c.id === categoryId);
   const isNotOpen = !["OPEN", "DRAW", "SCHEDULED"].includes(tournament.status ?? "");
@@ -400,6 +401,7 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
       status,
       paid,
       forceEnroll: forceEnroll || undefined,
+      skipPlayerNotices: skipPlayerNotices || undefined,
     });
   };
 
@@ -514,6 +516,11 @@ export function EnrollTeamModal({ tournament, onClose, onEnrolled }: Props) {
                 <input type="checkbox" checked={forceEnroll} onChange={(e) => setForceEnroll(e.target.checked)}
                   className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
                 <span className="text-sm text-foreground">Forzar (ignorar límite de plazas)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={skipPlayerNotices} onChange={(e) => setSkipPlayerNotices(e.target.checked)}
+                  className="w-4 h-4 rounded border-border bg-secondary accent-[#D4AF37]" />
+                <span className="text-sm text-foreground">No avisar a los jugadores</span>
               </label>
             </div>
           </div>

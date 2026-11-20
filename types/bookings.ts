@@ -446,6 +446,8 @@ export interface CreateBookingPayload {
   clubCustomerId?: string;
   /** Cobrada en el mostrador: nace cobrada, en la misma operación (solo el personal del club). */
   payNow?: { method: CounterPaymentMethod; amountCents?: number };
+  /** No avisar a los jugadores de la reserva (copias de reservas que ya existen en otro sistema). */
+  skipPlayerNotices?: boolean;
 }
 
 export interface AvailabilityQuery {

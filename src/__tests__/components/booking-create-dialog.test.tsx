@@ -124,6 +124,24 @@ describe("BookingCreateDialog", () => {
     );
   });
 
+  it("«No avisar al jugador» viene desmarcada y, sin tocarla, no va en el payload", async () => {
+    renderDialog();
+    await screen.findByDisplayValue("18:00");
+    expect(screen.getByRole("checkbox", { name: "No avisar al jugador" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
+    await waitFor(() => expect(svc.bookings.create).toHaveBeenCalledTimes(1));
+    expect(svc.bookings.create.mock.calls[0][0]).not.toHaveProperty("skipPlayerNotices");
+  });
+
+  it("marcada, «No avisar al jugador» se manda", async () => {
+    renderDialog();
+    await screen.findByDisplayValue("18:00");
+    fireEvent.click(screen.getByRole("checkbox", { name: "No avisar al jugador" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear reserva" }));
+    await waitFor(() => expect(svc.bookings.create).toHaveBeenCalledTimes(1));
+    expect(svc.bookings.create.mock.calls[0][0]).toMatchObject({ skipPlayerNotices: true });
+  });
+
   async function addGuests(names: string[]) {
     // «Por teléfono» es el modo por defecto: los invitados son de «Con jugadores»
     fireEvent.click(screen.getByRole("radio", { name: /Con jugadores/ }));
