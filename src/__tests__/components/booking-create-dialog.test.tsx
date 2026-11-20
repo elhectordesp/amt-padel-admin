@@ -257,6 +257,21 @@ describe("BookingCreateDialog", () => {
   });
 });
 
+describe("BookingCreateDialog — el club no admite reservas", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    courtsList.mockResolvedValue([{ id: "p1", name: "Pista 1", active: true, type: "DOUBLES" }]);
+    svc.courtDurations.list.mockResolvedValue([{ id: "d", courtId: "p1", minutes: 90, isDefault: true }]);
+  });
+
+  it("si /availability falla, enseña el motivo y no «Sin huecos libres»", async () => {
+    svc.availability.mockRejectedValue(new Error("Este club no tiene reservas habilitadas"));
+    renderDialog({ courtId: "p1", date: "2026-11-02" });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Este club no tiene reservas habilitadas");
+    expect(screen.queryByText(/Sin huecos libres/)).not.toBeInTheDocument();
+  });
+});
+
 describe("BookingCreateDialog — club en Canarias (B1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

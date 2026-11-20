@@ -417,6 +417,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando
                 huecos…
               </div>
+            ) : availabilityQuery.isError ? (
+              // El motivo real (un club sin activar, sin reservas…), no un «sin huecos» que engaña
+              <p role="alert" className="mt-1 rounded-md border border-destructive/40 bg-background px-2 py-1.5 text-sm text-destructive">
+                {availabilityQuery.error instanceof Error && availabilityQuery.error.message
+                  ? availabilityQuery.error.message
+                  : "No se pudieron cargar los huecos."}
+              </p>
             ) : slots.length === 0 ? (
               <p className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-muted-foreground">
                 Sin huecos libres para esta pista, fecha y duración.
