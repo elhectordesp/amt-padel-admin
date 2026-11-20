@@ -260,6 +260,17 @@ describe("TournamentPreparationChecklist — liga", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Liga publicada"));
   });
 
+  it("una liga abierta se cierra desde su lista: «Cerrar inscripciones» pasa a Sorteo (F19)", async () => {
+    preparationMock.mockResolvedValue(leaguePrep("OPEN", ["CATEGORIES", "PUBLISH"]));
+    updateMock.mockResolvedValue({});
+    renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");
+    fireEvent.click(await screen.findByRole("button", { name: "Cerrar inscripciones" }));
+    expect(screen.getByText(/la liga pasa a «Sorteo» para generar los grupos/)).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", { name: "Cerrar inscripciones" });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(updateMock).toHaveBeenCalledWith("t1", { status: "DRAW" }));
+  });
+
   it("el paso de grupos lleva a los grupos y el enlace de «Avanzado» cuelga de /ligas", async () => {
     preparationMock.mockResolvedValue(leaguePrep("OPEN", ["CATEGORIES", "PUBLISH"]));
     const { onNavigate } = renderChecklist(vi.fn(), "Europe/Madrid", "/ligas");

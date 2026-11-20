@@ -176,6 +176,14 @@ describe("Ficha de una liga", { timeout: 30_000 }, () => {
     expect(within(panel).getByText("Quedan 3 partidos de grupos sin resultado.")).toBeInTheDocument();
   });
 
+  it("una liga en borrador ofrece «Generar cuadro…» en Grupos, con el motivo de por qué aún no (F19)", async () => {
+    state.status = "DRAFT";
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Grupos" }, WAIT));
+    expect(await screen.findByRole("button", { name: "Generar cuadro…" }, WAIT)).toBeInTheDocument();
+    expect(screen.getByText(/La liga es un borrador\. Publícala y cierra las inscripciones en «Preparación de la liga»/)).toBeInTheDocument();
+  });
+
   it("Crear partido en una liga pide la jornada, no la hora ni la pista", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Grupos" }, WAIT));

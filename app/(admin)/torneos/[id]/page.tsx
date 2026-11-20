@@ -3269,7 +3269,7 @@ export default function TorneoDetailPage() {
         {/* ── CUADRO TAB ── */}
         {tab === "cuadro" && (
           <div className="space-y-4">
-            {(tournament.status === "OPEN" || tournament.status === "DRAW") && (() => {
+            {(tournament.status === "OPEN" || tournament.status === "DRAW" || (league && tournament.status === "DRAFT")) && (() => {
               const st = tournament.status;
               // En DRAW las inscripciones siempre están cerradas
               const deadlinePassed = st === "DRAW"
@@ -3306,9 +3306,12 @@ export default function TorneoDetailPage() {
               // - "ya generado": banner ámbar o rojo según resultados
               // - "inscripciones abiertas": modo read-only con motivo
               // El botón siempre se puede pulsar para abrir el dialog.
-              const blockedReason = !deadlinePassed
-                ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Ciérralas en «Preparación del torneo» (pestaña Resumen) para generar el cuadro.`
-                : null;
+              const prepName = league ? "Preparación de la liga" : "Preparación del torneo";
+              const blockedReason = st === "DRAFT"
+                ? `La liga es un borrador. Publícala y cierra las inscripciones en «${prepName}» (pestaña Resumen) para sortear los grupos.`
+                : !deadlinePassed
+                  ? `Las inscripciones siguen abiertas${deadlineLabel ? ` hasta el ${deadlineLabel}` : ""}. Ciérralas en «${prepName}» (pestaña Resumen) para ${league ? "sortear los grupos" : "generar el cuadro"}.`
+                  : null;
 
               return (
                 <div className="bg-card border border-border rounded-lg p-5">

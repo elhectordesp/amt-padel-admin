@@ -183,7 +183,7 @@ export function TournamentPreparationChecklist({
   const closeMut = useMutation({
     mutationFn: () => adminService.tournaments.update(tournamentId, { status: "DRAW" }),
     onSuccess: () => {
-      toast.success("Inscripciones cerradas: ya puedes generar el cuadro");
+      toast.success(league ? "Inscripciones cerradas: ya puedes sortear los grupos" : "Inscripciones cerradas: ya puedes generar el cuadro");
       setConfirm(null);
       refresh();
     },
@@ -259,7 +259,15 @@ export function TournamentPreparationChecklist({
           <button className={secondary} onClick={() => setConfirm("close")}>Cerrar inscripciones</button>
         ) : null;
       case "DRAW":
-        return <button className={secondary} onClick={() => onNavigate("cuadro")}>{league ? "Ir a los grupos" : "Ir al cuadro"}</button>;
+        return (
+          <>
+            {/* Una liga no tiene el paso «Inscripciones cerradas»: se cierran aquí, antes de sortear */}
+            {league && status === "OPEN" && !readOnly && (
+              <button className={secondary} onClick={() => setConfirm("close")}>Cerrar inscripciones</button>
+            )}
+            <button className={secondary} onClick={() => onNavigate("cuadro")}>{league ? "Ir a los grupos" : "Ir al cuadro"}</button>
+          </>
+        );
       case "SCHEDULE":
         return <button className={secondary} onClick={() => onNavigate("horarios")}>Ir a horarios</button>;
       case "PUBLISH":
@@ -390,7 +398,9 @@ export function TournamentPreparationChecklist({
       <ConfirmModal
         open={confirm === "close"}
         title="Cerrar inscripciones"
-        description="Nadie más podrá inscribirse desde la app y el torneo pasa a «Sorteo» para generar el cuadro."
+        description={league
+          ? "Nadie más podrá inscribirse y la liga pasa a «Sorteo» para generar los grupos."
+          : "Nadie más podrá inscribirse desde la app y el torneo pasa a «Sorteo» para generar el cuadro."}
         confirmLabel="Cerrar inscripciones"
         loading={closeMut.isPending}
         onClose={() => setConfirm(null)}
