@@ -7,6 +7,7 @@ import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { SchoolFeePayDialog, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
+import { ShopSalePayDialog } from "@/components/admin/shop-sale-pay-dialog";
 import { Button } from "@/components/ui/button";
 import { accountsQK, accountsService } from "@/lib/services/accounts";
 import { adminService } from "@/lib/services/admin";
@@ -39,6 +40,7 @@ const AREA_OF: Record<DebtItem["source"], "bookings" | "cash" | "school"> = {
   BOOKING_PART:  "cash",
   REGISTRATION:  "cash",
   VOUCHER:       "cash",
+  SALE:          "cash",
   SCHOOL_FEE:    "school",
   PRIVATE_CLASS: "school",
 };
@@ -170,6 +172,15 @@ export function CajaDebts({ clubId, timeZone }: Props) {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: clubVouchersQK.all(clubId) });
           }}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collecting?.item.source === "SALE" && (
+        <ShopSalePayDialog
+          clubId={clubId}
+          saleId={collecting.item.refId}
+          subtitle={`${collecting.person} · ${collecting.item.concept}`}
+          amountCents={collecting.item.amountCents}
           onClose={() => setCollecting(null)}
         />
       )}

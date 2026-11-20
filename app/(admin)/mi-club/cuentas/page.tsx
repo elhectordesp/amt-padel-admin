@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { AccountsConfigSection } from "@/components/admin/accounts-config-section";
 import { AccountsPartPricesSection } from "@/components/admin/accounts-part-prices-section";
 import { AccountsPartnersSection } from "@/components/admin/accounts-partners-section";
+import { AccountsShopSection } from "@/components/admin/accounts-shop-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
 import { useClubAccounts } from "@/lib/use-accounts-enabled";
@@ -53,6 +54,7 @@ export default function CuentasPage() {
             <AccountsPartnersSection clubId={clubId} />
             <AccountsPartPricesSection clubId={clubId} />
             <AccountsConfigSection clubId={clubId} />
+            <AccountsShopSection clubId={clubId} />
           </>
         )}
       </div>

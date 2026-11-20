@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CalendarDays, Loader2, Printer } from "lucide-react";
 import { CashClosurePanel } from "@/components/admin/cash-closure-panel";
 import { ErrorState } from "@/components/admin/error-state";
+import { ShopDaySales } from "@/components/admin/shop-day-sales";
 import { Button } from "@/components/ui/button";
 import { cashQK, cashService } from "@/lib/services/cash";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -120,7 +121,7 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
                     <tr key={`${m.source}-${m.refId}-${i}`} className="border-b border-border last:border-0">
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{zonedTime(m.at, cash.timezone)}</td>
                       <td className="px-3 py-2 text-foreground">
-                        {m.source === "BOOKING_PART" && m.bookingId ? (
+                        {(m.source === "BOOKING_PART" || m.source === "SALE") && m.bookingId ? (
                           <Link href={`/mi-club/reservas/bookings/${m.bookingId}`} className="underline underline-offset-2 hover:text-[#D4AF37]">
                             {m.concept}
                           </Link>
@@ -137,6 +138,8 @@ export function CajaDay({ clubId, clubName, timeZone }: Props) {
               </table>
             </div>
           )}
+
+          <ShopDaySales clubId={clubId} date={date} />
         </>
       )}
     </div>

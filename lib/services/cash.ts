@@ -15,8 +15,10 @@ export interface CashMovement {
    * SCHOOL_FEE: una cuota de la escuela. PRIVATE_CLASS: un alumno de una clase privada
    * (con bono, método VOUCHER e importe 0). BOOKING_PART: la parte de una reserva
    * cobrada por partes (módulo Cuentas); `refId` es la parte y `bookingId` su reserva.
+   * SALE: una venta de la tienda (o, en negativo, su devolución); `refId` es la venta y
+   * `bookingId`, si la hay, la reserva en que se vendió.
    */
-  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS";
+  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS" | "SALE";
   refId:       string;
   /** Cuándo se cobró (ISO). */
   at:          string;
@@ -24,7 +26,7 @@ export interface CashMovement {
   person:      string;
   method:      string;
   amountCents: number;
-  /** Solo BOOKING_PART: la reserva de la parte, para abrirla. */
+  /** Solo BOOKING_PART y SALE: la reserva de la parte o de la venta, para abrirla. */
   bookingId?:  string;
   /** Solo en un Bizum con el módulo Cuentas: el nombre del socio al que llegó, o «Club». */
   bizumReceiver?: string;
@@ -42,10 +44,10 @@ export interface CashOfDay {
 }
 
 export interface DebtItem {
-  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS";
+  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS" | "SALE";
   /** La reserva, la parte de una reserva, la inscripción, la cuota o, en una clase privada, el alumno de la clase. */
   refId:       string;
-  /** Solo partes de una reserva: la reserva a la que se cobran. */
+  /** Solo partes de una reserva y ventas de la tienda: la reserva a la que se cobran. */
   bookingId?:  string;
   concept:     string;
   /** Inicio de la reserva, de la clase privada o del torneo, o el día 1 del mes de la cuota (ISO). */

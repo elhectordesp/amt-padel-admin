@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingCollectPanel } from "@/components/admin/booking-collect-panel";
+import { BookingShopSales } from "@/components/admin/booking-shop-sales";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import CollectModal from "@/components/admin/collect-modal";
@@ -364,6 +365,8 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
           <BookingCollectPanel clubId={clubId} booking={b} onChanged={refreshAfterCollect} />
         </Section>
       )}
+
+      <BookingShopSales clubId={clubId} bookingId={b.id} status={b.status} onChanged={refreshAfterCollect} />
 
       {/* Participantes */}
       <Section title={`Participantes (${b.participants?.length ?? 0})`}>
