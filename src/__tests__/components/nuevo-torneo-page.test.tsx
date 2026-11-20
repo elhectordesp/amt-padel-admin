@@ -418,3 +418,19 @@ describe("Crear torneo — con las opciones de torneo del club (B5-1)", () => {
     expect(values("Precio por pareja (€)")).toEqual(["25"]);
   }, 60_000);
 });
+
+describe("Crear torneo — errores a la vista", () => {
+  it("un «Siguiente» con errores lleva el primero a la vista (el botón está abajo)", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NuevoTorneoPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue("Club Las Palmas — Las Palmas", {}, WAIT);
+    next();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled(), WAIT);
+  });
+});

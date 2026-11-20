@@ -545,7 +545,20 @@ export default function NuevoTorneoPage() {
     create.mutate();
   };
 
+  // Tras un «Siguiente» con errores, el primero se lleva a la vista: el botón
+  // está al final de la página y el error de un campo de arriba quedaba fuera
+  const revealFirstError = () => {
+    requestAnimationFrame(() => {
+      document.querySelector("[data-field-error]")?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    });
+  };
+
   const goNext = async () => {
+    await advance();
+    revealFirstError();
+  };
+
+  const advance = async () => {
     if (step === 1) {
       const ok = await infoForm.trigger();
       if (!ok) return;
