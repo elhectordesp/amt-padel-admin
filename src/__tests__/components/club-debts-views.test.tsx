@@ -66,7 +66,24 @@ describe("caja: deudas del club en «Pendiente de cobro»", () => {
     expect(screen.getByText("Último día")).toBeInTheDocument();
   });
 
-  it("«Cobrar todo» de la persona cobra solo sus deudas del club", async () => {
+  it("el botón de la persona dice «Cobrar deudas (X €)» con lo que suman solo sus deudas del club", async () => {
+    cashMock.debts.mockResolvedValue({
+      people: [{
+        key: "customer:c1", name: "Ana", userId: null, customerId: "c1", totalCents: 6350,
+        items: [
+          clubDebtItem(),
+          clubDebtItem({ refId: "d2", amountCents: 900 }),
+          { source: "VOUCHER", refId: "v1", concept: "Bono", date: "2026-11-01T00:00:00.000Z", amountCents: 5000 },
+        ],
+      }],
+      totalCents: 6350,
+    });
+    wrap(<CajaDebts clubId="c1" timeZone="Europe/Madrid" />);
+    expect(await screen.findByRole("button", { name: /Cobrar deudas \(13,50/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cobrar todo/ })).not.toBeInTheDocument();
+  });
+
+  it("cobrar las deudas de la persona cobra solo sus deudas del club", async () => {
     cashMock.debts.mockResolvedValue({
       people: [{
         key: "customer:c1", name: "Ana", userId: null, customerId: "c1", totalCents: 6350,
@@ -80,7 +97,7 @@ describe("caja: deudas del club en «Pendiente de cobro»", () => {
     });
     debts.pay.mockResolvedValue({ paid: 2, totalCents: 1350, debts: [] });
     wrap(<CajaDebts clubId="c1" timeZone="Europe/Madrid" />);
-    await userEvent.click(await screen.findByRole("button", { name: /Cobrar todo/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Cobrar deudas/ }));
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(within(dialog).getByRole("button", { name: "Tarjeta" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Cobrar" }));
@@ -119,7 +136,7 @@ describe("caja: deudas del club en «Pendiente de cobro»", () => {
     });
     wrap(<CajaDebts clubId="c1" timeZone="Europe/Madrid" />);
     await screen.findByText("Bono");
-    expect(screen.queryByRole("button", { name: /Cobrar todo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cobrar (todo|deudas)/ })).not.toBeInTheDocument();
   });
 });
 
@@ -140,6 +157,12 @@ describe("DebtWarningsNotice (portada)", () => {
     expect(screen.getByText("Día 9")).toBeInTheDocument();
     expect(screen.getByText("Último día")).toBeInTheDocument();
     expect(screen.getAllByRole("link")[0]).toHaveAttribute("href", "/caja");
+  });
+
+  it("si la petición falla, enseña el error y no un vacío", async () => {
+    debts.warnings.mockRejectedValue(new Error("caído"));
+    wrap(<DebtWarningsNotice clubId="c1" />);
+    expect(await screen.findByText("No se pudieron cargar los avisos de deudas")).toBeInTheDocument();
   });
 
   it("sin avisos no sale; sin el módulo o sin la caja no pide nada", async () => {
@@ -176,6 +199,12 @@ describe("CustomerDebtsSection (ficha del cliente)", () => {
     expect(debts.list).toHaveBeenCalledWith("c1", "ALL", "cc1");
     expect(screen.getByText("4,50 €", { selector: "strong" })).toBeInTheDocument();
     expect(screen.getByText("Cobrada")).toBeInTheDocument();
+  });
+
+  it("si la petición falla, enseña el error y no un «no debe nada»", async () => {
+    debts.list.mockRejectedValue(new Error("caído"));
+    wrap(<CustomerDebtsSection clubId="c1" customerId="cc1" />);
+    expect(await screen.findByText("No se pudieron cargar las deudas del cliente")).toBeInTheDocument();
   });
 
   it("un cliente sin deudas no la enseña", async () => {

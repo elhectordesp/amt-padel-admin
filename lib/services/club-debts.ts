@@ -42,6 +42,20 @@ export interface ClubDebt {
   createdByName:    string;
 }
 
+/** Lo que devuelve apuntar una deuda: si nació ya vencida, se apunta de largo plazo. */
+export interface CreatedDebt extends ClubDebt {
+  /** El back la ha marcado de largo plazo porque ya había pasado su plazo. */
+  longTermAuto: boolean;
+  /** El plazo del club (días) que se había pasado; null sin plazo. */
+  expiryDays:   number | null;
+}
+
+/** Las deudas que pasarían a perdidas hoy con un plazo nuevo. */
+export interface ExpiryPreview {
+  count:      number;
+  totalCents: number;
+}
+
 export interface DebtPersonGroup {
   key:            string;
   name:           string;
@@ -103,7 +117,10 @@ export const clubDebtsService = {
   warnings: (clubId: string) =>
     api.get<DebtWarning[]>(`${base(clubId)}/warnings`).then((r) => r.data),
   create: (clubId: string, input: CreateDebtPayload) =>
-    api.post<ClubDebt>(base(clubId), input).then((r) => r.data),
+    api.post<CreatedDebt>(base(clubId), input).then((r) => r.data),
+  /** Cuántas abiertas sin largo plazo se perderían hoy con ese plazo (área «settings»). */
+  expiryPreview: (clubId: string, days: number) =>
+    api.get<ExpiryPreview>(`${base(clubId)}/expiry-preview`, { params: { days } }).then((r) => r.data),
   pay: (clubId: string, input: PayDebtsPayload) =>
     api
       .post<{ paid: number; totalCents: number; debts: ClubDebt[] }>(`${base(clubId)}/pay`, input)

@@ -38,6 +38,8 @@ vi.mock("@/lib/services/accounts", async (orig) => ({
   accountsService: { partners },
 }));
 vi.mock("@/components/admin/booking-customer-picker", () => ({ BookingCustomerPicker: () => null }));
+const toasts = vi.hoisted(() => ({ info: vi.fn(), success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
 
 import { AccountsDebtsSection } from "@/components/admin/accounts-debts-section";
 
@@ -168,7 +170,53 @@ describe("AccountsDebtsSection", () => {
     debts.undoPay.mockResolvedValue(debt());
     renderSection();
     await userEvent.click(await screen.findByRole("button", { name: /Deshacer cobro/ }));
+    // Pide confirmación antes de llamar
+    const dialog = await screen.findByRole("dialog");
+    expect(debts.undoPay).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Deshacer el cobro" }));
     await waitFor(() => expect(debts.undoPay).toHaveBeenCalledWith("club-1", "d1"));
+  });
+
+  it("cancelar la confirmación no deshace el cobro", async () => {
+    debts.list.mockResolvedValue([
+      ana([debt({ status: "PAID", paymentMethod: "CASH", paidAt: "2026-12-02T10:00:00.000Z" })]),
+    ]);
+    renderSection();
+    await userEvent.click(await screen.findByRole("button", { name: /Deshacer cobro/ }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+    expect(debts.undoPay).not.toHaveBeenCalled();
+  });
+
+  it("una deuda que nace vencida avisa de que se apunta de largo plazo y por qué", async () => {
+    debts.create.mockResolvedValue({ ...debt({ longTerm: true }), longTermAuto: true, expiryDays: 10 });
+    renderSection();
+    await userEvent.click(await screen.findByRole("button", { name: /Nueva deuda/ }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Otra persona" }));
+    await userEvent.type(within(dialog).getByLabelText("Nombre"), "Pablo");
+    await userEvent.type(within(dialog).getByLabelText("Concepto"), "Cañas");
+    await userEvent.type(within(dialog).getByLabelText("Importe"), "9,50");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Apuntar deuda" }));
+    await waitFor(() =>
+      expect(toasts.info).toHaveBeenCalledWith(
+        "Se apunta como de largo plazo porque ya ha pasado el plazo de 10 días",
+      ),
+    );
+  });
+
+  it("una deuda normal no avisa de largo plazo", async () => {
+    debts.create.mockResolvedValue({ ...debt(), longTermAuto: false, expiryDays: 10 });
+    renderSection();
+    await userEvent.click(await screen.findByRole("button", { name: /Nueva deuda/ }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Otra persona" }));
+    await userEvent.type(within(dialog).getByLabelText("Nombre"), "Pablo");
+    await userEvent.type(within(dialog).getByLabelText("Concepto"), "Cañas");
+    await userEvent.type(within(dialog).getByLabelText("Importe"), "9,50");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Apuntar deuda" }));
+    await waitFor(() => expect(debts.create).toHaveBeenCalled());
+    expect(toasts.info).not.toHaveBeenCalled();
   });
 
   it("nueva deuda de otra persona: nombre, concepto e importe", async () => {

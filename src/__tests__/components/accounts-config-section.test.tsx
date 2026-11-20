@@ -15,6 +15,11 @@ vi.mock("@/lib/services/accounts-config", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/accounts-config")>()),
   accountsConfigService: svc,
 }));
+const debts = vi.hoisted(() => ({ expiryPreview: vi.fn() }));
+vi.mock("@/lib/services/club-debts", async (orig) => ({
+  ...(await orig<typeof import("@/lib/services/club-debts")>()),
+  clubDebtsService: debts,
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { AccountsConfigSection } from "@/components/admin/accounts-config-section";
@@ -34,12 +39,81 @@ function renderSection() {
 const DEFAULTS = { debtExpiryDays: null, debtWarnDays: [], cardFeeBps: 0 };
 const save = () => screen.getByRole("button", { name: "Guardar ajustes" });
 
+describe("AccountsConfigSection: aviso al poner o acortar el plazo", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    access.canWrite = true;
+    svc.update.mockImplementation((_club: string, input: object) => Promise.resolve(input));
+  });
+
+  it("al poner un plazo, enseña cuántas deudas se perderían y no guarda hasta confirmar", async () => {
+    svc.get.mockResolvedValue({ debtExpiryDays: null, debtWarnDays: [], cardFeeBps: 0 });
+    debts.expiryPreview.mockResolvedValue({ count: 3, totalCents: 1350 });
+    renderSection();
+    fireEvent.click(await screen.findByLabelText(/Caducan a los/));
+    fireEvent.change(screen.getByLabelText("Días para que caduque una deuda"), { target: { value: "30" } });
+    fireEvent.click(save());
+    const dialog = await screen.findByRole("dialog");
+    expect(debts.expiryPreview).toHaveBeenCalledWith("club-1", 30);
+    expect(dialog).toHaveTextContent("3 deudas abiertas");
+    expect(dialog).toHaveTextContent("13,50");
+    expect(svc.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar el plazo" }));
+    await waitFor(() =>
+      expect(svc.update).toHaveBeenCalledWith("club-1", { debtExpiryDays: 30, debtWarnDays: [], cardFeeBps: 0 }),
+    );
+  });
+
+  it("al acortar el plazo también pregunta; si se cancela, no guarda", async () => {
+    svc.get.mockResolvedValue({ debtExpiryDays: 30, debtWarnDays: [], cardFeeBps: 0 });
+    debts.expiryPreview.mockResolvedValue({ count: 1, totalCents: 450 });
+    renderSection();
+    fireEvent.change(await screen.findByLabelText("Días para que caduque una deuda"), { target: { value: "10" } });
+    fireEvent.click(save());
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("1 deuda abierta");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(svc.update).not.toHaveBeenCalled();
+  });
+
+  it("alargar el plazo o quitarlo no consulta nada y guarda directo", async () => {
+    svc.get.mockResolvedValue({ debtExpiryDays: 10, debtWarnDays: [], cardFeeBps: 0 });
+    renderSection();
+    fireEvent.change(await screen.findByLabelText("Días para que caduque una deuda"), { target: { value: "20" } });
+    fireEvent.click(save());
+    await waitFor(() => expect(svc.update).toHaveBeenCalled());
+    expect(debts.expiryPreview).not.toHaveBeenCalled();
+  });
+
+  it("al acortar sin deudas afectadas guarda sin preguntar", async () => {
+    svc.get.mockResolvedValue({ debtExpiryDays: 30, debtWarnDays: [], cardFeeBps: 0 });
+    debts.expiryPreview.mockResolvedValue({ count: 0, totalCents: 0 });
+    renderSection();
+    fireEvent.change(await screen.findByLabelText("Días para que caduque una deuda"), { target: { value: "10" } });
+    fireEvent.click(save());
+    await waitFor(() => expect(svc.update).toHaveBeenCalled());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("si la comprobación falla, no guarda nada", async () => {
+    svc.get.mockResolvedValue({ debtExpiryDays: null, debtWarnDays: [], cardFeeBps: 0 });
+    debts.expiryPreview.mockRejectedValue(new Error("caído"));
+    renderSection();
+    fireEvent.click(await screen.findByLabelText(/Caducan a los/));
+    fireEvent.change(screen.getByLabelText("Días para que caduque una deuda"), { target: { value: "30" } });
+    fireEvent.click(save());
+    await waitFor(() => expect(debts.expiryPreview).toHaveBeenCalled());
+    expect(svc.update).not.toHaveBeenCalled();
+  });
+});
+
 describe("AccountsConfigSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     access.canWrite = true;
     svc.get.mockResolvedValue(DEFAULTS);
     svc.update.mockImplementation((_club: string, input: object) => Promise.resolve(input));
+    debts.expiryPreview.mockResolvedValue({ count: 0, totalCents: 0 });
   });
 
   it("sin ajustes guardados: las deudas no caducan, sin avisos y sin comisión", async () => {
