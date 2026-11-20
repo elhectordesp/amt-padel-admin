@@ -27,6 +27,27 @@ interface Props {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const digits = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
+
+/** Quien del club ya tiene ese teléfono o email (el servidor busca por texto; aquí se afina). */
+export async function findDuplicateCustomers(
+  clubId: string,
+  phone: string,
+  email: string,
+): Promise<ClubCustomer[]> {
+  const terms = [phone.trim(), email.trim()].filter((t) => t.length > 0);
+  const found = new Map<string, ClubCustomer>();
+  for (const q of terms) {
+    const page = await clubCustomersService.list(clubId, { q, pageSize: 20 });
+    for (const c of page?.items ?? []) {
+      const samePhone = digits(phone).length > 0 && digits(c.phone) === digits(phone);
+      const sameEmail = email.trim() !== "" && (c.email ?? "").toLowerCase() === email.trim().toLowerCase();
+      if (samePhone || sameEmail) found.set(c.id, c);
+    }
+  }
+  return [...found.values()];
+}
+
 /**
  * «Nuevo cliente»: quien no tiene la app (nombre y teléfono o email) o, si ya
  * juega en AMT, se busca su cuenta y el contacto se lee de ella. Con una fecha
@@ -48,6 +69,9 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
   const [error, setError] = useState<string | null>(null);
   // El back no enlaza una cuenta sin trato previo con el club (409): se propone el alta sin cuenta
   const [noRelation, setNoRelation] = useState(false);
+  // Clientes del club con el mismo teléfono o email: se avisa antes de duplicar
+  const [duplicates, setDuplicates] = useState<ClubCustomer[]>([]);
+  const [checking, setChecking] = useState(false);
 
   // Solo un aviso para el formulario: el servidor cuenta la edad con la zona del club
   const age = birthDate ? ageOn(birthDate, localDayKey(new Date())) : null;
@@ -91,6 +115,8 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
     e.preventDefault();
     setError(null);
     setNoRelation(false);
+    // Con el aviso a la vista, «Crear de todos modos» es el botón de enviar
+    const confirmedDuplicate = duplicates.length > 0;
     const hasGuardianContact = isMinor && (!!guardianPhone.trim() || !!guardianEmail.trim());
     if (withAccount) {
       if (!picked) return setError("Elige a la persona de la lista");
@@ -109,7 +135,16 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
       if (guardianEmail.trim() && !EMAIL.test(guardianEmail.trim())) return setError("El email del tutor no es válido");
       if (consent && !guardianName.trim()) return setError("Escribe el nombre del tutor que ha dado su consentimiento");
     }
-    create.mutate();
+    if (withAccount || confirmedDuplicate || (!phone.trim() && !email.trim())) {
+      create.mutate();
+      return;
+    }
+    setChecking(true);
+    findDuplicateCustomers(clubId, phone, email)
+      .then((dups) => (dups.length > 0 ? setDuplicates(dups) : create.mutate()))
+      // Si la comprobación falla, no se bloquea el alta: el aviso es una ayuda
+      .catch(() => create.mutate())
+      .finally(() => setChecking(false));
   };
 
   return (
@@ -133,10 +168,10 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
                 <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
               </Field>
               <Field label="Teléfono">
-                <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} />
+                <Input type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setDuplicates([]); }} maxLength={30} />
               </Field>
               <Field label="Email (opcional)">
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} />
+                <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setDuplicates([]); }} maxLength={254} />
               </Field>
             </>
           )}
@@ -179,6 +214,20 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
             </fieldset>
           )}
 
+          {duplicates.length > 0 && (
+            <div role="alert" className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <p className="font-medium">Ya hay un cliente con ese teléfono o email:</p>
+              <ul className="space-y-1">
+                {duplicates.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between gap-2">
+                    <span>{d.name ?? "Sin nombre"}{d.phone ? ` · ${d.phone}` : ""}{d.email ? ` · ${d.email}` : ""}</span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onDone(d)}>Abrir ficha</Button>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">Si es otra persona, puedes crearlo igualmente.</p>
+            </div>
+          )}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {noRelation && (
             <Button
@@ -197,8 +246,9 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
           )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" size="sm" disabled={create.isPending}>
-              {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Añadir cliente
+            <Button type="submit" size="sm" disabled={create.isPending || checking}>
+              {(create.isPending || checking) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{" "}
+              {duplicates.length > 0 ? "Crear de todos modos" : "Añadir cliente"}
             </Button>
           </div>
         </form>
