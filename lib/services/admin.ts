@@ -10,7 +10,7 @@ import type {
   AdminEnrollTeamPayload, AdminEnrollResult,
   AppConfigAll, AppConfigGeneral, AppConfigCircuit, AppConfigSeason,
   AppConfigEmail, AppConfigPush, AppConfigFaqs, AdminMember, ClubAdmins, ClubStaff,
-  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan, ClubSetupProgress,
+  ClubTournamentConfig, UpdateClubTournamentConfigPayload, ClubFiscal, ClubAmtPlan,
   ClubAmtPlanInternal, UpdateClubAmtPlanPayload,
   SupportMessage, SupportStatus,
   Court, TournamentCourt, CourtBlock, CourtBlockKind,
@@ -726,9 +726,6 @@ export const adminService = {
       api.get<ClubFiscal>(`/admin/clubs/${id}/fiscal`).then((r) => r.data),
     updateFiscal: (id: string, data: ClubFiscal) =>
       api.put<ClubFiscal>(`/admin/clubs/${id}/fiscal`, data).then((r) => r.data),
-    // Puesta en marcha: qué pasos tiene hechos el club, según sus datos reales
-    setupProgress: (id: string) =>
-      api.get<ClubSetupProgress>(`/admin/clubs/${id}/setup-progress`).then((r) => r.data),
     // Plan con AMT (solo propietario, gestor y AMT); sin notas internas
     amtPlan: (id: string) =>
       api.get<ClubAmtPlan>(`/admin/clubs/${id}/amt-plan`).then((r) => r.data),

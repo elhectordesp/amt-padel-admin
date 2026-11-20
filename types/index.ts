@@ -119,13 +119,6 @@ export interface ClubFiscal {
 }
 
 /** Plan del club con AMT (sin las notas internas de AMT). */
-/** Puesta en marcha del club (GET /admin/clubs/:id/setup-progress). */
-export type ClubSetupStepCode = "COURTS" | "SCHEDULE" | "PRICES" | "RULES";
-export interface ClubSetupProgress {
-  steps: { code: ClubSetupStepCode; done: boolean }[];
-  complete: boolean;
-}
-
 export interface ClubAmtPlan {
   bookingPlan:            "FREE" | "SUBSCRIPTION" | "COMMISSION" | "CUSTOM";
   bookingMonthlyFeeCents: number | null;

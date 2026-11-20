@@ -4,6 +4,7 @@ import type { ClubVoucher } from "@/lib/services/club-vouchers";
 import type { SchoolCoach } from "@/types/school";
 import type {
   GenerateFeesResult,
+  PayPendingFeesResult,
   PaySchoolStudentPayload,
   SchoolFee,
   SchoolFeeFilters,
@@ -57,6 +58,11 @@ export const schoolBillingService = {
       api.patch<SchoolFee>(`${base(clubId)}/fees/${feeId}`, payload).then((r) => r.data),
     pay: (clubId: string, feeId: string, paymentMethod: string) =>
       api.post<SchoolFee>(`${base(clubId)}/fees/${feeId}/pay`, { paymentMethod }).then((r) => r.data),
+    /** Cobra todas las cuotas pendientes del mes (o de un grupo) con un mismo método del mostrador. */
+    payPending: (clubId: string, month: string, paymentMethod: string, groupId?: string) =>
+      api
+        .post<PayPendingFeesResult>(`${base(clubId)}/fees/pay-pending`, { month, paymentMethod, ...(groupId ? { groupId } : {}) })
+        .then((r) => r.data),
     unpay: (clubId: string, feeId: string) =>
       api.post<SchoolFee>(`${base(clubId)}/fees/${feeId}/unpay`).then((r) => r.data),
     /** Anula la cuota (solo sin cobrar): deja de contar como pendiente y no se vuelve a generar. */

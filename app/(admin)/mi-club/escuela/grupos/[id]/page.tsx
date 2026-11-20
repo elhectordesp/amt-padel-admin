@@ -25,6 +25,7 @@ import { invalidateSchool, schoolQK, schoolService } from "@/lib/services/school
 import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
+import { formatCents } from "@/lib/utils/booking-price";
 import { slotsSummary } from "@/lib/utils/school";
 import { formatDayKey } from "@/lib/utils/time-zone";
 
@@ -158,6 +159,12 @@ export default function GrupoEscuelaPage({ params }: { params: Promise<{ id: str
                   <dt className="inline">Plazas: </dt>
                   <dd className="inline text-foreground">
                     {g.activeStudents} de {g.maxStudents}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline">Cuota mensual: </dt>
+                  <dd className="inline text-foreground">
+                    {g.monthlyFeeCents === null ? "Sin cuota" : `${formatCents(g.monthlyFeeCents)} por alumno`}
                   </dd>
                 </div>
                 <div>

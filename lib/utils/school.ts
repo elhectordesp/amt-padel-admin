@@ -13,6 +13,7 @@ import type {
   SchoolSession,
   SchoolSlot,
 } from "@/types/school";
+import { formatCents } from "@/lib/utils/booking-price";
 import { centsToFieldText, checkMonthlyFee } from "@/lib/utils/school-money";
 import { formatInTimeZone, zonedDayKey, zonedMinutes, zonedTime } from "@/lib/utils/time-zone";
 
@@ -62,6 +63,11 @@ export function slotText(slot: Pick<SchoolSlot, "weekday" | "startTime" | "durat
 }
 
 /** El horario semanal de un grupo en una línea. */
+/** La cuota mensual de un grupo, para el listado y la ficha. */
+export function monthlyFeeText(cents: number | null): string {
+  return cents === null ? "Sin cuota mensual" : `Cuota: ${formatCents(cents)} al mes por alumno`;
+}
+
 export function slotsSummary(slots: readonly SchoolSlot[]): string {
   if (slots.length === 0) return "Sin horario";
   return [...slots]

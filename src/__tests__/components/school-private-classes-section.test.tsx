@@ -116,6 +116,22 @@ describe("SchoolPrivateClassesSection", () => {
     expect(await screen.findByText("Marta", {}, WAIT)).toBeInTheDocument();
     expect(screen.queryByText(/20,00 €/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Pendiente/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cobrados/)).not.toBeInTheDocument();
+  });
+
+  it("el entrenador recibe la clase sin precios ni cobros y el listado no se rompe", async () => {
+    access.cash = false;
+    billing.privateClasses.list.mockResolvedValue([
+      {
+        id: "pc1", coachStaffId: "s1", coachName: "Luis", startsAt: "2026-11-23T17:00:00.000Z",
+        endsAt: "2026-11-23T18:00:00.000Z", status: "SCHEDULED", cancelReason: null, notes: null,
+        court: { id: "c1", name: "Pista 1" }, createdAt: "2026-11-20T10:00:00.000Z",
+        students: [{ id: "st1", clubCustomerId: "cc1", name: "Marta" }],
+      },
+    ]);
+    renderSection(false);
+    expect(await screen.findByText("Marta", {}, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(/NaN|undefined|cobrados/)).not.toBeInTheDocument();
   });
 
   it("cambiar el rango pide esos días; un rango del revés no pide nada", async () => {
