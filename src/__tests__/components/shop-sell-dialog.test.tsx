@@ -28,7 +28,7 @@ import type { ShopProduct, ShopSale } from "@/lib/services/shop";
 
 const product = (patch: Partial<ShopProduct> = {}): ShopProduct => ({
   id: "p1", name: "Bolas", priceCents: 600, costCents: null, unitsPerBox: 24, minStock: null,
-  active: true, displayOrder: 0, stock: 48, lowStock: false, ...patch,
+  active: true, displayOrder: 0, stockTracked: true, stock: 48, lowStock: false, ...patch,
 });
 const PRODUCTS = [
   product(),
@@ -106,6 +106,20 @@ describe("ShopSellDialog", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Sin stock");
     way("Tarjeta");
     expect(submit(/Cobrar/)).toBeEnabled();
+  });
+
+  it("un producto sin control de stock no avisa ni antes ni después de vender", async () => {
+    shop.products.list.mockResolvedValue([product({ stockTracked: false, stock: null, lowStock: false })]);
+    shop.sales.sell.mockResolvedValue({ sale: SALE, stockAfter: null });
+    renderDialog();
+    await pickProduct("Bolas");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sin stock|Quedan/)).not.toBeInTheDocument();
+    way("Tarjeta");
+    fireEvent.click(submit(/Cobrar/));
+    await waitFor(() => expect(shop.sales.sell).toHaveBeenCalled());
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(toast.warning).not.toHaveBeenCalled();
   });
 
   it("tras vender sin stock, el toast avisa de lo que dice el back", async () => {

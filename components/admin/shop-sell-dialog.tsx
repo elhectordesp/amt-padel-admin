@@ -137,9 +137,11 @@ export function ShopSellDialog({ clubId, bookingId, bookingHasCustomer = false, 
                 >
                   <span className="block text-sm font-semibold text-foreground">{p.name}</span>
                   <span className="block text-xs">{formatCents(p.priceCents)}</span>
-                  <span className={`block text-xs ${p.lowStock ? "text-amber-500" : ""}`}>
-                    {p.stock <= 0 ? "Sin stock" : `Quedan ${p.stock}`}
-                  </span>
+                  {p.stock !== null && (
+                    <span className={`block text-xs ${p.lowStock ? "text-amber-500" : ""}`}>
+                      {p.stock <= 0 ? "Sin stock" : `Quedan ${p.stock}`}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

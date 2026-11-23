@@ -21,7 +21,7 @@ export function ShopLowStockNotice({ clubId }: { clubId: string }) {
     queryFn: () => shopService.products.list(clubId),
     enabled: allowed,
   });
-  const low = (query.data ?? []).filter((p) => p.active && p.lowStock);
+  const low = (query.data ?? []).filter((p) => p.active && p.stockTracked && p.stock !== null && p.lowStock);
   if (!allowed || low.length === 0) return null;
   const canEdit = can("settings", "write");
 
@@ -34,7 +34,7 @@ export function ShopLowStockNotice({ clubId }: { clubId: string }) {
       <ul className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-foreground">
         {low.map((p) => (
           <li key={p.id}>
-            {p.name}: <span className="font-semibold">{p.stock <= 0 ? "agotado" : `quedan ${p.stock}`}</span>
+            {p.name}: <span className="font-semibold">{(p.stock ?? 0) <= 0 ? "agotado" : `quedan ${p.stock}`}</span>
           </li>
         ))}
       </ul>

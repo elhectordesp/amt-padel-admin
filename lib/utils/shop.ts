@@ -25,6 +25,8 @@ export type StockWarning = { level: "out" | "low"; text: string };
 
 /** El aviso al vender `quantity` de un producto: sin stock (se vende igual) o stock bajo. */
 export function saleStockWarning(p: ShopProduct, quantity: number): StockWarning | null {
+  // Sin control de stock no hay nada que avisar
+  if (!p.stockTracked || p.stock === null) return null;
   const after = p.stock - quantity;
   if (after < 0)
     return {
@@ -38,7 +40,8 @@ export function saleStockWarning(p: ShopProduct, quantity: number): StockWarning
 }
 
 /** El aviso tras vender, con lo que dice el back que queda. */
-export function stockAfterWarning(productName: string, stockAfter: number, threshold: number): string | null {
+export function stockAfterWarning(productName: string, stockAfter: number | null, threshold: number): string | null {
+  if (stockAfter === null) return null;
   if (stockAfter < 0) return `${productName}: sin stock (${stockAfter}). Revisa el recuento.`;
   if (stockAfter < threshold) return `${productName}: stock bajo, quedan ${stockAfter}.`;
   return null;
