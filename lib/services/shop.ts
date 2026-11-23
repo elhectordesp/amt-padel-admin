@@ -19,8 +19,10 @@ export interface ShopProduct {
   minStock:     number | null;
   active:       boolean;
   displayOrder: number;
-  /** Compras y recuentos menos lo vendido sin anular; puede ser negativo. */
-  stock:        number;
+  /** Falso hasta su primer movimiento de stock (compra o recuento): el club no lo controla. */
+  stockTracked: boolean;
+  /** Compras y recuentos menos lo vendido sin anular (puede ser negativo); null si no se controla. */
+  stock:        number | null;
   lowStock:     boolean;
 }
 
@@ -101,8 +103,8 @@ export interface SellPayload {
 
 export interface SellResult {
   sale:       ShopSale;
-  /** El stock que queda tras la venta: negativo si se vendió sin tenerlo. */
-  stockAfter: number;
+  /** El stock que queda tras la venta: negativo si se vendió sin tenerlo; null si no se controla. */
+  stockAfter: number | null;
 }
 
 export const shopQK = {

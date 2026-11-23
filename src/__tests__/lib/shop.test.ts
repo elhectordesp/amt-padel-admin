@@ -11,7 +11,7 @@ import {
 
 const product = (patch: Partial<ShopProduct> = {}): ShopProduct => ({
   id: "p1", name: "Bolas", priceCents: 600, costCents: 375, unitsPerBox: 24, minStock: null,
-  active: true, displayOrder: 0, stock: 30, lowStock: false, ...patch,
+  active: true, displayOrder: 0, stockTracked: true, stock: 30, lowStock: false, ...patch,
 });
 
 const sale = (patch: Partial<ShopSale> = {}): ShopSale => ({
@@ -35,6 +35,11 @@ describe("stock al vender", () => {
 
   it("dejando menos de una caja: stock bajo con lo que quedará", () => {
     expect(saleStockWarning(product({ stock: 30 }), 10)).toEqual({ level: "low", text: "Stock bajo: quedarán 20." });
+  });
+
+  it("sin control de stock no avisa de nada", () => {
+    expect(saleStockWarning(product({ stockTracked: false, stock: null }), 5)).toBeNull();
+    expect(stockAfterWarning("Bolas", null, 24)).toBeNull();
   });
 
   it("con stock de sobra no avisa", () => {

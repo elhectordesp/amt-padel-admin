@@ -106,8 +106,9 @@ export function AccountsShopSection({ clubId }: { clubId: string }) {
       <div>
         <h2 id="shop-title" className="font-heading text-lg text-foreground">Tienda</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Lo que vende el club (bolas, grips...). El stock son las cajas compradas menos lo vendido, y avisa cuando
-          queda menos de lo que marques o, si no marcas nada, de una caja. Se puede vender aunque no quede.
+          Lo que vende el club (bolas, grips...). El stock no se controla hasta que apuntes una compra o un recuento;
+          desde entonces son las cajas compradas menos lo vendido, y avisa cuando queda menos de lo que marques o, si no
+          marcas nada, de una caja. Se puede vender aunque no quede.
         </p>
       </div>
 
@@ -129,14 +130,23 @@ export function AccountsShopSection({ clubId }: { clubId: string }) {
                   {p.costCents !== null ? ` · coste ${formatCents(p.costCents)}` : ""}
                 </p>
               </div>
-              <span
-                aria-label={`Stock de ${p.name}`}
-                className={`rounded-md px-2 py-0.5 text-sm tabular-nums ${
-                  p.lowStock ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-foreground"
-                }`}
-              >
-                Stock {p.stock}{p.lowStock ? " · bajo" : ""}
-              </span>
+              {p.stockTracked ? (
+                <span
+                  aria-label={`Stock de ${p.name}`}
+                  className={`rounded-md px-2 py-0.5 text-sm tabular-nums ${
+                    p.lowStock ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-foreground"
+                  }`}
+                >
+                  Stock {p.stock}{p.lowStock ? " · bajo" : ""}
+                </span>
+              ) : (
+                <span aria-label={`Stock de ${p.name}`} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground">Sin control de stock</span>
+                  <button type="button" onClick={() => setCount(p)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                    Empezar a controlar el stock
+                  </button>
+                </span>
+              )}
               <span className={`rounded-md px-2 py-0.5 text-xs ${p.active ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
                 {p.active ? "Activo" : "Desactivado"}
               </span>

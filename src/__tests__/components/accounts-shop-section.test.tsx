@@ -32,7 +32,7 @@ import type { ShopProduct } from "@/lib/services/shop";
 
 const product = (patch: Partial<ShopProduct> = {}): ShopProduct => ({
   id: "p1", name: "Bolas", priceCents: 600, costCents: 375, unitsPerBox: 24, minStock: null,
-  active: true, displayOrder: 0, stock: 48, lowStock: false, ...patch,
+  active: true, displayOrder: 0, stockTracked: true, stock: 48, lowStock: false, ...patch,
 });
 const LIST = [
   product(),
@@ -60,6 +60,28 @@ describe("AccountsShopSection", () => {
     expect(screen.getByLabelText("Stock de Grips")).toHaveTextContent("Stock 10 · bajo");
     expect(screen.getByText("Desactivado")).toBeInTheDocument();
     expect(screen.getAllByText("Activo")).toHaveLength(2);
+  });
+
+  it("un producto sin control de stock no enseña cifra y «Empezar a controlar» abre el recuento", async () => {
+    const SIN = product({ id: "p9", name: "Cintas", stockTracked: false, stock: null, lowStock: false });
+    shop.products.list.mockResolvedValue([SIN]);
+    wrap(<AccountsShopSection clubId="c1" />);
+    const badge = await screen.findByLabelText("Stock de Cintas");
+    expect(badge).toHaveTextContent("Sin control de stock");
+    expect(badge).not.toHaveTextContent("Stock 0");
+    fireEvent.click(within(badge).getByRole("button", { name: "Empezar a controlar el stock" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Recuento" });
+    expect(dialog).toHaveTextContent("el stock aún no se controla");
+    const save = within(dialog).getByRole("button", { name: "Guardar recuento" });
+    fireEvent.change(within(dialog).getByLabelText("Unidades contadas"), { target: { value: "30" } });
+    expect(within(dialog).getByRole("status")).toHaveTextContent("se empieza a controlar el stock");
+    fireEvent.change(within(dialog).getByLabelText("Nota del recuento"), { target: { value: "Primer recuento" } });
+    fireEvent.click(save);
+
+    await waitFor(() => expect(shop.products.addStock).toHaveBeenCalledWith("c1", "p9", {
+      kind: "ADJUSTMENT", countedUnits: 30, notes: "Primer recuento",
+    }));
   });
 
   it("alta: manda precio y coste en céntimos y lo opcional vacío como null", async () => {
@@ -215,6 +237,13 @@ describe("ShopLowStockNotice (portada)", () => {
     expect(within(notice).getByText(/Grips/)).toHaveTextContent("quedan 10");
     expect(within(notice).queryByText(/Cuerdas/)).not.toBeInTheDocument();
     expect(within(notice).queryByText(/Bolas/)).not.toBeInTheDocument();
+  });
+
+  it("un producto sin control de stock no sale en el aviso", async () => {
+    shop.products.list.mockResolvedValue([product({ stockTracked: false, stock: null, lowStock: false })]);
+    const { container } = wrap(<ShopLowStockNotice clubId="c1" />);
+    await waitFor(() => expect(shop.products.list).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("sin nada bajo, con el módulo apagado o sin acceso al catálogo, no pinta nada ni lo pide", async () => {

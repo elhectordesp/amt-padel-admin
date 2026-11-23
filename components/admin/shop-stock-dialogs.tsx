@@ -88,7 +88,7 @@ export function PurchaseDialog({ clubId, product, onClose }: { clubId: string; p
   });
 
   return (
-    <Shell title="Compra de cajas" subtitle={`${product.name} · stock ahora ${product.stock}`} onClose={onClose} busy={save.isPending}>
+    <Shell title="Compra de cajas" subtitle={product.stock === null ? `${product.name} · el stock aún no se controla` : `${product.name} · stock ahora ${product.stock}`} onClose={onClose} busy={save.isPending}>
       <div className="flex flex-col gap-4 overflow-y-auto p-5">
         {hasBox && (
           <div role="group" aria-label="Qué se compra" className="grid grid-cols-2 gap-2">
@@ -113,7 +113,7 @@ export function PurchaseDialog({ clubId, product, onClose }: { clubId: string; p
           <span className={LABEL}>{mode === "boxes" ? "Cajas compradas" : "Unidades compradas"}</span>
           <input type="text" inputMode="numeric" aria-label={mode === "boxes" ? "Cajas compradas" : "Unidades compradas"} value={amount} onChange={(e) => setAmount(e.target.value)} className={FIELD} />
         </label>
-        {units !== null && <p className="text-sm text-muted-foreground">Entran {units} unidades: el stock pasa a {product.stock + units}.</p>}
+        {units !== null && <p className="text-sm text-muted-foreground">Entran {units} unidades: {product.stock === null ? "desde ahora se controla el stock" : `el stock pasa a ${product.stock + units}`}.</p>}
         <label className="block">
           <span className={LABEL}>Lo pagado en total (opcional)</span>
           <input type="text" inputMode="decimal" aria-label="Lo pagado en total" placeholder="90,00" value={cost} onChange={(e) => setCost(e.target.value)} className={FIELD} />
@@ -135,7 +135,9 @@ export function CountDialog({ clubId, product, onClose }: { clubId: string; prod
   const [counted, setCounted] = useState("");
   const [notes, setNotes] = useState("");
   const count = parseCount(counted);
-  const diff = count === null ? null : countDifference(count, product.stock);
+  // Sin control de stock no hay cifra con la que comparar: el recuento es el punto de partida
+  const untracked = product.stock === null;
+  const diff = count === null || product.stock === null ? null : countDifference(count, product.stock);
   const text = notes.trim();
 
   const save = useMutation({
@@ -150,12 +152,17 @@ export function CountDialog({ clubId, product, onClose }: { clubId: string; prod
   });
 
   return (
-    <Shell title="Recuento" subtitle={`${product.name} · el stock dice ${product.stock}`} onClose={onClose} busy={save.isPending}>
+    <Shell title="Recuento" subtitle={untracked ? `${product.name} · el stock aún no se controla` : `${product.name} · el stock dice ${product.stock}`} onClose={onClose} busy={save.isPending}>
       <div className="flex flex-col gap-4 overflow-y-auto p-5">
         <label className="block">
           <span className={LABEL}>Unidades contadas</span>
           <input type="text" inputMode="numeric" aria-label="Unidades contadas" value={counted} onChange={(e) => setCounted(e.target.value)} className={FIELD} />
         </label>
+        {untracked && count !== null && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Al guardar, se empieza a controlar el stock de {product.name} con {count} unidades (menos lo ya vendido sin recuento).
+          </p>
+        )}
         {diff !== null && (
           <p role="status" className="text-sm text-muted-foreground">
             {diff === 0 ? "Coincide con el stock: no hay nada que ajustar." : `Se guarda una diferencia de ${signedUnits(diff)} unidades.`}
@@ -166,7 +173,7 @@ export function CountDialog({ clubId, product, onClose }: { clubId: string; prod
           <input type="text" aria-label="Nota del recuento" placeholder="Recuento de noviembre" value={notes} maxLength={NOTES_MAX} onChange={(e) => setNotes(e.target.value)} className={FIELD} />
         </label>
       </div>
-      <Footer onClose={onClose} busy={save.isPending} canSave={diff !== null && diff !== 0 && text.length >= NOTES_MIN} submit="Guardar recuento" onSubmit={() => save.mutate()} />
+      <Footer onClose={onClose} busy={save.isPending} canSave={(untracked ? count !== null : diff !== null && diff !== 0) && text.length >= NOTES_MIN} submit="Guardar recuento" onSubmit={() => save.mutate()} />
     </Shell>
   );
 }
