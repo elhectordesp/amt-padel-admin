@@ -71,9 +71,14 @@ describe("checkGroupForm", () => {
         startDate: "2026-09-14",
         endDate: "2027-06-18",
         notes: null,
+        activity: "ACADEMY",
         slots: [{ weekday: 1, startTime: "18:00", durationMinutes: 60, preferredCourtId: null }],
       },
     });
+  });
+
+  it("la actividad del grupo (academia o equipo de competición) va con el grupo", () => {
+    expect(checkGroupForm(validForm({ activity: "TEAM" }))).toMatchObject({ ok: true, value: { activity: "TEAM" } });
   });
 
   it("la cuota mensual se escribe en euros y sale en céntimos; vacía, el grupo no cobra cuota", () => {
@@ -91,7 +96,8 @@ describe("checkGroupForm", () => {
   it("el formulario de un grupo con cuota la vuelve a escribir en euros; sin cuota, vacía", () => {
     const group = {
       id: "g", clubId: "c", name: "Iniciación", level: null, maxStudents: 6, monthlyFeeCents: 4550,
-      startDate: "2026-09-14", endDate: "2027-06-18", notes: null, archivedAt: null, createdAt: "", coach: null, slots: [],
+      startDate: "2026-09-14", endDate: "2027-06-18", notes: null, activity: "ACADEMY" as const, archivedAt: null,
+      createdAt: "", coach: null, slots: [],
     };
     expect(groupFormOf(group).monthlyFee).toBe("45,50");
     expect(groupFormOf({ ...group, monthlyFeeCents: null }).monthlyFee).toBe("");

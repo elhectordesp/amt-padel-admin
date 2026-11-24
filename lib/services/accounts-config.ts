@@ -12,6 +12,8 @@ export interface AccountsConfig {
   debtWarnDays:   number[];
   /** Comisión del datáfono en puntos básicos (150 = 1,50 %). */
   cardFeeBps:     number;
+  /** Día («AAAA-MM-DD») desde el que se avisa de los gastos sin justificante; null = no se avisa. */
+  receiptsRequiredFrom?: string | null;
 }
 
 export const accountsConfigQK = {

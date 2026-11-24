@@ -2,9 +2,11 @@
  * /mi-club/escuela/clases/[id] — la ficha de una clase de la escuela. Pasar
  * lista: cada alumno de la lista, presente, ausente o con la falta justificada;
  * lo hacen el entrenador del grupo y quien gestiona la escuela, el día de la
- * clase o después (no antes). Quien gestiona la escuela además avisa las
- * ausencias (que dan una recuperación si se avisa con margen), apunta a quien
- * recupera en el hueco que queda y puede cancelar la clase.
+ * clase o después (no antes). Quien paga con bono gasta una clase de su bono al
+ * quedar presente (y si no tiene bono o está agotado, se avisa). Quien gestiona
+ * la escuela además avisa las ausencias (que dan una recuperación si se avisa
+ * con margen), apunta a quien recupera en el hueco que queda, cambia al
+ * entrenador de la clase (una sustitución) y puede cancelarla.
  */
 
 "use client";
@@ -12,7 +14,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Ban, CalendarPlus, CheckCheck, Loader2, Save, Undo2, UserX } from "lucide-react";
+import { ArrowLeft, Ban, CalendarPlus, CheckCheck, Loader2, Repeat, Save, Undo2, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ErrorState } from "@/components/admin/error-state";
@@ -22,6 +24,7 @@ import { SchoolAbsenceDialog } from "@/components/admin/school-absence-dialog";
 import { SchoolCancelSessionModal } from "@/components/admin/school-cancel-session-modal";
 import { SchoolGuardianLine, SchoolMinorBadge } from "@/components/admin/school-minor-info";
 import { SchoolRecoveryDialog } from "@/components/admin/school-recovery-dialog";
+import { SchoolSessionCoachDialog } from "@/components/admin/school-session-coach-dialog";
 import { Button } from "@/components/ui/button";
 import { invalidateSchool, schoolQK, schoolService } from "@/lib/services/school";
 import { schoolRecoveryQK, schoolRecoveryService } from "@/lib/services/school-recovery";
@@ -34,10 +37,19 @@ import {
   canTakeAttendance,
   sessionLabel,
 } from "@/lib/utils/school";
+import { isBeforeCurrentMonth } from "@/lib/utils/school-billing";
 import { dateTimeText } from "@/lib/utils/school-recovery";
-import type { SchoolAttendanceStatus, SchoolAttendanceStudent } from "@/types/school";
+import type { SchoolAttendanceStatus, SchoolAttendanceStudent, SchoolVoucherWarning } from "@/types/school";
 
 const OPTIONS: SchoolAttendanceStatus[] = ["PRESENT", "ABSENT", "EXCUSED"];
+
+/** Por qué no se descontó la clase del bono de un alumno que paga con bono. */
+function voucherWarningText(w: SchoolVoucherWarning): string {
+  const who = w.name ?? "El alumno";
+  return w.reason === "NO_VOUCHER"
+    ? `${who}: sin bono. Queda como presente, pero no se ha descontado ninguna clase.`
+    : `${who}: bono agotado. Queda como presente, pero no se ha descontado ninguna clase.`;
+}
 
 export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -47,6 +59,8 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
   const { can } = useClubAccess();
   // Avisar ausencias, apuntar recuperaciones y cancelar son de quien escribe la escuela; el entrenador pasa lista
   const canWrite = can("school", "write");
+  // Cambiar el entrenador de un mes ya cerrado cambia lo que se paga al entrenador: lo hace quien lleva las cuentas
+  const canAdjust = can("accounts", "write");
   const { timeZone, isError: timeZoneError, refetch: refetchTimeZone } = useClubTimeZone(clubId, enabled);
   const [now] = useState(() => new Date());
   // Lo cambiado en pantalla y aún sin guardar, por cliente
@@ -56,6 +70,9 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
   const [giveBackTo, setGiveBackTo] = useState<SchoolAttendanceStudent | null>(null);
   const [showRecovery, setShowRecovery] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
+  const [showCoach, setShowCoach] = useState(false);
+  // Los alumnos a los que no se les pudo descontar la clase de su bono al guardar
+  const [voucherWarnings, setVoucherWarnings] = useState<SchoolVoucherWarning[]>([]);
 
   const sheet = useQuery({
     queryKey: schoolQK.session(clubId ?? "", id),
@@ -70,11 +87,15 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
         id,
         Object.entries(edits).map(([clubCustomerId, status]) => ({ clubCustomerId, status })),
       ),
-    onSuccess: (saved) => {
+    onSuccess: ({ voucherWarnings: warnings, ...saved }) => {
       qc.setQueryData(schoolQK.session(clubId!, id), saved);
       invalidateSchool(qc, clubId!);
+      // El bono gastado cambia su saldo: lo que enseñan la ficha del cliente y el grupo
+      void qc.invalidateQueries({ queryKey: ["club-vouchers", clubId!] });
       setEdits({});
+      setVoucherWarnings(warnings ?? []);
       toast.success("Asistencia guardada");
+      for (const w of warnings ?? []) toast.warning(voucherWarningText(w));
     },
     onError: (err: unknown) => toast.error(errorText(err)),
   });
@@ -176,15 +197,29 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                     {freeSpots} {freeSpots === 1 ? "hueco libre" : "huecos libres"} de {data.capacity.maxStudents} plazas
                   </p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Entrenador de la clase: {data.session.coachName ?? "sin entrenador"}
+                </p>
               </div>
-              {canWrite && scheduled && (
+              {canWrite && (
                 <div className="flex flex-wrap gap-2">
-                  {!started && (
+                  {data.session.status !== "CANCELLED" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!canAdjust && isBeforeCurrentMonth(data.session.startsAt, timeZone ?? null, now)}
+                      title={!canAdjust && isBeforeCurrentMonth(data.session.startsAt, timeZone ?? null, now) ? "Es de un mes anterior: lo cambia el propietario o el gestor" : undefined}
+                      onClick={() => setShowCoach(true)}
+                    >
+                      <Repeat className="h-3.5 w-3.5" /> Cambiar (sustitución)
+                    </Button>
+                  )}
+                  {scheduled && !started && (
                     <Button variant="outline" size="sm" disabled={freeSpots === 0} onClick={() => setShowRecovery(true)}>
                       <CalendarPlus className="h-3.5 w-3.5" /> Apuntar recuperación
                     </Button>
                   )}
-                  {data.session.attendanceCount === 0 && (
+                  {scheduled && data.session.attendanceCount === 0 && (
                     <Button variant="outline" size="sm" onClick={() => setShowCancel(true)}>
                       <Ban className="h-3.5 w-3.5" /> Cancelar clase
                     </Button>
@@ -192,6 +227,16 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
             </div>
+
+            {voucherWarnings.length > 0 && (
+              <div role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {voucherWarnings.map((w) => (
+                    <li key={w.clubCustomerId}>{voucherWarningText(w)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {!open && (
               <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -245,6 +290,11 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
                             </span>
                           )}
                           <SchoolMinorBadge student={s} />
+                          {s.paysWithVoucher && (
+                            <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
+                              Paga con bono
+                            </span>
+                          )}
                         </span>
                         {/* De un día que aún no ha llegado no se pasa lista: sin botones que no se pueden pulsar */}
                         {!(scheduled && !open) && (
@@ -354,6 +404,9 @@ export default function ClaseEscuelaPage({ params }: { params: Promise<{ id: str
           timeZone={timeZone}
           onClose={() => setShowRecovery(false)}
         />
+      )}
+      {data && showCoach && (
+        <SchoolSessionCoachDialog clubId={clubId!} session={data.session} onClose={() => setShowCoach(false)} />
       )}
       {data && timeZone && showCancel && (
         <SchoolCancelSessionModal

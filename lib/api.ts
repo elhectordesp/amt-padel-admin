@@ -83,6 +83,30 @@ function processQueue(error: unknown, token: string | null = null) {
 /** Motivo con el que se manda a /login (?motivo=…): el formulario lo explica. */
 export const LOGIN_REASON_CLUB_DEACTIVATED = "club-desactivado";
 
+/**
+ * El cuerpo de un error. Con `responseType: "blob"` (las descargas) llega como
+ * Blob: se lee su JSON para que el mensaje y el código sean los del back y no
+ * un «Error de conexión». Algo que no es JSON se queda sin cuerpo.
+ */
+interface ErrorBody {
+  message?: string | string[];
+  error?:   string;
+  code?:    unknown;
+  details?: unknown;
+}
+
+async function errorBody(data: unknown): Promise<ErrorBody | undefined> {
+  if (typeof Blob !== "undefined" && data instanceof Blob) {
+    try {
+      const parsed: unknown = JSON.parse(await data.text());
+      return parsed && typeof parsed === "object" ? (parsed as ErrorBody) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return data && typeof data === "object" ? (data as ErrorBody) : undefined;
+}
+
 /** El back corta la sesión del admin de un club que AMT desactivó. */
 function isClubDeactivated(err: unknown): boolean {
   return (err as { response?: { data?: { code?: string } } })?.response?.data?.code === "CLUB_DEACTIVATED";
@@ -189,11 +213,13 @@ api.interceptors.response.use(
       return Promise.reject(new ApiError(TOO_MANY_REQUESTS_MESSAGE, 429, "TOO_MANY_REQUESTS"));
     }
 
+    // Una descarga (responseType blob) que falla trae su error como un Blob JSON
+    const body = await errorBody(err.response?.data);
     const message =
-      err.response?.data?.message ??
-      err.response?.data?.error ??
+      body?.message ??
+      body?.error ??
       "Error de conexión";
-    const code = err.response?.data?.code;
+    const code = body?.code;
     if (code === "CLUB_ROLE_FORBIDDEN") {
       return Promise.reject(new ApiError(CLUB_ROLE_FORBIDDEN_MESSAGE, err.response?.status, code));
     }
@@ -202,7 +228,7 @@ api.interceptors.response.use(
         Array.isArray(message) ? message[0] : message,
         err.response?.status,
         typeof code === "string" ? code : undefined,
-        err.response?.data?.details,
+        body?.details,
       ),
     );
   },

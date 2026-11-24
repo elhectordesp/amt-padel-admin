@@ -8,7 +8,48 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// La pestaña sale de ?tab=; los tests de socios y precios viven en «Ajustes»
+const nav = vi.hoisted(() => ({ tab: "ajustes" as string | null, replace: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: nav.replace }),
+  usePathname: () => "/mi-club/cuentas",
+  useSearchParams: () => new URLSearchParams(nav.tab ? `tab=${nav.tab}` : ""),
+}));
+const ledger = vi.hoisted(() => ({
+  categories: { list: vi.fn() },
+  entries: { list: vi.fn() },
+  recurring: { list: vi.fn() },
+  openAccounts: { list: vi.fn() },
+}));
+vi.mock("@/lib/services/ledger", async (orig) => ({
+  ...(await orig<typeof import("@/lib/services/ledger")>()),
+  ledgerService: ledger,
+}));
+const coaches = vi.hoisted(() => ({
+  overview: vi.fn(),
+  rates: { list: vi.fn() },
+  extraHours: { list: vi.fn() },
+}));
+vi.mock("@/lib/services/coaches", async (orig) => ({
+  ...(await orig<typeof import("@/lib/services/coaches")>()),
+  coachesService: coaches,
+}));
+vi.mock("@/lib/use-club-time-zone", () => ({
+  useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
+}));
 vi.mock("@/components/admin/header", () => ({ Header: ({ title }: { title: string }) => <h1>{title}</h1> }));
+// La ocupación tiene sus propios tests: aquí solo importa que su pestaña la enseñe
+vi.mock("@/components/admin/accounts-occupancy-section", () => ({
+  AccountsOccupancySection: ({ clubId }: { clubId: string }) => (
+    <section aria-label="Ocupación de pistas">club {clubId}</section>
+  ),
+}));
+// El resumen tiene sus propios tests
+vi.mock("@/components/admin/accounts-summary-section", () => ({
+  AccountsSummarySection: ({ clubId }: { clubId: string }) => (
+    <section aria-label="Resumen de cuentas">club {clubId}</section>
+  ),
+}));
 vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "c1" }),
   isClub: (r: string | null) => r === "club",
@@ -49,6 +90,20 @@ describe("página Cuentas", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clubState.value = { on: true, known: true, isError: false, refetch: vi.fn() };
+    nav.tab = "ajustes";
+    ledger.categories.list.mockResolvedValue([]);
+    ledger.entries.list.mockResolvedValue({
+      items: [], total: 0, page: 1, pageSize: 50,
+      totals: { incomeCents: 0, expenseCents: 0, pendingCents: 0 },
+    });
+    ledger.recurring.list.mockResolvedValue([]);
+    ledger.openAccounts.list.mockResolvedValue([]);
+    coaches.overview.mockResolvedValue({
+      month: "2026-11", coaches: [],
+      totals: { accruedCents: 0, paidCents: 0, owedCents: 0, previousOwedCents: 0 },
+    });
+    coaches.rates.list.mockResolvedValue([]);
+    coaches.extraHours.list.mockResolvedValue([]);
     accounts.partners.list.mockResolvedValue([
       { id: "s1", name: "Marta", active: true },
       { id: "s2", name: "Antiguo", active: false },
@@ -67,6 +122,62 @@ describe("página Cuentas", () => {
     expect(screen.getByText(/no está activado en tu club/)).toBeInTheDocument();
     expect(accounts.partners.list).not.toHaveBeenCalled();
     expect(accounts.partPrices.list).not.toHaveBeenCalled();
+  });
+
+  describe("pestañas (?tab=)", () => {
+    it("sin ?tab= abre «Resumen» y ofrece las siete pestañas", async () => {
+      nav.tab = null;
+      renderPage();
+      const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+      expect(tabs).toEqual(["Resumen", "Gastos e ingresos", "Entrenadores", "Ocupación", "Deudas", "Tienda", "Ajustes"]);
+      expect(screen.getByRole("tab", { name: "Resumen" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("region", { name: "Resumen de cuentas" })).toHaveTextContent("club c1");
+      // Lo de otras pestañas no se pide
+      expect(ledger.entries.list).not.toHaveBeenCalled();
+      expect(accounts.partners.list).not.toHaveBeenCalled();
+    });
+
+    it("?tab=gastos enseña «Gastos e ingresos»", async () => {
+      nav.tab = "gastos";
+      renderPage();
+      expect(screen.getByRole("tab", { name: "Gastos e ingresos" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByRole("region", { name: "Gastos e ingresos" })).toBeInTheDocument();
+    });
+
+    it("?tab=ocupacion enseña la ocupación de pistas del club", () => {
+      nav.tab = "ocupacion";
+      renderPage();
+      expect(screen.getByRole("tab", { name: "Ocupación" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("region", { name: "Ocupación de pistas" })).toHaveTextContent("club c1");
+    });
+
+    it("un ?tab= que no existe cae en la primera", () => {
+      nav.tab = "inventada";
+      renderPage();
+      expect(screen.getByRole("tab", { name: "Resumen" })).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("pulsar una pestaña la pone en la URL sin recargar", () => {
+      nav.tab = "gastos";
+      renderPage();
+      fireEvent.click(screen.getByRole("tab", { name: "Deudas" }));
+      expect(nav.replace).toHaveBeenCalledWith("/mi-club/cuentas?tab=deudas", { scroll: false });
+    });
+
+    it("«Deudas» trae arriba las cuentas abiertas, y «Ajustes» las categorías", async () => {
+      nav.tab = "deudas";
+      const { unmount } = render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <CuentasPage />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByRole("region", { name: "Cuentas abiertas" })).toBeInTheDocument();
+      unmount();
+      nav.tab = "ajustes";
+      renderPage();
+      expect(await screen.findByRole("region", { name: "Categorías de gastos e ingresos" })).toBeInTheDocument();
+      expect(await screen.findByText("Socios del club")).toBeInTheDocument();
+    });
   });
 
   it("mientras no sabe si está activado, no dice que no lo esté", () => {

@@ -30,12 +30,14 @@ export const VOUCHER_STATUS_LABEL: Record<VoucherStatus, string> = {
 export const VOUCHER_KIND_LABEL: Record<VoucherKind, string> = {
   COURT:         "Reservas de pista",
   PRIVATE_CLASS: "Clases privadas",
+  SCHOOL_CLASS:  "Clases de escuela",
 };
 
-/** Lo que gasta una sesión de cada tipo: «reserva» o «clase privada». */
+/** Lo que gasta una sesión de cada tipo: «reserva», «clase privada» o «clase de escuela». */
 export const VOUCHER_KIND_SESSION: Record<VoucherKind, string> = {
   COURT:         "reserva de pista",
   PRIVATE_CLASS: "clase privada",
+  SCHOOL_CLASS:  "clase de escuela",
 };
 
 /** «7 de 10 sesiones» (las que quedan, de las que tiene). */
@@ -62,11 +64,12 @@ export function expiryLabel(expiresAt: string | null, timeZone: string): string 
 
 /**
  * Un tipo para elegirlo al vender: «Bono 10 · 10 sesiones · 120,00 €». Los de
- * clases privadas lo dicen al final (los de pista, el caso de siempre, no).
+ * clases (privadas o de la escuela) lo dicen al final (los de pista, el caso de
+ * siempre, no).
  */
 export function typeOptionLabel(t: Pick<ClubVoucherType, "name" | "sessions" | "priceCents"> & { kind?: VoucherKind }): string {
   const base = `${t.name} · ${t.sessions} ${t.sessions === 1 ? "sesión" : "sesiones"} · ${formatCents(t.priceCents)}`;
-  return t.kind === "PRIVATE_CLASS" ? `${base} · ${VOUCHER_KIND_LABEL.PRIVATE_CLASS.toLowerCase()}` : base;
+  return t.kind && t.kind !== "COURT" ? `${base} · ${VOUCHER_KIND_LABEL[t.kind].toLowerCase()}` : base;
 }
 
 /** El formulario de un tipo tal como se escribe (todo texto). */
@@ -134,7 +137,10 @@ export function futureSessionCount(
   v: Pick<ClubVoucher, "uses">,
   now: Date = new Date(),
 ): number {
-  return v.uses.filter((u) => u.startsAt !== null && new Date(u.startsAt) > now).length;
+  // Las clases de grupo y las apuntadas a mano ya se dieron: se quedan al cancelar
+  return v.uses.filter(
+    (u) => u.type !== "GROUP_CLASS" && u.type !== "MANUAL" && u.startsAt !== null && new Date(u.startsAt) > now,
+  ).length;
 }
 
 /**

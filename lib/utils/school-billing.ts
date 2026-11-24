@@ -5,12 +5,15 @@
  * es quien manda). Los importes van en céntimos.
  */
 
+import { formatCents } from "@/lib/utils/booking-price";
 import { eurosToCents, methodLabel } from "@/lib/utils/payment-methods";
 import { SCHOOL_MAX_DURATION, SCHOOL_MIN_DURATION, SCHOOL_NOTES_MAX, endTimeOf, isRealDay } from "@/lib/utils/school";
 import { SCHOOL_MAX_PRICE_CENTS, centsToFieldText, type Checked } from "@/lib/utils/school-money";
-import { addDaysToKey, capitalizeFirst, formatDayKey, formatInTimeZone, zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
+import { addDaysToKey, capitalizeFirst, formatDayKey, formatInTimeZone, isBeforeToday, zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
+import type { SchoolConfig } from "@/types/school-recovery";
 import type {
   SchoolFee,
+  SchoolFeeCancelReason,
   SchoolFeeStatus,
   SchoolPrivateClass,
   SchoolPrivateClassPayload,
@@ -26,10 +29,23 @@ const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 // ── Cuotas ──────────────────────────────────────────────────────────────────
 
 export const FEE_STATUS_LABEL: Record<SchoolFeeStatus, string> = {
-  pending:   "Pendiente",
-  paid:      "Cobrada",
-  cancelled: "Anulada",
+  PAID:      "Pagada",
+  PARTIAL:   "Parcial",
+  OVERDUE:   "Atrasada",
+  PENDING:   "Pendiente",
+  CANCELLED: "Anulada",
+  ARCHIVED:  "Archivada",
 };
+
+/** Por qué el sistema anuló una cuota (el motivo del gestor va en su nota). */
+export const FEE_CANCEL_REASON_LABEL: Record<SchoolFeeCancelReason, string> = {
+  LEFT:    "Baja",
+  PAUSED:  "Baja temporal",
+  VOUCHER: "Paga con bono",
+};
+
+/** Por qué una cuota archivada no tiene cobro ni acciones. */
+export const FEE_ARCHIVED_HINT = "Más de 6 años: ya no se guardan sus datos de cobro";
 
 /** El mes («AAAA-MM») del día «AAAA-MM-DD». */
 export function monthOfDay(day: string): string {
@@ -39,6 +55,22 @@ export function monthOfDay(day: string): string {
 /** El mes de hoy en la zona del club. */
 export function currentMonth(now: Date, tz: string): string {
   return monthOfDay(zonedDayKey(now, tz));
+}
+
+/** ¿Cae ese instante en un mes anterior al de hoy, en la zona del club? Sin la zona (aún no se sabe), se supone que sí: lo estricto. */
+export function isBeforeCurrentMonth(value: string | Date, tz: string | null, now: Date = new Date()): boolean {
+  if (!tz) return true;
+  return monthOfDay(zonedDayKey(value, tz)) < currentMonth(now, tz);
+}
+
+/** ¿Se cobró la cuota hoy (zona del club)? Cada pago con su día; una cobrada antes de los pagos, con su `paidAt`. */
+export function feeCollectedToday(
+  fee: Pick<SchoolFee, "payments" | "paidAt">,
+  tz: string | null,
+  now: Date = new Date(),
+): boolean {
+  const days = fee.payments.length > 0 ? fee.payments.map((p) => p.paidAt) : fee.paidAt ? [fee.paidAt] : [];
+  return days.every((d) => !isBeforeToday(d, tz, now));
 }
 
 /** El mes `delta` meses después (o antes, si es negativo) de «AAAA-MM». */
@@ -57,22 +89,29 @@ export function monthLabel(month: string): string {
 }
 
 export interface FeeTotals {
+  /** Cuotas con algo pendiente (pendientes, parciales y atrasadas). */
   pendingCount: number;
+  /** Lo que falta por cobrar de ellas. */
   pendingCents: number;
+  /** Cuotas pagadas enteras. */
   paidCount:    number;
+  /** Lo cobrado: lo pagado de todas las no anuladas, también lo de las parciales. */
   paidCents:    number;
 }
 
-/** Lo pendiente y lo cobrado de una lista de cuotas (las anuladas no cuentan). */
-export function feeTotals(fees: readonly Pick<SchoolFee, "status" | "amountCents">[]): FeeTotals {
+/** Lo pendiente y lo cobrado de una lista de cuotas (las anuladas y las archivadas no cuentan). */
+export function feeTotals(
+  fees: readonly Pick<SchoolFee, "status" | "paidCents" | "pendingCents">[],
+): FeeTotals {
   const totals: FeeTotals = { pendingCount: 0, pendingCents: 0, paidCount: 0, paidCents: 0 };
   for (const f of fees) {
-    if (f.status === "pending") {
-      totals.pendingCount += 1;
-      totals.pendingCents += f.amountCents;
-    } else if (f.status === "paid") {
+    if (f.status === "CANCELLED" || f.status === "ARCHIVED") continue;
+    totals.paidCents += f.paidCents;
+    if (f.status === "PAID") {
       totals.paidCount += 1;
-      totals.paidCents += f.amountCents;
+    } else {
+      totals.pendingCount += 1;
+      totals.pendingCents += f.pendingCents;
     }
   }
   return totals;
@@ -81,15 +120,87 @@ export function feeTotals(fees: readonly Pick<SchoolFee, "status" | "amountCents
 /** Lo que pasó al generar las cuotas, en una línea para el aviso. */
 export function generateFeesText(r: { created: number; existing: number; due: number; groups: number }): string {
   if (r.groups === 0) return "Ningún grupo con cuota mensual tiene temporada en ese mes";
-  if (r.due === 0) return "Los grupos con cuota no tienen alumnos en ese mes";
+  if (r.due === 0) return "No hay alumnos a los que cobrar cuota en ese mes (los del bono y los de baja no pagan cuota)";
   const created = r.created === 0 ? "No había cuotas nuevas" : r.created === 1 ? "Se ha creado 1 cuota" : `Se han creado ${r.created} cuotas`;
   return r.existing > 0 ? `${created} · ${r.existing} ${r.existing === 1 ? "ya estaba" : "ya estaban"}` : created;
 }
 
-/** «Cobrada · Efectivo» o «Pendiente»; la anulada, «Anulada». */
+/** «Pagada · Efectivo», «Parcial» o «Atrasada»: el estado de la cuota con el método si está pagada entera. */
 export function feeStateText(f: Pick<SchoolFee, "status" | "paymentMethod">): string {
-  if (f.status === "paid") return `Cobrada · ${methodLabel(f.paymentMethod)}`;
+  if (f.status === "PAID" && f.paymentMethod) return `Pagada · ${methodLabel(f.paymentMethod)}`;
   return FEE_STATUS_LABEL[f.status];
+}
+
+/** Cómo se llegó al importe de la cuota: «80,00 € − 6,25 € (Hermanos) · 5 de 8 clases», o vacío si es la cuota entera. */
+export function feeBreakdownText(
+  f: Pick<SchoolFee, "listCents" | "discountCents" | "prorationNote" | "amountCents">,
+  discountReason?: string | null,
+): string {
+  const parts: string[] = [];
+  if (f.prorationNote) parts.push(f.prorationNote);
+  if (f.discountCents) {
+    parts.push(`− ${formatCents(f.discountCents)}${discountReason ? ` (${discountReason})` : ""}`);
+  }
+  return parts.join(" · ");
+}
+
+export interface FeeShare {
+  feeId:       string;
+  amountCents: number;
+}
+
+/**
+ * Cómo se reparte un importe entre cuotas con algo pendiente, ya ordenadas (la
+ * más antigua primero, como hace el back): lo que toca a cada una y, si el
+ * importe supera lo pendiente, el cambio que sobra.
+ */
+export function allocateFeePayment(
+  pending: readonly { id: string; pendingCents: number }[],
+  amountCents: number,
+): { shares: FeeShare[]; changeCents: number } {
+  let left = amountCents;
+  const shares: FeeShare[] = [];
+  for (const f of pending) {
+    if (left <= 0) break;
+    const share = Math.min(left, f.pendingCents);
+    if (share > 0) shares.push({ feeId: f.id, amountCents: share });
+    left -= share;
+  }
+  return { shares, changeCents: Math.max(0, left) };
+}
+
+/** Las cuotas con algo pendiente de un alumno, de la más antigua a la más nueva (y por grupo). */
+export function pendingFeesOf(fees: readonly SchoolFee[]): SchoolFee[] {
+  return fees
+    .filter((f) => f.status !== "CANCELLED" && f.pendingCents > 0)
+    .sort((a, b) => a.month.localeCompare(b.month) || a.groupName.localeCompare(b.groupName, "es") || a.id.localeCompare(b.id));
+}
+
+// ── Ajustes de las cuotas ───────────────────────────────────────────────────
+
+/** Lo mismo que el back acepta del día límite de pago. */
+export const FEE_DUE_DAY_MIN = 1;
+export const FEE_DUE_DAY_MAX = 28;
+
+export interface FeeSettingsForm {
+  /** Día límite de pago, como se escribe. */
+  feeDueDay:        string;
+  autoGenerateFees: boolean;
+}
+
+export function feeSettingsOf(config: Pick<SchoolConfig, "feeDueDay" | "autoGenerateFees">): FeeSettingsForm {
+  return { feeDueDay: String(config.feeDueDay), autoGenerateFees: config.autoGenerateFees };
+}
+
+/** Los ajustes de las cuotas con las reglas del back, listos para mandar. */
+export function checkFeeSettings(
+  form: FeeSettingsForm,
+): Checked<Pick<SchoolConfig, "feeDueDay" | "autoGenerateFees">> {
+  const day = Number(form.feeDueDay);
+  if (form.feeDueDay.trim() === "" || !Number.isInteger(day) || day < FEE_DUE_DAY_MIN || day > FEE_DUE_DAY_MAX) {
+    return { ok: false, message: `El día límite tiene que ser un día del mes entre ${FEE_DUE_DAY_MIN} y ${FEE_DUE_DAY_MAX}` };
+  }
+  return { ok: true, value: { feeDueDay: day, autoGenerateFees: form.autoGenerateFees } };
 }
 
 // ── Clases privadas ─────────────────────────────────────────────────────────

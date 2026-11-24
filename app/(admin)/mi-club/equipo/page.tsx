@@ -9,10 +9,15 @@ import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { RoleChips } from "@/components/admin/staff-role-picker";
 import { StaffDialog, type StaffDialogTarget } from "@/components/admin/staff-dialog";
 import { adminService } from "@/lib/services/admin";
+import { coachesQK, coachesService } from "@/lib/services/coaches";
 import type { ClubStaffRole } from "@/lib/club-permissions";
 import { useRole } from "@/lib/use-role";
 import { ME_QUERY_KEY } from "@/lib/use-me";
+import { useClubAccounts } from "@/lib/use-accounts-enabled";
 import { useClubAccess } from "@/lib/use-club-access";
+import { useClubTimeZone } from "@/lib/use-club-time-zone";
+import { formatCents } from "@/lib/utils/booking-price";
+import { currentMonth } from "@/lib/utils/school-billing";
 import { clubStaffQueryKey, staffDate, staffErrorMessage } from "@/lib/utils/club-staff";
 import type { ClubStaffInvitation, ClubStaffMember } from "@/types";
 
@@ -107,6 +112,20 @@ export default function EquipoPage() {
     onError: (err: Error) => toast.error(staffErrorMessage(err)),
     onSettled: () => setConfirm(null),
   });
+
+  // Al quitar a un entrenador con horas sin pagar, su devengado dejaría de verse: se avisa antes
+  const accountsOn = useClubAccounts(clubId ?? null).on;
+  const { timeZone } = useClubTimeZone(clubId ?? null);
+  const removing = confirm?.kind === "remove" ? confirm.member : null;
+  const coachMonth = timeZone ? currentMonth(new Date(), timeZone) : "";
+  const coaches = useQuery({
+    queryKey: coachesQK.overview(clubId ?? "", coachMonth),
+    queryFn: () => coachesService.overview(clubId!, coachMonth),
+    enabled: !!removing && !!clubId && !!coachMonth && accountsOn && can("accounts", "read"),
+  });
+  const coachRow = removing ? coaches.data?.coaches.find((c) => c.userId === removing.userId) : undefined;
+  const owedCents = coachRow ? coachRow.owedCents + coachRow.previousOwedCents : 0;
+  const owesCoach = !!coachRow && (coachRow.owedCents !== 0 || coachRow.previousOwedCents !== 0);
 
   const data = staff.data;
 
@@ -263,7 +282,13 @@ export default function EquipoPage() {
         loading={act.isPending}
         onClose={() => { if (!act.isPending) setConfirm(null); }}
         onConfirm={() => { if (confirm) act.mutate(confirm); }}
-      />
+      >
+        {removing && owesCoach && (
+          <p role="alert" className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-600 dark:text-amber-400">
+            Se le deben {formatCents(owedCents)} de horas: págale antes de quitarlo, o su devengado dejará de verse.
+          </p>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

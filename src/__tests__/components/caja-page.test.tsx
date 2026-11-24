@@ -29,14 +29,14 @@ const markPaid = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/bookings", () => ({ bookingsService: { bookings: { markPaid } } }));
 const updatePayment = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/admin", () => ({ adminService: { registrations: { updatePayment } } }));
-const school = vi.hoisted(() => ({ feePay: vi.fn(), classPay: vi.fn(), classVouchers: vi.fn() }));
+const school = vi.hoisted(() => ({ feeCollect: vi.fn(), classPay: vi.fn(), classVouchers: vi.fn() }));
 vi.mock("@/lib/services/school-billing", async (orig) => {
   const actual = await orig<typeof import("@/lib/services/school-billing")>();
   return {
     ...actual,
     schoolBillingService: {
       ...actual.schoolBillingService,
-      fees: { ...actual.schoolBillingService.fees, pay: school.feePay },
+      fees: { ...actual.schoolBillingService.fees, collect: school.feeCollect },
       privateClasses: { ...actual.schoolBillingService.privateClasses, pay: school.classPay, vouchers: school.classVouchers },
     },
   };
@@ -178,7 +178,7 @@ describe("CajaPage", () => {
 
     beforeEach(() => {
       cashMock.debts.mockResolvedValue(SCHOOL_DEBTS);
-      school.feePay.mockResolvedValue({});
+      school.feeCollect.mockResolvedValue([]);
       school.classPay.mockResolvedValue({});
       school.classVouchers.mockResolvedValue([]);
     });
@@ -229,18 +229,41 @@ describe("CajaPage", () => {
       await waitFor(() => expect(setVoucherPayment).toHaveBeenCalledWith("club-1", "v9", "CARD"));
     });
 
-    it("cobrar una cuota: solo el método (el importe es el de la cuota), en el servicio de la escuela", async () => {
+    it("cobrar una cuota: lo que falta por defecto, en el servicio de la escuela y con el alumno de la persona", async () => {
       renderPage();
       fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
       await screen.findByText("Cuota Iniciación · 2026-11");
       fireEvent.click(screen.getAllByRole("button", { name: /Cobrar/ })[0]);
       const dialog = await screen.findByRole("dialog", { name: "Cobrar cuota" });
-      expect(dialog.querySelector('input[type="text"]')).toBeNull();
+      expect(within(dialog).getByLabelText("Importe cobrado")).toHaveValue("45,00");
       fireEvent.click(within(dialog).getByRole("button", { name: "Efectivo" }));
       fireEvent.click(within(dialog).getByRole("button", { name: "Cobrar" }));
-      await waitFor(() => expect(school.feePay).toHaveBeenCalledWith("club-1", "f9", "CASH"));
+      await waitFor(() =>
+        expect(school.feeCollect).toHaveBeenCalledWith("club-1", {
+          clubCustomerId: "cc9", amountCents: 4500, paymentMethod: "CASH", feeIds: ["f9"],
+        }),
+      );
       expect(markPaid).not.toHaveBeenCalled();
       expect(updatePayment).not.toHaveBeenCalled();
+    });
+
+    it("cobrar una parte de una cuota: el importe se puede bajar y no pasar de lo que falta", async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("tab", { name: "Pendiente de cobro" }));
+      await screen.findByText("Cuota Iniciación · 2026-11");
+      fireEvent.click(screen.getAllByRole("button", { name: /Cobrar/ })[0]);
+      const dialog = await screen.findByRole("dialog", { name: "Cobrar cuota" });
+      const amount = within(dialog).getByLabelText("Importe cobrado");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Tarjeta" }));
+      fireEvent.change(amount, { target: { value: "46" } });
+      expect(within(dialog).getByRole("button", { name: "Cobrar" })).toBeDisabled();
+      fireEvent.change(amount, { target: { value: "10" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cobrar" }));
+      await waitFor(() =>
+        expect(school.feeCollect).toHaveBeenCalledWith("club-1", {
+          clubCustomerId: "cc9", amountCents: 1000, paymentMethod: "CARD", feeIds: ["f9"],
+        }),
+      );
     });
 
     it("cobrar a un alumno de una clase privada: con su clase y su alumno, en el servicio de la escuela", async () => {

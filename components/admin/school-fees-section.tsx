@@ -2,31 +2,57 @@
 
 /**
  * Cuotas de la escuela: las del mes de cada grupo con cuota mensual, por
- * alumno. Se generan sin duplicar (una por alumno que estuvo en el grupo algún
- * día del mes), se cobran en el mostrador, se les quita el cobro si fue un
- * error y se anulan (solo las pendientes: una anulada no se vuelve a generar).
- * Lo cobrado sale en la caja y lo pendiente, en «Pendiente de cobro».
+ * alumno, con lo pagado y lo que falta. Se generan sin duplicar (prorrateadas
+ * si el alumno entró a mitad de mes, con su descuento y sin cuota para quien
+ * paga con bono o está de baja), se cobran en el mostrador enteras o por
+ * partes, se miran y deshacen sus pagos, se recalculan y se anulan (solo las
+ * que no tienen pagos: una anulada no se vuelve a generar). Lo cobrado sale en
+ * la caja y lo que falta, en «Pendiente de cobro».
  */
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, ChevronLeft, ChevronRight, CreditCard, Loader2, Pencil, Receipt, Undo2, WandSparkles } from "lucide-react";
+import {
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  History,
+  Loader2,
+  Pencil,
+  Receipt,
+  RefreshCw,
+  UserRound,
+  WandSparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { AmountField } from "@/components/admin/payment-fields";
 import { errorText } from "@/components/admin/price-seasons-panel";
-import { SchoolFeePayDialog, SchoolFeesPayAllDialog } from "@/components/admin/school-pay-dialogs";
+import { SchoolFeePaymentsDialog } from "@/components/admin/school-fee-payments-dialog";
+import { SchoolFeeSettings } from "@/components/admin/school-fee-settings";
+import {
+  SchoolFeeCollectModal,
+  SchoolFeesPayAllDialog,
+  SchoolStudentFeesDialog,
+} from "@/components/admin/school-pay-dialogs";
 import { SchoolDialog, schoolInputCls } from "@/components/admin/school-dialog";
 import { Button } from "@/components/ui/button";
+import { accountsQK, accountsService } from "@/lib/services/accounts";
 import { schoolQK, schoolService } from "@/lib/services/school";
 import { invalidateSchoolBilling, schoolBillingQK, schoolBillingService } from "@/lib/services/school-billing";
+import { useAccountsEnabled } from "@/lib/use-accounts-enabled";
+import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { formatCents } from "@/lib/utils/booking-price";
 import { eurosToCents } from "@/lib/utils/payment-methods";
 import {
+  FEE_ARCHIVED_HINT,
+  FEE_CANCEL_REASON_LABEL,
   FEE_STATUS_LABEL,
   currentMonth,
+  feeBreakdownText,
   feeStateText,
   feeTotals,
   generateFeesText,
@@ -37,10 +63,15 @@ import { SCHOOL_MAX_PRICE_CENTS, centsToFieldText } from "@/lib/utils/school-mon
 import type { SchoolFee, SchoolFeeStatus } from "@/types/school-billing";
 
 const STATUS_COLORS: Record<SchoolFeeStatus, string> = {
-  pending:   "bg-amber-500/15 text-amber-500 border-amber-500/30",
-  paid:      "bg-green-500/15 text-green-500 border-green-500/30",
-  cancelled: "bg-muted text-muted-foreground border-border",
+  PENDING:   "bg-amber-500/15 text-amber-500 border-amber-500/30",
+  PARTIAL:   "bg-sky-500/15 text-sky-500 border-sky-500/30",
+  OVERDUE:   "bg-red-500/15 text-red-500 border-red-500/30",
+  PAID:      "bg-green-500/15 text-green-500 border-green-500/30",
+  CANCELLED: "bg-muted text-muted-foreground border-border",
+  ARCHIVED:  "bg-muted text-muted-foreground border-border",
 };
+
+const STATUS_FILTERS: SchoolFeeStatus[] = ["PAID", "PARTIAL", "OVERDUE", "PENDING", "CANCELLED", "ARCHIVED"];
 
 export function SchoolFeesSection({ clubId, canWrite }: { clubId: string; canWrite: boolean }) {
   const { timeZone, isError, refetch } = useClubTimeZone(clubId);
@@ -49,16 +80,24 @@ export function SchoolFeesSection({ clubId, canWrite }: { clubId: string; canWri
   return <FeesList clubId={clubId} timeZone={timeZone} canWrite={canWrite} />;
 }
 
+const th = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+const num = "whitespace-nowrap px-3 py-2.5 text-right tabular-nums";
+
 function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: string; canWrite: boolean }) {
   const qc = useQueryClient();
+  // Importes y cobros de días anteriores son de quien lleva las cuentas (propietario y gestor), no de recepción
+  const canAdjust = useClubAccess().can("accounts", "write");
   const [month, setMonth] = useState(() => currentMonth(new Date(), timeZone));
   const [status, setStatus] = useState<SchoolFeeStatus | "">("");
   const [groupId, setGroupId] = useState("");
   const [confirmGenerate, setConfirmGenerate] = useState(false);
-  const [paying, setPaying] = useState<SchoolFee | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [collecting, setCollecting] = useState<SchoolFee | null>(null);
+  const [collectingStudent, setCollectingStudent] = useState<SchoolFee | null>(null);
   const [payingAll, setPayingAll] = useState(false);
+  const [viewing, setViewing] = useState<SchoolFee | null>(null);
   const [editing, setEditing] = useState<SchoolFee | null>(null);
-  const [unpaying, setUnpaying] = useState<SchoolFee | null>(null);
+  const [toRecalc, setToRecalc] = useState<SchoolFee | null>(null);
   const [toCancel, setToCancel] = useState<SchoolFee | null>(null);
   const [note, setNote] = useState("");
 
@@ -72,6 +111,14 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
     queryKey: schoolQK.groups(clubId, false),
     queryFn: () => schoolService.groups.list(clubId, false),
   });
+  // Con el módulo Cuentas, un Bizum pregunta a qué móvil llegó (los socios activos)
+  const accountsOn = useAccountsEnabled(clubId);
+  const partners = useQuery({
+    queryKey: accountsQK.partners(clubId),
+    queryFn: () => accountsService.partners.list(clubId),
+    enabled: accountsOn,
+  });
+  const bizumReceivers = accountsOn && partners.data ? partners.data.filter((p) => p.active) : undefined;
 
   const refresh = () => invalidateSchoolBilling(qc, clubId);
 
@@ -79,6 +126,7 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
     mutationFn: () => schoolBillingService.fees.generate(clubId, month, groupId || undefined),
     onSuccess: (result) => {
       refresh();
+      setWarnings(result.warnings ?? []);
       const text = generateFeesText(result);
       if (result.created === 0) toast.info(text);
       else toast.success(text);
@@ -90,16 +138,16 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
     },
   });
 
-  const unpay = useMutation({
-    mutationFn: (fee: SchoolFee) => schoolBillingService.fees.unpay(clubId, fee.id),
-    onSuccess: () => {
+  const recalc = useMutation({
+    mutationFn: (fee: SchoolFee) => schoolBillingService.fees.recalculate(clubId, fee.id),
+    onSuccess: (fee) => {
       refresh();
-      toast.success("Cobro quitado: la cuota vuelve a estar pendiente");
-      setUnpaying(null);
+      toast.success(fee.status === "CANCELLED" ? "Ya no toca cuota: se ha anulado" : "Cuota recalculada");
+      setToRecalc(null);
     },
     onError: (err: unknown) => {
       toast.error(errorText(err));
-      setUnpaying(null);
+      setToRecalc(null);
     },
   });
 
@@ -121,6 +169,7 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
   const totals = feeTotals(list);
   const withFee = (groups.data ?? []).filter((g) => g.monthlyFeeCents !== null);
   const scopeText = groupId ? "del grupo elegido" : "de los grupos con cuota mensual";
+  const who = (f: SchoolFee) => f.customerName ?? "este alumno";
 
   return (
     <section aria-label="Cuotas" className="space-y-4">
@@ -143,7 +192,7 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
               className={`${schoolInputCls} mt-1 block`}
             >
               <option value="">Todas</option>
-              {(Object.keys(FEE_STATUS_LABEL) as SchoolFeeStatus[]).map((s) => (
+              {STATUS_FILTERS.map((s) => (
                 <option key={s} value={s}>
                   {FEE_STATUS_LABEL[s]}
                 </option>
@@ -176,6 +225,18 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
         )}
       </div>
 
+      <SchoolFeeSettings clubId={clubId} canWrite={canWrite} />
+
+      {warnings.length > 0 && (
+        <div role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+          <ul className="list-disc space-y-0.5 pl-4">
+            {warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {groups.isSuccess && withFee.length === 0 && (
         <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
           Ningún grupo tiene cuota mensual. Ponla al crear o editar el grupo.
@@ -198,53 +259,122 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
             Pendiente: <strong className="text-foreground">{formatCents(totals.pendingCents)}</strong> ({totals.pendingCount}) ·
             Cobrado: <strong className="text-foreground">{formatCents(totals.paidCents)}</strong> ({totals.paidCount})
           </p>
-          <ul className="divide-y divide-border rounded-lg border border-border text-sm">
-            {list.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{f.customerName ?? "Sin nombre"}</span>
-                    <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[f.status]}`}>
-                      {feeStateText(f)}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {f.groupName} · {formatCents(f.amountCents)}
-                    {f.note && ` · ${f.note}`}
-                  </div>
-                </div>
-                {canWrite && f.status === "pending" && (
-                  <span className="flex flex-wrap items-center gap-1">
-                    <Button variant="outline" size="sm" onClick={() => setPaying(f)} aria-label={`Cobrar la cuota de ${f.customerName ?? "este alumno"}`}>
-                      <CreditCard className="h-3.5 w-3.5" /> Cobrar
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(f)} aria-label={`Editar la cuota de ${f.customerName ?? "este alumno"}`}>
-                      <Pencil className="h-3.5 w-3.5" /> Editar
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToCancel(f)} aria-label={`Anular la cuota de ${f.customerName ?? "este alumno"}`}>
-                      <Ban className="h-3.5 w-3.5" /> Anular
-                    </Button>
-                  </span>
-                )}
-                {canWrite && f.status === "paid" && (
-                  <Button variant="outline" size="sm" onClick={() => setUnpaying(f)} aria-label={`Quitar el cobro de la cuota de ${f.customerName ?? "este alumno"}`}>
-                    <Undo2 className="h-3.5 w-3.5" /> Quitar cobro
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="border-b border-border bg-muted/30">
+                <tr>
+                  <th scope="col" className={th}>Alumno</th>
+                  <th scope="col" className={th}>Grupo</th>
+                  <th scope="col" className={`${th} text-right`}>Cuota</th>
+                  <th scope="col" className={`${th} text-right`}>Pagado</th>
+                  <th scope="col" className={`${th} text-right`}>Pendiente</th>
+                  <th scope="col" className={th}>Estado</th>
+                  {canWrite && <th scope="col" className={th}><span className="sr-only">Acciones</span></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {list.map((f) => {
+                  const archived = f.status === "ARCHIVED";
+                  const open = f.status !== "CANCELLED" && !archived;
+                  const hasPayments = f.payments.length > 0 || f.paidAt !== null;
+                  const breakdown = feeBreakdownText(f);
+                  return (
+                    <tr key={f.id}>
+                      <td className="px-3 py-2.5 align-top">
+                        <span className="font-medium">{f.customerName ?? "Sin nombre"}</span>
+                        {f.createdByName === null && (
+                          <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            Automática
+                          </span>
+                        )}
+                        {f.cancelReason && (
+                          <span className="block text-xs text-muted-foreground">{FEE_CANCEL_REASON_LABEL[f.cancelReason]}</span>
+                        )}
+                        {f.note && <span className="block text-xs text-muted-foreground">{f.note}</span>}
+                      </td>
+                      <td className="px-3 py-2.5 align-top text-muted-foreground">{f.groupName}</td>
+                      <td className={`${num} align-top`}>
+                        <span className="block">{formatCents(f.amountCents)}</span>
+                        {breakdown && <span className="block text-xs text-muted-foreground">{breakdown}</span>}
+                      </td>
+                      <td className={`${num} align-top`}>{archived ? "—" : formatCents(f.paidCents)}</td>
+                      <td className={`${num} align-top`}>{open ? formatCents(f.pendingCents) : "—"}</td>
+                      <td className="px-3 py-2.5 align-top">
+                        <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[f.status]}`}>
+                          {feeStateText(f)}
+                        </span>
+                        {archived && <span className="mt-0.5 block text-xs text-muted-foreground">{FEE_ARCHIVED_HINT}</span>}
+                        {open && f.status !== "PAID" && (
+                          <span className="mt-0.5 block text-xs text-muted-foreground">Hasta el {f.dueDate.slice(8)}</span>
+                        )}
+                      </td>
+                      {canWrite && (
+                        <td className="px-3 py-2.5 align-top">
+                          <span className="flex flex-wrap justify-end gap-1">
+                            {open && f.pendingCents > 0 && (
+                              <>
+                                <Button variant="outline" size="sm" onClick={() => setCollecting(f)} aria-label={`Cobrar la cuota de ${who(f)}`}>
+                                  <CreditCard className="h-3.5 w-3.5" /> Cobrar
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setCollectingStudent(f)} aria-label={`Cobrar a ${who(f)} todo lo que debe`}>
+                                  <UserRound className="h-3.5 w-3.5" /> Al alumno
+                                </Button>
+                              </>
+                            )}
+                            {open && hasPayments && (
+                              <Button variant="ghost" size="sm" onClick={() => setViewing(f)} aria-label={`Ver los pagos de la cuota de ${who(f)}`}>
+                                <History className="h-3.5 w-3.5" /> Ver pagos
+                              </Button>
+                            )}
+                            {open && !hasPayments && (
+                              <>
+                                {canAdjust && (
+                                  <Button variant="ghost" size="sm" onClick={() => setToRecalc(f)} aria-label={`Recalcular la cuota de ${who(f)}`}>
+                                    <RefreshCw className="h-3.5 w-3.5" /> Recalcular
+                                  </Button>
+                                )}
+                                <Button variant="ghost" size="sm" onClick={() => setToCancel(f)} aria-label={`Anular la cuota de ${who(f)}`}>
+                                  <Ban className="h-3.5 w-3.5" /> Anular
+                                </Button>
+                              </>
+                            )}
+                            {open && (
+                              <Button variant="ghost" size="sm" onClick={() => setEditing(f)} aria-label={`Editar la cuota de ${who(f)}`}>
+                                <Pencil className="h-3.5 w-3.5" /> Editar
+                              </Button>
+                            )}
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
-      {paying && (
-        <SchoolFeePayDialog
+      {collecting && (
+        <SchoolFeeCollectModal
           clubId={clubId}
-          feeId={paying.id}
-          subtitle={`${paying.customerName ?? "Alumno"} · ${paying.groupName} · ${monthLabel(paying.month)}`}
-          amountCents={paying.amountCents}
+          clubCustomerId={collecting.clubCustomerId}
+          feeId={collecting.id}
+          subtitle={`${collecting.customerName ?? "Alumno"} · ${collecting.groupName} · ${monthLabel(collecting.month)}`}
+          pendingCents={collecting.pendingCents}
+          bizumReceivers={bizumReceivers}
           onDone={refresh}
-          onClose={() => setPaying(null)}
+          onClose={() => setCollecting(null)}
+        />
+      )}
+      {collectingStudent && (
+        <SchoolStudentFeesDialog
+          clubId={clubId}
+          clubCustomerId={collectingStudent.clubCustomerId}
+          studentName={collectingStudent.customerName ?? "Alumno"}
+          bizumReceivers={bizumReceivers}
+          onDone={refresh}
+          onClose={() => setCollectingStudent(null)}
         />
       )}
       {payingAll && (
@@ -259,14 +389,25 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
           onClose={() => setPayingAll(false)}
         />
       )}
+      {viewing && (
+        <SchoolFeePaymentsDialog
+          clubId={clubId}
+          fee={viewing}
+          timeZone={timeZone}
+          canWrite={canWrite}
+          canAdjust={canAdjust}
+          onDone={refresh}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {editing && (
-        <FeeEditDialog clubId={clubId} fee={editing} onDone={refresh} onClose={() => setEditing(null)} />
+        <FeeEditDialog clubId={clubId} fee={editing} canAdjust={canAdjust} onDone={refresh} onClose={() => setEditing(null)} />
       )}
 
       <ConfirmModal
         open={confirmGenerate}
         title={`Generar las cuotas de ${monthLabel(month).toLowerCase()}`}
-        description={`Se crea una cuota por alumno ${scopeText} que estuviera en el grupo algún día del mes, con el importe del grupo. Las que ya existen (también las anuladas) no se tocan.`}
+        description={`Se crea una cuota por alumno ${scopeText}: entera, o prorrateada por las clases que quedan si entró a mitad de mes o vuelve de una baja, y con su descuento. No se genera cuota a quien paga con bono ni a quien está de baja todo el mes. Las que ya existen (también las anuladas) no se tocan.`}
         confirmLabel="Generar cuotas"
         loading={generate.isPending}
         onClose={() => {
@@ -275,21 +416,21 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
         onConfirm={() => generate.mutate()}
       />
       <ConfirmModal
-        open={!!unpaying}
-        title="Quitar el cobro de la cuota"
-        description={`La cuota de ${unpaying?.customerName ?? "este alumno"} volverá a estar pendiente de cobro. Si ya se contó en la caja de un día, ese cobro dejará de salir en ella (la caja se calcula con los cobros apuntados, no se guarda): úsalo solo si la cobraste por error.`}
-        confirmLabel="Quitar el cobro"
-        loading={unpay.isPending}
+        open={!!toRecalc}
+        title="Recalcular la cuota"
+        description={`La cuota de ${toRecalc ? who(toRecalc) : "este alumno"} se vuelve a calcular con los datos de hoy (descuento, baja temporal y clases que quedan). Si ya no toca cuota, se anula.`}
+        confirmLabel="Recalcular"
+        loading={recalc.isPending}
         onClose={() => {
-          if (!unpay.isPending) setUnpaying(null);
+          if (!recalc.isPending) setToRecalc(null);
         }}
-        onConfirm={() => unpaying && unpay.mutate(unpaying)}
+        onConfirm={() => toRecalc && recalc.mutate(toRecalc)}
       />
       <ConfirmModal
         open={!!toCancel}
         danger
         title="Anular la cuota"
-        description={`La cuota de ${toCancel?.customerName ?? "este alumno"} deja de contar como pendiente y no se vuelve a generar este mes.`}
+        description={`La cuota de ${toCancel ? who(toCancel) : "este alumno"} deja de contar como pendiente y no se vuelve a generar este mes.`}
         confirmLabel="Anular cuota"
         cancelLabel="Volver"
         loading={cancel.isPending}
@@ -320,19 +461,24 @@ function FeesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: st
   );
 }
 
-/** Cambiar el importe o la nota de una cuota sin cobrar (un descuento, un mes a medias). */
+/** Cambiar el importe o la nota de una cuota (un descuento puntual, un mes a medias); el importe no baja de lo ya pagado. */
 function FeeEditDialog({
-  clubId, fee, onDone, onClose,
-}: { clubId: string; fee: SchoolFee; onDone: () => void; onClose: () => void }) {
+  clubId, fee, canAdjust, onDone, onClose,
+}: { clubId: string; fee: SchoolFee; canAdjust: boolean; onDone: () => void; onClose: () => void }) {
   const [amount, setAmount] = useState(centsToFieldText(fee.amountCents));
   const [note, setNote] = useState(fee.note ?? "");
   const cents = eurosToCents(amount);
-  const invalid = cents === null || cents > SCHOOL_MAX_PRICE_CENTS;
+  const invalid = cents === null || cents > SCHOOL_MAX_PRICE_CENTS || cents < fee.paidCents;
+  // Una cuota cobrada antes de los pagos por partes no cambia de importe sin quitar el cobro
+  const legacyPaid = fee.payments.length === 0 && fee.paidAt !== null;
 
   const save = useMutation({
     mutationFn: () => {
       if (cents === null || invalid) throw new Error("Escribe un importe válido (por ejemplo 45 o 45,50)");
-      return schoolBillingService.fees.update(clubId, fee.id, { amountCents: cents, note: note.trim() || null });
+      return schoolBillingService.fees.update(clubId, fee.id, {
+        ...(cents !== fee.amountCents ? { amountCents: cents } : {}),
+        note: note.trim() || null,
+      });
     },
     onSuccess: () => {
       toast.success("Cuota guardada");
@@ -348,7 +494,18 @@ function FeeEditDialog({
       <p className="text-sm text-muted-foreground">
         {fee.customerName ?? "Alumno"} · {fee.groupName} · {monthLabel(fee.month)}
       </p>
-      <AmountField label="Importe de la cuota" value={amount} onChange={setAmount} invalid={invalid} disabled={save.isPending} />
+      <AmountField label="Importe de la cuota" value={amount} onChange={setAmount} invalid={invalid} disabled={save.isPending || legacyPaid || !canAdjust} />
+      {fee.paidCents > 0 && !legacyPaid && (
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Ya lleva pagados {formatCents(fee.paidCents)}: el importe no puede ser menor.
+        </p>
+      )}
+      {!canAdjust && (
+        <p className="-mt-2 text-xs text-muted-foreground">El importe lo cambia el propietario o el gestor; tú puedes cambiar la nota.</p>
+      )}
+      {legacyPaid && (
+        <p className="-mt-2 text-xs text-muted-foreground">Está cobrada: quítale el cobro para cambiar el importe.</p>
+      )}
       <label className="block text-xs text-muted-foreground">
         Nota (opcional)
         <input

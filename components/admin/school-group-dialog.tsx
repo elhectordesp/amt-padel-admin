@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { invalidateSchool, schoolQK, schoolService } from "@/lib/services/school";
 import {
+  ACTIVITY_LABEL,
   SCHOOL_MAX_SLOTS,
   WEEKDAYS,
   checkGroupForm,
@@ -28,7 +29,7 @@ import {
   type GroupFormValues,
   type SlotFormValues,
 } from "@/lib/utils/school";
-import type { GenerateSessionsResult, SchoolGroupDetail } from "@/types/school";
+import type { GenerateSessionsResult, SchoolActivity, SchoolGroupDetail } from "@/types/school";
 
 export function SchoolGroupDialog({
   clubId,
@@ -147,6 +148,20 @@ export function SchoolGroupDialog({
               {coachOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-muted-foreground">
+            Actividad
+            <select
+              value={form.activity}
+              onChange={(e) => setForm({ ...form, activity: e.target.value as SchoolActivity })}
+              className={`${schoolInputCls} mt-1 w-full`}
+            >
+              {(Object.keys(ACTIVITY_LABEL) as SchoolActivity[]).map((a) => (
+                <option key={a} value={a}>
+                  {ACTIVITY_LABEL[a]}
                 </option>
               ))}
             </select>

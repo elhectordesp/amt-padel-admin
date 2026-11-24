@@ -7,7 +7,7 @@ import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import { ClubDebtPayAll, ClubDebtPayDialog, DebtItemPill } from "@/components/admin/club-debt-pay";
 import CollectModal from "@/components/admin/collect-modal";
 import { ErrorState } from "@/components/admin/error-state";
-import { SchoolFeePayDialog, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
+import { SchoolFeeCollectModal, SchoolStudentPayDialog, VoucherPayDialog } from "@/components/admin/school-pay-dialogs";
 import { ShopSalePayDialog } from "@/components/admin/shop-sale-pay-dialog";
 import { Button } from "@/components/ui/button";
 import { accountsQK, accountsService } from "@/lib/services/accounts";
@@ -78,7 +78,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
   const { can } = useClubAccess();
   // Cada cobro va al área que lo escribe en el back
   const canCollect = (item: DebtItem) => can(AREA_OF[item.source], "write");
-  const [collecting, setCollecting] = useState<{ person: string; item: DebtItem } | null>(null);
+  const [collecting, setCollecting] = useState<{ person: string; customerId: string | null; item: DebtItem } | null>(null);
   // Con el módulo Cuentas, un Bizum pregunta a qué móvil llegó (los socios activos)
   const accountsOn = useAccountsEnabled(clubId);
   const partners = useQuery({
@@ -145,7 +145,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
                         <ExternalLink className="h-3.5 w-3.5" /> Abrir la reserva
                       </Link>
                     ) : canCollect(item) && (
-                      <Button variant="outline" size="sm" onClick={() => setCollecting({ person: p.name, item })}>
+                      <Button variant="outline" size="sm" onClick={() => setCollecting({ person: p.name, customerId: p.customerId, item })}>
                         <CreditCard className="h-3.5 w-3.5" /> Cobrar
                       </Button>
                     )}
@@ -204,12 +204,15 @@ export function CajaDebts({ clubId, timeZone }: Props) {
           onClose={() => setCollecting(null)}
         />
       )}
-      {collecting?.item.source === "SCHOOL_FEE" && (
-        <SchoolFeePayDialog
+      {collecting?.item.source === "SCHOOL_FEE" && collecting.customerId && (
+        // Lo que falta de la cuota: se puede cobrar entero o una parte
+        <SchoolFeeCollectModal
           clubId={clubId}
+          clubCustomerId={collecting.customerId}
           feeId={collecting.item.refId}
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
-          amountCents={collecting.item.amountCents}
+          pendingCents={collecting.item.amountCents}
+          bizumReceivers={accountsOn && partners.data ? partners.data.filter((p) => p.active) : undefined}
           onDone={() => invalidateSchoolBilling(qc, clubId)}
           onClose={() => setCollecting(null)}
         />
