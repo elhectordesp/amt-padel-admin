@@ -6,15 +6,19 @@ import type { Booking } from "@/types/bookings";
  * Bonos de reservas del club: el catálogo de lo que vende, los bonos vendidos
  * a cada cliente (se cobran a mano) y el gasto de sus sesiones al cobrar
  * reservas o clases privadas de la escuela. Una sesión es una reserva de pista
- * entera (bono de pista) o una clase privada (bono de clases privadas). Los
- * importes van en céntimos.
+ * entera (bono de pista), una clase privada (bono de clases privadas) o una
+ * clase de un grupo de la escuela (bono de clases de la escuela, que se gasta
+ * al pasar lista o a mano). Los importes van en céntimos.
  */
 
 /** Cómo está un bono hoy: con sesiones, sin ellas, pasado de fecha o cancelado. */
 export type VoucherStatus = "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "CANCELLED";
 
-/** Para qué se gasta un bono: reservas de pista o clases privadas de la escuela. */
-export type VoucherKind = "COURT" | "PRIVATE_CLASS";
+/** Para qué se gasta un bono: reservas de pista, clases privadas o clases de grupo de la escuela. */
+export type VoucherKind = "COURT" | "PRIVATE_CLASS" | "SCHOOL_CLASS";
+
+/** De dónde sale una sesión gastada: reserva, clase privada, clase de grupo (al pasar lista) o apuntada a mano. */
+export type VoucherUseType = "BOOKING" | "PRIVATE_CLASS" | "GROUP_CLASS" | "MANUAL";
 
 /** Un tipo del catálogo del club. Cambiarlo no toca los bonos ya vendidos. */
 export interface ClubVoucherType {
@@ -44,9 +48,10 @@ export interface UpdateClubVoucherTypePayload extends Partial<ClubVoucherTypePay
   active?: boolean;
 }
 
-/** Una sesión gastada: la reserva o la clase privada a la que se descontó (una de las dos). */
+/** Una sesión gastada: la reserva, la clase privada o de grupo a la que se descontó, o un apunte a mano. */
 export interface ClubVoucherUse {
   id:             string;
+  type:           VoucherUseType;
   /** La reserva; null si fue una clase privada. */
   bookingId:      string | null;
   /** La clase privada; null si fue una reserva. */
@@ -57,6 +62,11 @@ export interface ClubVoucherUse {
   startsAt:       string | null;
   /** La pista; null si la clase privada se quedó sin ella. */
   courtName:      string | null;
+  /** Clase de grupo: el grupo al que vino el alumno. */
+  groupName:      string | null;
+  /** A mano: el día de la clase («AAAA-MM-DD») y su nota. */
+  manualDate:     string | null;
+  note:           string | null;
 }
 
 /** Un bono vendido a un cliente, con su saldo y su estado ya calculados por el back. */
@@ -127,6 +137,15 @@ export const clubVouchersService = {
       api.get<ClubVoucher[]>(`${base(clubId)}/customers/${customerId}/vouchers`).then((r) => r.data),
     sell: (clubId: string, customerId: string, payload: SellVoucherPayload) =>
       api.post<ClubVoucher>(`${base(clubId)}/customers/${customerId}/vouchers`, payload).then((r) => r.data),
+  },
+
+  /** Uso a mano de un bono de clases de la escuela (una clase que no se pasó por lista). */
+  manualUse: {
+    add: (clubId: string, voucherId: string, payload: { date: string; note?: string }) =>
+      api.post<ClubVoucher>(`${base(clubId)}/vouchers/${voucherId}/manual-uses`, payload).then((r) => r.data),
+    /** Quita un uso a mano: la clase vuelve al bono. */
+    remove: (clubId: string, voucherId: string, useId: string) =>
+      api.delete<ClubVoucher>(`${base(clubId)}/vouchers/${voucherId}/manual-uses/${useId}`).then((r) => r.data),
   },
 
   /** Marca el bono como cobrado con un método del mostrador; PENDING le quita el cobro. */

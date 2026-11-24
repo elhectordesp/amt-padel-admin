@@ -6,6 +6,7 @@
 
 import type {
   GenerateSessionsResult,
+  SchoolActivity,
   SchoolAttendanceStatus,
   SchoolAttendanceStudent,
   SchoolGroup,
@@ -98,8 +99,16 @@ export interface GroupFormValues {
   startDate:    string;
   endDate:      string;
   notes:        string;
+  /** Academia o equipo de competición. */
+  activity:     SchoolActivity;
   slots:        SlotFormValues[];
 }
+
+/** Las actividades de un grupo, tal como se le enseñan al gestor. */
+export const ACTIVITY_LABEL: Record<SchoolActivity, string> = {
+  ACADEMY: "Academia",
+  TEAM:    "Equipo de competición",
+};
 
 let slotCounter = 0;
 
@@ -124,6 +133,7 @@ export function emptyGroupForm(): GroupFormValues {
     startDate: "",
     endDate: "",
     notes: "",
+    activity: "ACADEMY",
     slots: [newSlotForm()],
   };
 }
@@ -138,6 +148,7 @@ export function groupFormOf(group: SchoolGroup): GroupFormValues {
     startDate: group.startDate,
     endDate: group.endDate,
     notes: group.notes ?? "",
+    activity: group.activity ?? "ACADEMY",
     slots: group.slots.map((s) => ({
       key: s.id,
       id: s.id,
@@ -236,6 +247,7 @@ export function checkGroupForm(form: GroupFormValues): CheckedGroupForm {
       startDate: form.startDate,
       endDate: form.endDate,
       notes: notes || null,
+      activity: form.activity,
       slots,
     },
   };

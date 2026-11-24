@@ -8,6 +8,10 @@
  */
 
 export type SchoolSessionStatus = "SCHEDULED" | "CANCELLED";
+/** Academia o equipo de competición: separa sus ingresos en el resumen. */
+export type SchoolActivity = "ACADEMY" | "TEAM";
+/** Cómo paga un alumno su plaza: la cuota mensual del grupo o un bono de clases de la escuela. */
+export type SchoolMemberBilling = "MONTHLY" | "VOUCHER";
 export type SchoolAttendanceStatus = "PRESENT" | "ABSENT" | "EXCUSED";
 
 /** Franja semanal de un grupo: día (1 lunes ... 7 domingo), hora y duración. */
@@ -38,6 +42,8 @@ export interface SchoolGroup {
   startDate:   string;
   endDate:     string;
   notes:       string | null;
+  /** Academia (por defecto) o equipo de competición. */
+  activity:    SchoolActivity;
   archivedAt:  string | null;
   createdAt:   string;
   coach:       SchoolCoachRef | null;
@@ -77,7 +83,40 @@ export interface SchoolStudentMinor {
 }
 
 /** Un alumno en la ficha de su grupo (el alta y la baja devuelven solo SchoolMember). */
-export interface SchoolGroupMember extends SchoolMember, SchoolStudentMinor {}
+export interface SchoolGroupMember extends SchoolMember, SchoolStudentMinor {
+  billing:         SchoolMemberBilling;
+  /** Descuento fijo en cada cuota, en céntimos; null: sin descuento (y para quien no lleva el dinero de la escuela). */
+  discountCents:   number | null;
+  discountReason:  string | null;
+  /** Baja temporal: «AAAA-MM-DD» del día de la baja; null: no está de baja. */
+  pausedFrom:      string | null;
+  /** El día en que vuelve (el primero que ya paga); null: sin fecha de vuelta. */
+  pausedUntil:     string | null;
+  pauseReason:     string | null;
+  /** Quien paga con bono: las clases que le quedan en sus bonos vigentes; null si paga cuota. */
+  voucherRemaining: number | null;
+}
+
+/** Lo que cambia de un alumno dentro del grupo; lo que no va no cambia, y null quita el descuento o la baja. */
+export interface UpdateSchoolMemberPayload {
+  billing?:        SchoolMemberBilling;
+  discountCents?:  number | null;
+  discountReason?: string | null;
+  pausedFrom?:     string | null;
+  pausedUntil?:    string | null;
+  pauseReason?:    string | null;
+}
+
+/** El alumno tras cambiarlo, con los avisos de las cuotas que no se pudieron tocar. */
+export interface SchoolMemberUpdateResult extends SchoolMember {
+  billing:        SchoolMemberBilling;
+  discountCents:  number | null;
+  discountReason: string | null;
+  pausedFrom:     string | null;
+  pausedUntil:    string | null;
+  pauseReason:    string | null;
+  warnings:       string[];
+}
 
 export interface SchoolSession {
   id:              string;
@@ -90,6 +129,9 @@ export interface SchoolSession {
   /** null: la clase está «sin pista». */
   court:           { id: string; name: string } | null;
   attendanceCount: number;
+  /** Quien da la clase (el del grupo o una sustitución); null: sin entrenador. */
+  coachStaffId:    string | null;
+  coachName:       string | null;
 }
 
 /** Una clase dentro de la ficha de su grupo (el grupo ya se sabe). */
@@ -114,6 +156,21 @@ export interface SchoolAttendanceStudent extends SchoolStudentMinor {
   recovery:       boolean;
   /** El crédito que ha gastado para estar en esta clase (solo si recupera). */
   usedCreditId:   string | null;
+  /** Si paga con bono de clases: al marcarlo presente se gasta una clase de su bono. */
+  paysWithVoucher?: boolean;
+}
+
+/** Un alumno al que no se le pudo gastar una clase de su bono al pasar lista. */
+export interface SchoolVoucherWarning {
+  clubCustomerId: string;
+  name:           string | null;
+  /** NO_VOUCHER: sin bono vigente; EXHAUSTED: con bono, pero sin clases. */
+  reason:         "NO_VOUCHER" | "EXHAUSTED";
+}
+
+/** La hoja tras pasar lista: con los avisos de bono si los hay. */
+export interface SchoolAttendanceResult extends SchoolAttendanceSheet {
+  voucherWarnings?: SchoolVoucherWarning[];
 }
 
 export interface SchoolAttendanceSheet {
@@ -166,6 +223,7 @@ export interface SchoolGroupPayload {
   startDate:     string;
   endDate:       string;
   notes?:        string | null;
+  activity?:     SchoolActivity;
   slots:         SchoolSlotPayload[];
 }
 

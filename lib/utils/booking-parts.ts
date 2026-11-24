@@ -5,6 +5,7 @@
  */
 import type { BookingPart, BookingPartsView, PartPriceOption, UpdatePartPayload } from "@/lib/services/booking-parts";
 import { formatCents } from "@/lib/utils/booking-price";
+import { LEDGER_BACK_MESSAGE_WINS, LEDGER_ERROR_MESSAGES } from "@/lib/utils/ledger";
 import type { BookingPartsSummary } from "@/types/bookings";
 
 /** Lo más que admite el back al repartir una reserva. */
@@ -19,10 +20,27 @@ export const ACCOUNTS_ERROR_MESSAGES: Record<string, string> = {
   BOOKING_PARTS_LOCKED:      "Alguna parte ya está cobrada, a deber o invitada. Deshazla primero para cambiar el reparto o el precio.",
   BOOKING_ALREADY_COLLECTED: "La reserva ya está cobrada entera. Márcala como no pagada si quieres cobrarla por jugadores.",
   BOOKING_PART_INVALID:      "Los datos de la parte no valen. Revisa el precio, el motivo y quién es.",
+  // Escuela fina (F8-C3)
+  SCHOOL_FEE_HAS_PAYMENTS:         "La cuota ya tiene pagos: deshaz el cobro antes de recalcularla o anularla.",
+  SCHOOL_FEE_OVERPAID:             "El importe supera lo que falta por cobrar de las cuotas.",
+  SCHOOL_FEE_BELOW_PAID:           "El importe de la cuota no puede ser menor que lo ya pagado.",
+  SCHOOL_FEE_ARCHIVED:             "La cuota tiene más de 6 años: está archivada y solo se puede consultar.",
+  SCHOOL_FEE_COLLECTION_NOT_FOUND: "Ese cobro ya no existe. Recarga la pantalla.",
+  SCHOOL_MEMBER_INVALID:           "Los datos del alumno no valen. Revisa el descuento, su motivo y las fechas de la baja.",
+  // Gastos, ingresos y entrenadores (fase 2)
+  ...LEDGER_ERROR_MESSAGES,
+  LEDGER_INVALID:            "Los datos del apunte no valen. Revísalos.",
+  COACH_PAY_INVALID:         "Los datos no valen. Revísalos.",
 };
 
 /** Los códigos cuyo mensaje del back lleva el motivo concreto (qué dato falla): ese mensaje se enseña tal cual. */
-const BACK_MESSAGE_WINS = new Set(["BOOKING_PART_INVALID"]);
+const BACK_MESSAGE_WINS = new Set([
+  "BOOKING_PART_INVALID",
+  "SCHOOL_FEE_OVERPAID",
+  "SCHOOL_FEE_BELOW_PAID",
+  "SCHOOL_MEMBER_INVALID",
+  ...LEDGER_BACK_MESSAGE_WINS,
+]);
 
 /** El mensaje de un error al cobrar o configurar: el del código si lo conocemos; si no, el que manda el back. */
 export function accountsErrorText(err: unknown): string {

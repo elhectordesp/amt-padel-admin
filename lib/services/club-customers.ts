@@ -27,6 +27,8 @@ export interface ClubCustomer {
   archivedAt:   string | null;
   /** Cuándo se dio de baja de los mensajes del club (lo hace la persona desde el email; el club no puede quitarlo). */
   messagesOptOutAt?: string | null;
+  /** Cuenta abierta (módulo Cuentas): sus deudas no caducan. No viene con un back anterior. */
+  openAccount?: boolean;
   createdAt:    string;
   // Menores. No vienen con un back anterior: sin ellos, es un adulto.
   /** AAAA-MM-DD */

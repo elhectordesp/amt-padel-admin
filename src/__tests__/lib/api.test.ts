@@ -66,6 +66,29 @@ describe("api: club desactivado a mitad de sesión", () => {
     });
     expect(window.location.href).toBe("");
   });
+
+  // Las descargas (Excel, ZIP) piden un Blob: el error del back llega como Blob
+  it("un error de una descarga (Blob JSON) llega con el mensaje y el código del back", async () => {
+    backAnswers(
+      400,
+      new Blob([JSON.stringify({ success: false, code: "LEDGER_TOO_MANY_RECEIPTS", message: "Hay 301 justificantes" })]),
+    );
+
+    await expect(api.get("/admin/clubs/c1/accounts/receipts.zip", { responseType: "blob" })).rejects.toMatchObject({
+      message: "Hay 301 justificantes",
+      status: 400,
+      code: "LEDGER_TOO_MANY_RECEIPTS",
+    });
+  });
+
+  it("un error de una descarga que no es JSON queda como «Error de conexión», sin romper", async () => {
+    backAnswers(502, new Blob(["<html>Bad gateway</html>"]));
+
+    await expect(api.get("/admin/clubs/c1/accounts/export.xlsx", { responseType: "blob" })).rejects.toMatchObject({
+      message: "Error de conexión",
+      status: 502,
+    });
+  });
 });
 
 describe("api: un admin al que le quitan el rol renueva como jugador (P2-16)", () => {

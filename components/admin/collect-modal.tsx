@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { BizumReceiverPicker, type BizumReceiver } from "@/components/admin/bizum-receiver";
 import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
 import type { ClubPartner } from "@/lib/services/accounts";
+import { formatCents } from "@/lib/utils/booking-price";
 import { centsToEurosInput, eurosToCents, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
 
 interface Props {
@@ -15,6 +16,11 @@ interface Props {
   subtitle:     string;
   /** El importe que se propone, en céntimos; se puede cambiar. */
   defaultCents: number;
+  /**
+   * El tope del importe, en céntimos, si lo hay (p. ej. lo que falta de una
+   * cuota: cobrar menos la deja parcial, más no se puede). Pasado, no se cobra.
+   */
+  maxCents?:    number;
   /**
    * Con el módulo Cuentas: los socios activos del club. Al elegir Bizum se
    * pregunta a qué móvil llegó (un socio o «Club») y se manda como tercer
@@ -34,7 +40,7 @@ interface Props {
  * caja; el modal de «Estado de pago» y «Cobrar pareja» llevan los mismos
  * campos (payment-fields.tsx).
  */
-export default function CollectModal({ title, subtitle, defaultCents, bizumReceivers, onSubmit, onDone, onClose }: Props) {
+export default function CollectModal({ title, subtitle, defaultCents, maxCents, bizumReceivers, onSubmit, onDone, onClose }: Props) {
   const [method, setMethod] = useState<CounterPaymentMethod | "">("");
   const [amount, setAmount] = useState(centsToEurosInput(defaultCents));
   const [receiver, setReceiver] = useState<BizumReceiver>(undefined);
@@ -57,7 +63,8 @@ export default function CollectModal({ title, subtitle, defaultCents, bizumRecei
 
   // Mientras guarda no se cierra: la respuesta cerraría el modal que se abriera después
   const close = () => { if (!saveMut.isPending) onClose(); };
-  const canSave = method !== "" && cents !== null && (!askReceiver || receiver !== undefined) && !saveMut.isPending;
+  const overMax = cents !== null && maxCents !== undefined && cents > maxCents;
+  const canSave = method !== "" && cents !== null && !(maxCents !== undefined && cents === 0) && !overMax && (!askReceiver || receiver !== undefined) && !saveMut.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -78,7 +85,17 @@ export default function CollectModal({ title, subtitle, defaultCents, bizumRecei
           {askReceiver && (
             <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} disabled={saveMut.isPending} />
           )}
-          <AmountField value={amount} onChange={setAmount} invalid={cents === null} disabled={saveMut.isPending} />
+          <AmountField value={amount} onChange={setAmount} invalid={cents === null || overMax} disabled={saveMut.isPending} />
+          {overMax && maxCents !== undefined && (
+            <p role="alert" className="-mt-2 text-xs text-destructive">
+              No puede pasar de lo que falta por cobrar ({formatCents(maxCents)}).
+            </p>
+          )}
+          {!overMax && maxCents !== undefined && cents !== null && cents > 0 && cents < maxCents && (
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Cobras una parte: quedarán {formatCents(maxCents - cents)} por cobrar.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3 px-5 pb-5">

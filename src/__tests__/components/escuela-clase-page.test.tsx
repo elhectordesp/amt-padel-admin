@@ -4,7 +4,7 @@
  * llegado ni de una clase cancelada.
  */
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, act, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Suspense } from "react";
 
@@ -17,9 +17,9 @@ vi.mock("@/lib/use-role", () => ({
   useRole: () => ({ role: "club", clubId: "c1" }),
   isClub: (r: string) => r === "club",
 }));
-const access = vi.hoisted(() => ({ write: false }));
+const access = vi.hoisted(() => ({ write: false, accounts: true }));
 vi.mock("@/lib/use-club-access", () => ({
-  useClubAccess: () => ({ roles: null, can: (_a: string, level = "read") => level === "read" || access.write }),
+  useClubAccess: () => ({ roles: null, can: (area: string, level = "read") => level === "read" || (area === "accounts" ? access.accounts : access.write) }),
 }));
 const recovery = vi.hoisted(() => ({ config: { get: vi.fn() } }));
 vi.mock("@/lib/services/school-recovery", async () => {
@@ -30,7 +30,8 @@ vi.mock("@/lib/use-club-time-zone", () => ({
   useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
 }));
 const school = vi.hoisted(() => ({
-  sessions: { sheet: vi.fn(), setAttendance: vi.fn() },
+  sessions: { sheet: vi.fn(), setAttendance: vi.fn(), setCoach: vi.fn() },
+  coaches: { list: vi.fn() },
 }));
 vi.mock("@/lib/services/school", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/school")>("@/lib/services/school");
@@ -89,6 +90,7 @@ describe("Escuela: pasar lista", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     access.write = false;
+    access.accounts = true;
     recovery.config.get.mockResolvedValue({ recoveryNoticeHours: 24, recoveryValidDays: 60 });
     school.sessions.sheet.mockResolvedValue(sheet());
   });
@@ -253,5 +255,110 @@ describe("Escuela: pasar lista", () => {
     school.sessions.sheet.mockResolvedValue(sheet({ students: [] }));
     await renderPage();
     expect(await screen.findByText(/no tiene alumnos en la lista/, {}, WAIT)).toBeInTheDocument();
+  });
+});
+
+describe("Escuela: entrenador de la clase y bonos al pasar lista (F8-C3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    access.write = true;
+    access.accounts = true;
+    recovery.config.get.mockResolvedValue({ recoveryNoticeHours: 24, recoveryValidDays: 60 });
+    school.sessions.sheet.mockResolvedValue(sheet({}, { coachStaffId: "st1", coachName: "Marta Prueba" }));
+    school.coaches.list.mockResolvedValue([
+      { staffId: "st1", userId: "u1", name: "Marta Prueba", coachBio: null, privateClassRateCents: null, groups: [] },
+      { staffId: "st2", userId: "u2", name: "Pablo Suplente", coachBio: null, privateClassRateCents: null, groups: [] },
+    ]);
+  });
+
+  it("enseña quién da la clase", async () => {
+    await renderPage();
+    expect(await screen.findByText("Entrenador de la clase: Marta Prueba", {}, WAIT)).toBeInTheDocument();
+  });
+
+  it("«Cambiar (sustitución)»: elige a otro entrenador del equipo y lo guarda para esa clase", async () => {
+    school.sessions.setCoach.mockResolvedValue({});
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: /Cambiar \(sustitución\)/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Entrenador de la clase" });
+    const select = within(dialog).getByLabelText("Entrenador");
+    await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(3), WAIT);
+    const save = within(dialog).getByRole("button", { name: "Guardar" });
+    expect(save).toBeDisabled();
+    fireEvent.change(select, { target: { value: "st2" } });
+    fireEvent.click(save);
+    await waitFor(() => expect(school.sessions.setCoach).toHaveBeenCalledWith("c1", "ses1", "st2"), WAIT);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Entrenador de la clase cambiado"), WAIT);
+  });
+
+  it("sin acceso a las cuentas (recepción), el entrenador de una clase de un mes anterior no se cambia; el de este mes, sí", async () => {
+    access.write = true;
+    access.accounts = false;
+    school.sessions.sheet.mockResolvedValue(
+      sheet({}, { startsAt: "2026-10-28T17:00:00.000Z", endsAt: "2026-10-28T18:00:00.000Z" }),
+    );
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    expect(screen.getByRole("button", { name: /Cambiar \(sustitución\)/ })).toBeDisabled();
+    cleanup();
+    school.sessions.sheet.mockResolvedValue(sheet());
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    expect(screen.getByRole("button", { name: /Cambiar \(sustitución\)/ })).toBeEnabled();
+  });
+
+  it("quien lleva las cuentas sí cambia el entrenador de una clase de un mes anterior", async () => {
+    access.write = true;
+    school.sessions.sheet.mockResolvedValue(
+      sheet({}, { startsAt: "2026-10-28T17:00:00.000Z", endsAt: "2026-10-28T18:00:00.000Z" }),
+    );
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    expect(screen.getByRole("button", { name: /Cambiar \(sustitución\)/ })).toBeEnabled();
+  });
+
+  it("quien solo pasa lista (entrenador) no cambia al entrenador de la clase", async () => {
+    access.write = false;
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    expect(screen.queryByRole("button", { name: /Cambiar \(sustitución\)/ })).not.toBeInTheDocument();
+  });
+
+  it("quien paga con bono lo lleva marcado", async () => {
+    school.sessions.sheet.mockResolvedValue(
+      sheet({
+        students: [
+          student0("cc1", "Ana Prueba", null, { paysWithVoucher: true }),
+          student0("cc2", "Beto Prueba", null),
+        ],
+      }),
+    );
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    expect(screen.getAllByText("Paga con bono")).toHaveLength(1);
+  });
+
+  it("al guardar, avisa de quien no tiene bono o lo tiene agotado: queda presente sin descontar clase", async () => {
+    school.sessions.setAttendance.mockResolvedValue({
+      ...sheet({
+        students: [student0("cc1", "Ana Prueba", "PRESENT", { paysWithVoucher: true }), student0("cc2", "Beto Prueba", "PRESENT", { paysWithVoucher: true })],
+      }),
+      voucherWarnings: [
+        { clubCustomerId: "cc1", name: "Ana Prueba", reason: "NO_VOUCHER" },
+        { clubCustomerId: "cc2", name: "Beto Prueba", reason: "EXHAUSTED" },
+      ],
+    });
+    await renderPage();
+    await screen.findByText("Iniciación", {}, WAIT);
+    fireEvent.click(within(student("Ana Prueba")).getByRole("button", { name: "Presente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar asistencia" }));
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(2), WAIT);
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining("Ana Prueba: sin bono"));
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining("Beto Prueba: bono agotado"));
+    // Y se quedan a la vista en la pantalla
+    const warnings = await screen.findByRole("status", {}, WAIT);
+    expect(warnings).toHaveTextContent(/Ana Prueba: sin bono/);
+    expect(warnings).toHaveTextContent(/Beto Prueba: bono agotado/);
   });
 });

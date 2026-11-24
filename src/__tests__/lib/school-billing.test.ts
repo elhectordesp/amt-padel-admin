@@ -6,15 +6,22 @@
 import { describe, it, expect } from "vitest";
 import {
   FEE_STATUS_LABEL,
+  allocateFeePayment,
+  checkFeeSettings,
   checkPrivateClassForm,
   classPaymentSummary,
   currentMonth,
   defaultPrivateClassRange,
   emptyPrivateClassForm,
+  feeBreakdownText,
+  feeSettingsOf,
   feeStateText,
+  feeCollectedToday,
   feeTotals,
   generateFeesText,
+  isBeforeCurrentMonth,
   monthLabel,
+  pendingFeesOf,
   privateClassDuration,
   privateClassFormOf,
   privateClassWhen,
@@ -25,9 +32,34 @@ import {
   type PrivateClassFormValues,
 } from "@/lib/utils/school-billing";
 import { centsToFieldText, checkMonthlyFee, checkRate } from "@/lib/utils/school-money";
-import type { SchoolPrivateClass } from "@/types/school-billing";
+import type { SchoolFee, SchoolFeeStatus, SchoolPrivateClass } from "@/types/school-billing";
 
 const MADRID = "Europe/Madrid";
+
+describe("ajustes sin acceso a las cuentas: hoy y mes en curso en la zona del club", () => {
+  // 20-11 a las 11:00 en Madrid
+  const now = new Date("2026-11-20T10:00:00Z");
+
+  it("un instante es de un mes anterior solo si su mes (en Madrid) es anterior al de hoy", () => {
+    expect(isBeforeCurrentMonth("2026-10-31T22:30:00Z", MADRID, now)).toBe(true);
+    // 23:30 UTC del 31-10 ya es 1-11 en Madrid
+    expect(isBeforeCurrentMonth("2026-10-31T23:30:00Z", MADRID, now)).toBe(false);
+    expect(isBeforeCurrentMonth("2026-11-02T10:00:00Z", MADRID, now)).toBe(false);
+    expect(isBeforeCurrentMonth("2026-12-07T10:00:00Z", MADRID, now)).toBe(false);
+    // sin la zona, lo estricto
+    expect(isBeforeCurrentMonth("2026-11-02T10:00:00Z", null, now)).toBe(true);
+  });
+
+  it("una cuota se cobró hoy si todos sus pagos son de hoy; sin pagos, cuenta su paidAt", () => {
+    const pay = (paidAt: string) => ({ paidAt }) as never;
+    expect(feeCollectedToday({ payments: [pay("2026-11-19T23:30:00Z"), pay("2026-11-20T09:00:00Z")], paidAt: null }, MADRID, now)).toBe(true);
+    expect(feeCollectedToday({ payments: [pay("2026-11-20T09:00:00Z"), pay("2026-11-19T22:00:00Z")], paidAt: null }, MADRID, now)).toBe(false);
+    expect(feeCollectedToday({ payments: [], paidAt: "2026-11-19T10:00:00Z" }, MADRID, now)).toBe(false);
+    expect(feeCollectedToday({ payments: [], paidAt: "2026-11-20T08:00:00Z" }, MADRID, now)).toBe(true);
+    expect(feeCollectedToday({ payments: [], paidAt: null }, MADRID, now)).toBe(true);
+    expect(feeCollectedToday({ payments: [pay("2026-11-20T09:00:00Z")], paidAt: null }, null, now)).toBe(false);
+  });
+});
 
 describe("meses de las cuotas", () => {
   it("el mes de hoy es el de la zona del club, no el de UTC", () => {
@@ -51,28 +83,93 @@ describe("meses de las cuotas", () => {
 });
 
 describe("cuotas: totales y textos", () => {
-  const fee = (status: "pending" | "paid" | "cancelled", amountCents: number) => ({ status, amountCents });
+  const fee = (status: SchoolFeeStatus, paidCents: number, pendingCents: number) => ({ status, paidCents, pendingCents });
 
-  it("lo pendiente y lo cobrado; las anuladas no cuentan", () => {
-    expect(feeTotals([fee("pending", 4500), fee("pending", 4500), fee("paid", 3000), fee("cancelled", 9999)])).toEqual({
-      pendingCount: 2,
-      pendingCents: 9000,
+  it("lo pendiente y lo cobrado; lo cobrado incluye lo pagado de las parciales y las anuladas no cuentan", () => {
+    expect(
+      feeTotals([
+        fee("PENDING", 0, 4500),
+        fee("OVERDUE", 0, 4500),
+        fee("PARTIAL", 2000, 2500),
+        fee("PAID", 3000, 0),
+        fee("CANCELLED", 0, 9999),
+        fee("ARCHIVED", 0, 0),
+      ]),
+    ).toEqual({
+      pendingCount: 3,
+      pendingCents: 11500,
       paidCount: 1,
-      paidCents: 3000,
+      paidCents: 5000,
     });
     expect(feeTotals([])).toEqual({ pendingCount: 0, pendingCents: 0, paidCount: 0, paidCents: 0 });
   });
 
   it("el estado de una cuota para leer", () => {
-    expect(feeStateText({ status: "pending", paymentMethod: null })).toBe("Pendiente");
-    expect(feeStateText({ status: "paid", paymentMethod: "CARD" })).toBe("Cobrada · Tarjeta");
-    expect(feeStateText({ status: "cancelled", paymentMethod: null })).toBe("Anulada");
-    expect(Object.keys(FEE_STATUS_LABEL)).toEqual(["pending", "paid", "cancelled"]);
+    expect(feeStateText({ status: "PENDING", paymentMethod: null })).toBe("Pendiente");
+    expect(feeStateText({ status: "PARTIAL", paymentMethod: null })).toBe("Parcial");
+    expect(feeStateText({ status: "OVERDUE", paymentMethod: null })).toBe("Atrasada");
+    expect(feeStateText({ status: "PAID", paymentMethod: "CARD" })).toBe("Pagada · Tarjeta");
+    expect(feeStateText({ status: "PAID", paymentMethod: "MIXED" })).toBe("Pagada · Varios");
+    expect(feeStateText({ status: "CANCELLED", paymentMethod: null })).toBe("Anulada");
+    expect(feeStateText({ status: "ARCHIVED", paymentMethod: null })).toBe("Archivada");
+    expect(Object.keys(FEE_STATUS_LABEL)).toEqual(["PAID", "PARTIAL", "OVERDUE", "PENDING", "CANCELLED", "ARCHIVED"]);
+  });
+
+  it("cómo se llegó al importe: las clases que quedan y el descuento", () => {
+    const base = { listCents: 8000, amountCents: 4375, discountCents: null, prorationNote: null };
+    expect(feeBreakdownText(base)).toBe("");
+    expect(feeBreakdownText({ ...base, prorationNote: "5 de 8 clases" })).toBe("5 de 8 clases");
+    expect(feeBreakdownText({ ...base, prorationNote: "5 de 8 clases", discountCents: 625 })).toBe(
+      "5 de 8 clases · − 6,25 €",
+    );
+    expect(feeBreakdownText({ ...base, discountCents: 1000 }, "Hermanos")).toBe("− 10,00 € (Hermanos)");
+  });
+
+  it("el reparto de un importe entre cuotas: de la más antigua a la más nueva, y el cambio que sobra", () => {
+    const pending = [
+      { id: "oct", pendingCents: 2500 },
+      { id: "nov", pendingCents: 8000 },
+    ];
+    expect(allocateFeePayment(pending, 3000)).toEqual({
+      shares: [{ feeId: "oct", amountCents: 2500 }, { feeId: "nov", amountCents: 500 }],
+      changeCents: 0,
+    });
+    expect(allocateFeePayment(pending, 1000)).toEqual({ shares: [{ feeId: "oct", amountCents: 1000 }], changeCents: 0 });
+    expect(allocateFeePayment(pending, 11000)).toEqual({
+      shares: [{ feeId: "oct", amountCents: 2500 }, { feeId: "nov", amountCents: 8000 }],
+      changeCents: 500,
+    });
+    expect(allocateFeePayment(pending, 0)).toEqual({ shares: [], changeCents: 0 });
+  });
+
+  it("las cuotas con algo pendiente de un alumno, por mes y por grupo; sin las anuladas ni las pagadas", () => {
+    const f = (id: string, month: string, groupName: string, status: SchoolFeeStatus, pendingCents: number) =>
+      ({ id, month, groupName, status, pendingCents }) as SchoolFee;
+    expect(
+      pendingFeesOf([
+        f("c", "2026-11", "B", "PENDING", 100),
+        f("a", "2026-10", "B", "OVERDUE", 100),
+        f("b", "2026-11", "A", "PARTIAL", 100),
+        f("x", "2026-09", "A", "PAID", 0),
+        f("y", "2026-09", "A", "CANCELLED", 100),
+      ]).map((x) => x.id),
+    ).toEqual(["a", "b", "c"]);
+  });
+
+  it("los ajustes de las cuotas: el día límite de 1 a 28 y si se generan solas", () => {
+    expect(feeSettingsOf({ feeDueDay: 10, autoGenerateFees: true })).toEqual({ feeDueDay: "10", autoGenerateFees: true });
+    expect(checkFeeSettings({ feeDueDay: "15", autoGenerateFees: false })).toEqual({
+      ok: true,
+      value: { feeDueDay: 15, autoGenerateFees: false },
+    });
+    for (const feeDueDay of ["", "0", "29", "2.5", "abc", "-1"]) {
+      expect(checkFeeSettings({ feeDueDay, autoGenerateFees: false }).ok).toBe(false);
+    }
   });
 
   it("lo que pasó al generar, en una línea", () => {
     expect(generateFeesText({ groups: 0, due: 0, created: 0, existing: 0 })).toMatch(/Ningún grupo con cuota/);
-    expect(generateFeesText({ groups: 2, due: 0, created: 0, existing: 0 })).toMatch(/no tienen alumnos/);
+    expect(generateFeesText({ groups: 2, due: 0, created: 0, existing: 0 })).toMatch(/No hay alumnos a los que cobrar/);
     expect(generateFeesText({ groups: 2, due: 5, created: 5, existing: 0 })).toBe("Se han creado 5 cuotas");
     expect(generateFeesText({ groups: 2, due: 5, created: 1, existing: 4 })).toBe("Se ha creado 1 cuota · 4 ya estaban");
     expect(generateFeesText({ groups: 2, due: 5, created: 0, existing: 5 })).toBe("No había cuotas nuevas · 5 ya estaban");

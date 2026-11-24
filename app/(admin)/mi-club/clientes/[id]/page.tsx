@@ -19,6 +19,7 @@ import { AlertTriangle, Archive, ArchiveRestore, Loader2, Save, UserX } from "lu
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { CustomerDebtsSection } from "@/components/admin/customer-debts-section";
+import { CustomerOpenAccount } from "@/components/admin/customer-open-account";
 import { CustomerVouchersSection } from "@/components/admin/customer-vouchers-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Field, Input } from "@/components/admin/form";
@@ -434,6 +435,8 @@ function CustomerView({
           <CustomerVouchersSection clubId={clubId} customerId={c.id} timeZone={timeZone} />
         </div>
       )}
+
+      <CustomerOpenAccount clubId={clubId} customerId={c.id} openAccount={c.openAccount === true} />
 
       <CustomerDebtsSection clubId={clubId} customerId={c.id} />
 

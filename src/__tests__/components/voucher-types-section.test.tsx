@@ -91,6 +91,29 @@ describe("VoucherTypesSection", () => {
     );
   });
 
+  it("un bono de clases de la escuela (F8-C3): se ofrece como tipo y va en lo que se manda", async () => {
+    renderSection();
+    await screen.findByText("Bono 10");
+    fireEvent.click(screen.getByRole("button", { name: /Nuevo bono/ }));
+    const dialog = within(await screen.findByRole("dialog"));
+    const kinds = within(dialog.getByLabelText("Tipo de bono")).getAllByRole("option").map((o) => o.textContent);
+    expect(kinds).toEqual(["Reservas de pista", "Clases privadas", "Clases de escuela"]);
+    fireEvent.change(dialog.getByLabelText("Tipo de bono"), { target: { value: "SCHOOL_CLASS" } });
+    fireEvent.change(dialog.getByLabelText("Sesiones (clases)"), { target: { value: "10" } });
+    fireEvent.change(dialog.getByLabelText("Nombre"), { target: { value: "Bono 10 clases de escuela" } });
+    fireEvent.change(dialog.getByLabelText("Precio del bono (€)"), { target: { value: "90" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Guardar bono" }));
+    await waitFor(() =>
+      expect(svc.types.create).toHaveBeenCalledWith("c1", {
+        name: "Bono 10 clases de escuela",
+        kind: "SCHOOL_CLASS",
+        sessions: 10,
+        priceCents: 9000,
+        validDays: null,
+      }),
+    );
+  });
+
   it("un bono nuevo: el precio en euros sale en céntimos y los días vacíos, sin caducidad", async () => {
     renderSection();
     await screen.findByText("Bono 10");

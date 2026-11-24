@@ -5,8 +5,31 @@
  * céntimos; los instantes, ISO; los meses, «AAAA-MM» en la zona del club.
  */
 
-/** Cómo está una cuota: sin cobrar, cobrada o anulada. */
-export type SchoolFeeStatus = "pending" | "paid" | "cancelled";
+/**
+ * Cómo está una cuota: sin pagar (dentro de plazo o atrasada), con una parte
+ * pagada, pagada entera o anulada. «Atrasada» gana sobre «parcial». «Archivada»:
+ * de hace más de 6 años, sin datos de cobro; solo se consulta.
+ */
+export type SchoolFeeStatus = "PENDING" | "PARTIAL" | "OVERDUE" | "PAID" | "CANCELLED" | "ARCHIVED";
+
+/**
+ * Por qué el sistema anuló una cuota al cambiar el alumno en el grupo: baja,
+ * baja temporal o pasar a pagar con bono. null: la anuló una persona.
+ */
+export type SchoolFeeCancelReason = "LEFT" | "PAUSED" | "VOUCHER";
+
+/** Un pago (o parte de un cobro) de una cuota. */
+export interface SchoolFeePayment {
+  id:               string;
+  /** Agrupa los pagos de un mismo cobro (que pudo tocar varias cuotas). */
+  collectionId:     string;
+  amountCents:      number;
+  paymentMethod:    string;
+  /** BIZUM: el socio a cuyo móvil llegó; null: la cuenta del club. */
+  bizumPartnerName: string | null;
+  paidAt:           string;
+  paidByName:       string;
+}
 
 export interface SchoolFee {
   id:             string;
@@ -16,14 +39,29 @@ export interface SchoolFee {
   customerName:   string | null;
   /** AAAA-MM */
   month:          string;
+  /** Lo que hay que pagar: la cuota del grupo, prorrateada y con el descuento. */
   amountCents:    number;
+  /** La cuota del grupo entera al generarla; null en las anteriores a la fase 2. */
+  listCents:      number | null;
+  /** El descuento aplicado, en céntimos; null si no hay. */
+  discountCents:  number | null;
+  /** «7 de 8 clases» si se prorrateó. */
+  prorationNote:  string | null;
+  paidCents:      number;
+  pendingCents:   number;
   status:         SchoolFeeStatus;
-  /** Método de cobro (los del mostrador); null: sin cobrar. */
+  /** AAAA-MM-DD: el día límite de pago. */
+  dueDate:        string;
+  /** Resumen de cuando está pagada entera: el método (MIXED si hay varios); null: sin pagar entera. */
   paymentMethod:  string | null;
   paidAt:         string | null;
   cancelledAt:    string | null;
+  cancelReason:   SchoolFeeCancelReason | null;
   note:           string | null;
   createdAt:      string;
+  /** Quien la generó; null: la generó el cron («Automática»). */
+  createdByName:  string | null;
+  payments:       SchoolFeePayment[];
 }
 
 /** Qué ha pasado al cobrar de golpe las cuotas pendientes de un mes. */
@@ -39,17 +77,31 @@ export interface GenerateFeesResult {
   month:    string;
   /** Grupos con cuota, sin archivar y con temporada en el mes. */
   groups:   number;
-  /** Cuotas que tocaban (un alumno por grupo). */
+  /** Cuotas que tocaban (un alumno por grupo): sin quien paga con bono o está de baja. */
   due:      number;
   created:  number;
   /** Las que ya estaban (pendientes, cobradas o anuladas). */
   existing: number;
+  /** Avisos (p. ej. grupos sin clases en el calendario). */
+  warnings: string[];
 }
 
 export interface SchoolFeeFilters {
-  month?:   string;
-  status?:  SchoolFeeStatus;
-  groupId?: string;
+  month?:          string;
+  status?:         SchoolFeeStatus;
+  groupId?:        string;
+  clubCustomerId?: string;
+}
+
+/** Cobrar a un alumno un importe, repartido entre sus cuotas con algo pendiente. */
+export interface CollectFeesPayload {
+  clubCustomerId: string;
+  amountCents:    number;
+  paymentMethod:  string;
+  /** Con Bizum (módulo Cuentas): el socio a cuyo móvil llegó; null o sin él, la cuenta del club. */
+  bizumPartnerId?: string | null;
+  /** Solo estas cuotas; sin ellas, todas las no anuladas del alumno. */
+  feeIds?:        string[];
 }
 
 /** Un alumno de una clase privada con lo que paga. */

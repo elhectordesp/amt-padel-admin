@@ -185,6 +185,11 @@ export default function ClientesPage() {
                       </Link>
                       {!c.hasAccount && <span className="ml-2 text-xs text-muted-foreground">sin app</span>}
                       {c.archivedAt && <span className="ml-2 text-xs text-muted-foreground">archivado</span>}
+                      {c.openAccount && (
+                        <span className="ml-2 rounded-full border border-[rgba(212,175,55,0.4)] bg-[rgba(212,175,55,0.12)] px-2 py-0.5 text-xs text-[#D4AF37]">
+                          Cuenta abierta
+                        </span>
+                      )}
                       {c.isMinor && (
                         <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Menor</span>
                       )}

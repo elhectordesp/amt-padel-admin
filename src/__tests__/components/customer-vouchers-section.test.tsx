@@ -17,6 +17,7 @@ const svc = vi.hoisted(() => ({
   customer: { list: vi.fn(), sell: vi.fn() },
   setPayment: vi.fn(),
   cancel: vi.fn(),
+  manualUse: { add: vi.fn(), remove: vi.fn() },
 }));
 vi.mock("@/lib/services/club-vouchers", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/club-vouchers")>()),
@@ -263,5 +264,90 @@ describe("CustomerVouchersSection", () => {
     expect(screen.queryByRole("button", { name: /Vender bono/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Marcar cobrado" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancelar bono" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CustomerVouchersSection: bono de clases de la escuela (F8-C3)", () => {
+  const SCHOOL = {
+    ...PAID,
+    id: "v7", name: "Bono 4 clases", kind: "SCHOOL_CLASS", sessions: 4, usedSessions: 2, remainingSessions: 2,
+    uses: [
+      {
+        id: "u-1", type: "GROUP_CLASS", bookingId: null, privateClassId: null, usedAt: "2026-11-10T19:00:00.000Z",
+        startsAt: "2026-11-10T17:00:00.000Z", courtName: null, groupName: "Iniciación", manualDate: null, note: null,
+      },
+      {
+        id: "u-2", type: "MANUAL", bookingId: null, privateClassId: null, usedAt: "2026-11-12T09:00:00.000Z",
+        startsAt: null, courtName: null, groupName: null, manualDate: "2026-11-11", note: "Clase suelta",
+      },
+      {
+        id: "u-3", type: "MANUAL", bookingId: null, privateClassId: null, usedAt: "2026-11-14T09:00:00.000Z",
+        startsAt: null, courtName: null, groupName: null, manualDate: "2026-11-13", note: null,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    accessMock.can.mockReturnValue(true);
+    svc.customer.list.mockResolvedValue([SCHOOL]);
+    svc.types.list.mockResolvedValue(TYPES);
+    svc.manualUse.add.mockResolvedValue(SCHOOL);
+    svc.manualUse.remove.mockResolvedValue(SCHOOL);
+  });
+
+  it("lo dice y enseña cada clase gastada según de dónde salió: pasar lista o a mano, con su nota", async () => {
+    renderSection();
+    await screen.findByText("Bono 4 clases");
+    expect(screen.getByText("Clases de escuela")).toBeInTheDocument();
+    expect(screen.getByText("Clases gastadas con este bono (3)")).toBeInTheDocument();
+    expect(screen.getByText("Clase de grupo · Iniciación · 10/11/2026, 18:00")).toBeInTheDocument();
+    expect(screen.getByText("A mano · 11/11/2026 · Clase suelta")).toBeInTheDocument();
+    expect(screen.getByText("A mano · 13/11/2026")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("«+1 clase»: la fecha de hoy por defecto y una nota; no puede ser un día futuro", async () => {
+    renderSection();
+    await screen.findByText("Bono 4 clases");
+    fireEvent.click(screen.getByRole("button", { name: "+1 clase" }));
+    const dialog = await screen.findByRole("dialog", { name: "Apuntar una clase" });
+    const date = within(dialog).getByLabelText("Día de la clase") as HTMLInputElement;
+    expect(date.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const today = date.value;
+    fireEvent.change(within(dialog).getByLabelText("Nota (opcional)"), { target: { value: " Recupera " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apuntar clase" }));
+    await waitFor(() => expect(svc.manualUse.add).toHaveBeenCalledWith("c1", "v7", { date: today, note: "Recupera" }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Clase apuntada: se descuenta del bono"));
+  });
+
+  it("«Quitar la última» quita el último uso a mano (el más reciente)", async () => {
+    renderSection();
+    await screen.findByText("Bono 4 clases");
+    fireEvent.click(screen.getByRole("button", { name: "Quitar la última" }));
+    await waitFor(() => expect(svc.manualUse.remove).toHaveBeenCalledWith("c1", "v7", "u-3"));
+  });
+
+  it("sin usos a mano no hay «Quitar la última»; un bono de pista no tiene «+1 clase»", async () => {
+    svc.customer.list.mockResolvedValue([{ ...SCHOOL, uses: [SCHOOL.uses[0]] }, { ...PAID, id: "v8", name: "Bono pista", kind: "COURT" }]);
+    renderSection();
+    await screen.findByText("Bono pista");
+    expect(screen.queryByRole("button", { name: "Quitar la última" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "+1 clase" })).toHaveLength(1);
+  });
+
+  it("sin clases en el bono no se puede apuntar otra", async () => {
+    svc.customer.list.mockResolvedValue([{ ...SCHOOL, remainingSessions: 0, status: "EXHAUSTED" }]);
+    renderSection();
+    await screen.findByText("Bono 4 clases");
+    expect(screen.queryByRole("button", { name: "+1 clase" })).not.toBeInTheDocument();
+  });
+
+  it("al cancelarlo, sus clases ya dadas se quedan", async () => {
+    renderSection();
+    await screen.findByText("Bono 4 clases");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar bono" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/Las 2 sesiones ya gastadas se quedan \(sus clases siguen pagadas\)/);
   });
 });

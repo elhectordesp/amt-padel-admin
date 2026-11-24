@@ -14,6 +14,7 @@ import {
   launchPending, launchSteps, liveBookings, todayOccupancy, upcomingBookings,
 } from "@/lib/utils/club-today";
 import { useClubAccess } from "@/lib/use-club-access";
+import { AccountsAttentionLine } from "@/components/admin/accounts-attention-line";
 import { AmtFeeOverdueNotice, useAmtPlan } from "@/components/admin/club-amt-plan-card";
 import { DebtWarningsNotice } from "@/components/admin/debt-warnings-notice";
 import { ShopLowStockNotice } from "@/components/admin/shop-low-stock-notice";
@@ -189,6 +190,7 @@ export function ClubToday({ clubId }: { clubId: string }) {
       <UnclosedDaysNotice clubId={clubId} />
       <DebtWarningsNotice clubId={clubId} />
       <ShopLowStockNotice clubId={clubId} />
+      <AccountsAttentionLine clubId={clubId} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-heading text-lg text-foreground">Hoy en el club</h3>
         <div className="flex flex-wrap gap-2">

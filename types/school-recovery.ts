@@ -40,12 +40,16 @@ export interface SchoolCreditFilters {
   status?:         SchoolCreditStatus;
 }
 
-/** Las dos ventanas del club para las recuperaciones. */
+/** Los ajustes de la escuela del club: las ventanas de las recuperaciones y lo de las cuotas. */
 export interface SchoolConfig {
   /** Horas de antelación con las que hay que avisar para ganar la recuperación. */
   recoveryNoticeHours: number;
   /** Días que dura el crédito desde la clase perdida. */
   recoveryValidDays:   number;
+  /** Último día del mes (1-28) para pagar la cuota sin estar «atrasada». */
+  feeDueDay:           number;
+  /** Generar las cuotas del mes en curso solas, cada hora y sin duplicar. */
+  autoGenerateFees:    boolean;
 }
 
 /** Qué ha pasado al avisar una ausencia. */

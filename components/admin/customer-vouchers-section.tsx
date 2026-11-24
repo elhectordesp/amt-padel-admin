@@ -3,14 +3,16 @@
 /**
  * Bonos de un cliente del club, en su ficha: vender uno del catálogo, marcarlo
  * cobrado (se cobra a mano, como una reserva), ver su saldo, su caducidad y a
- * qué reservas se han ido sus sesiones, y cancelarlo con la devolución que el
- * club decida. Las sesiones ya gastadas se quedan al cancelar.
+ * qué reservas o clases se han ido sus sesiones, y cancelarlo con la devolución
+ * que el club decida. Las sesiones ya gastadas se quedan al cancelar. En un bono
+ * de clases de la escuela, «+1 clase» apunta a mano una clase que no se pasó por
+ * lista y «Quitar la última» quita la última apuntada a mano.
  */
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Loader2, Plus, Ticket, X } from "lucide-react";
+import { Loader2, Minus, Plus, Ticket, X } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
@@ -20,11 +22,12 @@ import {
   clubVouchersQK,
   clubVouchersService,
   type ClubVoucher,
+  type ClubVoucherUse,
 } from "@/lib/services/club-vouchers";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import { centsToEurosInput, eurosToCents, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
-import { formatInTimeZone } from "@/lib/utils/time-zone";
+import { formatDayKey, formatInTimeZone, zonedDayKey } from "@/lib/utils/time-zone";
 import {
   VOUCHER_KIND_LABEL,
   VOUCHER_STATUS_LABEL,
@@ -69,6 +72,7 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
   const [collecting, setCollecting] = useState<ClubVoucher | null>(null);
   const [uncollecting, setUncollecting] = useState<ClubVoucher | null>(null);
   const [cancelling, setCancelling] = useState<ClubVoucher | null>(null);
+  const [addingClass, setAddingClass] = useState<ClubVoucher | null>(null);
 
   // Lo que cambia con un bono: su lista, y la caja (venta y devolución cuentan allí)
   const refresh = () => {
@@ -81,6 +85,16 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
     onSuccess: () => {
       toast.success("Cobro quitado: el bono vuelve a estar pendiente de cobro");
       setUncollecting(null);
+      refresh();
+    },
+    onError: (err: unknown) => toast.error(errorText(err)),
+  });
+
+  const removeManual = useMutation({
+    mutationFn: ({ voucher, use }: { voucher: ClubVoucher; use: ClubVoucherUse }) =>
+      clubVouchersService.manualUse.remove(clubId, voucher.id, use.id),
+    onSuccess: () => {
+      toast.success("Clase quitada: vuelve al bono");
       refresh();
     },
     onError: (err: unknown) => toast.error(errorText(err)),
@@ -118,9 +132,9 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
                   <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[v.status]}`}>
                     {VOUCHER_STATUS_LABEL[v.status]}
                   </span>
-                  {v.kind === "PRIVATE_CLASS" && (
+                  {(v.kind === "PRIVATE_CLASS" || v.kind === "SCHOOL_CLASS") && (
                     <span className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {VOUCHER_KIND_LABEL.PRIVATE_CLASS}
+                      {VOUCHER_KIND_LABEL[v.kind]}
                     </span>
                   )}
                 </div>
@@ -143,7 +157,7 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
               {v.uses.length > 0 && (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                    {`${v.kind === "PRIVATE_CLASS" ? "Clases privadas pagadas" : "Reservas pagadas"} con este bono (${v.uses.length})`}
+                    {`${usesTitle(v.kind)} con este bono (${v.uses.length})`}
                   </summary>
                   <ul className="mt-1 space-y-1">
                     {v.uses.map((u) => {
@@ -154,6 +168,16 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
                             <Link href={`/mi-club/reservas/bookings/${u.bookingId}`} className="text-primary hover:underline">
                               {u.courtName} · {when}
                             </Link>
+                          ) : u.type === "GROUP_CLASS" ? (
+                            // Pasó lista: la clase del grupo a la que vino
+                            <span>
+                              Clase de grupo{u.groupName ? ` · ${u.groupName}` : ""} · {when}
+                            </span>
+                          ) : u.type === "MANUAL" ? (
+                            <span>
+                              A mano · {u.manualDate ? formatDayKey(u.manualDate, DAY) : ""}
+                              {u.note ? ` · ${u.note}` : ""}
+                            </span>
                           ) : (
                             // Una clase privada de la escuela: se ve en Escuela · Clases privadas
                             <span>
@@ -176,6 +200,21 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
                   ) : (
                     <Button variant="outline" size="sm" onClick={() => setCollecting(v)}>
                       Marcar cobrado
+                    </Button>
+                  )}
+                  {v.kind === "SCHOOL_CLASS" && v.remainingSessions > 0 && v.status === "ACTIVE" && (
+                    <Button variant="outline" size="sm" onClick={() => setAddingClass(v)}>
+                      <Plus className="h-3.5 w-3.5" /> +1 clase
+                    </Button>
+                  )}
+                  {lastManualUse(v) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={removeManual.isPending}
+                      onClick={() => removeManual.mutate({ voucher: v, use: lastManualUse(v)! })}
+                    >
+                      <Minus className="h-3.5 w-3.5" /> Quitar la última
                     </Button>
                   )}
                   <Button variant="outline" size="sm" onClick={() => setCancelling(v)}>
@@ -204,6 +243,15 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
           onClose={() => setCollecting(null)}
         />
       )}
+      {addingClass && (
+        <ManualClassDialog
+          clubId={clubId}
+          voucher={addingClass}
+          timeZone={timeZone}
+          onDone={refresh}
+          onClose={() => setAddingClass(null)}
+        />
+      )}
       {cancelling && (
         <CancelVoucherDialog
           clubId={clubId}
@@ -224,6 +272,73 @@ export function CustomerVouchersSection({ clubId, customerId, timeZone }: Props)
         onConfirm={() => uncollecting && unCollect.mutate(uncollecting)}
       />
     </section>
+  );
+}
+
+/** Qué cuentan las sesiones gastadas de cada tipo de bono. */
+function usesTitle(kind: ClubVoucher["kind"]): string {
+  if (kind === "PRIVATE_CLASS") return "Clases privadas pagadas";
+  if (kind === "SCHOOL_CLASS") return "Clases gastadas";
+  return "Reservas pagadas";
+}
+
+/** El último uso apuntado a mano (el más reciente): lo único que «Quitar la última» puede quitar. */
+function lastManualUse(v: ClubVoucher): ClubVoucherUse | null {
+  const manual = v.uses.filter((u) => u.type === "MANUAL");
+  if (manual.length === 0) return null;
+  return manual.reduce((last, u) => (u.usedAt > last.usedAt ? u : last));
+}
+
+/** «+1 clase»: apuntar a mano una clase de un bono de la escuela, con su día (hoy) y una nota. */
+function ManualClassDialog({
+  clubId, voucher, timeZone, onDone, onClose,
+}: { clubId: string; voucher: ClubVoucher; timeZone: string; onDone: () => void; onClose: () => void }) {
+  const today = zonedDayKey(new Date(), timeZone);
+  const [date, setDate] = useState(today);
+  const [note, setNote] = useState("");
+  const add = useMutation({
+    mutationFn: () => clubVouchersService.manualUse.add(clubId, voucher.id, { date, ...(note.trim() ? { note: note.trim() } : {}) }),
+    onSuccess: () => {
+      toast.success("Clase apuntada: se descuenta del bono");
+      onDone();
+      onClose();
+    },
+    onError: (err: unknown) => toast.error(errorText(err)),
+  });
+  const close = () => { if (!add.isPending) onClose(); };
+
+  return (
+    <Modal title="Apuntar una clase" subtitle={`${voucher.name} · quedan ${voucher.remainingSessions}`} onClose={close} busy={add.isPending}>
+      <label className="block text-xs text-muted-foreground">
+        Día de la clase
+        <input
+          type="date"
+          value={date}
+          max={today}
+          onChange={(e) => setDate(e.target.value)}
+          disabled={add.isPending}
+          className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+        />
+      </label>
+      <label className="block text-xs text-muted-foreground">
+        Nota (opcional)
+        <input
+          type="text"
+          maxLength={200}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          disabled={add.isPending}
+          className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+        />
+      </label>
+      <ModalButtons
+        confirmLabel="Apuntar clase"
+        busy={add.isPending}
+        disabled={add.isPending || !date || date > today}
+        onClose={close}
+        onConfirm={() => add.mutate()}
+      />
+    </Modal>
   );
 }
 
@@ -347,7 +462,7 @@ function CollectVoucherDialog({
 function cancelDescription(voucher: ClubVoucher): string {
   const future = futureSessionCount(voucher);
   const past = voucher.usedSessions - future;
-  const what = voucher.kind === "PRIVATE_CLASS" ? "clases" : "reservas";
+  const what = voucher.kind === "PRIVATE_CLASS" || voucher.kind === "SCHOOL_CLASS" ? "clases" : "reservas";
   const parts: string[] = [];
   if (past > 0)
     parts.push(

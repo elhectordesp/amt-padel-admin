@@ -164,7 +164,8 @@ describe("checkRefund", () => {
 describe("devolución proporcional al cancelar", () => {
   const now = new Date("2026-11-19T10:00:00.000Z");
   const use = (startsAt: string | null) => ({
-    id: "u", bookingId: null, privateClassId: null, usedAt: "2026-11-01T10:00:00.000Z", startsAt, courtName: null,
+    id: "u", type: "BOOKING" as const, bookingId: null, privateClassId: null, usedAt: "2026-11-01T10:00:00.000Z", startsAt,
+    courtName: null, groupName: null, manualDate: null, note: null,
   });
   const voucher = (uses: ReturnType<typeof use>[], remainingSessions: number) => ({
     priceCents: 12000, sessions: 10, remainingSessions, uses,
@@ -173,6 +174,21 @@ describe("devolución proporcional al cancelar", () => {
   it("cuenta como futuras solo las sesiones que empiezan después de ahora", () => {
     expect(
       futureSessionCount({ uses: [use("2026-11-18T10:00:00.000Z"), use("2026-11-20T10:00:00.000Z"), use(null)] }, now),
+    ).toBe(1);
+  });
+
+  it("las clases de grupo y las apuntadas a mano ya se dieron: no vuelven al bono al cancelarlo", () => {
+    expect(
+      futureSessionCount(
+        {
+          uses: [
+            { ...use("2026-11-20T10:00:00.000Z"), type: "GROUP_CLASS" as const },
+            { ...use(null), type: "MANUAL" as const },
+            use("2026-11-21T10:00:00.000Z"),
+          ],
+        },
+        now,
+      ),
     ).toBe(1);
   });
 

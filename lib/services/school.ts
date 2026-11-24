@@ -4,14 +4,17 @@ import type { CancelRecoveries } from "@/types/school-recovery";
 import type {
   AttendanceEntryPayload,
   GenerateSessionsResult,
+  SchoolAttendanceResult,
   SchoolAttendanceSheet,
   SchoolCoach,
   SchoolGroupDetail,
   SchoolGroupListItem,
   SchoolGroupPayload,
   SchoolMember,
+  SchoolMemberUpdateResult,
   SchoolSession,
   UpdateSchoolGroupPayload,
+  UpdateSchoolMemberPayload,
   UpdateSchoolSessionPayload,
 } from "@/types/school";
 
@@ -63,9 +66,17 @@ export const schoolService = {
   members: {
     add: (clubId: string, groupId: string, clubCustomerId: string) =>
       api.post<SchoolMember>(`${base(clubId)}/groups/${groupId}/members`, { clubCustomerId }).then((r) => r.data),
-    /** Baja del alumno (se queda su historial de asistencia). */
+    /**
+     * Cambia al alumno dentro del grupo: cómo paga (cuota o bono), su descuento y su
+     * baja temporal. Devuelve avisos de las cuotas con pagos que no se pudieron tocar.
+     */
+    update: (clubId: string, groupId: string, memberId: string, payload: UpdateSchoolMemberPayload) =>
+      api
+        .patch<SchoolMemberUpdateResult>(`${base(clubId)}/groups/${groupId}/members/${memberId}`, payload)
+        .then((r) => r.data),
+    /** Baja del alumno (se queda su historial de asistencia): anula sus cuotas sin pagos de los meses siguientes. */
     leave: (clubId: string, groupId: string, memberId: string) =>
-      api.post<SchoolMember>(`${base(clubId)}/groups/${groupId}/members/${memberId}/leave`).then((r) => r.data),
+      api.post<SchoolMember & { warnings?: string[] }>(`${base(clubId)}/groups/${groupId}/members/${memberId}/leave`).then((r) => r.data),
   },
 
   sessions: {
@@ -76,6 +87,9 @@ export const schoolService = {
       api.get<SchoolAttendanceSheet>(`${base(clubId)}/sessions/${sessionId}`).then((r) => r.data),
     update: (clubId: string, sessionId: string, payload: UpdateSchoolSessionPayload) =>
       api.patch<SchoolSession>(`${base(clubId)}/sessions/${sessionId}`, payload).then((r) => r.data),
+    /** Sustituye al entrenador de la clase (null la deja sin entrenador). */
+    setCoach: (clubId: string, sessionId: string, coachStaffId: string | null) =>
+      api.patch<SchoolSession>(`${base(clubId)}/sessions/${sessionId}/coach`, { coachStaffId }).then((r) => r.data),
     /**
      * Cancela la clase. Con `grantRecovery` (por defecto, sí) cada alumno gana una
      * recuperación; a quien recuperaba en ella se le devuelve el crédito siempre.
@@ -88,7 +102,7 @@ export const schoolService = {
         })
         .then((r) => r.data),
     setAttendance: (clubId: string, sessionId: string, entries: AttendanceEntryPayload[]) =>
-      api.put<SchoolAttendanceSheet>(`${base(clubId)}/sessions/${sessionId}/attendance`, { entries }).then((r) => r.data),
+      api.put<SchoolAttendanceResult>(`${base(clubId)}/sessions/${sessionId}/attendance`, { entries }).then((r) => r.data),
   },
 
   coaches: {

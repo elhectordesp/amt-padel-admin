@@ -18,8 +18,9 @@ export interface CashMovement {
    * CLUB_DEBT: una deuda del club cobrada (`refId` es la deuda).
    * SALE: una venta de la tienda (o, en negativo, su devolución); `refId` es la venta y
    * `bookingId`, si la hay, la reserva en que se vendió.
+   * LEDGER: un gasto o ingreso apuntado a mano y pagado o cobrado en efectivo (los gastos restan).
    */
-  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS" | "CLUB_DEBT" | "SALE";
+  source:      "BOOKING" | "BOOKING_PART" | "REGISTRATION" | "VOUCHER" | "SCHOOL_FEE" | "PRIVATE_CLASS" | "CLUB_DEBT" | "SALE" | "LEDGER";
   refId:       string;
   /** Cuándo se cobró (ISO). */
   at:          string;

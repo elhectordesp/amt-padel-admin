@@ -130,7 +130,10 @@ export function configFormOf(config: SchoolConfig): ConfigFormValues {
   };
 }
 
-export type CheckedConfigForm = { ok: true; value: SchoolConfig } | { ok: false; message: string };
+/** Las ventanas de las recuperaciones: lo que guarda el formulario de recuperaciones (lo de las cuotas va aparte). */
+export type RecoveryConfig = Pick<SchoolConfig, "recoveryNoticeHours" | "recoveryValidDays">;
+
+export type CheckedConfigForm = { ok: true; value: RecoveryConfig } | { ok: false; message: string };
 
 /** Valida los ajustes con las reglas del back y los deja listos para mandar. */
 export function checkConfigForm(form: ConfigFormValues): CheckedConfigForm {

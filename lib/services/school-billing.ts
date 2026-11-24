@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import type { ClubVoucher } from "@/lib/services/club-vouchers";
 import type { SchoolCoach } from "@/types/school";
 import type {
+  CollectFeesPayload,
   GenerateFeesResult,
   PayPendingFeesResult,
   PaySchoolStudentPayload,
@@ -56,16 +57,35 @@ export const schoolBillingService = {
         .then((r) => r.data),
     update: (clubId: string, feeId: string, payload: { amountCents?: number; note?: string | null }) =>
       api.patch<SchoolFee>(`${base(clubId)}/fees/${feeId}`, payload).then((r) => r.data),
-    pay: (clubId: string, feeId: string, paymentMethod: string) =>
-      api.post<SchoolFee>(`${base(clubId)}/fees/${feeId}/pay`, { paymentMethod }).then((r) => r.data),
-    /** Cobra todas las cuotas pendientes del mes (o de un grupo) con un mismo método del mostrador. */
+    /** Cobra lo que falta de una cuota. Con Bizum y el módulo Cuentas, el socio que lo recibió. */
+    pay: (clubId: string, feeId: string, paymentMethod: string, bizumPartnerId?: string | null) =>
+      api
+        .post<SchoolFee>(`${base(clubId)}/fees/${feeId}/pay`, {
+          paymentMethod,
+          ...(paymentMethod === "BIZUM" && bizumPartnerId !== undefined ? { bizumPartnerId } : {}),
+        })
+        .then((r) => r.data),
+    /** Cobra todo lo pendiente de las cuotas del mes (o de un grupo) con un mismo método del mostrador. */
     payPending: (clubId: string, month: string, paymentMethod: string, groupId?: string) =>
       api
         .post<PayPendingFeesResult>(`${base(clubId)}/fees/pay-pending`, { month, paymentMethod, ...(groupId ? { groupId } : {}) })
         .then((r) => r.data),
+    /**
+     * Cobra a un alumno un importe: el back lo reparte entre sus cuotas con algo
+     * pendiente (de la más antigua a la más nueva) y devuelve las que toca.
+     */
+    collect: (clubId: string, payload: CollectFeesPayload) =>
+      api.post<SchoolFee[]>(`${base(clubId)}/fees/collect`, payload).then((r) => r.data),
+    /** Quita todos los pagos de la cuota: vuelve a estar sin pagar. */
     unpay: (clubId: string, feeId: string) =>
       api.post<SchoolFee>(`${base(clubId)}/fees/${feeId}/unpay`).then((r) => r.data),
-    /** Anula la cuota (solo sin cobrar): deja de contar como pendiente y no se vuelve a generar. */
+    /** Deshace un cobro entero: borra sus pagos en todas las cuotas que tocó. */
+    undoCollection: (clubId: string, collectionId: string) =>
+      api.delete<SchoolFee[]>(`${base(clubId)}/fees/collections/${collectionId}`).then((r) => r.data),
+    /** Vuelve a calcular la cuota con los datos de hoy (solo sin pagos): si ya no toca, la anula. */
+    recalculate: (clubId: string, feeId: string) =>
+      api.post<SchoolFee>(`${base(clubId)}/fees/${feeId}/recalculate`).then((r) => r.data),
+    /** Anula la cuota (solo sin pagos): deja de contar como pendiente y no se vuelve a generar. */
     cancel: (clubId: string, feeId: string, note?: string) =>
       api.post<SchoolFee>(`${base(clubId)}/fees/${feeId}/cancel`, note ? { note } : {}).then((r) => r.data),
   },

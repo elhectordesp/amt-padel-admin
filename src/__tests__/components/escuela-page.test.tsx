@@ -233,6 +233,7 @@ describe("Escuela: grupos", () => {
         startDate: "2026-09-14",
         endDate: "2027-06-18",
         notes: null,
+        activity: "ACADEMY",
         slots: [{ weekday: 2, startTime: "18:00", durationMinutes: 60, preferredCourtId: "p1" }],
       }),
     WAIT);
