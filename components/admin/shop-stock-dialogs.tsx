@@ -4,10 +4,14 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
+import { accountsQK, accountsService } from "@/lib/services/accounts";
 import { shopQK, shopService, type ShopProduct } from "@/lib/services/shop";
 import { formatCents } from "@/lib/utils/booking-price";
 import { eurosToCents } from "@/lib/utils/payment-methods";
-import { countDifference, moveLabel, parseCount, purchaseUnits, shopErrorText, signedUnits } from "@/lib/utils/shop";
+import {
+  countDifference, moveLabel, paidWithText, parseCount, purchasePaymentOptions, purchasePaymentPayload,
+  purchaseUnits, shopErrorText, signedUnits,
+} from "@/lib/utils/shop";
 import { formatInTimeZone } from "@/lib/utils/time-zone";
 
 const FIELD =
@@ -66,17 +70,26 @@ export function PurchaseDialog({ clubId, product, onClose }: { clubId: string; p
   const [amount, setAmount] = useState("");
   const [cost, setCost] = useState("");
   const [notes, setNotes] = useState("");
+  const [paidWith, setPaidWith] = useState("");
+
+  const partners = useQuery({
+    queryKey: accountsQK.partners(clubId),
+    queryFn: () => accountsService.partners.list(clubId),
+  });
+  const paymentOptions = purchasePaymentOptions((partners.data ?? []).filter((p) => p.active));
 
   const count = parseCount(amount);
   const units = count === null ? null : purchaseUnits(mode, count, product.unitsPerBox);
   const costCents = cost.trim() === "" ? undefined : eurosToCents(cost);
+  // Con coste, el dinero sale de algún sitio: sin decir cuál, la tesorería lo dejaría «sin lugar»
+  const needsPaidWith = costCents !== undefined && costCents !== null;
 
   const save = useMutation({
     mutationFn: () =>
       shopService.products.addStock(clubId, product.id, {
         kind: "PURCHASE",
         ...(mode === "boxes" ? { boxes: count as number } : { units: count as number }),
-        ...(costCents !== undefined && costCents !== null ? { costCents } : {}),
+        ...(needsPaidWith ? { costCents, ...purchasePaymentPayload(paidWith) } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       }),
     onSuccess: () => {
@@ -119,12 +132,39 @@ export function PurchaseDialog({ clubId, product, onClose }: { clubId: string; p
           <input type="text" inputMode="decimal" aria-label="Lo pagado en total" placeholder="90,00" value={cost} onChange={(e) => setCost(e.target.value)} className={FIELD} />
           {costCents === null && <span className="mt-1 block text-xs text-red-400">Escribe un importe válido (por ejemplo 90,00)</span>}
         </label>
+        {needsPaidWith && (
+          <div role="group" aria-label="Pagado con">
+            <span className={LABEL}>Pagado con</span>
+            <div className="flex flex-wrap gap-2">
+              {paymentOptions.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={paidWith === o.value}
+                  onClick={() => setPaidWith(o.value)}
+                  className={`min-h-11 rounded-md border px-3 text-sm font-medium ${
+                    paidWith === o.value
+                      ? "border-[rgba(212,175,55,0.4)] bg-[rgba(212,175,55,0.15)] text-[#D4AF37]"
+                      : "border-border bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {paidWith === "" ? "Elige de dónde salió el dinero." : paidWith === "CASH"
+                ? "Baja el efectivo de la caja."
+                : paidWith.startsWith("PARTNER:") ? "Lo puso el socio de su bolsillo: el club se lo debe." : "Sale del banco."}
+            </p>
+          </div>
+        )}
         <label className="block">
           <span className={LABEL}>Nota (opcional)</span>
           <input type="text" aria-label="Nota de la compra" value={notes} maxLength={NOTES_MAX} onChange={(e) => setNotes(e.target.value)} className={FIELD} />
         </label>
       </div>
-      <Footer onClose={onClose} busy={save.isPending} canSave={units !== null && costCents !== null} submit="Apuntar compra" onSubmit={() => save.mutate()} />
+      <Footer onClose={onClose} busy={save.isPending} canSave={units !== null && costCents !== null && (!needsPaidWith || paidWith !== "")} submit="Apuntar compra" onSubmit={() => save.mutate()} />
     </Shell>
   );
 }
@@ -208,7 +248,7 @@ export function HistoryDialog({ clubId, product, timeZone, onClose }: {
                   <p className={m.cancelled ? "text-muted-foreground line-through" : "text-foreground"}>{moveLabel(m)}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatInTimeZone(m.at, timeZone, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} · {m.byName}
-                    {m.costCents !== null ? ` · pagado ${formatCents(m.costCents)}` : ""}
+                    {m.costCents !== null ? ` · pagado ${formatCents(m.costCents)}${paidWithText(m) ? ` con ${paidWithText(m)}` : ""}` : ""}
                     {m.amountCents !== null ? ` · ${formatCents(m.amountCents)}` : ""}
                     {m.notes ? ` · ${m.notes}` : ""}
                   </p>

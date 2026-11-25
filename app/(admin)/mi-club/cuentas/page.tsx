@@ -1,7 +1,9 @@
 /**
  * /mi-club/cuentas — el módulo «Cuentas» del club, en pestañas (?tab=): el
  * resumen (la de por defecto para quien tiene `accounts`), gastos e ingresos con
- * sus fijos, entrenadores, ocupación de pistas, deudas (con las cuentas
+ * sus fijos, entrenadores, ocupación de pistas, tesorería y socios y reparto
+ * (solo con la tesorería encendida: dónde está el dinero y cómo se reparte el
+ * beneficio), deudas (con las cuentas
  * abiertas), tienda y ajustes (socios a cuyo móvil llega un Bizum, precios
  * especiales, configuración y categorías). Solo con el módulo encendido (lo
  * enciende AMT); resumen, gastos, entrenadores y ocupación, solo propietario y
@@ -16,10 +18,12 @@ import { Loader2 } from "lucide-react";
 import { AccountsDebtsSection } from "@/components/admin/accounts-debts-section";
 import { AccountsConfigSection } from "@/components/admin/accounts-config-section";
 import { AccountsOccupancySection } from "@/components/admin/accounts-occupancy-section";
+import { AccountsProfitSection } from "@/components/admin/accounts-profit-section";
 import { AccountsPartPricesSection } from "@/components/admin/accounts-part-prices-section";
 import { AccountsPartnersSection } from "@/components/admin/accounts-partners-section";
 import { AccountsShopSection } from "@/components/admin/accounts-shop-section";
 import { AccountsSummarySection } from "@/components/admin/accounts-summary-section";
+import { AccountsTreasurySection } from "@/components/admin/accounts-treasury-section";
 import { CoachesSection } from "@/components/admin/coaches-section";
 import { ErrorState } from "@/components/admin/error-state";
 import { Header } from "@/components/admin/header";
@@ -30,14 +34,17 @@ import { useClubAccess } from "@/lib/use-club-access";
 import { useClubAccounts } from "@/lib/use-accounts-enabled";
 import { useRole, isClub } from "@/lib/use-role";
 
+// `needsTreasury`: solo con la tesorería encendida (la enciende AMT sobre «Cuentas»)
 const TABS = [
-  { id: "resumen",      label: "Resumen",           needsAccounts: true },
-  { id: "gastos",      label: "Gastos e ingresos", needsAccounts: true },
-  { id: "entrenadores", label: "Entrenadores",      needsAccounts: true },
-  { id: "ocupacion",    label: "Ocupación",         needsAccounts: true },
-  { id: "deudas",       label: "Deudas",            needsAccounts: false },
-  { id: "tienda",       label: "Tienda",            needsAccounts: false },
-  { id: "ajustes",      label: "Ajustes",           needsAccounts: false },
+  { id: "resumen",      label: "Resumen",           needsAccounts: true,  needsTreasury: false },
+  { id: "gastos",      label: "Gastos e ingresos", needsAccounts: true,  needsTreasury: false },
+  { id: "entrenadores", label: "Entrenadores",      needsAccounts: true,  needsTreasury: false },
+  { id: "ocupacion",    label: "Ocupación",         needsAccounts: true,  needsTreasury: false },
+  { id: "tesoreria",    label: "Tesorería",         needsAccounts: true,  needsTreasury: true },
+  { id: "socios",       label: "Socios y reparto",  needsAccounts: true,  needsTreasury: true },
+  { id: "deudas",       label: "Deudas",           needsAccounts: false, needsTreasury: false },
+  { id: "tienda",       label: "Tienda",            needsAccounts: false, needsTreasury: false },
+  { id: "ajustes",      label: "Ajustes",           needsAccounts: false, needsTreasury: false },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -60,7 +67,7 @@ function CuentasContent() {
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const tabs = TABS.filter((t) => canAccounts || !t.needsAccounts);
+  const tabs = TABS.filter((t) => (canAccounts || !t.needsAccounts) && (accounts.treasuryOn || !t.needsTreasury));
   const asked = params.get("tab");
   const tab: TabId = tabs.find((t) => t.id === asked)?.id ?? tabs[0].id;
   const select = (id: TabId) => router.replace(`${pathname}?tab=${id}`, { scroll: false });
@@ -120,6 +127,8 @@ function CuentasContent() {
               {tab === "gastos" && <LedgerEntriesSection clubId={clubId} />}
               {tab === "entrenadores" && <CoachesSection clubId={clubId} />}
               {tab === "ocupacion" && <AccountsOccupancySection clubId={clubId} />}
+              {tab === "tesoreria" && <AccountsTreasurySection clubId={clubId} />}
+              {tab === "socios" && <AccountsProfitSection clubId={clubId} />}
               {tab === "deudas" && (
                 <>
                   {canAccounts && <OpenAccountsSection clubId={clubId} />}
@@ -129,9 +138,9 @@ function CuentasContent() {
               {tab === "tienda" && <AccountsShopSection clubId={clubId} />}
               {tab === "ajustes" && (
                 <>
-                  <AccountsPartnersSection clubId={clubId} />
+                  <AccountsPartnersSection clubId={clubId} showShares={accounts.treasuryOn && canAccounts} />
                   <AccountsPartPricesSection clubId={clubId} />
-                  <AccountsConfigSection clubId={clubId} />
+                  <AccountsConfigSection clubId={clubId} treasuryOn={accounts.treasuryOn} />
                   {canAccounts && <LedgerCategoriesSection clubId={clubId} />}
                 </>
               )}

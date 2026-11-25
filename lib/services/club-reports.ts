@@ -61,6 +61,8 @@ export interface Summary {
     cardFeesCents:      number;
   };
   result:    number;
+  /** Lo que entra y sale de los fondos: aparte, fuera de ingresos, gastos y resultado. */
+  fund:      { inCents: number; outCents: number };
   /** Resultado entre ingresos (0,25 = 25 %); null sin ingresos. */
   marginPct: number | null;
   byActivity: Record<LedgerActivity, ActivityMargin>;
@@ -77,7 +79,9 @@ export interface Summary {
 export type AttentionKey =
   | "DEBTS_WARN" | "UNCLOSED_DAYS" | "CLOSURE_DIFF" | "MISSING_RECEIPTS" | "UNPAID_EXPENSES"
   | "NO_PAYMENT_METHOD" | "OVERDUE_FEES" | "PAUSES_RETURNING" | "EXHAUSTED_VOUCHERS"
-  | "COACHES_PAY_DUE" | "OPEN_ACCOUNTS" | "LOW_STOCK";
+  | "COACHES_PAY_DUE" | "OPEN_ACCOUNTS" | "LOW_STOCK"
+  // Tesorería (fase 3): solo con ella encendida y empezada
+  | "TREASURY_NO_COUNT" | "TREASURY_UNPLACED";
 
 export interface AttentionDetail {
   label:        string;

@@ -15,6 +15,11 @@ vi.mock("@/lib/services/shop", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/shop")>()),
   shopService: shop,
 }));
+const accounts = vi.hoisted(() => ({ partners: { list: vi.fn() } }));
+vi.mock("@/lib/services/accounts", async (orig) => ({
+  ...(await orig<typeof import("@/lib/services/accounts")>()),
+  accountsService: accounts,
+}));
 vi.mock("@/lib/use-club-time-zone", () => ({ useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }) }));
 const flags = vi.hoisted(() => ({ on: true, settingsRead: true, settingsWrite: true }));
 vi.mock("@/lib/use-accounts-enabled", () => ({ useAccountsEnabled: () => flags.on }));
@@ -51,6 +56,10 @@ describe("AccountsShopSection", () => {
     shop.products.update.mockResolvedValue(product());
     shop.products.remove.mockResolvedValue(undefined);
     shop.products.addStock.mockResolvedValue(product());
+    accounts.partners.list.mockResolvedValue([
+      { id: "s1", name: "Marta", active: true },
+      { id: "s2", name: "Antiguo", active: false },
+    ]);
     shop.products.moves.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 30 });
   });
 
@@ -165,10 +174,32 @@ describe("AccountsShopSection", () => {
     expect(within(dialog).getByText(/Entran 48 unidades: el stock pasa a 96/)).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Lo pagado en total"), { target: { value: "90" } });
     fireEvent.change(within(dialog).getByLabelText("Nota de la compra"), { target: { value: "Pedido de noviembre" } });
+    // Con coste, hay que decir con qué se pagó
+    expect(save).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Banco" }));
     fireEvent.click(save);
 
     await waitFor(() => expect(shop.products.addStock).toHaveBeenCalledWith("c1", "p1", {
-      kind: "PURCHASE", boxes: 2, costCents: 9000, notes: "Pedido de noviembre",
+      kind: "PURCHASE", boxes: 2, costCents: 9000, payment: "BANK", notes: "Pedido de noviembre",
+    }));
+  });
+
+  it("«Pagado con» ofrece caja, banco, tarjeta y los socios activos; el de un socio manda su id", async () => {
+    wrap(<AccountsShopSection clubId="c1" />);
+    await screen.findByLabelText("Stock de Bolas");
+    fireEvent.click(screen.getByRole("button", { name: "Compra de cajas de Bolas" }));
+    const dialog = await screen.findByRole("dialog", { name: "Compra de cajas" });
+    // Sin coste no hay nada que pagar: no se pregunta
+    expect(within(dialog).queryByRole("group", { name: "Pagado con" })).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Cajas compradas"), { target: { value: "1" } });
+    fireEvent.change(within(dialog).getByLabelText("Lo pagado en total"), { target: { value: "45" } });
+    const group = within(dialog).getByRole("group", { name: "Pagado con" });
+    await within(group).findByRole("button", { name: "Bolsillo de Marta" });
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["Caja", "Banco", "Tarjeta", "Bolsillo de Marta"]);
+    fireEvent.click(within(group).getByRole("button", { name: "Bolsillo de Marta" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apuntar compra" }));
+    await waitFor(() => expect(shop.products.addStock).toHaveBeenCalledWith("c1", "p1", {
+      kind: "PURCHASE", boxes: 1, costCents: 4500, payment: "PARTNER", partnerId: "s1",
     }));
   });
 

@@ -154,5 +154,6 @@ export type UpdateSchoolPrivateClassPayload = Partial<SchoolPrivateClassPayload>
 
 /** Cobrar a un alumno: con un método del mostrador o con una sesión de un bono suyo; uno de los dos. */
 export type PaySchoolStudentPayload =
-  | { paymentMethod: string; voucherId?: undefined }
+  // `bizumPartnerId`, solo con Bizum y el módulo Cuentas: el socio a cuyo móvil llegó, o null para «Club»
+  | { paymentMethod: string; bizumPartnerId?: string | null; voucherId?: undefined }
   | { voucherId: string; paymentMethod?: undefined };

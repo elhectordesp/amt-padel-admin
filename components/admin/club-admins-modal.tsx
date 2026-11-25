@@ -287,7 +287,7 @@ export function ClubAdminsModal({
       <ConfirmModal
         open={!!removing}
         title={`¿Quitar a ${removing?.name ?? ""} del equipo?`}
-        description="Dejará de poder entrar al panel de este club. Su cuenta no se borra."
+        description="Dejará de poder entrar al panel de este club. Su cuenta no se borra. Si da clases, las futuras se quedan sin entrenador; lo ya dado y lo que se le deba se conserva."
         confirmLabel="Quitar del equipo"
         danger
         loading={remove.isPending}

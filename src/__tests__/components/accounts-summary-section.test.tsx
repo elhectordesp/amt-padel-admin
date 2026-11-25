@@ -56,6 +56,7 @@ const summary = (over: Record<string, unknown> = {}) => ({
     cardFeesCents: 1200,
   },
   result: 54300,
+  fund: { inCents: 0, outCents: 0 },
   marginPct: 0.1459,
   byActivity: {
     COURTS: { incomeCents: 170000, expenseCents: 225000, resultCents: -55000 },
@@ -119,6 +120,22 @@ describe("AccountsSummarySection", () => {
     expect(figure("Gastos")).toHaveTextContent("3177,00 €");
     expect(figure("Resultado")).toHaveTextContent("+543,00 €");
     expect(figure("Margen")).toHaveTextContent("14,6 %");
+  });
+
+  it("la línea «Fondo» solo sale si el fondo se ha movido, y aparte del resultado", async () => {
+    renderSection();
+    await screen.findByText("Nov 2026");
+    expect(screen.queryByRole("group", { name: "Fondo" })).not.toBeInTheDocument();
+  });
+
+  it("con movimientos del fondo, enseña lo que entra y lo que sale", async () => {
+    svc.summary.mockResolvedValue({ ...summary(), fund: { inCents: 20000, outCents: 5000 } });
+    renderSection();
+    const fund = await screen.findByRole("group", { name: "Fondo" });
+    expect(fund).toHaveTextContent("entran 200,00");
+    expect(fund).toHaveTextContent("salen 50,00");
+    // El resultado no cambia
+    expect(screen.getByRole("group", { name: "Resultado" })).toHaveTextContent("+543,00 €");
   });
 
   it("un periodo fuera del plazo de conservación enseña el motivo del back", async () => {

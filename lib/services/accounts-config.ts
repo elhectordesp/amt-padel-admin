@@ -14,6 +14,14 @@ export interface AccountsConfig {
   cardFeeBps:     number;
   /** Día («AAAA-MM-DD») desde el que se avisa de los gastos sin justificante; null = no se avisa. */
   receiptsRequiredFrom?: string | null;
+  /**
+   * Tesorería (fase 3; solo propietario y gestor los ven, y escribirlos exige la
+   * tesorería encendida): el día en que empieza, el colchón y el saldo inicial
+   * del fondo. Sin el campo al guardar, no cambian.
+   */
+  treasuryStartDate?: string | null;
+  reserveCents?:      number;
+  fundOpeningCents?:  number;
 }
 
 export const accountsConfigQK = {

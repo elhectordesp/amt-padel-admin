@@ -111,6 +111,8 @@ export interface Club {
   timezone?:            string;
   // Módulo «Cuentas» (cobro por partes, socios del Bizum, precios especiales): lo enciende AMT. No viene con un back anterior
   accountsEnabled?:     boolean;
+  // Socios y tesorería (fase 3 de Cuentas): la enciende AMT sobre «Cuentas». No viene con un back anterior
+  treasuryEnabled?:     boolean;
 }
 
 /** Datos fiscales del club: solo para su gestoría (AMT no emite facturas). */
@@ -386,6 +388,8 @@ export interface AdminRegistrationUser {
 export interface PlayerPayment {
   paid:           boolean;
   paymentMethod?: string | null;
+  /** Solo con Bizum y el módulo Cuentas: el socio a cuyo móvil llegó; null, la cuenta del club. */
+  bizumPartnerId?: string | null;
   paidAt?:        string | null;
   /** Lo cobrado a este jugador, en céntimos. */
   paidAmountCents?: number | null;
@@ -405,6 +409,7 @@ export interface AdminRegistration {
   // El pago del titular (userId)
   paid:           boolean;
   paymentMethod?: string | null;
+  bizumPartnerId?: string | null;
   paidAt?:        string | null;
   paidAmountCents?: number | null;
   paymentNote?:   string | null;

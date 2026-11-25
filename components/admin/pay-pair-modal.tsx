@@ -5,8 +5,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
+import { BizumReceiverPicker, type BizumReceiver } from "@/components/admin/bizum-receiver";
 import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
 import { adminService, registrationsQK } from "@/lib/services/admin";
+import { useBizumReceivers } from "@/lib/use-bizum-receivers";
 import { centsToEurosInput, eurosToCents, playerShareCents } from "@/lib/utils/payment-methods";
 import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
 import type { AdminRegistration } from "@/types";
@@ -18,6 +20,8 @@ interface Props {
   /** Se monta al abrirlo, con la inscripción de ese momento. */
   registration: AdminRegistration;
   tournamentId: string;
+  /** El club del torneo: con el módulo Cuentas, un Bizum pregunta a qué móvil llegó cada pago. */
+  clubId?:      string | null;
   onClose: () => void;
 }
 
@@ -26,9 +30,12 @@ interface Props {
  * método y confirma la pareja en un paso. Corregir el pago de un solo jugador
  * sigue siendo el modal de «Estado de pago».
  */
-export default function PayPairModal({ registration, tournamentId, onClose }: Props) {
+export default function PayPairModal({ registration, tournamentId, clubId = null, onClose }: Props) {
   const players = pairPlayers(registration);
   const qc = useQueryClient();
+  const bizumReceivers = useBizumReceivers(clubId);
+  // A qué móvil llegó el Bizum de cada jugador cobrado
+  const [receivers, setReceivers] = useState<Record<PaymentPlayer, BizumReceiver>>({ titular: undefined, partner: undefined });
   // Marcados por defecto los que aún no han pagado
   const [selected, setSelected] = useState<Set<PaymentPlayer>>(
     () => new Set(players.filter((p) => !p.payment.paid).map((p) => p.player)),
@@ -41,12 +48,16 @@ export default function PayPairModal({ registration, tournamentId, onClose }: Pr
   // Lo cobrado a cada jugador marcado; sin tocar, la mitad del precio de la pareja
   const [amount, setAmount] = useState(centsToEurosInput(playerShareCents(price)));
   const cents = eurosToCents(amount);
+  const askReceivers = method === "BIZUM" && bizumReceivers !== undefined;
+  const receiverPlayers = players.filter((p) => selected.has(p.player));
 
   const saveMut = useMutation({
     mutationFn: () =>
       adminService.registrations.payPair(registration.id, {
-        players:       players.filter((p) => selected.has(p.player)).map((p) => p.player),
+        players:       receiverPlayers.map((p) => p.player),
         paymentMethod: method,
+        ...(askReceivers && selected.has("titular") ? { bizumPartnerId: receivers.titular as string | null } : {}),
+        ...(askReceivers && selected.has("partner") ? { partnerBizumPartnerId: receivers.partner as string | null } : {}),
         ...(cents !== null ? { paidAmountCents: cents } : {}),
         titularId:     registration.userId,
         partnerId:     registration.partnerId ?? undefined,
@@ -79,7 +90,9 @@ export default function PayPairModal({ registration, tournamentId, onClose }: Pr
 
   // Mientras guarda no se cierra: la respuesta cerraría el modal que se abriera después
   const close = () => { if (!saveMut.isPending) onClose(); };
-  const canSave = selected.size > 0 && method !== "" && cents !== null && !saveMut.isPending;
+  const canSave =
+    selected.size > 0 && method !== "" && cents !== null && !saveMut.isPending &&
+    (!askReceivers || receiverPlayers.every((p) => receivers[p.player] !== undefined));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -122,6 +135,16 @@ export default function PayPairModal({ registration, tournamentId, onClose }: Pr
           </div>
 
           <PaymentMethodPicker value={method} onChange={setMethod} disabled={saveMut.isPending} />
+          {askReceivers && receiverPlayers.map((p) => (
+            <BizumReceiverPicker
+              key={p.player}
+              partners={bizumReceivers}
+              who={p.name}
+              value={receivers[p.player]}
+              onChange={(r) => setReceivers((prev) => ({ ...prev, [p.player]: r }))}
+              disabled={saveMut.isPending}
+            />
+          ))}
           <AmountField label="Importe por jugador" value={amount} onChange={setAmount} invalid={cents === null} disabled={saveMut.isPending} />
 
           {confirmsOnSave && (

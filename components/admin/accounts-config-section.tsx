@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { AccountsTreasurySettings } from "@/components/admin/accounts-treasury-settings";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { errorText } from "@/components/admin/price-seasons-panel";
 import { Button } from "@/components/ui/button";
@@ -24,9 +25,14 @@ import {
 const fieldClass =
   "rounded border border-border bg-background px-2 py-1 text-sm disabled:opacity-60";
 
-export function AccountsConfigSection({ clubId }: { clubId: string }) {
+export function AccountsConfigSection({ clubId, treasuryOn = false }: {
+  clubId: string;
+  /** Con la tesorería encendida, salen sus ajustes (inicio, colchón y fondo) para quien lleva las cuentas. */
+  treasuryOn?: boolean;
+}) {
   const qc = useQueryClient();
-  const canWrite = useClubAccess().can("settings", "write");
+  const access = useClubAccess();
+  const canWrite = access.can("settings", "write");
   const config = useQuery({
     queryKey: accountsConfigQK.config(clubId),
     queryFn: () => accountsConfigService.get(clubId),
@@ -194,6 +200,10 @@ export function AccountsConfigSection({ clubId }: { clubId: string }) {
             >
               Guardar ajustes
             </Button>
+          )}
+
+          {treasuryOn && saved && access.can("accounts", "read") && (
+            <AccountsTreasurySettings clubId={clubId} saved={saved} canWrite={access.can("accounts", "write")} />
           )}
         </div>
       )}

@@ -222,12 +222,22 @@ export function SchoolFeesPayAllDialog({
 
 /** Cobrar un bono vendido y pendiente: el método del mostrador; el importe es su precio. */
 export function VoucherPayDialog({
-  clubId, voucherId, subtitle, amountCents, onDone, onClose,
-}: Common & { voucherId: string; amountCents: number }) {
+  clubId, voucherId, subtitle, amountCents, bizumReceivers, onDone, onClose,
+}: Common & {
+  voucherId:    string;
+  amountCents:  number;
+  /** Con el módulo Cuentas: los socios activos, para el receptor de un Bizum. */
+  bizumReceivers?: ClubPartner[];
+}) {
   const [method, setMethod] = useState<CounterPaymentMethod | "">("");
+  const [receiver, setReceiver] = useState<BizumReceiver>(undefined);
+  const askReceiver = method === "BIZUM" && bizumReceivers !== undefined;
 
   const pay = useMutation({
-    mutationFn: () => clubVouchersService.setPayment(clubId, voucherId, method as CounterPaymentMethod),
+    mutationFn: () =>
+      askReceiver
+        ? clubVouchersService.setPayment(clubId, voucherId, method as CounterPaymentMethod, receiver as string | null)
+        : clubVouchersService.setPayment(clubId, voucherId, method as CounterPaymentMethod),
     onSuccess: () => {
       toast.success("Bono cobrado");
       onDone();
@@ -243,11 +253,19 @@ export function VoucherPayDialog({
         {subtitle} · <strong className="text-foreground">{formatCents(amountCents)}</strong>
       </p>
       <PaymentMethodPicker value={method} onChange={setMethod} disabled={pay.isPending} />
+      {askReceiver && (
+        <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} disabled={pay.isPending} />
+      )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" size="sm" onClick={close} disabled={pay.isPending}>
           Cancelar
         </Button>
-        <Button type="button" size="sm" disabled={method === "" || pay.isPending} onClick={() => pay.mutate()}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={method === "" || (askReceiver && receiver === undefined) || pay.isPending}
+          onClick={() => pay.mutate()}
+        >
           {pay.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
           Cobrar
         </Button>
@@ -260,11 +278,20 @@ type Mode = "counter" | "voucher";
 
 /** Cobrar a un alumno de una clase privada: en el mostrador o con un bono de clases privadas suyo. */
 export function SchoolStudentPayDialog({
-  clubId, classId, studentId, subtitle, priceCents, timeZone, onDone, onClose,
-}: Common & { classId: string; studentId: string; priceCents: number; timeZone: string }) {
+  clubId, classId, studentId, subtitle, priceCents, timeZone, bizumReceivers, onDone, onClose,
+}: Common & {
+  classId:      string;
+  studentId:    string;
+  priceCents:   number;
+  timeZone:     string;
+  /** Con el módulo Cuentas: los socios activos, para el receptor de un Bizum. */
+  bizumReceivers?: ClubPartner[];
+}) {
   const [mode, setMode] = useState<Mode>("counter");
   const [method, setMethod] = useState<CounterPaymentMethod | "">("");
+  const [receiver, setReceiver] = useState<BizumReceiver>(undefined);
   const [voucherId, setVoucherId] = useState("");
+  const askReceiver = mode === "counter" && method === "BIZUM" && bizumReceivers !== undefined;
 
   const vouchers = useQuery({
     queryKey: schoolBillingQK.classVouchers(clubId, classId, studentId),
@@ -276,7 +303,10 @@ export function SchoolStudentPayDialog({
     mutationFn: () =>
       mode === "voucher"
         ? schoolBillingService.privateClasses.pay(clubId, classId, studentId, { voucherId })
-        : schoolBillingService.privateClasses.pay(clubId, classId, studentId, { paymentMethod: method }),
+        : schoolBillingService.privateClasses.pay(clubId, classId, studentId, {
+            paymentMethod: method,
+            ...(askReceiver ? { bizumPartnerId: receiver as string | null } : {}),
+          }),
     onSuccess: () => {
       toast.success(mode === "voucher" ? "Clase pagada con bono" : "Clase cobrada");
       onDone();
@@ -287,7 +317,8 @@ export function SchoolStudentPayDialog({
 
   const close = () => { if (!pay.isPending) onClose(); };
   const list = vouchers.data ?? [];
-  const canPay = !pay.isPending && (mode === "voucher" ? voucherId !== "" : method !== "");
+  const canPay =
+    !pay.isPending && (mode === "voucher" ? voucherId !== "" : method !== "" && (!askReceiver || receiver !== undefined));
 
   return (
     <SchoolDialog title="Cobrar clase privada" onClose={close} busy={pay.isPending}>
@@ -320,7 +351,12 @@ export function SchoolStudentPayDialog({
       </div>
 
       {mode === "counter" ? (
-        <PaymentMethodPicker value={method} onChange={setMethod} disabled={pay.isPending} />
+        <>
+          <PaymentMethodPicker value={method} onChange={setMethod} disabled={pay.isPending} />
+          {askReceiver && (
+            <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} disabled={pay.isPending} />
+          )}
+        </>
       ) : vouchers.isLoading ? (
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       ) : vouchers.isError ? (

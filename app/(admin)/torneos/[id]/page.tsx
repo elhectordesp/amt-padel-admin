@@ -4699,6 +4699,7 @@ export default function TorneoDetailPage() {
         registration={paymentOf.reg}
         player={paymentOf.player}
         tournamentId={id}
+        clubId={tournament?.club?.id}
         onClose={() => setPaymentOf(null)}
       />
     )}
@@ -4707,6 +4708,7 @@ export default function TorneoDetailPage() {
       <PayPairModal
         registration={payPairOf}
         tournamentId={id}
+        clubId={tournament?.club?.id}
         onClose={() => setPayPairOf(null)}
       />
     )}

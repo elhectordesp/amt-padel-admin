@@ -37,7 +37,7 @@ function confirmTitle(c: Confirm | null): string {
 
 function confirmDescription(c: Confirm | null): string {
   if (c?.kind === "remove")
-    return "Dejará de poder entrar al panel de este club. Su cuenta no se borra: si tiene la de jugador, la conserva.";
+    return "Dejará de poder entrar al panel de este club. Su cuenta no se borra: si tiene la de jugador, la conserva. Si da clases, las futuras se quedan sin entrenador; lo ya dado y lo que se le deba se conserva.";
   if (c?.kind === "revoke")
     return "Su enlace dejará de valer. Para que entre al equipo habrá que invitarle de nuevo.";
   return "Le llegará un enlace nuevo, válido 7 días. El que tenga ahora dejará de valer.";
@@ -113,7 +113,7 @@ export default function EquipoPage() {
     onSettled: () => setConfirm(null),
   });
 
-  // Al quitar a un entrenador con horas sin pagar, su devengado dejaría de verse: se avisa antes
+  // Al quitar a un entrenador con horas sin pagar se avisa de lo que se le debe: se conserva y sigue en el pago a entrenadores
   const accountsOn = useClubAccounts(clubId ?? null).on;
   const { timeZone } = useClubTimeZone(clubId ?? null);
   const removing = confirm?.kind === "remove" ? confirm.member : null;
@@ -285,7 +285,7 @@ export default function EquipoPage() {
       >
         {removing && owesCoach && (
           <p role="alert" className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-600 dark:text-amber-400">
-            Se le deben {formatCents(owedCents)} de horas: págale antes de quitarlo, o su devengado dejará de verse.
+            Se le deben {formatCents(owedCents)} de horas. Seguirá en el pago a entrenadores hasta que se le pague.
           </p>
         )}
       </ConfirmModal>

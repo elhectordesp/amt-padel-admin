@@ -31,6 +31,25 @@ export const ACCOUNTS_ERROR_MESSAGES: Record<string, string> = {
   ...LEDGER_ERROR_MESSAGES,
   LEDGER_INVALID:            "Los datos del apunte no valen. Revísalos.",
   COACH_PAY_INVALID:         "Los datos no valen. Revísalos.",
+  // Tesorería (fase 3)
+  TREASURY_DISABLED:            "La tesorería no está activada en este club. Pídeselo a AMT.",
+  TREASURY_NEEDS_ACCOUNTS:      "Para encender la tesorería, antes hay que encender el módulo Cuentas.",
+  TREASURY_NOT_STARTED:         "La tesorería aún no tiene fecha de inicio. Ponla en Ajustes.",
+  TREASURY_DATE_OUT_OF_RANGE:   "La fecha tiene que estar entre el inicio de la tesorería y hoy.",
+  TREASURY_RANGE_TOO_LONG:      "Un extracto cubre como mucho 93 días. Acorta las fechas.",
+  TREASURY_PARTNER_INACTIVE:    "Ese socio está de baja: ya no admite apuntes nuevos.",
+  TREASURY_HELD_INSUFFICIENT:   "El socio no puede devolver más efectivo del que guarda ese día. Revisa el importe o la fecha.",
+  TREASURY_START_AFTER_RECORDS: "La fecha de inicio no puede ser posterior a los traspasos o cuadres ya apuntados. Borra los anteriores o elige un día más temprano.",
+  TREASURY_TRANSFER_NOT_FOUND:  "Ese traspaso ya no existe. Recarga la pantalla.",
+  TREASURY_COUNT_NOT_FOUND:     "Ese cuadre ya no existe. Recarga la pantalla.",
+  TREASURY_INVALID:             "Los datos no valen. Revisa el origen, el destino y el importe.",
+  // Socios y reparto (fase 3)
+  PROFIT_SHARES_INVALID:        "Las partes de los socios activos tienen que sumar 100 %, y ese mes tiene que tener unas partes fijadas. Revísalas en Ajustes → Socios del club.",
+  PROFIT_SHARES_LOCKED:         "Ya hay repartos apuntados en ese mes o después: las partes solo pueden empezar después del último mes repartido. Elige un mes posterior o borra esos repartos.",
+  PROFIT_SHARE_PERIOD_INVALID:  "Solo se reparte un mes ya acabado y que no sea anterior al inicio de la tesorería.",
+  PROFIT_SHARE_EXCEEDS_PENDING: "Algún importe pasa de lo que le queda pendiente a ese socio en el mes. Recarga la pantalla y revisa los importes.",
+  PROFIT_SHARE_NOT_AVAILABLE:   "No hay dinero disponible para repartir tanto. Recarga la pantalla y revisa los importes.",
+  PROFIT_SHARE_NOT_FOUND:       "Ese reparto ya no existe. Recarga la pantalla.",
 };
 
 /** Los códigos cuyo mensaje del back lleva el motivo concreto (qué dato falla): ese mensaje se enseña tal cual. */
@@ -39,6 +58,8 @@ const BACK_MESSAGE_WINS = new Set([
   "SCHOOL_FEE_OVERPAID",
   "SCHOOL_FEE_BELOW_PAID",
   "SCHOOL_MEMBER_INVALID",
+  "TREASURY_INVALID",
+  "TREASURY_START_AFTER_RECORDS",
   ...LEDGER_BACK_MESSAGE_WINS,
 ]);
 

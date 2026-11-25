@@ -19,6 +19,7 @@ import { SchoolPrivateClassDialog } from "@/components/admin/school-private-clas
 import { SchoolStudentPayDialog } from "@/components/admin/school-pay-dialogs";
 import { Button } from "@/components/ui/button";
 import { invalidateSchoolBilling, schoolBillingQK, schoolBillingService } from "@/lib/services/school-billing";
+import { useBizumReceivers } from "@/lib/use-bizum-receivers";
 import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -42,6 +43,7 @@ export function SchoolPrivateClassesSection({ clubId, canWrite }: { clubId: stri
 
 function PrivateClassesList({ clubId, timeZone, canWrite }: { clubId: string; timeZone: string; canWrite: boolean }) {
   const showMoney = useClubAccess().can("cash");
+  const bizumReceivers = useBizumReceivers(clubId);
   const qc = useQueryClient();
   const [range, setRange] = useState(() => defaultPrivateClassRange(new Date(), timeZone));
   const [creating, setCreating] = useState(false);
@@ -247,6 +249,7 @@ function PrivateClassesList({ clubId, timeZone, canWrite }: { clubId: string; ti
           subtitle={`${paying.student.name ?? "Alumno"} · ${privateClassWhen(paying.cls, timeZone)}`}
           priceCents={paying.student.priceCents}
           timeZone={timeZone}
+          bizumReceivers={bizumReceivers}
           onDone={refresh}
           onClose={() => setPaying(null)}
         />

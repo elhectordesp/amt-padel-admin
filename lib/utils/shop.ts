@@ -3,7 +3,7 @@
  * al vender, lo que se enseña de una venta, las unidades de una compra y los
  * mensajes de error.
  */
-import type { ProductMove, ShopProduct, ShopSale } from "@/lib/services/shop";
+import type { ProductMove, PurchasePayment, ShopProduct, ShopSale } from "@/lib/services/shop";
 import { accountsErrorText } from "@/lib/utils/booking-parts";
 import { formatCents } from "@/lib/utils/booking-price";
 import { methodLabel } from "@/lib/utils/payment-methods";
@@ -130,6 +130,32 @@ export function moveLabel(m: Pick<ProductMove, "kind" | "boxes" | "cancelled">):
   if (m.kind === "SALE") return m.cancelled ? "Venta anulada" : "Venta";
   if (m.kind === "ADJUSTMENT") return "Recuento";
   return m.boxes ? `Compra de ${m.boxes} ${m.boxes === 1 ? "caja" : "cajas"}` : "Compra";
+}
+
+const PURCHASE_PAYMENT_LABEL: Record<PurchasePayment, string> = {
+  CASH: "Caja", BANK: "Banco", CARD: "Tarjeta", PARTNER: "Socio",
+};
+
+/** Las opciones de «Pagado con»: Caja, Banco, Tarjeta y uno por cada socio (value «PARTNER:id»). */
+export function purchasePaymentOptions(partners: { id: string; name: string }[]): { value: string; label: string }[] {
+  return [
+    { value: "CASH", label: PURCHASE_PAYMENT_LABEL.CASH },
+    { value: "BANK", label: PURCHASE_PAYMENT_LABEL.BANK },
+    { value: "CARD", label: PURCHASE_PAYMENT_LABEL.CARD },
+    ...partners.map((p) => ({ value: `PARTNER:${p.id}`, label: `Bolsillo de ${p.name}` })),
+  ];
+}
+
+/** De una opción de «Pagado con» a lo que manda el back. */
+export function purchasePaymentPayload(value: string): { payment: PurchasePayment; partnerId?: string } {
+  if (value.startsWith("PARTNER:")) return { payment: "PARTNER", partnerId: value.slice("PARTNER:".length) };
+  return { payment: value as Exclude<PurchasePayment, "PARTNER"> };
+}
+
+/** «Pagado con» de una compra del historial; null si no se sabe (compras anteriores). */
+export function paidWithText(m: Pick<ProductMove, "kind" | "payment" | "partnerName">): string | null {
+  if (m.kind !== "PURCHASE" || m.payment === null) return null;
+  return m.payment === "PARTNER" ? `${m.partnerName ?? "un socio"} (socio)` : PURCHASE_PAYMENT_LABEL[m.payment];
 }
 
 /** Un número entero positivo escrito en un campo; null si no lo es (vacío incluido). */

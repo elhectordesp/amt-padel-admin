@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorState } from "@/components/admin/error-state";
+import { AccountsPartnerShares } from "@/components/admin/accounts-partner-shares";
 import { accountsQK, accountsService, type ClubPartner } from "@/lib/services/accounts";
+import { profitQK } from "@/lib/services/profit";
 import { accountsErrorText } from "@/lib/utils/booking-parts";
 
 const FIELD =
@@ -17,7 +19,11 @@ const NAME_MAX = 60;
  * tiene Bizum propio). Al cobrar por Bizum se elige uno o «Club». No se
  * borran: se desactivan y dejan de ofrecerse, pero lo cobrado sigue a su nombre.
  */
-export function AccountsPartnersSection({ clubId }: { clubId: string }) {
+export function AccountsPartnersSection({ clubId, showShares = false }: {
+  clubId:      string;
+  /** Con la tesorería encendida y permiso de cuentas: las partes del reparto, debajo de la lista. */
+  showShares?: boolean;
+}) {
   const qc = useQueryClient();
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
@@ -26,7 +32,12 @@ export function AccountsPartnersSection({ clubId }: { clubId: string }) {
     queryKey: accountsQK.partners(clubId),
     queryFn: () => accountsService.partners.list(clubId),
   });
-  const refresh = () => qc.invalidateQueries({ queryKey: accountsQK.partners(clubId) });
+  // Un socio nuevo o dado de baja cambia a quién se reparte: las partes se vuelven a pedir
+  const refresh = () => Promise.all([
+    qc.invalidateQueries({ queryKey: accountsQK.partners(clubId) }),
+    qc.invalidateQueries({ queryKey: profitQK.current(clubId) }),
+    qc.invalidateQueries({ queryKey: profitQK.partnerShares(clubId) }),
+  ]);
 
   const create = useMutation({
     mutationFn: (name: string) => accountsService.partners.create(clubId, name),
@@ -155,6 +166,8 @@ export function AccountsPartnersSection({ clubId }: { clubId: string }) {
           <Plus className="h-4 w-4" /> Añadir socio
         </button>
       </form>
+
+      {showShares && <AccountsPartnerShares clubId={clubId} />}
     </section>
   );
 }

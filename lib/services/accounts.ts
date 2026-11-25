@@ -61,6 +61,10 @@ export const accountsService = {
   setEnabled: (clubId: string, enabled: boolean) =>
     api.patch<{ accountsEnabled: boolean }>(`/admin/clubs/${clubId}/accounts/enabled`, { enabled }).then((r) => r.data),
 
+  /** Solo AMT: la tesorería va sobre «Cuentas» (409 TREASURY_NEEDS_ACCOUNTS si está apagado). */
+  setTreasuryEnabled: (clubId: string, enabled: boolean) =>
+    api.patch<{ treasuryEnabled: boolean }>(`/admin/clubs/${clubId}/accounts/treasury-enabled`, { enabled }).then((r) => r.data),
+
   partners: {
     list:   (clubId: string) =>
       api.get<ClubPartner[]>(`${base(clubId)}/partners`).then((r) => r.data),

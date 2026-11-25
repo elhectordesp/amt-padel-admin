@@ -31,7 +31,7 @@ import { accountsErrorText } from "@/lib/utils/booking-parts";
 import { PAYMENT_LABEL, isDayKey, minutesText, owedText } from "@/lib/utils/ledger";
 import { centsToEurosInput, eurosToCents } from "@/lib/utils/payment-methods";
 import { currentMonth, monthLabel, shiftMonth } from "@/lib/utils/school-billing";
-import { formatDayKey, zonedDayKey } from "@/lib/utils/time-zone";
+import { addDaysToKey, formatDayKey, zonedDayKey } from "@/lib/utils/time-zone";
 
 const DAY: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
 const PAY_PAYMENTS: Exclude<LedgerPayment, "PENDING">[] = ["CASH", "BANK", "CARD", "PARTNER", "UNKNOWN"];
@@ -110,6 +110,11 @@ function Coaches({ clubId, timeZone }: { clubId: string; timeZone: string }) {
                           Toca pagar
                         </span>
                       )}
+                      {c.leftAt && (
+                        <span className="ml-2 rounded-full border border-border bg-secondary px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                          De baja
+                        </span>
+                      )}
                       {c.missingRate && (
                         <span className="ml-2 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs font-normal text-red-600 dark:text-red-400">
                           Falta la tarifa
@@ -171,7 +176,7 @@ function Coaches({ clubId, timeZone }: { clubId: string; timeZone: string }) {
       {paying && <PayDialog clubId={clubId} month={month} coach={paying} today={today} onClose={() => setPaying(null)} onDone={refresh} />}
       {detail && <DetailDialog clubId={clubId} month={month} coach={detail} onClose={() => setDetail(null)} onChange={refresh} />}
       {addingHours && data && (
-        <HoursDialog clubId={clubId} coaches={data.coaches} month={month} today={today} onClose={() => setAddingHours(false)} onDone={refresh} />
+        <HoursDialog clubId={clubId} coaches={data.coaches} month={month} today={today} timeZone={timeZone} onClose={() => setAddingHours(false)} onDone={refresh} />
       )}
     </section>
   );
@@ -324,14 +329,29 @@ function DetailDialog({
 }
 
 function HoursDialog({
-  clubId, coaches, month, today, onClose, onDone,
-}: { clubId: string; coaches: CoachMonth[]; month: string; today: string; onClose: () => void; onDone: () => void }) {
+  clubId, coaches, month, today, timeZone, onClose, onDone,
+}: { clubId: string; coaches: CoachMonth[]; month: string; today: string; timeZone: string; onClose: () => void; onDone: () => void }) {
+  // Quien está de baja solo admite horas de días anteriores a su baja.
+  const lastDayOf = (id: string) => {
+    const leftAt = coaches.find((c) => c.coachStaffId === id)?.leftAt;
+    return leftAt ? addDaysToKey(zonedDayKey(leftAt, timeZone), -1) : undefined;
+  };
+  const initialDate = today.startsWith(month) ? today : `${month}-01`;
   const [coachId, setCoachId] = useState(coaches[0]?.coachStaffId ?? "");
-  const [date, setDate] = useState(today.startsWith(month) ? today : `${month}-01`);
+  const [date, setDate] = useState(() => {
+    const last = lastDayOf(coaches[0]?.coachStaffId ?? "");
+    return last && initialDate > last ? last : initialDate;
+  });
+  const maxDate = lastDayOf(coachId);
+  const pickCoach = (id: string) => {
+    setCoachId(id);
+    const last = lastDayOf(id);
+    if (last && date > last) setDate(last);
+  };
   const [hours, setHours] = useState("1");
   const [note, setNote] = useState("");
   const minutes = Math.round(Number(hours.replace(",", ".")) * 60);
-  const valid = !!coachId && isDayKey(date) && Number.isFinite(minutes) && minutes >= 1 && minutes <= 1440;
+  const valid = !!coachId && isDayKey(date) && (!maxDate || date <= maxDate) && Number.isFinite(minutes) && minutes >= 1 && minutes <= 1440;
   const save = useMutation({
     mutationFn: () => coachesService.extraHours.create(clubId, { coachStaffId: coachId, date, minutes, note: note.trim() || null }),
     onSuccess: () => { toast.success("Horas apuntadas"); onDone(); onClose(); },
@@ -341,10 +361,15 @@ function HoursDialog({
     <SchoolDialog title="Añadir horas a mano" onClose={onClose} busy={save.isPending}>
       <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (valid) save.mutate(); }}>
         <Field label="Entrenador">
-          <CustomSelect options={coaches.map((c) => ({ value: c.coachStaffId, label: c.name }))} value={coachId} onChange={setCoachId} />
+          <CustomSelect options={coaches.map((c) => ({ value: c.coachStaffId, label: c.name }))} value={coachId} onChange={pickCoach} />
         </Field>
+        {maxDate && (
+          <p role="note" className="text-xs text-muted-foreground">
+            Está de baja: solo se pueden apuntar horas hasta el {formatDayKey(maxDate, { day: "numeric", month: "long" })}.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Día"><Input type="date" aria-label="Día" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+          <Field label="Día"><Input type="date" aria-label="Día" max={maxDate} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           <Field label="Horas"><Input aria-label="Horas" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} /></Field>
         </div>
         <Field label="Nota (sustitución, evento...)">

@@ -188,6 +188,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
           voucherId={collecting.item.refId}
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
           amountCents={collecting.item.amountCents}
+          bizumReceivers={accountsOn && partners.data ? partners.data.filter((p) => p.active) : undefined}
           onDone={() => {
             qc.invalidateQueries({ queryKey: cashQK.all(clubId) });
             qc.invalidateQueries({ queryKey: clubVouchersQK.all(clubId) });
@@ -225,6 +226,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
           priceCents={collecting.item.amountCents}
           timeZone={timeZone}
+          bizumReceivers={accountsOn && partners.data ? partners.data.filter((p) => p.active) : undefined}
           onDone={() => invalidateSchoolBilling(qc, clubId)}
           onClose={() => setCollecting(null)}
         />

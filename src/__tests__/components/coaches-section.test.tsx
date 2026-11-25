@@ -37,7 +37,7 @@ import { toast } from "sonner";
 
 const coach = (extra: Record<string, unknown> = {}) => ({
   coachStaffId: "c1", userId: "u1", name: "Marta", groupMinutes: 150, privateMinutes: 60, extraMinutes: 0,
-  accruedCents: 6500, paidCents: 2000, owedCents: 4500, previousOwedCents: 0, missingRate: false, payDue: false,
+  accruedCents: 6500, paidCents: 2000, owedCents: 4500, previousOwedCents: 0, missingRate: false, payDue: false, leftAt: null,
   ...extra,
 });
 const overview = (list: unknown[]) => ({
@@ -76,6 +76,17 @@ describe("lista", () => {
     // Aparece en la etiqueta y en el aviso de tarifas
     expect(screen.getAllByText(/Falta la tarifa/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("De meses anteriores: 12,00 €")).toBeInTheDocument();
+  });
+
+  it("«De baja» solo junto a quien tiene fecha de baja", async () => {
+    coaches.overview.mockResolvedValue(overview([
+      coach(),
+      coach({ coachStaffId: "c2", name: "Raúl", leftAt: "2026-11-10T09:00:00.000Z" }),
+    ]));
+    renderSection();
+    const raul = (await screen.findByText("Raúl")).closest("li")!;
+    expect(within(raul).getByText("De baja")).toBeInTheDocument();
+    expect(within(screen.getByText("Marta").closest("li")!).queryByText("De baja")).not.toBeInTheDocument();
   });
 
   it("sin entrenadores lo dice", async () => {
@@ -169,6 +180,34 @@ describe("horas a mano y tarifas", () => {
     expect(coaches.extraHours.create.mock.calls[0][1]).toMatchObject({
       coachStaffId: "c1", minutes: 90, note: "Sustitución",
     });
+  });
+
+  it("quien está de baja no admite días desde su baja: tope en el día anterior y no guarda uno posterior", async () => {
+    coaches.overview.mockResolvedValue(overview([coach({ leftAt: "2026-11-10T09:00:00.000Z" })]));
+    coaches.extraHours.create.mockResolvedValue({});
+    renderSection();
+    await screen.findByText("Marta");
+    fireEvent.click(screen.getByRole("button", { name: /Añadir horas a mano/ }));
+    const dialog = await screen.findByRole("dialog");
+    const day = within(dialog).getByLabelText("Día");
+    expect(day).toHaveAttribute("max", "2026-11-09");
+    expect(day).toHaveValue("2026-11-09");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(/Está de baja/);
+    fireEvent.change(day, { target: { value: "2026-11-12" } });
+    expect(within(dialog).getByRole("button", { name: "Guardar" })).toBeDisabled();
+    fireEvent.change(day, { target: { value: "2026-11-05" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(coaches.extraHours.create).toHaveBeenCalled());
+    expect(coaches.extraHours.create.mock.calls[0][1]).toMatchObject({ coachStaffId: "c1", date: "2026-11-05" });
+  });
+
+  it("quien sigue en el equipo no lleva tope de día", async () => {
+    renderSection();
+    await screen.findByText("Marta");
+    fireEvent.click(screen.getByRole("button", { name: /Añadir horas a mano/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Día")).not.toHaveAttribute("max");
+    expect(within(dialog).queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("guarda la tarifa del club (sin entrenador) con su fecha", async () => {

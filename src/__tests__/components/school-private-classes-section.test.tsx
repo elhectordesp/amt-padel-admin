@@ -27,6 +27,10 @@ vi.mock("@/components/admin/booking-customer-picker", () => ({
   ),
 }));
 
+// Los socios a cuyo móvil puede llegar un Bizum (undefined: el módulo Cuentas apagado)
+const bizum = vi.hoisted(() => ({ receivers: undefined as { id: string; name: string; active: boolean }[] | undefined }));
+vi.mock("@/lib/use-bizum-receivers", () => ({ useBizumReceivers: () => bizum.receivers }));
+
 const access = vi.hoisted(() => ({ cash: true }));
 vi.mock("@/lib/use-club-access", () => ({
   useClubAccess: () => ({ roles: null, can: (area: string) => (area === "cash" ? access.cash : true) }),
@@ -83,6 +87,7 @@ describe("SchoolPrivateClassesSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     access.cash = true;
+    bizum.receivers = undefined;
     // «Hoy» es el 18 de noviembre de 2026
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-18T10:00:00Z"));
@@ -150,6 +155,25 @@ describe("SchoolPrivateClassesSection", () => {
     billing.privateClasses.list.mockResolvedValue([]);
     renderSection();
     expect(await screen.findByText("No hay clases privadas en estos días.", {}, WAIT)).toBeInTheDocument();
+  });
+
+  it("con el módulo Cuentas, cobrar por Bizum pide el móvil y manda el socio", async () => {
+    bizum.receivers = [{ id: "s1", name: "Ana", active: true }];
+    renderSection();
+    await screen.findByText("Marta", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Cobrar a Marta" }));
+    const dialog = await screen.findByRole("dialog", { name: "Cobrar clase privada" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Bizum" }));
+    const confirm = within(dialog).getByRole("button", { name: "Cobrar" });
+    // Sin elegir a qué móvil llegó, no se cobra
+    expect(confirm).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Ana" }));
+    fireEvent.click(confirm);
+    await waitFor(
+      () =>
+        expect(billing.privateClasses.pay).toHaveBeenCalledWith("c1", "pc1", "st1", { paymentMethod: "BIZUM", bizumPartnerId: "s1" }),
+      WAIT,
+    );
   });
 
   it("cobrar a un alumno en el mostrador: método de la lista", async () => {

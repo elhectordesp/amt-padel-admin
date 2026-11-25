@@ -17,6 +17,8 @@ export function useClubAccounts(clubId: string | null, enabled = true) {
   });
   return {
     on:      query.data?.accountsEnabled === true,
+    /** La tesorería (fase 3): la enciende AMT sobre «Cuentas». */
+    treasuryOn: query.data?.treasuryEnabled === true,
     known:   query.data !== undefined,
     isError: query.isLoadingError,
     refetch: query.refetch,
