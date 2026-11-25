@@ -11,10 +11,11 @@ import { collectDebt } from '../../../components/admin/caja-debts';
 import { adminService } from '@/lib/services/admin';
 import { bookingsService } from '@/lib/services/bookings';
 
-const registrationDebt: any = {
+type CounterDebt = Parameters<typeof collectDebt>[0];
+const registrationDebt = {
   source: 'REGISTRATION', refId: 'reg-1', slot: 'partner', playerId: 'u-bea', amountCents: 1500,
-};
-const bookingDebt: any = { source: 'BOOKING', refId: 'b-1', amountCents: 1500 };
+} as CounterDebt;
+const bookingDebt = { source: 'BOOKING', refId: 'b-1', amountCents: 1500 } as CounterDebt;
 
 describe('collectDebt', () => {
   beforeEach(() => vi.clearAllMocks());
