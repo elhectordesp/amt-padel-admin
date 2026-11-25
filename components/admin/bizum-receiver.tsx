@@ -14,22 +14,24 @@ const CHOICE =
   "min-h-11 px-4 rounded-md border text-sm font-medium transition-colors disabled:opacity-50";
 
 export function BizumReceiverPicker({
-  partners, value, onChange, disabled,
+  partners, value, onChange, disabled, who,
 }: {
   /** Solo los socios activos. */
   partners: ClubPartner[];
   value:    BizumReceiver;
   onChange: (receiver: string | null) => void;
   disabled?: boolean;
+  /** De quién es el Bizum, cuando un mismo cobro lleva más de uno (los dos jugadores de una pareja). */
+  who?: string;
 }) {
   const options: { id: string | null; name: string }[] = [
     { id: null, name: "Club" },
     ...partners.map((p) => ({ id: p.id, name: p.name })),
   ];
   return (
-    <div role="group" aria-label="Móvil al que llegó el Bizum">
+    <div role="group" aria-label={who ? `Móvil al que llegó el Bizum de ${who}` : "Móvil al que llegó el Bizum"}>
       <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-        ¿A qué móvil llegó el Bizum?
+        {who ? `¿A qué móvil llegó el Bizum de ${who}?` : "¿A qué móvil llegó el Bizum?"}
       </span>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => (

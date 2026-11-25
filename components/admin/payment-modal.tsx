@@ -5,8 +5,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
+import { BizumReceiverPicker, type BizumReceiver } from "@/components/admin/bizum-receiver";
 import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
 import { adminService, registrationsQK } from "@/lib/services/admin";
+import { useBizumReceivers } from "@/lib/use-bizum-receivers";
 import { localDayKey } from "@/lib/utils/date-keys";
 import { centsToEurosInput, eurosToCents, playerShareCents } from "@/lib/utils/payment-methods";
 import { pairPlayers, type PaymentPlayer } from "@/lib/utils/registration-pairs";
@@ -21,6 +23,8 @@ interface Props {
   /** De quién es el pago: el titular de la inscripción o su compañero. */
   player:       PaymentPlayer;
   tournamentId: string;
+  /** El club del torneo: con el módulo Cuentas, un Bizum pregunta a qué móvil llegó. */
+  clubId?:      string | null;
   onClose: () => void;
 }
 
@@ -28,11 +32,14 @@ interface Props {
 // que salga el mismo día en cualquier zona. Hoy, en cambio, es el día local
 const toDateInput = (d: string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 
-export default function PaymentModal({ registration, player, tournamentId, onClose }: Props) {
+export default function PaymentModal({ registration, player, tournamentId, clubId = null, onClose }: Props) {
   const who = pairPlayers(registration).find((p) => p.player === player);
   const current = who?.payment;
   const [paid,   setPaid]   = useState(current?.paid ?? false);
   const [method, setMethod] = useState<string>(current?.paymentMethod ?? "");
+  const bizumReceivers = useBizumReceivers(clubId);
+  const [receiver, setReceiver] = useState<BizumReceiver>(current?.paymentMethod === "BIZUM" ? current.bizumPartnerId : undefined);
+  const askReceiver = paid && method === "BIZUM" && bizumReceivers !== undefined;
   // Lo cobrado a este jugador; sin cobro, la mitad del precio de la pareja
   const [amount, setAmount] = useState<string>(
     centsToEurosInput(current?.paidAmountCents ?? playerShareCents(registration.category.price)),
@@ -40,7 +47,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
   const [paidAt, setPaidAt] = useState<string>(toDateInput(current?.paidAt));
   const cents = eurosToCents(amount);
   // Para marcar pagado hacen falta método e importe (el back exige el método)
-  const incomplete = paid && (method === "" || cents === null);
+  const incomplete = paid && (method === "" || cents === null || (askReceiver && receiver === undefined));
   const [note,   setNote]   = useState<string>(current?.paymentNote ?? "");
   const qc = useQueryClient();
 
@@ -50,6 +57,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
         paid,
         // Sin pagar, sin método ni fecha (no los de un pago que se desmarca)
         paymentMethod: (paid && method) || undefined,
+        ...(askReceiver ? { bizumPartnerId: receiver as string | null } : {}),
         paidAmountCents: paid && cents !== null ? cents : undefined,
         paidAt:        (paid && paidAt) || undefined,
         paymentNote:   note.trim() || undefined,
@@ -119,6 +127,7 @@ export default function PaymentModal({ registration, player, tournamentId, onClo
           {paid && (
             <>
               <PaymentMethodPicker value={method} onChange={setMethod} />
+              {askReceiver && <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} />}
               <AmountField value={amount} onChange={setAmount} invalid={cents === null} />
 
               {/* Date */}

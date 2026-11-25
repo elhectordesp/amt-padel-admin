@@ -69,6 +69,7 @@ export function playerPayment(reg: AdminRegistration, player: PaymentPlayer): Pl
     return {
       paid:          reg.paid,
       paymentMethod: reg.paymentMethod ?? null,
+      bizumPartnerId: reg.bizumPartnerId,
       paidAt:        reg.paidAt ?? null,
       paidAmountCents: reg.paidAmountCents ?? null,
       paymentNote:   reg.paymentNote ?? null,

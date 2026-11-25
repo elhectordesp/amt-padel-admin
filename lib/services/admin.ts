@@ -510,7 +510,12 @@ export const adminService = {
      */
     updatePayment: (
       registrationId: string,
-      data: { paid: boolean; paymentMethod?: string; paidAmountCents?: number; paidAt?: string; paymentNote?: string; player: PaymentPlayer; playerId: string },
+      data: {
+        paid: boolean; paymentMethod?: string; paidAmountCents?: number; paidAt?: string; paymentNote?: string;
+        /** Solo con Bizum y el módulo Cuentas: el socio a cuyo móvil llegó (del jugador de `player`), o null para «Club». */
+        bizumPartnerId?: string | null;
+        player: PaymentPlayer; playerId: string;
+      },
     ) =>
       api.patch(`/admin/registrations/${registrationId}/payment`, data).then((r) => r.data),
     /**
@@ -521,7 +526,12 @@ export const adminService = {
      */
     payPair: (
       registrationId: string,
-      data: { players: PaymentPlayer[]; paymentMethod: string; paidAmountCents?: number; titularId: string; partnerId?: string },
+      data: {
+        players: PaymentPlayer[]; paymentMethod: string; paidAmountCents?: number; titularId: string; partnerId?: string;
+        /** Solo con Bizum y el módulo Cuentas: el socio a cuyo móvil llegó el pago del titular y el del compañero (null, «Club»). */
+        bizumPartnerId?: string | null;
+        partnerBizumPartnerId?: string | null;
+      },
     ) =>
       api.post<{ registrationId: string; confirmed: boolean; status: RegistrationStatus }>(
         `/admin/registrations/${registrationId}/pay-pair`, data,

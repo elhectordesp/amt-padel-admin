@@ -35,8 +35,15 @@ export interface ProductPayload {
   active?:      boolean;
 }
 
+/** Con qué se pagó una compra: PARTNER lleva el socio (de su bolsillo). */
+export type PurchasePayment = "CASH" | "BANK" | "CARD" | "PARTNER";
+
 export type StockMovePayload =
-  | { kind: "PURCHASE"; boxes?: number; units?: number; costCents?: number; notes?: string }
+  | {
+      kind: "PURCHASE"; boxes?: number; units?: number; costCents?: number; notes?: string;
+      /** Obligatorio si la compra tiene coste (el back de la fase 3 lo admite sin él, y entonces el dinero queda «sin lugar»). */
+      payment?: PurchasePayment; partnerId?: string;
+    }
   | { kind: "ADJUSTMENT"; countedUnits: number; notes: string };
 
 export interface ProductMove {
@@ -50,6 +57,10 @@ export interface ProductMove {
   costCents:   number | null;
   /** Solo ventas. */
   amountCents: number | null;
+  /** Solo compras de la fase 3 en adelante: con qué se pagó; null en las anteriores. */
+  payment:     PurchasePayment | null;
+  /** Compra pagada por un socio: su nombre. */
+  partnerName: string | null;
   notes:       string | null;
   byName:      string;
   /** Venta anulada: ya no cuenta en el stock. */

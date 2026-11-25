@@ -12,6 +12,10 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const accessMock = vi.hoisted(() => ({ can: vi.fn() }));
 vi.mock("@/lib/use-club-access", () => ({ useClubAccess: () => ({ roles: null, can: accessMock.can }) }));
 
+// Los socios a cuyo móvil puede llegar un Bizum (undefined: el módulo Cuentas apagado)
+const bizum = vi.hoisted(() => ({ receivers: undefined as { id: string; name: string; active: boolean }[] | undefined }));
+vi.mock("@/lib/use-bizum-receivers", () => ({ useBizumReceivers: () => bizum.receivers }));
+
 const svc = vi.hoisted(() => ({
   types: { list: vi.fn() },
   customer: { list: vi.fn(), sell: vi.fn() },
@@ -53,6 +57,7 @@ function renderSection() {
 describe("CustomerVouchersSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    bizum.receivers = undefined;
     accessMock.can.mockReturnValue(true);
     svc.customer.list.mockResolvedValue([VOUCHER]);
     svc.types.list.mockResolvedValue(TYPES);
@@ -119,6 +124,34 @@ describe("CustomerVouchersSection", () => {
       );
     });
 
+    it("con el módulo Cuentas, un Bizum cobrado ahora pide el móvil y manda el socio", async () => {
+      bizum.receivers = [{ id: "s1", name: "Ana", active: true }];
+      const dialog = await openSell();
+      fireEvent.click(await dialog.findByRole("radio"));
+      fireEvent.click(dialog.getByLabelText("Cobrarlo ahora"));
+      fireEvent.click(dialog.getByRole("button", { name: "Bizum" }));
+      // Sin elegir a qué móvil llegó, no se vende
+      expect(dialog.getByRole("button", { name: "Vender bono" })).toBeDisabled();
+      fireEvent.click(dialog.getByRole("button", { name: "Ana" }));
+      fireEvent.click(dialog.getByRole("button", { name: "Vender bono" }));
+
+      await waitFor(() =>
+        expect(svc.customer.sell).toHaveBeenCalledWith("c1", "cc1", { typeId: "t1", method: "BIZUM", bizumPartnerId: "s1" }),
+      );
+    });
+
+    it("sin el módulo Cuentas, un Bizum se vende sin preguntar el móvil", async () => {
+      const dialog = await openSell();
+      fireEvent.click(await dialog.findByRole("radio"));
+      fireEvent.click(dialog.getByLabelText("Cobrarlo ahora"));
+      fireEvent.click(dialog.getByRole("button", { name: "Bizum" }));
+      expect(dialog.queryByRole("group", { name: "Móvil al que llegó el Bizum" })).not.toBeInTheDocument();
+      fireEvent.click(dialog.getByRole("button", { name: "Vender bono" }));
+      await waitFor(() =>
+        expect(svc.customer.sell).toHaveBeenCalledWith("c1", "cc1", { typeId: "t1", method: "BIZUM" }),
+      );
+    });
+
     it("sin tipos activos en el catálogo, manda a crearlos", async () => {
       svc.types.list.mockResolvedValue([TYPES[1]]);
       const dialog = await openSell();
@@ -146,6 +179,19 @@ describe("CustomerVouchersSection", () => {
       fireEvent.click(dialog.getByRole("button", { name: "Tarjeta" }));
       fireEvent.click(dialog.getByRole("button", { name: "Marcar cobrado" }));
       await waitFor(() => expect(svc.setPayment).toHaveBeenCalledWith("c1", "v1", "CARD"));
+    });
+
+    it("con el módulo Cuentas, cobrar por Bizum pide el móvil y manda «Club» como null", async () => {
+      bizum.receivers = [{ id: "s1", name: "Ana", active: true }];
+      renderSection();
+      await screen.findByText("Bono 10");
+      fireEvent.click(screen.getByRole("button", { name: "Marcar cobrado" }));
+      const dialog = within(await screen.findByRole("dialog", { name: "Cobrar bono" }));
+      fireEvent.click(dialog.getByRole("button", { name: "Bizum" }));
+      expect(dialog.getByRole("button", { name: "Marcar cobrado" })).toBeDisabled();
+      fireEvent.click(dialog.getByRole("button", { name: "Club" }));
+      fireEvent.click(dialog.getByRole("button", { name: "Marcar cobrado" }));
+      await waitFor(() => expect(svc.setPayment).toHaveBeenCalledWith("c1", "v1", "BIZUM", null));
     });
 
     it("uno cobrado ofrece quitar el cobro (con confirmación) y lo manda como PENDING", async () => {

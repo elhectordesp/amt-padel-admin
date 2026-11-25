@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const access = vi.hoisted(() => ({ canWrite: true }));
 vi.mock("@/lib/use-club-access", () => ({
-  useClubAccess: () => ({ roles: ["OWNER"], can: () => access.canWrite }),
+  useClubAccess: () => ({ roles: ["OWNER"], can: (_area: string, level = "read") => level === "read" || access.canWrite }),
 }));
 const svc = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }));
 vi.mock("@/lib/services/accounts-config", async (orig) => ({
@@ -19,6 +19,9 @@ const debts = vi.hoisted(() => ({ expiryPreview: vi.fn() }));
 vi.mock("@/lib/services/club-debts", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/club-debts")>()),
   clubDebtsService: debts,
+}));
+vi.mock("@/lib/use-club-time-zone", () => ({
+  useClubTimeZone: () => ({ timeZone: "Europe/Madrid", isError: false, refetch: vi.fn() }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -202,5 +205,60 @@ describe("ajustes de cuentas: lo que se escribe", () => {
     expect(feePercentToBps("")).toBeNull();
     expect(bpsToFeeText(150)).toBe("1,5");
     expect(bpsToFeeText(0)).toBe("0");
+  });
+});
+
+describe("ajustes de la tesorería (inicio, colchón y fondo)", () => {
+  const renderTreasury = (treasuryOn: boolean) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AccountsConfigSection clubId="club-1" treasuryOn={treasuryOn} />
+      </QueryClientProvider>,
+    );
+  };
+  const saveTreasury = () => screen.getByRole("button", { name: "Guardar tesorería" });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    access.canWrite = true;
+    svc.get.mockResolvedValue({
+      ...DEFAULTS, debtWarnDays: [5], treasuryStartDate: null, reserveCents: 0, fundOpeningCents: 0,
+    });
+    svc.update.mockImplementation((_club: string, input: object) => Promise.resolve(input));
+  });
+
+  it("apagada, no salen sus ajustes", async () => {
+    renderTreasury(false);
+    await screen.findByText("Plazo de las deudas");
+    expect(screen.queryByLabelText("Inicio de la tesorería")).not.toBeInTheDocument();
+  });
+
+  it("encendida, guarda solo lo que cambia y manda las deudas como estaban", async () => {
+    renderTreasury(true);
+    const start = await screen.findByLabelText("Inicio de la tesorería");
+    expect(saveTreasury()).toBeDisabled();
+    fireEvent.change(start, { target: { value: "2026-11-01" } });
+    fireEvent.change(screen.getByLabelText("Colchón"), { target: { value: "1500" } });
+    fireEvent.click(saveTreasury());
+    await waitFor(() => expect(svc.update).toHaveBeenCalledWith("club-1", {
+      debtExpiryDays: null, debtWarnDays: [5], cardFeeBps: 0,
+      treasuryStartDate: "2026-11-01", reserveCents: 150000,
+    }));
+  });
+
+  it("un importe que no vale no deja guardar", async () => {
+    renderTreasury(true);
+    await screen.findByLabelText("Inicio de la tesorería");
+    fireEvent.change(screen.getByLabelText("Saldo inicial del fondo"), { target: { value: "mucho" } });
+    expect(saveTreasury()).toBeDisabled();
+    expect(screen.getByText(/Escribe un importe válido/)).toBeInTheDocument();
+  });
+
+  it("quien solo lee los ve sin botón de guardar", async () => {
+    access.canWrite = false;
+    renderTreasury(true);
+    expect(await screen.findByLabelText("Inicio de la tesorería")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Guardar tesorería" })).not.toBeInTheDocument();
   });
 });

@@ -50,6 +50,12 @@ describe("AccountsAttentionLine", () => {
     expect(link).toHaveAttribute("href", "/mi-club/cuentas?tab=resumen");
   });
 
+  it("cuenta los dos avisos de tesorería (sin cuadrar y sin lugar)", async () => {
+    svc.attention.mockResolvedValue({ items: [item("TREASURY_NO_COUNT"), item("TREASURY_UNPLACED")] });
+    renderLine();
+    expect(await screen.findByRole("link", { name: /Cuentas: 2 avisos/ })).toBeInTheDocument();
+  });
+
   it("en singular con un solo aviso", async () => {
     svc.attention.mockResolvedValue({ items: [item("OPEN_ACCOUNTS")] });
     renderLine();

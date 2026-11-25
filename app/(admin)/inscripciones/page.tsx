@@ -304,6 +304,7 @@ function InscripcionesContent({ tournamentId }: { tournamentId: string }) {
           registration={paymentOf.reg}
           player={paymentOf.player}
           tournamentId={tournamentId}
+          clubId={tournaments.find((t) => t.id === tournamentId)?.club?.id}
           onClose={() => setPaymentOf(null)}
         />
       )}

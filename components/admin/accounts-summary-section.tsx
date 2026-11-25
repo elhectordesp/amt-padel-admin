@@ -265,6 +265,15 @@ function SummaryBody({ data }: { data: Summary }) {
         <Figure label="Margen" sub="Resultado entre ingresos">{formatMargin(data.marginPct)}</Figure>
       </div>
 
+      {(data.fund.inCents > 0 || data.fund.outCents > 0) && (
+        <p role="group" aria-label="Fondo" className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <span className="font-medium">Fondo</span>
+          <span className="text-muted-foreground"> · entran </span><Money cents={data.fund.inCents} />
+          <span className="text-muted-foreground"> · salen </span><Money cents={data.fund.outCents} />
+          <span className="block text-xs text-muted-foreground">Aparte del resultado: no cuenta como ingreso ni como gasto.</span>
+        </p>
+      )}
+
       {data.warnings.length > 0 && (
         <ul aria-label="Avisos del resumen" className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-foreground">
           {data.warnings.map((w) => (

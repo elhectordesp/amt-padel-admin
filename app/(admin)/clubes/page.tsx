@@ -16,7 +16,7 @@ import { matchesSearch } from "@/lib/utils/search";
 import { QuickInviteClubModal } from "@/components/admin/quick-invite-modal";
 import { CourtsManager } from "@/components/admin/courts-manager";
 import { ClubAmtPlanEditor } from "@/components/admin/club-amt-plan-editor";
-import { ClubAccountsToggle } from "@/components/admin/club-accounts-toggle";
+import { ClubAccountsToggle, ClubTreasuryToggle } from "@/components/admin/club-accounts-toggle";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ClubBookingsActivationModal } from "@/components/admin/club-bookings-activation-modal";
 import { ClubAdminsModal } from "@/components/admin/club-admins-modal";
@@ -781,6 +781,12 @@ function ClubCard({
 
       {/* Módulo Cuentas: lo enciende AMT a mano, club a club */}
       <ClubAccountsToggle clubId={club.id} enabled={club.accountsEnabled === true} />
+      {/* Socios y tesorería: sobre Cuentas, también a mano de AMT */}
+      <ClubTreasuryToggle
+        clubId={club.id}
+        enabled={club.treasuryEnabled === true}
+        accountsEnabled={club.accountsEnabled === true}
+      />
 
       {/* Tournament count */}
       {(club.tournamentCount ?? 0) > 0 && (

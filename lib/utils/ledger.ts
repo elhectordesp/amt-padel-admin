@@ -114,6 +114,7 @@ export const LEDGER_ERROR_MESSAGES: Record<string, string> = {
   LEDGER_ATTACHMENT_NOT_FOUND: "Ese justificante ya no existe.",
   LEDGER_RECURRING_NOT_FOUND: "Ese gasto o ingreso fijo ya no existe.",
   LEDGER_CATEGORY_INACTIVE:   "La categoría está desactivada. Elige otra o actívala en Ajustes.",
+  LEDGER_CATEGORY_HAS_ENTRIES: "Esta categoría ya tiene apuntes o fijos: no se puede cambiar si es un fondo. Crea otra categoría para el fondo.",
   LEDGER_ENTRY_NOT_PENDING:   "Ese gasto ya no está pendiente de pago.",
   LEDGER_FILE_INVALID:        "Solo se admiten fotos (JPEG, PNG o WEBP) o PDF.",
   LEDGER_FILE_TOO_LARGE:      "El justificante pesa más de 10 MB.",

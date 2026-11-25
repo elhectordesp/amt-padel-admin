@@ -86,6 +86,14 @@ describe("Equipo del club", () => {
     expect(screen.getByText(/Solo el propietario puede cambiar el equipo/)).toBeInTheDocument();
   });
 
+  it("quitar del equipo avisa de qué pasa con sus clases y lo que se le deba", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Quitar a Raúl Díaz del equipo" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Si da clases, las futuras se quedan sin entrenador; lo ya dado y lo que se le deba se conserva.",
+    );
+  });
+
   describe("quitar a un entrenador con horas sin pagar", () => {
     const coachRow = (extra: Record<string, unknown> = {}) => ({
       coachStaffId: "sc2", userId: "u2", name: "Raúl Díaz", owedCents: 4500, previousOwedCents: 1000, ...extra,
@@ -101,7 +109,7 @@ describe("Equipo del club", () => {
       coachesMock.overview.mockResolvedValue({ month: "2026-11", coaches: [coachRow()], totals: {} });
       const dialog = await openRemove();
       expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-        "Se le deben 55,00 € de horas: págale antes de quitarlo, o su devengado dejará de verse.",
+        "Se le deben 55,00 € de horas. Seguirá en el pago a entrenadores hasta que se le pague.",
       );
     });
 

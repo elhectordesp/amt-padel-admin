@@ -25,6 +25,8 @@ export interface CoachMonth {
   /** Alguna clase sin tarifa ese día: cuesta 0 hasta que se ponga. */
   missingRate:       boolean;
   payDue:            boolean;
+  /** Cuándo se le dio de baja del equipo; null si sigue en él. */
+  leftAt:            string | null;
 }
 
 export interface CoachesOverview {

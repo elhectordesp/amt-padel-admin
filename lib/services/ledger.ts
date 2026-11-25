@@ -19,6 +19,8 @@ export interface LedgerCategory {
   kind:         LedgerKind;
   activity:     LedgerActivity;
   vatPercent:   number | null;
+  /** Un fondo: mueve dinero, pero no cuenta en el resultado y su saldo no se reparte. */
+  isFund:       boolean;
   /** Las del juego por defecto lo llevan: no se borran, se desactivan. */
   systemKey:    string | null;
   active:       boolean;
@@ -129,6 +131,7 @@ export interface CategoryPayload {
   kind:        LedgerKind;
   activity:    LedgerActivity;
   vatPercent?: number | null;
+  isFund?:     boolean;
 }
 
 export interface OpenAccount {

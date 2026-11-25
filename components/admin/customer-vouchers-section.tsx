@@ -15,6 +15,7 @@ import Link from "next/link";
 import { Loader2, Minus, Plus, Ticket, X } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
+import { BizumReceiverPicker, type BizumReceiver } from "@/components/admin/bizum-receiver";
 import { AmountField, PaymentMethodPicker } from "@/components/admin/payment-fields";
 import { errorText } from "@/components/admin/price-seasons-panel";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import {
   type ClubVoucher,
   type ClubVoucherUse,
 } from "@/lib/services/club-vouchers";
+import { useBizumReceivers } from "@/lib/use-bizum-receivers";
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import { centsToEurosInput, eurosToCents, type CounterPaymentMethod } from "@/lib/utils/payment-methods";
@@ -353,12 +355,16 @@ function SellVoucherDialog({
   const [typeId, setTypeId] = useState("");
   const [payNow, setPayNow] = useState(false);
   const [method, setMethod] = useState<CounterPaymentMethod | "">("");
+  const bizumReceivers = useBizumReceivers(clubId);
+  const [receiver, setReceiver] = useState<BizumReceiver>(undefined);
+  const askReceiver = payNow && method === "BIZUM" && bizumReceivers !== undefined;
 
   const sell = useMutation({
     mutationFn: () =>
       clubVouchersService.customer.sell(clubId, customerId, {
         typeId,
         ...(payNow && method ? { method } : {}),
+        ...(askReceiver ? { bizumPartnerId: receiver as string | null } : {}),
       }),
     onSuccess: () => {
       toast.success(payNow ? "Bono vendido y cobrado" : "Bono vendido, pendiente de cobro");
@@ -370,7 +376,7 @@ function SellVoucherDialog({
 
   const active = (types.data ?? []).filter((t) => t.active);
   const close = () => { if (!sell.isPending) onClose(); };
-  const canSell = typeId !== "" && (!payNow || method !== "") && !sell.isPending;
+  const canSell = typeId !== "" && (!payNow || method !== "") && (!askReceiver || receiver !== undefined) && !sell.isPending;
 
   return (
     <Modal title="Vender bono" onClose={close} busy={sell.isPending}>
@@ -409,6 +415,9 @@ function SellVoucherDialog({
             Cobrarlo ahora
           </label>
           {payNow && <PaymentMethodPicker value={method} onChange={setMethod} disabled={sell.isPending} />}
+          {askReceiver && (
+            <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} disabled={sell.isPending} />
+          )}
           {!payNow && (
             <p className="text-xs text-muted-foreground">
               Si no lo cobras ahora, queda pendiente de cobro y ya se puede gastar; lo marcas cobrado cuando
@@ -433,8 +442,14 @@ function CollectVoucherDialog({
   clubId, voucher, onDone, onClose,
 }: { clubId: string; voucher: ClubVoucher; onDone: () => void; onClose: () => void }) {
   const [method, setMethod] = useState<CounterPaymentMethod | "">("");
+  const bizumReceivers = useBizumReceivers(clubId);
+  const [receiver, setReceiver] = useState<BizumReceiver>(undefined);
+  const askReceiver = method === "BIZUM" && bizumReceivers !== undefined;
   const collect = useMutation({
-    mutationFn: () => clubVouchersService.setPayment(clubId, voucher.id, method as CounterPaymentMethod),
+    mutationFn: () =>
+      askReceiver
+        ? clubVouchersService.setPayment(clubId, voucher.id, method as CounterPaymentMethod, receiver as string | null)
+        : clubVouchersService.setPayment(clubId, voucher.id, method as CounterPaymentMethod),
     onSuccess: () => {
       toast.success("Bono cobrado");
       onDone();
@@ -447,10 +462,13 @@ function CollectVoucherDialog({
   return (
     <Modal title="Cobrar bono" subtitle={`${voucher.name} · ${formatCents(voucher.priceCents)}`} onClose={close} busy={collect.isPending}>
       <PaymentMethodPicker value={method} onChange={setMethod} disabled={collect.isPending} />
+      {askReceiver && (
+        <BizumReceiverPicker partners={bizumReceivers} value={receiver} onChange={setReceiver} disabled={collect.isPending} />
+      )}
       <ModalButtons
         confirmLabel="Marcar cobrado"
         busy={collect.isPending}
-        disabled={method === "" || collect.isPending}
+        disabled={method === "" || (askReceiver && receiver === undefined) || collect.isPending}
         onClose={close}
         onConfirm={() => collect.mutate()}
       />

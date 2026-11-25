@@ -102,6 +102,8 @@ export interface SellVoucherPayload {
   typeId: string;
   /** Cobrado en el momento con este método; sin él, queda pendiente de cobro. */
   method?: CounterPaymentMethod;
+  /** Solo con Bizum y el módulo Cuentas: el socio a cuyo móvil llegó, o null para «Club». */
+  bizumPartnerId?: string | null;
 }
 
 export interface CancelVoucherPayload {
@@ -148,9 +150,17 @@ export const clubVouchersService = {
       api.delete<ClubVoucher>(`${base(clubId)}/vouchers/${voucherId}/manual-uses/${useId}`).then((r) => r.data),
   },
 
-  /** Marca el bono como cobrado con un método del mostrador; PENDING le quita el cobro. */
-  setPayment: (clubId: string, voucherId: string, method: CounterPaymentMethod | "PENDING") =>
-    api.patch<ClubVoucher>(`${base(clubId)}/vouchers/${voucherId}/payment`, { method }).then((r) => r.data),
+  /**
+   * Marca el bono como cobrado con un método del mostrador; PENDING le quita el cobro. Con Bizum y el
+   * módulo Cuentas, `bizumPartnerId` es el socio a cuyo móvil llegó (null, «Club»).
+   */
+  setPayment: (clubId: string, voucherId: string, method: CounterPaymentMethod | "PENDING", bizumPartnerId?: string | null) =>
+    api
+      .patch<ClubVoucher>(`${base(clubId)}/vouchers/${voucherId}/payment`, {
+        method,
+        ...(method === "BIZUM" && bizumPartnerId !== undefined ? { bizumPartnerId } : {}),
+      })
+      .then((r) => r.data),
 
   /** Cancela el bono: devolución manual. Las sesiones ya gastadas se quedan. */
   cancel: (clubId: string, voucherId: string, payload: CancelVoucherPayload) =>

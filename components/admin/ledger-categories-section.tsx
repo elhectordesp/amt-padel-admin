@@ -81,7 +81,7 @@ export function LedgerCategoriesSection({ clubId }: { clubId: string }) {
                   <span>
                     {c.name}
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {ACTIVITY_LABEL[c.activity]}{c.vatPercent !== null ? ` · IVA ${c.vatPercent} %` : ""}
+                      {ACTIVITY_LABEL[c.activity]}{c.vatPercent !== null ? ` · IVA ${c.vatPercent} %` : ""}{c.isFund ? " · Fondo" : ""}
                     </span>
                     {!c.active && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">Desactivada</span>}
                   </span>
@@ -134,14 +134,18 @@ function CategoryDialog({
   const [kind, setKind] = useState<LedgerKind>(category?.kind ?? "EXPENSE");
   const [activity, setActivity] = useState<LedgerActivity>(category?.activity ?? "OTHER");
   const [vat, setVat] = useState(category?.vatPercent !== null && category?.vatPercent !== undefined ? String(category.vatPercent) : "");
+  const [isFund, setIsFund] = useState(category?.isFund ?? false);
   const vatN = vat.trim() === "" ? null : /^\d{1,2}$/.test(vat.trim()) ? Number(vat) : NaN;
   const vatValid = vatN === null || (Number.isInteger(vatN) && vatN >= 0 && vatN <= 21);
   const valid = name.trim().length > 0 && name.trim().length <= 60 && vatValid;
   const save = useMutation({
     mutationFn: () =>
       category
-        ? ledgerService.categories.update(clubId, category.id, { name: name.trim(), activity, vatPercent: vatN })
-        : ledgerService.categories.create(clubId, { name: name.trim(), kind, activity, vatPercent: vatN }),
+        // Si no se toca, el fondo no se manda: cambiarlo en una categoría con apuntes da 409
+        ? ledgerService.categories.update(clubId, category.id, {
+            name: name.trim(), activity, vatPercent: vatN, ...(isFund !== category.isFund ? { isFund } : {}),
+          })
+        : ledgerService.categories.create(clubId, { name: name.trim(), kind, activity, vatPercent: vatN, isFund }),
     onSuccess: () => { toast.success("Categoría guardada"); onDone(); onClose(); },
     onError: (err: unknown) => toast.error(accountsErrorText(err)),
   });
@@ -170,6 +174,24 @@ function CategoryDialog({
         <Field label="IVA informativo (0-21 %, vacío = sin IVA)" error={vatValid ? undefined : "Un número entero de 0 a 21"}>
           <Input aria-label="IVA" inputMode="numeric" value={vat} onChange={(e) => setVat(e.target.value)} />
         </Field>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={isFund}
+            onChange={(e) => setIsFund(e.target.checked)}
+          />
+          <span>
+            Es un fondo (no cuenta en el resultado)
+            <span className="block text-xs text-muted-foreground">
+              Para dinero que se aparta con un fin, como un fondo de pistas. Sus apuntes mueven la caja o el banco, pero
+              no son ingreso ni gasto del resultado, y su saldo no se reparte entre los socios.
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              Solo en categorías sin apuntes: si ya tiene apuntes o fijos, no se puede cambiar. Créala nueva para el fondo.
+            </span>
+          </span>
+        </label>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={save.isPending}>Cancelar</Button>
           <Button type="submit" disabled={!valid || save.isPending}>

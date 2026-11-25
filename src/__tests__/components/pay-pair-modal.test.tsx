@@ -4,7 +4,7 @@
  * pagó sale como pagado y fuera de la selección, y al guardar una sola llamada.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/services/admin", () => ({
@@ -12,6 +12,9 @@ vi.mock("@/lib/services/admin", () => ({
   registrationsQK: { list: (tournamentId: string) => ["registrations", tournamentId] },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
+// Los socios a cuyo móvil puede llegar un Bizum (undefined: el módulo Cuentas apagado)
+const bizum = vi.hoisted(() => ({ receivers: undefined as { id: string; name: string; active: boolean }[] | undefined }));
+vi.mock("@/lib/use-bizum-receivers", () => ({ useBizumReceivers: () => bizum.receivers }));
 
 import PayPairModal from "../../../components/admin/pay-pair-modal";
 import { adminService } from "@/lib/services/admin";
@@ -38,14 +41,39 @@ function renderModal(registration: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <PayPairModal registration={registration} tournamentId="t1" onClose={onClose} />
+      <PayPairModal registration={registration} tournamentId="t1" clubId="c1" onClose={onClose} />
     </QueryClientProvider>,
   );
   return onClose;
 }
 
 describe("PayPairModal", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bizum.receivers = undefined;
+  });
+
+  it("con el módulo Cuentas, un Bizum pide el móvil de cada jugador y manda los dos socios", async () => {
+    bizum.receivers = [{ id: "s1", name: "Marta", active: true }];
+    vi.mocked(adminService.registrations.payPair).mockResolvedValue({ registrationId: "reg-1", confirmed: true, status: "CONFIRMED" });
+    renderModal(reg());
+
+    fireEvent.click(screen.getByRole("button", { name: "Bizum" }));
+    const cobrar = screen.getByRole("button", { name: /Cobrar y confirmar/ });
+    expect(cobrar).toBeDisabled();
+    const titular = screen.getByRole("group", { name: "Móvil al que llegó el Bizum de Ana López" });
+    const partner = screen.getByRole("group", { name: "Móvil al que llegó el Bizum de Bea Ruiz" });
+    fireEvent.click(within(titular).getByRole("button", { name: "Marta" }));
+    // Falta el del compañero
+    expect(cobrar).toBeDisabled();
+    fireEvent.click(within(partner).getByRole("button", { name: "Club" }));
+    fireEvent.click(cobrar);
+
+    await waitFor(() => expect(adminService.registrations.payPair).toHaveBeenCalledWith("reg-1", {
+      players: ["titular", "partner"], paymentMethod: "BIZUM", bizumPartnerId: "s1", partnerBizumPartnerId: null,
+      paidAmountCents: 1500, titularId: "u-ana", partnerId: "u-bea",
+    }));
+  });
 
   it("enseña el precio, marca a los dos y no guarda sin método", () => {
     renderModal(reg());

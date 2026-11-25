@@ -8,7 +8,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-const accounts = vi.hoisted(() => ({ setEnabled: vi.fn() }));
+const accounts = vi.hoisted(() => ({ setEnabled: vi.fn(), setTreasuryEnabled: vi.fn() }));
 vi.mock("@/lib/services/accounts", async (orig) => ({
   ...(await orig<typeof import("@/lib/services/accounts")>()),
   accountsService: accounts,
@@ -19,7 +19,7 @@ vi.mock("@/lib/services/club-vouchers", async (orig) => ({
   clubVouchersService: vouchers,
 }));
 
-import { ClubAccountsToggle } from "@/components/admin/club-accounts-toggle";
+import { ClubAccountsToggle, ClubTreasuryToggle } from "@/components/admin/club-accounts-toggle";
 import CollectModal from "@/components/admin/collect-modal";
 import { PayWithVoucherModal } from "@/components/admin/pay-with-voucher-modal";
 import { ReservasDayGrid } from "@/components/admin/reservas-day-grid";
@@ -61,6 +61,40 @@ describe("interruptor del módulo (AMT)", () => {
     withQuery(<ClubAccountsToggle clubId="club-9" enabled={false} />);
     fireEvent.click(screen.getByRole("switch", { name: "Módulo Cuentas" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Solo AMT"));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("interruptor de «Socios y tesorería» (AMT)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("apagado y con Cuentas encendido, al pulsarlo enciende la tesorería de ese club", async () => {
+    accounts.setTreasuryEnabled.mockResolvedValue({ treasuryEnabled: true });
+    withQuery(<ClubTreasuryToggle clubId="club-9" enabled={false} accountsEnabled />);
+    const toggle = screen.getByRole("switch", { name: "Socios y tesorería" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(accounts.setTreasuryEnabled).toHaveBeenCalledWith("club-9", true));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Socios y tesorería activados"));
+  });
+
+  it("sin Cuentas no se puede encender, pero encendida siempre se puede apagar", async () => {
+    const { unmount } = withQuery(<ClubTreasuryToggle clubId="club-9" enabled={false} accountsEnabled={false} />);
+    expect(screen.getByRole("switch", { name: "Socios y tesorería" })).toBeDisabled();
+    expect(screen.getByText("Necesita el módulo Cuentas encendido")).toBeInTheDocument();
+    unmount();
+    accounts.setTreasuryEnabled.mockResolvedValue({ treasuryEnabled: false });
+    withQuery(<ClubTreasuryToggle clubId="club-9" enabled accountsEnabled={false} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Socios y tesorería" }));
+    await waitFor(() => expect(accounts.setTreasuryEnabled).toHaveBeenCalledWith("club-9", false));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Socios y tesorería desactivados"));
+  });
+
+  it("si el back lo rechaza (Cuentas se apagó a la vez), enseña el texto del código", async () => {
+    accounts.setTreasuryEnabled.mockRejectedValue(Object.assign(new Error("x"), { code: "TREASURY_NEEDS_ACCOUNTS" }));
+    withQuery(<ClubTreasuryToggle clubId="club-9" enabled={false} accountsEnabled />);
+    fireEvent.click(screen.getByRole("switch", { name: "Socios y tesorería" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("encender el módulo Cuentas")));
     expect(toast.success).not.toHaveBeenCalled();
   });
 });

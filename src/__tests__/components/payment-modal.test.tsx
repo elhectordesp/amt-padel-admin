@@ -22,6 +22,10 @@ vi.mock('@/lib/services/admin', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+// Los socios a cuyo móvil puede llegar un Bizum (undefined: el módulo Cuentas apagado)
+let receivers: { id: string; name: string; active: boolean }[] | undefined;
+vi.mock('@/lib/use-bizum-receivers', () => ({ useBizumReceivers: () => receivers }));
+
 import PaymentModal from '../../../components/admin/payment-modal';
 import { adminService } from '@/lib/services/admin';
 import { ApiError } from '@/lib/api';
@@ -51,6 +55,30 @@ describe('PaymentModal (pago por jugador)', () => {
     vi.clearAllMocks();
     mutationOptions = undefined;
     pending = false;
+    receivers = undefined;
+  });
+
+  it('con el módulo Cuentas, un Bizum pide el móvil y manda el socio de ese jugador', async () => {
+    receivers = [{ id: 's1', name: 'Marta', active: true }];
+    render(<PaymentModal registration={registration} player="titular" tournamentId="t1" clubId="c1" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Bizum' }));
+    // Sin elegir a qué móvil llegó, no se guarda
+    expect(screen.getByRole('button', { name: /Guardar/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Marta' }));
+    expect(screen.getByRole('button', { name: /Guardar/ })).toBeEnabled();
+    await mutationOptions.mutationFn();
+    expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', expect.objectContaining({
+      paymentMethod: 'BIZUM', bizumPartnerId: 's1', player: 'titular', playerId: 'u-ana',
+    }));
+  });
+
+  it('sin el módulo Cuentas, un Bizum se guarda sin pedir el móvil', async () => {
+    render(<PaymentModal registration={registration} player="titular" tournamentId="t1" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Bizum' }));
+    expect(screen.getByRole('button', { name: /Guardar/ })).toBeEnabled();
+    await mutationOptions.mutationFn();
+    const sent = vi.mocked(adminService.registrations.updatePayment).mock.calls[0][1];
+    expect(sent).not.toHaveProperty('bizumPartnerId');
   });
 
   it('del compañero: su nombre y su pago (no el del titular)', () => {

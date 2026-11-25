@@ -4,7 +4,7 @@
  * validadas, activar y desactivar, y borrar con el aviso de «ya usado»).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -55,7 +55,14 @@ vi.mock("@/lib/use-role", () => ({
   isClub: (r: string | null) => r === "club",
 }));
 const clubState = vi.hoisted(() => ({ value: { on: true, known: true, isError: false, refetch: vi.fn() } }));
-vi.mock("@/lib/use-accounts-enabled", () => ({ useClubAccounts: () => clubState.value }));
+const treasury = vi.hoisted(() => ({ on: false }));
+vi.mock("@/lib/use-accounts-enabled", () => ({ useClubAccounts: () => ({ ...clubState.value, treasuryOn: treasury.on }) }));
+// La tesorería tiene sus propios tests: aquí solo importa que su pestaña la enseñe
+vi.mock("@/components/admin/accounts-treasury-section", () => ({
+  AccountsTreasurySection: ({ clubId }: { clubId: string }) => (
+    <section aria-label="Tesorería del club">club {clubId}</section>
+  ),
+}));
 const accounts = vi.hoisted(() => ({
   partners: { list: vi.fn(), create: vi.fn(), update: vi.fn() },
   partPrices: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
@@ -90,6 +97,7 @@ describe("página Cuentas", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clubState.value = { on: true, known: true, isError: false, refetch: vi.fn() };
+    treasury.on = false;
     nav.tab = "ajustes";
     ledger.categories.list.mockResolvedValue([]);
     ledger.entries.list.mockResolvedValue({
@@ -149,6 +157,23 @@ describe("página Cuentas", () => {
       renderPage();
       expect(screen.getByRole("tab", { name: "Ocupación" })).toHaveAttribute("aria-selected", "true");
       expect(screen.getByRole("region", { name: "Ocupación de pistas" })).toHaveTextContent("club c1");
+    });
+
+    it("«Tesorería» y «Socios y reparto» solo salen con la tesorería encendida, entre «Ocupación» y «Deudas»", () => {
+      nav.tab = "tesoreria";
+      renderPage();
+      // Apagada: las pestañas no existen y ?tab=tesoreria cae en la primera
+      expect(screen.queryByRole("tab", { name: "Tesorería" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Socios y reparto" })).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Resumen" })).toHaveAttribute("aria-selected", "true");
+      cleanup();
+      treasury.on = true;
+      renderPage();
+      expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+        "Resumen", "Gastos e ingresos", "Entrenadores", "Ocupación", "Tesorería", "Socios y reparto", "Deudas", "Tienda", "Ajustes",
+      ]);
+      expect(screen.getByRole("tab", { name: "Tesorería" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("region", { name: "Tesorería del club" })).toHaveTextContent("club c1");
     });
 
     it("un ?tab= que no existe cae en la primera", () => {

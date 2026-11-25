@@ -58,7 +58,7 @@ function wrap(ui: React.ReactNode) {
 }
 
 const CATEGORIES = [
-  { id: "cat-luz", name: "Luz", kind: "EXPENSE", activity: "COURTS", vatPercent: 21, systemKey: "ELECTRICITY", active: true, displayOrder: 10, inUse: true },
+  { id: "cat-luz", name: "Luz", kind: "EXPENSE", activity: "COURTS", vatPercent: 21, systemKey: "ELECTRICITY", active: true, displayOrder: 10, inUse: true, isFund: false },
   { id: "cat-propia", name: "Césped", kind: "EXPENSE", activity: "COURTS", vatPercent: null, systemKey: null, active: true, displayOrder: 20, inUse: false },
   { id: "cat-usada", name: "Reformas", kind: "EXPENSE", activity: "OTHER", vatPercent: null, systemKey: null, active: false, displayOrder: 30, inUse: true },
 ];
@@ -228,8 +228,40 @@ describe("categorías y aviso de justificantes (Ajustes)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(ledger.categories.create).toHaveBeenCalled());
     expect(ledger.categories.create.mock.calls[0][1]).toEqual({
-      name: "Seguros", kind: "EXPENSE", activity: "OTHER", vatPercent: 21,
+      name: "Seguros", kind: "EXPENSE", activity: "OTHER", vatPercent: 21, isFund: false,
     });
+  });
+
+  it("una categoría se marca como fondo con su casilla", async () => {
+    ledger.categories.create.mockResolvedValue({});
+    wrap(<LedgerCategoriesSection clubId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Nueva categoría/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "Fondo de pistas" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Es un fondo/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(ledger.categories.create).toHaveBeenCalled());
+    expect(ledger.categories.create.mock.calls[0][1]).toMatchObject({ name: "Fondo de pistas", isFund: true });
+  });
+
+  it("editar una categoría sin tocar el fondo no lo manda; cambiarlo con apuntes (409) dice por qué", async () => {
+    ledger.categories.update.mockResolvedValue({});
+    wrap(<LedgerCategoriesSection clubId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar Luz" }));
+    let dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Solo en categorías sin apuntes");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(ledger.categories.update).toHaveBeenCalled());
+    expect(ledger.categories.update.mock.calls[0][2]).not.toHaveProperty("isFund");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    ledger.categories.update.mockRejectedValue(Object.assign(new Error("x"), { code: "LEDGER_CATEGORY_HAS_ENTRIES" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar Luz" }));
+    dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Es un fondo/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(ledger.categories.update.mock.calls[1][2]).toMatchObject({ isFund: true }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/ya tiene apuntes o fijos/)));
   });
 
   it("el aviso de justificantes se enciende con un día y se guarda con el resto de ajustes", async () => {
