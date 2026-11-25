@@ -28,9 +28,10 @@ interface Props {
   onClose: () => void;
 }
 
-// La fecha de pago se guarda como día (medianoche UTC): se lee en UTC para
-// que salga el mismo día en cualquier zona. Hoy, en cambio, es el día local
-const toDateInput = (d: string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+// `paidAt` es el instante real del pago: se muestra su día local, como el de
+// hoy que rellena el formulario (en UTC, un pago de las 00:30 en Madrid saldría
+// con el día anterior)
+const toDateInput = (d: string | null | undefined) => (d ? localDayKey(new Date(d)) : "");
 
 export default function PaymentModal({ registration, player, tournamentId, clubId = null, onClose }: Props) {
   const who = pairPlayers(registration).find((p) => p.player === player);
@@ -40,11 +41,18 @@ export default function PaymentModal({ registration, player, tournamentId, clubI
   const bizumReceivers = useBizumReceivers(clubId);
   const [receiver, setReceiver] = useState<BizumReceiver>(current?.paymentMethod === "BIZUM" ? current.bizumPartnerId : undefined);
   const askReceiver = paid && method === "BIZUM" && bizumReceivers !== undefined;
+  // Método y móvil con los que se abrió: al editar un Bizum que ya lo era, el móvil solo se manda si cambia
+  const [initialMethod]   = useState(method);
+  const [initialReceiver] = useState(receiver);
+  const sendReceiver = askReceiver && (initialMethod !== "BIZUM" || receiver !== initialReceiver);
   // Lo cobrado a este jugador; sin cobro, la mitad del precio de la pareja
   const [amount, setAmount] = useState<string>(
     centsToEurosInput(current?.paidAmountCents ?? playerShareCents(registration.category.price)),
   );
-  const [paidAt, setPaidAt] = useState<string>(toDateInput(current?.paidAt));
+  const initialPaidAt = toDateInput(current?.paidAt);
+  const [paidAt, setPaidAt] = useState<string>(initialPaidAt);
+  // Solo si el usuario cambia la fecha se manda: sin tocarla, el back conserva el instante del pago
+  const [paidAtEdited, setPaidAtEdited] = useState(false);
   const cents = eurosToCents(amount);
   // Para marcar pagado hacen falta método e importe (el back exige el método)
   const incomplete = paid && (method === "" || cents === null || (askReceiver && receiver === undefined));
@@ -57,9 +65,10 @@ export default function PaymentModal({ registration, player, tournamentId, clubI
         paid,
         // Sin pagar, sin método ni fecha (no los de un pago que se desmarca)
         paymentMethod: (paid && method) || undefined,
-        ...(askReceiver ? { bizumPartnerId: receiver as string | null } : {}),
+        // Sin dato, el back conserva el móvil del Bizum: reenviarlo daría un 400 si ese socio se dio de baja después
+        ...(sendReceiver ? { bizumPartnerId: receiver as string | null } : {}),
         paidAmountCents: paid && cents !== null ? cents : undefined,
-        paidAt:        (paid && paidAt) || undefined,
+        paidAt:        (paid && paidAtEdited && paidAt !== initialPaidAt && paidAt) || undefined,
         paymentNote:   note.trim() || undefined,
         player,
         playerId:      who?.id ?? "",
@@ -136,7 +145,7 @@ export default function PaymentModal({ registration, player, tournamentId, clubI
                 <input
                   type="date"
                   value={paidAt}
-                  onChange={(e) => setPaidAt(e.target.value)}
+                  onChange={(e) => { setPaidAt(e.target.value); setPaidAtEdited(true); }}
                   className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
               </div>

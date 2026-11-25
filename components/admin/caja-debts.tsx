@@ -67,6 +67,7 @@ export function collectDebt(
         paid: true,
         paymentMethod: method,
         paidAmountCents: amountCents,
+        ...(method === "BIZUM" && bizumPartnerId !== undefined ? { bizumPartnerId } : {}),
         player: item.slot ?? "titular",
         playerId: item.playerId ?? "",
       });
@@ -162,7 +163,7 @@ export function CajaDebts({ clubId, timeZone }: Props) {
           title="Cobrar"
           subtitle={`${collecting.person} · ${collecting.item.concept}`}
           defaultCents={collecting.item.amountCents}
-          bizumReceivers={accountsOn && collecting.item.source === "BOOKING" && partners.data ? partners.data.filter((p) => p.active) : undefined}
+          bizumReceivers={accountsOn && partners.data ? partners.data.filter((p) => p.active) : undefined}
           onSubmit={(method, amountCents, bizumPartnerId) =>
             collectDebt(collecting.item as CounterDebt, method, amountCents, bizumPartnerId)}
           onDone={() => {

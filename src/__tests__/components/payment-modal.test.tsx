@@ -102,7 +102,6 @@ describe('PaymentModal (pago por jugador)', () => {
       paid:          true,
       paymentMethod: 'CASH',
       paidAmountCents: 1200,
-      paidAt:        '2026-05-03',
       paymentNote:   'pagó en efectivo',
       player:        'partner',
       playerId:      'u-bea',
@@ -127,8 +126,10 @@ describe('PaymentModal (pago por jugador)', () => {
     expect(screen.getByText('Guardar').closest('button')).not.toBeDisabled();
     await mutationOptions.mutationFn();
     expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', expect.objectContaining({
-      paid: true, paymentMethod: 'BIZUM', paidAmountCents: 1400, paidAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      paid: true, paymentMethod: 'BIZUM', paidAmountCents: 1400,
     }));
+    // El hoy que rellena el formulario no se manda: el back pone el instante
+    expect(vi.mocked(adminService.registrations.updatePayment).mock.calls[0][1].paidAt).toBeUndefined();
   });
 
   it('guarda el del titular con su id', async () => {
@@ -215,5 +216,83 @@ describe('PaymentModal (pago por jugador)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('sin cambiar la fecha no manda paidAt (el back conserva el instante del pago); cambiandola, si', async () => {
+    render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={vi.fn()} />);
+    await mutationOptions.mutationFn();
+    expect(vi.mocked(adminService.registrations.updatePayment).mock.calls[0][1].paidAt).toBeUndefined();
+
+    fireEvent.change(screen.getByDisplayValue('2026-05-03'), { target: { value: '2026-05-10' } });
+    await mutationOptions.mutationFn();
+    expect(vi.mocked(adminService.registrations.updatePayment).mock.calls[1][1].paidAt).toBe('2026-05-10');
+  });
+
+  it('la fecha de pago es el día local del instante: un pago de las 00:30 en Madrid no sale con el día anterior', () => {
+    // 23:30 UTC del 24 son las 00:30 del 25 en Madrid (los tests corren en Europe/Madrid: vitest.config.ts)
+    render(
+      <PaymentModal
+        registration={{ ...registration, paidAt: '2026-11-24T23:30:00.000Z' }}
+        player="titular"
+        tournamentId="t1"
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByDisplayValue('2026-11-25')).toBeInTheDocument();
+  });
+
+  describe('móvil del Bizum (el back conserva el que tenía si no se manda)', () => {
+    const sent = (call: number) => vi.mocked(adminService.registrations.updatePayment).mock.calls[call][1];
+    // Un Bizum ya cobrado al socio s1, que se dio de baja: no sale entre los activos
+    const bizumDeS1 = { ...registration, paymentMethod: 'BIZUM', bizumPartnerId: 's1' };
+
+    beforeEach(() => {
+      receivers = [{ id: 's2', name: 'Luis', active: true }];
+    });
+
+    it('editar un Bizum sin tocar el móvil no lo manda (un socio de baja no hace fallar un cambio de nota)', async () => {
+      render(<PaymentModal registration={bizumDeS1} player="titular" tournamentId="t1" clubId="c1" onClose={vi.fn()} />);
+      fireEvent.change(screen.getByDisplayValue('nota de Ana'), { target: { value: 'nota nueva' } });
+      expect(screen.getByRole('button', { name: /Guardar/ })).toBeEnabled();
+      await mutationOptions.mutationFn();
+      expect(sent(0)).toMatchObject({ paymentMethod: 'BIZUM', paymentNote: 'nota nueva' });
+      expect(sent(0)).not.toHaveProperty('bizumPartnerId');
+    });
+
+    it('un Bizum que llegó a la cuenta del club (null), sin tocar, tampoco lo manda', async () => {
+      render(
+        <PaymentModal registration={{ ...bizumDeS1, bizumPartnerId: null }} player="titular" tournamentId="t1" clubId="c1" onClose={vi.fn()} />,
+      );
+      await mutationOptions.mutationFn();
+      expect(sent(0)).not.toHaveProperty('bizumPartnerId');
+    });
+
+    it('cambiando el móvil lo manda: a otro socio o a la cuenta del club (null)', async () => {
+      render(<PaymentModal registration={bizumDeS1} player="titular" tournamentId="t1" clubId="c1" onClose={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Luis' }));
+      await mutationOptions.mutationFn();
+      expect(sent(0)).toHaveProperty('bizumPartnerId', 's2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Club' }));
+      await mutationOptions.mutationFn();
+      expect(sent(1)).toHaveProperty('bizumPartnerId', null);
+    });
+
+    it('un primer cobro por Bizum lo manda siempre, también a la cuenta del club (null)', async () => {
+      render(
+        <PaymentModal
+          registration={{ ...registration, paid: false, paymentMethod: null, bizumPartnerId: null, paidAmountCents: null, paidAt: null }}
+          player="titular"
+          tournamentId="t1"
+          clubId="c1"
+          onClose={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByText('Pagado').parentElement!.querySelector('button')!);
+      fireEvent.click(screen.getByRole('button', { name: 'Bizum' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Club' }));
+      await mutationOptions.mutationFn();
+      expect(sent(0)).toHaveProperty('bizumPartnerId', null);
+    });
   });
 });
