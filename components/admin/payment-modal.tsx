@@ -44,7 +44,10 @@ export default function PaymentModal({ registration, player, tournamentId, clubI
   const [amount, setAmount] = useState<string>(
     centsToEurosInput(current?.paidAmountCents ?? playerShareCents(registration.category.price)),
   );
-  const [paidAt, setPaidAt] = useState<string>(toDateInput(current?.paidAt));
+  const initialPaidAt = toDateInput(current?.paidAt);
+  const [paidAt, setPaidAt] = useState<string>(initialPaidAt);
+  // Solo si el usuario cambia la fecha se manda: sin tocarla, el back conserva el instante del pago
+  const [paidAtEdited, setPaidAtEdited] = useState(false);
   const cents = eurosToCents(amount);
   // Para marcar pagado hacen falta método e importe (el back exige el método)
   const incomplete = paid && (method === "" || cents === null || (askReceiver && receiver === undefined));
@@ -59,7 +62,7 @@ export default function PaymentModal({ registration, player, tournamentId, clubI
         paymentMethod: (paid && method) || undefined,
         ...(askReceiver ? { bizumPartnerId: receiver as string | null } : {}),
         paidAmountCents: paid && cents !== null ? cents : undefined,
-        paidAt:        (paid && paidAt) || undefined,
+        paidAt:        (paid && paidAtEdited && paidAt !== initialPaidAt && paidAt) || undefined,
         paymentNote:   note.trim() || undefined,
         player,
         playerId:      who?.id ?? "",
@@ -136,7 +139,7 @@ export default function PaymentModal({ registration, player, tournamentId, clubI
                 <input
                   type="date"
                   value={paidAt}
-                  onChange={(e) => setPaidAt(e.target.value)}
+                  onChange={(e) => { setPaidAt(e.target.value); setPaidAtEdited(true); }}
                   className="w-full h-9 px-3 rounded-md bg-secondary border border-border text-sm text-foreground outline-none focus:ring-1 focus:ring-[#D4AF37]"
                 />
               </div>

@@ -102,7 +102,6 @@ describe('PaymentModal (pago por jugador)', () => {
       paid:          true,
       paymentMethod: 'CASH',
       paidAmountCents: 1200,
-      paidAt:        '2026-05-03',
       paymentNote:   'pagó en efectivo',
       player:        'partner',
       playerId:      'u-bea',
@@ -127,8 +126,10 @@ describe('PaymentModal (pago por jugador)', () => {
     expect(screen.getByText('Guardar').closest('button')).not.toBeDisabled();
     await mutationOptions.mutationFn();
     expect(adminService.registrations.updatePayment).toHaveBeenCalledWith('reg-1', expect.objectContaining({
-      paid: true, paymentMethod: 'BIZUM', paidAmountCents: 1400, paidAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      paid: true, paymentMethod: 'BIZUM', paidAmountCents: 1400,
     }));
+    // El hoy que rellena el formulario no se manda: el back pone el instante
+    expect(vi.mocked(adminService.registrations.updatePayment).mock.calls[0][1].paidAt).toBeUndefined();
   });
 
   it('guarda el del titular con su id', async () => {
@@ -216,4 +217,13 @@ describe('PaymentModal (pago por jugador)', () => {
       vi.useRealTimers();
     }
   });
-});
+
+  it('sin cambiar la fecha no manda paidAt (el back conserva el instante del pago); cambiandola, si', async () => {
+    render(<PaymentModal registration={registration} player="partner" tournamentId="t1" onClose={vi.fn()} />);
+    await mutationOptions.mutationFn();
+    expect(vi.mocked(adminService.registrations.updatePayment).mock.calls[0][1].paidAt).toBeUndefined();
+
+    fireEvent.change(screen.getByDisplayValue('2026-05-03'), { target: { value: '2026-05-10' } });
+    await mutationOptions.mutationFn();
+    expect(vi.mocked(adminService.registrations.updatePayment).mock.calls[1][1].paidAt).toBe('2026-05-10');
+  });});
