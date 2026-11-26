@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
-  allowsNegativeCount, applyShortcut, beforeStartBalance, countDay, countDiffText, daysInclusive,
-  defaultStatementRange, parsePlaceKey, parseSignedCents, partnerAccountText, placeKey, signedCents,
-  sourceLabel, statementRangeProblem, transferProblem, withRunningBalance, writablePlaces,
+  allowsNegativeCount, applyShortcut, beforeStartBalance, countablePlaces, countDay, countDiffText, daysInclusive,
+  defaultSettleSide, defaultStatementRange, parsePlaceKey, parseSignedCents, partnerAccountText, pendingSentence,
+  pendingSettlements, placeKey, settleAmountProblem, settleCountNote, settleStartCents, settleTransfer,
+  signedCents, sourceLabel, statementRangeProblem, TREASURY_MAX_CENTS, transferProblem, withRunningBalance,
+  writablePlaces,
 } from "@/lib/utils/treasury";
 import { accountsErrorText } from "@/lib/utils/booking-parts";
 import { paidWithText, purchasePaymentOptions, purchasePaymentPayload } from "@/lib/utils/shop";
@@ -32,6 +34,98 @@ describe("lugares", () => {
       { place: "PARTNER_HELD" as const, partnerId: "s2", label: "Guardado por Antiguo" },
     ];
     expect(writablePlaces(places, new Set(["s1"])).map((p) => p.label)).toEqual(["Caja", "Guardado por Marta"]);
+  });
+
+  it("para cuadrar, un socio de baja solo se ofrece mientras tenga saldo", () => {
+    const place = (p: "CASH" | "PARTNER_HELD" | "PARTNER_ACCOUNT", partnerId: string | null, label: string, balanceCents: number) =>
+      ({ place: p, partnerId, label, balanceCents, lastCount: null });
+    const places = [
+      place("CASH", null, "Caja", 0),
+      place("PARTNER_HELD", "s1", "Guardado por Marta", 0),
+      place("PARTNER_HELD", "s2", "Guardado por Antiguo", 5000),
+      place("PARTNER_ACCOUNT", "s2", "Cuenta de Antiguo con el club", -8000),
+      place("PARTNER_ACCOUNT", "s3", "Cuenta de Otro con el club", 0),
+    ];
+    // s1 activo (aunque esté a cero), s2 y s3 de baja: solo se queda el que debe o guarda algo
+    expect(countablePlaces(places, new Set(["s1"])).map((p) => p.label))
+      .toEqual(["Caja", "Guardado por Marta", "Guardado por Antiguo", "Cuenta de Antiguo con el club"]);
+  });
+});
+
+describe("saldar a un socio de baja", () => {
+  it("lista una cosa pendiente por cada lugar con saldo, con su frase", () => {
+    expect(pendingSettlements({ heldCents: 0, accountCents: 0 })).toEqual([]);
+    const held = pendingSettlements({ heldCents: 20000, accountCents: 0 });
+    expect(held.map((i) => [i.kind, i.place, i.cents])).toEqual([["held", "PARTNER_HELD", 20000]]);
+    expect(clean(held[0].text)).toBe("Guarda 200,00 € del club");
+    const has = pendingSettlements({ heldCents: 0, accountCents: 12000 });
+    expect(has.map((i) => [i.kind, i.place, i.cents])).toEqual([["has", "PARTNER_ACCOUNT", 12000]]);
+    expect(clean(has[0].text)).toBe("Tiene 120,00 € del club");
+    // Lo que el club le debe se pide en positivo: es lo pendiente
+    const owed = pendingSettlements({ heldCents: 0, accountCents: -8000 });
+    expect(owed.map((i) => [i.kind, i.place, i.cents])).toEqual([["owed", "PARTNER_ACCOUNT", 8000]]);
+    expect(clean(owed[0].text)).toBe("El club le debe 80,00 €");
+    // Guardado y cuenta van por separado, de uno en uno
+    expect(pendingSettlements({ heldCents: 500, accountCents: -300 }).map((i) => i.kind)).toEqual(["held", "owed"]);
+    expect(pendingSettlements({ heldCents: 500, accountCents: 300 }).map((i) => i.kind)).toEqual(["held", "has"]);
+  });
+
+  it("el sentido del traspaso: el socio entrega al club, salvo que el club le deba", () => {
+    const [held] = pendingSettlements({ heldCents: 20000, accountCents: 0 });
+    const [has] = pendingSettlements({ heldCents: 0, accountCents: 12000 });
+    const [owed] = pendingSettlements({ heldCents: 0, accountCents: -8000 });
+    expect(settleTransfer(held, "s2", "CASH")).toEqual({
+      from: { place: "PARTNER_HELD", partnerId: "s2" }, to: { place: "CASH" },
+    });
+    expect(settleTransfer(has, "s2", "BANK")).toEqual({
+      from: { place: "PARTNER_ACCOUNT", partnerId: "s2" }, to: { place: "BANK" },
+    });
+    // El club paga: sale de la caja o del banco y entra en la cuenta del socio (que sube hacia 0)
+    expect(settleTransfer(owed, "s2", "BANK")).toEqual({
+      from: { place: "BANK" }, to: { place: "PARTNER_ACCOUNT", partnerId: "s2" },
+    });
+    expect(settleTransfer(owed, "s2", "CASH").from).toEqual({ place: "CASH" });
+    // Y los dos lugares que salen son válidos para el back (con socio donde toca)
+    for (const i of [held, has, owed]) {
+      const { from, to } = settleTransfer(i, "s2", "CASH");
+      expect(transferProblem(from, to)).toBeNull();
+    }
+  });
+
+  it("el efectivo vuelve a la caja y lo que tiene en su cuenta, al banco", () => {
+    expect(defaultSettleSide("held")).toBe("CASH");
+    expect(defaultSettleSide("has")).toBe("BANK");
+    expect(defaultSettleSide("owed")).toBe("BANK");
+  });
+
+  it("el importe va de 0,01 € a lo pendiente, sin pasar del tope de un traspaso", () => {
+    expect(settleAmountProblem(8000, 8000)).toBeNull();
+    expect(settleAmountProblem(1, 8000)).toBeNull();
+    expect(settleAmountProblem(null, 8000)).toMatch(/importe válido/);
+    expect(settleAmountProblem(0, 8000)).toMatch(/0,01/);
+    expect(clean(settleAmountProblem(8001, 8000) ?? "")).toBe("No puede pasar de lo pendiente: 80,00 €");
+    // Un saldo mayor que el tope se salda en varios traspasos
+    expect(settleAmountProblem(TREASURY_MAX_CENTS, TREASURY_MAX_CENTS + 5000)).toBeNull();
+    expect(settleAmountProblem(TREASURY_MAX_CENTS + 1, TREASURY_MAX_CENTS + 5000)).toMatch(/100\.000/);
+    expect(settleStartCents(8000)).toBe(8000);
+    expect(settleStartCents(TREASURY_MAX_CENTS + 5000)).toBe(TREASURY_MAX_CENTS);
+  });
+
+  it("dice lo pendiente en una frase para confirmar la baja", () => {
+    const sentence = (held: number, account: number) => clean(pendingSentence("Marta", pendingSettlements({ heldCents: held, accountCents: account })));
+    expect(sentence(20000, 0)).toBe("Marta guarda 200,00 € del club");
+    expect(sentence(0, 12000)).toBe("Marta tiene 120,00 € del club");
+    expect(sentence(0, -8000)).toBe("El club le debe 80,00 € a Marta");
+    expect(sentence(20000, -8000)).toBe("Marta guarda 200,00 € del club y el club le debe 80,00 €");
+  });
+
+  it("avisa de entre qué valores se puede cuadrar el lugar de un socio de baja", () => {
+    expect(clean(settleCountNote("Antiguo", 5000))).toBe(
+      "Antiguo está de baja: este cuadre solo puede dejar el saldo entre 0,00 € y 50,00 €, para saldarlo.",
+    );
+    expect(clean(settleCountNote("Antiguo", -8000))).toBe(
+      "Antiguo está de baja: este cuadre solo puede dejar el saldo entre −80,00 € y 0,00 € (en negativo, lo que el club le debe), para saldarlo.",
+    );
   });
 });
 
@@ -150,6 +244,12 @@ describe("errores de tesorería", () => {
     expect(accountsErrorText({ code: "TREASURY_INVALID", message: "Elige otro socio" })).toBe("Elige otro socio");
     expect(accountsErrorText({ code: "TREASURY_START_AFTER_RECORDS", message: "Hay traspasos desde el 2026-11-02" }))
       .toBe("Hay traspasos desde el 2026-11-02");
+  });
+
+  it("con un socio de baja llega el texto del back, que dice lo pendiente; sin él, uno genérico", () => {
+    expect(accountsErrorText({ code: "TREASURY_PARTNER_INACTIVE", message: "Antiguo está de baja: solo se le puede saldar 80,00 €" }))
+      .toBe("Antiguo está de baja: solo se le puede saldar 80,00 €");
+    expect(accountsErrorText({ code: "TREASURY_PARTNER_INACTIVE", message: "" })).toMatch(/Ese socio está de baja/);
   });
 });
 

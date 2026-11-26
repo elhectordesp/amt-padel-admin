@@ -4,7 +4,8 @@
  * «Cuentas» → «Tesorería» (F8, fase 3): dónde está el dinero del club (caja,
  * banco y lo que guardan los socios), cuánto hay en total, la cuenta de cada
  * socio con el club, «Mover dinero», «Cuadrar» contra lo que hay de verdad,
- * el extracto y los traspasos y cuadres apuntados. Solo propietario y gestor.
+ * el extracto y los traspasos y cuadres apuntados. Un socio dado de baja con
+ * saldo se salda desde su fila. Solo propietario y gestor.
  * Los saldos los calcula el back; aquí no se guarda nada aparte.
  */
 
@@ -15,6 +16,7 @@ import { AlertTriangle, ArrowLeftRight, ClipboardCheck, Loader2 } from "lucide-r
 import { ErrorState } from "@/components/admin/error-state";
 import { TreasuryCountDialog } from "@/components/admin/treasury-count-dialog";
 import { TreasuryCountsList, TreasuryTransfersList } from "@/components/admin/treasury-lists";
+import { TreasurySettleDialog } from "@/components/admin/treasury-settle-dialog";
 import { TreasuryStatement } from "@/components/admin/treasury-statement";
 import { TreasuryTransferDialog } from "@/components/admin/treasury-transfer-dialog";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,7 @@ import { treasuryQK, treasuryService, type PlaceBalance, type TreasurySummary } 
 import { useClubAccess } from "@/lib/use-club-access";
 import { formatCents } from "@/lib/utils/booking-price";
 import { formatDayKey } from "@/lib/utils/time-zone";
-import { partnerAccountText, placeKey } from "@/lib/utils/treasury";
+import { partnerAccountText, pendingSettlements, placeKey } from "@/lib/utils/treasury";
 
 const DAY: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
 
@@ -62,14 +64,14 @@ function NotStarted() {
   );
 }
 
-type Dialog = { kind: "transfer" } | { kind: "count"; key: string };
+type Dialog = { kind: "transfer" } | { kind: "count"; key: string } | { kind: "settle"; partnerId: string };
 
 function Started({ clubId, summary }: { clubId: string; summary: TreasurySummary }) {
   const canWrite = useClubAccess().can("accounts", "write");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [statementKey, setStatementKey] = useState("CASH");
   const activePartners = new Set(summary.partners.filter((p) => p.active).map((p) => p.partnerId));
-  // Las tarjetas de «lo que guarda cada socio»: los de baja solo si aún guardan algo
+  // Las tarjetas de «lo que guarda cada socio»: los de baja solo si aún guardan algo (y se pueden cuadrar para saldarlo)
   const held = summary.places.filter((p) => p.place === "PARTNER_HELD" && (p.balanceCents !== 0 || activePartners.has(p.partnerId ?? "")));
   const cash = summary.places.find((p) => p.place === "CASH");
   const bank = summary.places.find((p) => p.place === "BANK");
@@ -113,7 +115,7 @@ function Started({ clubId, summary }: { clubId: string; summary: TreasurySummary
         {cash && <PlaceCard place={cash} warnUncounted canWrite={canWrite} onCount={(k) => setDialog({ kind: "count", key: k })} onStatement={openStatement} />}
         {bank && <PlaceCard place={bank} warnUncounted canWrite={canWrite} onCount={(k) => setDialog({ kind: "count", key: k })} onStatement={openStatement} />}
         {held.map((p) => (
-          <PlaceCard key={placeKey(p)} place={p} canWrite={canWrite && activePartners.has(p.partnerId ?? "")} onCount={(k) => setDialog({ kind: "count", key: k })} onStatement={openStatement} />
+          <PlaceCard key={placeKey(p)} place={p} canWrite={canWrite} onCount={(k) => setDialog({ kind: "count", key: k })} onStatement={openStatement} />
         ))}
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo (no se reparte)</p>
@@ -133,17 +135,34 @@ function Started({ clubId, summary }: { clubId: string; summary: TreasurySummary
           <ul className="divide-y divide-border rounded-lg border border-border">
             {partners.map((p) => {
               const key = placeKey({ place: "PARTNER_ACCOUNT", partnerId: p.partnerId });
+              // De baja con saldo: se puede saldar y, si su cuenta no está a cero, cuadrar
+              const toSettle = p.active ? [] : pendingSettlements(p);
               return (
                 <li key={p.partnerId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm">
                   <span className="min-w-0 flex-1">
                     <span className="font-medium">{p.name}</span>
-                    {!p.active && <span className="ml-2 text-xs text-muted-foreground">(de baja)</span>}
-                    <span className="block text-muted-foreground">{partnerAccountText(p.accountCents)}</span>
+                    {!p.active && (
+                      <span className={`ml-2 text-xs ${toSettle.length > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                        {toSettle.length > 0 ? "De baja · pendiente de saldar" : "(de baja)"}
+                      </span>
+                    )}
+                    <span className="block text-muted-foreground">
+                      {toSettle.length > 0 ? toSettle.map((i) => i.text).join(" · ") : partnerAccountText(p.accountCents)}
+                    </span>
                   </span>
+                  {canWrite && toSettle.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ kind: "settle", partnerId: p.partnerId })}
+                      className="min-h-11 rounded-md border border-[rgba(212,175,55,0.4)] bg-[rgba(212,175,55,0.15)] px-3 text-xs font-semibold text-[#D4AF37] min-[1025px]:min-h-8"
+                    >
+                      Saldar
+                    </button>
+                  )}
                   <button type="button" onClick={() => openStatement(key)} className="min-h-11 text-xs text-muted-foreground underline hover:text-foreground min-[1025px]:min-h-8">
                     Extracto
                   </button>
-                  {canWrite && p.active && (
+                  {canWrite && (p.active || p.accountCents !== 0) && (
                     <button type="button" onClick={() => setDialog({ kind: "count", key })} className="min-h-11 text-xs text-muted-foreground underline hover:text-foreground min-[1025px]:min-h-8">
                       Cuadrar
                     </button>
@@ -166,6 +185,7 @@ function Started({ clubId, summary }: { clubId: string; summary: TreasurySummary
 
       {dialog?.kind === "transfer" && <TreasuryTransferDialog clubId={clubId} summary={summary} onClose={() => setDialog(null)} />}
       {dialog?.kind === "count" && <TreasuryCountDialog clubId={clubId} summary={summary} initialKey={dialog.key} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "settle" && <TreasurySettleDialog clubId={clubId} summary={summary} partnerId={dialog.partnerId} onClose={() => setDialog(null)} />}
     </div>
   );
 }

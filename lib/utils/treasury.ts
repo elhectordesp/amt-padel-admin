@@ -1,5 +1,5 @@
 import type {
-  MoneyPlace, PlaceInput, PlaceRef, StatementRow, StatementSource,
+  MoneyPlace, PlaceBalance, PlaceInput, PlaceRef, StatementRow, StatementSource,
 } from "@/lib/services/treasury";
 import { formatCents } from "@/lib/utils/booking-price";
 import { addDaysToKey } from "@/lib/utils/time-zone";
@@ -32,6 +32,11 @@ export const allowsNegativeCount = (place: MoneyPlace): boolean => place === "BA
 /** Los lugares en los que se puede apuntar algo nuevo: los de los socios dados de baja se quedan fuera. */
 export function writablePlaces<T extends PlaceRef>(places: T[], activePartners: ReadonlySet<string>): T[] {
   return places.filter((p) => p.partnerId === null || activePartners.has(p.partnerId));
+}
+
+/** Los lugares que se pueden cuadrar: los de siempre y los de un socio de baja que aún tienen saldo (para saldarlo). */
+export function countablePlaces<T extends PlaceBalance>(places: T[], activePartners: ReadonlySet<string>): T[] {
+  return places.filter((p) => p.partnerId === null || activePartners.has(p.partnerId) || p.balanceCents !== 0);
 }
 
 // ── Frases ───────────────────────────────────────────────────────────────────
@@ -112,6 +117,89 @@ export function transferProblem(from: PlaceInput, to: PlaceInput): string | null
   if (from.place === to.place && (from.partnerId ?? null) === (to.partnerId ?? null))
     return "El origen y el destino no pueden ser el mismo";
   return null;
+}
+
+// ── Saldar a un socio de baja ────────────────────────────────────────────────
+
+/** Qué le queda pendiente a un socio: lo que guarda, lo que tiene del club o lo que el club le debe. */
+export type SettleKind = "held" | "has" | "owed";
+export type SettleSide = "CASH" | "BANK";
+
+export interface SettleItem {
+  kind:  SettleKind;
+  /** El lugar del socio que se salda. */
+  place: "PARTNER_HELD" | "PARTNER_ACCOUNT";
+  /** Lo pendiente, en céntimos y siempre positivo. */
+  cents: number;
+  /** «Guarda 200,00 € del club», «Tiene 120,00 € del club», «El club le debe 80,00 €». */
+  text:  string;
+  /** Qué se hace al saldarlo, en una línea. */
+  hint:  string;
+}
+
+/** Lo que hay que saldar con un socio, una cosa por lugar con saldo (lo guardado y la cuenta van por separado). */
+export function pendingSettlements(partner: { heldCents: number; accountCents: number }): SettleItem[] {
+  const items: SettleItem[] = [];
+  if (partner.heldCents > 0) {
+    items.push({
+      kind: "held", place: "PARTNER_HELD", cents: partner.heldCents,
+      text: `Guarda ${formatCents(partner.heldCents)} del club`,
+      hint: "Devuelve el efectivo que guardaba.",
+    });
+  }
+  if (partner.accountCents > 0) {
+    items.push({
+      kind: "has", place: "PARTNER_ACCOUNT", cents: partner.accountCents,
+      text: partnerAccountText(partner.accountCents),
+      hint: "Pasa ese dinero al club.",
+    });
+  }
+  if (partner.accountCents < 0) {
+    items.push({
+      kind: "owed", place: "PARTNER_ACCOUNT", cents: -partner.accountCents,
+      text: partnerAccountText(partner.accountCents),
+      hint: "El club le paga lo que le debe.",
+    });
+  }
+  return items;
+}
+
+/** El efectivo suele volver a la caja; lo que el socio tiene en su cuenta, al banco. */
+export const defaultSettleSide = (kind: SettleKind): SettleSide => (kind === "held" ? "CASH" : "BANK");
+
+/** De dónde a dónde va el dinero al saldar: del socio a la caja o el banco; si el club le debe, al revés. */
+export function settleTransfer(item: SettleItem, partnerId: string, side: SettleSide): { from: PlaceInput; to: PlaceInput } {
+  const partner: PlaceInput = { place: item.place, partnerId };
+  const club: PlaceInput = { place: side };
+  return item.kind === "owed" ? { from: club, to: partner } : { from: partner, to: club };
+}
+
+/** Por qué el importe de un saldo no vale (entre 0,01 € y lo pendiente, sin pasar del tope); null si vale. */
+export function settleAmountProblem(cents: number | null, pendingCents: number): string | null {
+  if (cents === null) return "Escribe un importe válido (por ejemplo 120,00)";
+  if (cents < 1) return "El importe tiene que ser de 0,01 € como mínimo";
+  if (cents > TREASURY_MAX_CENTS) return "Un traspaso llega como mucho a 100.000 €";
+  if (cents > pendingCents) return `No puede pasar de lo pendiente: ${formatCents(pendingCents)}`;
+  return null;
+}
+
+/** El importe con el que se abre el diálogo: todo lo pendiente (hasta el tope de un traspaso). */
+export const settleStartCents = (pendingCents: number): number => Math.min(pendingCents, TREASURY_MAX_CENTS);
+
+/** Lo pendiente dicho en una frase: «Marta guarda 200,00 € del club y el club le debe 80,00 €». */
+export function pendingSentence(name: string, items: SettleItem[]): string {
+  // Si solo queda lo que el club le debe, el sujeto es el club: «El club le debe 80,00 € a Marta»
+  if (items.length === 1 && items[0].kind === "owed") return `${items[0].text} a ${name}`;
+  const parts = items.map((i) => i.text.charAt(0).toLowerCase() + i.text.slice(1));
+  return `${name} ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}` : parts[0] ?? ""}`;
+}
+
+/** Al cuadrar un lugar de un socio de baja: solo se puede acercar a 0, sin cruzarlo. */
+export function settleCountNote(name: string, balanceCents: number): string {
+  const range = balanceCents > 0
+    ? `entre ${formatCents(0)} y ${formatCents(balanceCents)}`
+    : `entre ${signedCents(balanceCents)} y ${formatCents(0)} (en negativo, lo que el club le debe)`;
+  return `${name} está de baja: este cuadre solo puede dejar el saldo ${range}, para saldarlo.`;
 }
 
 // ── Cuadre ───────────────────────────────────────────────────────────────────

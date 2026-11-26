@@ -37,7 +37,7 @@ export const ACCOUNTS_ERROR_MESSAGES: Record<string, string> = {
   TREASURY_NOT_STARTED:         "La tesorería aún no tiene fecha de inicio. Ponla en Ajustes.",
   TREASURY_DATE_OUT_OF_RANGE:   "La fecha tiene que estar entre el inicio de la tesorería y hoy.",
   TREASURY_RANGE_TOO_LONG:      "Un extracto cubre como mucho 93 días. Acorta las fechas.",
-  TREASURY_PARTNER_INACTIVE:    "Ese socio está de baja: ya no admite apuntes nuevos.",
+  TREASURY_PARTNER_INACTIVE:    "Ese socio está de baja: solo se puede apuntar lo que sirva para saldarle lo pendiente, sin pasarse.",
   TREASURY_HELD_INSUFFICIENT:   "El socio no puede devolver más efectivo del que guarda ese día. Revisa el importe o la fecha.",
   TREASURY_START_AFTER_RECORDS: "La fecha de inicio no puede ser posterior a los traspasos o cuadres ya apuntados. Borra los anteriores o elige un día más temprano.",
   TREASURY_TRANSFER_NOT_FOUND:  "Ese traspaso ya no existe. Recarga la pantalla.",
@@ -60,6 +60,8 @@ const BACK_MESSAGE_WINS = new Set([
   "SCHOOL_MEMBER_INVALID",
   "TREASURY_INVALID",
   "TREASURY_START_AFTER_RECORDS",
+  // Con un socio de baja, el back dice qué le queda pendiente
+  "TREASURY_PARTNER_INACTIVE",
   ...LEDGER_BACK_MESSAGE_WINS,
 ]);
 
