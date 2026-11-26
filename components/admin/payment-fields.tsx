@@ -45,10 +45,12 @@ interface AmountProps {
   value:     string;
   onChange:  (text: string) => void;
   invalid?:  boolean;
+  /** El texto del error cuando `invalid`; por defecto, el de un importe mal escrito. */
+  error?:    string;
   disabled?: boolean;
 }
 
-export function AmountField({ label = "Importe cobrado", value, onChange, invalid, disabled }: AmountProps) {
+export function AmountField({ label = "Importe cobrado", value, onChange, invalid, error, disabled }: AmountProps) {
   return (
     <label className="block">
       <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">{label}</span>
@@ -66,7 +68,7 @@ export function AmountField({ label = "Importe cobrado", value, onChange, invali
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
       </div>
-      {invalid && <span className="mt-1 block text-xs text-red-400">Escribe un importe válido (por ejemplo 12,50)</span>}
+      {invalid && <span className="mt-1 block text-xs text-red-400">{error ?? "Escribe un importe válido (por ejemplo 12,50)"}</span>}
     </label>
   );
 }

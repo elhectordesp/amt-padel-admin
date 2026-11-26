@@ -50,6 +50,19 @@ const SUMMARY = {
   unplaced: { count: 0, cents: 0 },
   fundCents: 15000,
 };
+// Antiguo, de baja, aún guarda 50 € del club y el club le debe 80 €
+const BAJA = {
+  ...SUMMARY,
+  places: [
+    ...SUMMARY.places.filter((p) => p.partnerId !== "s2"),
+    place("PARTNER_HELD", "s2", "Guardado por Antiguo", 5000),
+    place("PARTNER_ACCOUNT", "s2", "Cuenta de Antiguo con el club", -8000),
+  ],
+  partners: [
+    SUMMARY.partners[0],
+    { partnerId: "s2", name: "Antiguo", active: false, heldCents: 5000, accountCents: -8000 },
+  ],
+};
 const TRANSFER = {
   id: "t1", date: "2026-11-24", amountCents: 20000,
   from: { place: "CASH", partnerId: null, label: "Caja" }, to: { place: "BANK", partnerId: null, label: "Banco" },
@@ -249,6 +262,195 @@ describe("Cuadrar", () => {
     fireEvent.change(within(dialog).getByLabelText("Lo que hay de verdad"), { target: { value: "-5" } });
     expect(within(dialog).getByText("Aquí no puede haber menos de 0 €")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Confirmar cuadre" })).toBeDisabled();
+  });
+});
+
+describe("socio de baja con saldo", () => {
+  const rowsOf = async () => screen.findByRole("region", { name: "Cuentas de los socios" });
+
+  beforeEach(() => svc.summary.mockResolvedValue(BAJA));
+
+  it("la tarjeta dice que está pendiente de saldar, con lo pendiente, y ofrece «Saldar»", async () => {
+    renderSection();
+    const cuentas = await rowsOf();
+    expect(cuentas).toHaveTextContent("Antiguo");
+    expect(cuentas).toHaveTextContent("De baja · pendiente de saldar");
+    expect(cuentas).not.toHaveTextContent("(de baja)");
+    expect(cuentas).toHaveTextContent("Guarda 50,00");
+    expect(cuentas).toHaveTextContent("El club le debe 80,00");
+    // Un solo «Saldar»: el del socio de baja; el activo no lo tiene
+    expect(within(cuentas).getAllByRole("button", { name: "Saldar" })).toHaveLength(1);
+  });
+
+  it("sin permiso de escritura no hay «Saldar» ni «Cuadrar» en ninguna tarjeta", async () => {
+    access.write = false;
+    renderSection();
+    const cuentas = await rowsOf();
+    expect(cuentas).toHaveTextContent("De baja · pendiente de saldar");
+    expect(screen.queryByRole("button", { name: "Saldar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cuadrar" })).not.toBeInTheDocument();
+  });
+
+  it("el socio de baja sin saldo no tiene tarjeta ni «Saldar»", async () => {
+    svc.summary.mockResolvedValue(SUMMARY);
+    renderSection();
+    const cuentas = await rowsOf();
+    expect(cuentas).not.toHaveTextContent("Antiguo");
+    expect(screen.queryByRole("button", { name: "Saldar" })).not.toBeInTheDocument();
+  });
+
+  const openSettle = async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Saldar" }));
+    return screen.findByRole("dialog", { name: "Saldar a Antiguo" });
+  };
+
+  it("lo guardado se salda con su importe precargado, a la caja, y manda el traspaso del socio a la caja", async () => {
+    const dialog = await openSettle();
+    // Dos cosas pendientes: se elige cuál, de una en una
+    expect(within(dialog).getByRole("button", { name: /Guarda 50,00/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: /El club le debe 80,00/ })).toHaveAttribute("aria-pressed", "false");
+    expect(within(dialog).getByLabelText("Importe")).toHaveValue("50,00");
+    expect(within(dialog).getByRole("group", { name: "Adónde va" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Caja" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByLabelText("Fecha")).toHaveValue("2026-11-25");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Pasan 50,00");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("de Guardado por Antiguo a Caja");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Antiguo queda saldado");
+    expect(dialog).toHaveTextContent("cuadra ese lugar a 0");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Saldar" }));
+    await waitFor(() => expect(svc.transfers.create).toHaveBeenCalledWith("c1", {
+      date: "2026-11-25", amountCents: 5000, from: { place: "PARTNER_HELD", partnerId: "s2" }, to: { place: "CASH" },
+    }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Traspaso apuntado"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Saldar a Antiguo" })).not.toBeInTheDocument());
+  });
+
+  it("lo que el club le debe se paga desde el banco a su cuenta, con otro importe y una nota", async () => {
+    const dialog = await openSettle();
+    fireEvent.click(within(dialog).getByRole("button", { name: /El club le debe 80,00/ }));
+    // Cambia el importe y el lado: ahora sale del banco
+    expect(within(dialog).getByLabelText("Importe")).toHaveValue("80,00");
+    expect(within(dialog).getByRole("group", { name: "De dónde sale" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Banco" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(within(dialog).getByLabelText("Importe"), { target: { value: "30" } });
+    fireEvent.change(within(dialog).getByLabelText("Nota del traspaso"), { target: { value: "Primer pago" } });
+    expect(within(dialog).getByRole("status")).toHaveTextContent("de Banco a Cuenta de Antiguo con el club");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Quedarán 50,00");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Saldar" }));
+    await waitFor(() => expect(svc.transfers.create).toHaveBeenCalledWith("c1", {
+      date: "2026-11-25", amountCents: 3000, from: { place: "BANK" }, to: { place: "PARTNER_ACCOUNT", partnerId: "s2" },
+      note: "Primer pago",
+    }));
+  });
+
+  it("se puede cambiar la caja por el banco", async () => {
+    const dialog = await openSettle();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Banco" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Saldar" }));
+    await waitFor(() => expect(svc.transfers.create).toHaveBeenCalledWith("c1", expect.objectContaining({
+      from: { place: "PARTNER_HELD", partnerId: "s2" }, to: { place: "BANK" },
+    })));
+  });
+
+  it("no deja pasar de lo pendiente ni importes vacíos, y lo dice sin guardar", async () => {
+    const dialog = await openSettle();
+    const save = within(dialog).getByRole("button", { name: "Saldar" });
+    fireEvent.change(within(dialog).getByLabelText("Importe"), { target: { value: "50,01" } });
+    expect(within(dialog).getByText("No puede pasar de lo pendiente: 50,00 €")).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Importe"), { target: { value: "0" } });
+    expect(within(dialog).getByText(/0,01 € como mínimo/)).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Importe"), { target: { value: "" } });
+    expect(within(dialog).getByText(/Escribe un importe válido/)).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    fireEvent.submit(save.closest("form") as HTMLFormElement);
+    expect(svc.transfers.create).not.toHaveBeenCalled();
+    // Un día fuera del rango tampoco
+    fireEvent.change(within(dialog).getByLabelText("Importe"), { target: { value: "10" } });
+    fireEvent.change(within(dialog).getByLabelText("Fecha"), { target: { value: "2026-10-01" } });
+    expect(within(dialog).getByText(/entre el inicio de la tesorería y hoy/)).toBeInTheDocument();
+    expect(save).toBeDisabled();
+  });
+
+  it("si el back rechaza el traspaso, enseña su mensaje (lo pendiente) y no dice que está hecho", async () => {
+    svc.transfers.create.mockRejectedValue(
+      Object.assign(new Error("Antiguo está de baja: solo se le puede saldar 50,00 € de lo que guarda"), { code: "TREASURY_PARTNER_INACTIVE" }),
+    );
+    const dialog = await openSettle();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Saldar" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Antiguo está de baja: solo se le puede saldar 50,00 € de lo que guarda"));
+    expect(toast.success).not.toHaveBeenCalled();
+    // El diálogo sigue abierto para corregir
+    expect(screen.getByRole("dialog", { name: "Saldar a Antiguo" })).toBeInTheDocument();
+  });
+
+  it("un socio con una sola cosa pendiente no pide elegir", async () => {
+    svc.summary.mockResolvedValue({
+      ...BAJA,
+      partners: [BAJA.partners[0], { ...BAJA.partners[1], heldCents: 0 }],
+      places: BAJA.places.map((p) => (p.place === "PARTNER_HELD" && p.partnerId === "s2" ? { ...p, balanceCents: 0 } : p)),
+    });
+    const dialog = await openSettle();
+    expect(within(dialog).queryByRole("group", { name: "¿Qué se salda?" })).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent("El club le debe 80,00");
+    expect(within(dialog).getByLabelText("Importe")).toHaveValue("80,00");
+  });
+
+  it("«Mover dinero» sigue sin ofrecer al socio de baja", async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: /Mover dinero/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Mover dinero" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Un socio guarda efectivo" }));
+    fireEvent.click(within(dialog).getByText("Marta"));
+    expect(within(dialog).queryByText("Antiguo")).not.toBeInTheDocument();
+    // Ni sus lugares en «De dónde sale» / «Adónde va»
+    fireEvent.click(within(dialog).getByRole("button", { name: "Otro" }));
+    fireEvent.click(within(dialog).getAllByText("Caja")[0]);
+    expect(within(dialog).queryByText(/Antiguo/)).not.toBeInTheDocument();
+  });
+
+  it("se puede cuadrar la cuenta del socio de baja y se avisa de hasta dónde", async () => {
+    renderSection();
+    const cuentas = await rowsOf();
+    // El «Cuadrar» de la fila de Antiguo (la segunda)
+    const cuadrar = within(cuentas).getAllByRole("button", { name: "Cuadrar" });
+    expect(cuadrar).toHaveLength(2);
+    fireEvent.click(cuadrar[1]);
+    const dialog = await screen.findByRole("dialog", { name: "Cuadrar" });
+    expect(within(dialog).getByText("Cuenta de Antiguo con el club (de baja)")).toBeInTheDocument();
+    expect(within(dialog).getByRole("note")).toHaveTextContent("Antiguo está de baja");
+    expect(within(dialog).getByRole("note")).toHaveTextContent("entre −80,00");
+    fireEvent.change(within(dialog).getByLabelText("Lo que hay de verdad"), { target: { value: "-30" } });
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Calculado por el panel");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirmar cuadre" }));
+    await waitFor(() => expect(svc.counts.create).toHaveBeenCalledWith("c1", {
+      place: "PARTNER_ACCOUNT", partnerId: "s2", upTo: "2026-11-25", countedCents: -3000,
+    }));
+  });
+
+  it("lo guardado por el socio de baja se cuadra desde su tarjeta de saldos", async () => {
+    renderSection();
+    const saldos = await screen.findByRole("region", { name: "Saldos" });
+    // Caja, banco, Marta y Antiguo
+    const cuadrar = within(saldos).getAllByRole("button", { name: "Cuadrar" });
+    expect(cuadrar).toHaveLength(4);
+    fireEvent.click(cuadrar[3]);
+    const dialog = await screen.findByRole("dialog", { name: "Cuadrar" });
+    expect(within(dialog).getByText("Guardado por Antiguo (de baja)")).toBeInTheDocument();
+    expect(within(dialog).getByRole("note")).toHaveTextContent("entre 0,00 € y 50,00");
+  });
+
+  it("un cuadre normal no lleva aviso de baja ni ofrece al socio de baja sin saldo", async () => {
+    svc.summary.mockResolvedValue(SUMMARY);
+    renderSection();
+    await screen.findByRole("region", { name: "Saldos" });
+    fireEvent.click(screen.getAllByRole("button", { name: /Cuadrar/ })[0]);
+    const dialog = await screen.findByRole("dialog", { name: "Cuadrar" });
+    expect(within(dialog).queryByRole("note")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByText("Caja"));
+    expect(within(dialog).getByText("Guardado por Marta")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Antiguo/)).not.toBeInTheDocument();
   });
 });
 

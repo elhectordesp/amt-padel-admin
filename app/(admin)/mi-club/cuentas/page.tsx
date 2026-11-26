@@ -138,7 +138,7 @@ function CuentasContent() {
               {tab === "tienda" && <AccountsShopSection clubId={clubId} />}
               {tab === "ajustes" && (
                 <>
-                  <AccountsPartnersSection clubId={clubId} showShares={accounts.treasuryOn && canAccounts} />
+                  <AccountsPartnersSection clubId={clubId} treasuryOn={accounts.treasuryOn && canAccounts} />
                   <AccountsPartPricesSection clubId={clubId} />
                   <AccountsConfigSection clubId={clubId} treasuryOn={accounts.treasuryOn} />
                   {canAccounts && <LedgerCategoriesSection clubId={clubId} />}

@@ -4,11 +4,14 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { ErrorState } from "@/components/admin/error-state";
 import { AccountsPartnerShares } from "@/components/admin/accounts-partner-shares";
 import { accountsQK, accountsService, type ClubPartner } from "@/lib/services/accounts";
 import { profitQK } from "@/lib/services/profit";
+import { treasuryQK, treasuryService } from "@/lib/services/treasury";
 import { accountsErrorText } from "@/lib/utils/booking-parts";
+import { pendingSentence, pendingSettlements } from "@/lib/utils/treasury";
 
 const FIELD =
   "min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:border-[#D4AF37]";
@@ -18,23 +21,34 @@ const NAME_MAX = 60;
  * «Socios del club»: las personas a cuyo móvil llega un Bizum (el club no
  * tiene Bizum propio). Al cobrar por Bizum se elige uno o «Club». No se
  * borran: se desactivan y dejan de ofrecerse, pero lo cobrado sigue a su nombre.
+ * Con la tesorería encendida, desactivar a quien guarda dinero del club (o a
+ * quien el club debe) pide confirmación: se salda después desde Tesorería.
  */
-export function AccountsPartnersSection({ clubId, showShares = false }: {
+export function AccountsPartnersSection({ clubId, treasuryOn = false }: {
   clubId:      string;
-  /** Con la tesorería encendida y permiso de cuentas: las partes del reparto, debajo de la lista. */
-  showShares?: boolean;
+  /** Con la tesorería encendida y permiso de cuentas: las partes del reparto, debajo de la lista, y el aviso del saldo al desactivar. */
+  treasuryOn?: boolean;
 }) {
   const qc = useQueryClient();
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  // Un socio con saldo al que se va a dar de baja, con lo pendiente tal como estaba al pulsar
+  const [confirming, setConfirming] = useState<{ id: string; name: string; pending: string } | null>(null);
 
   const query = useQuery({
     queryKey: accountsQK.partners(clubId),
     queryFn: () => accountsService.partners.list(clubId),
   });
-  // Un socio nuevo o dado de baja cambia a quién se reparte: las partes se vuelven a pedir
+  // Lo que guarda o le debe a cada socio sale del resumen de Tesorería (la misma consulta que esa pestaña)
+  const treasury = useQuery({
+    queryKey: treasuryQK.summary(clubId),
+    queryFn: () => treasuryService.summary(clubId),
+    enabled: treasuryOn,
+  });
+  // Un socio nuevo o dado de baja cambia a quién se reparte (las partes se vuelven a pedir) y qué puede hacer en Tesorería
   const refresh = () => Promise.all([
     qc.invalidateQueries({ queryKey: accountsQK.partners(clubId) }),
+    qc.invalidateQueries({ queryKey: treasuryQK.all(clubId) }),
     qc.invalidateQueries({ queryKey: profitQK.current(clubId) }),
     qc.invalidateQueries({ queryKey: profitQK.partnerShares(clubId) }),
   ]);
@@ -51,6 +65,16 @@ export function AccountsPartnersSection({ clubId, showShares = false }: {
     onError: (err: unknown) => toast.error(accountsErrorText(err)),
   });
   const busy = create.isPending || update.isPending;
+  // Hasta saber su saldo, no se da de baja a nadie: el aviso depende de él
+  const waitingBalance = treasuryOn && treasury.isPending;
+
+  const deactivate = (p: ClubPartner) => {
+    const summary = treasury.data;
+    const balance = summary?.started ? summary.partners.find((t) => t.partnerId === p.id) : undefined;
+    const pending = balance ? pendingSettlements(balance) : [];
+    if (pending.length > 0) setConfirming({ id: p.id, name: p.name, pending: pendingSentence(p.name, pending) });
+    else update.mutate({ id: p.id, data: { active: false } });
+  };
 
   const name = newName.trim();
   const editedName = editing?.name.trim() ?? "";
@@ -128,8 +152,8 @@ export function AccountsPartnersSection({ clubId, showShares = false }: {
                     </button>
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={() => update.mutate({ id: p.id, data: { active: !p.active } })}
+                      disabled={busy || (p.active && waitingBalance)}
+                      onClick={() => (p.active ? deactivate(p) : update.mutate({ id: p.id, data: { active: true } }))}
                       className="min-h-11 rounded-md border border-border px-4 text-sm hover:bg-secondary disabled:opacity-50"
                     >
                       {p.active ? "Desactivar" : "Activar"}
@@ -167,7 +191,18 @@ export function AccountsPartnersSection({ clubId, showShares = false }: {
         </button>
       </form>
 
-      {showShares && <AccountsPartnerShares clubId={clubId} />}
+      {treasuryOn && <AccountsPartnerShares clubId={clubId} />}
+
+      <ConfirmModal
+        open={confirming !== null}
+        title={confirming ? `¿Desactivar a ${confirming.name}?` : ""}
+        description={confirming ? `${confirming.pending}. Podrás saldarlo después desde Tesorería.` : ""}
+        confirmLabel="Desactivar"
+        loading={update.isPending}
+        onClose={() => setConfirming(null)}
+        onConfirm={() =>
+          confirming && update.mutate({ id: confirming.id, data: { active: false } }, { onSettled: () => setConfirming(null) })}
+      />
     </section>
   );
 }

@@ -5,12 +5,13 @@
  * banco, lo que guarda un socio o la cuenta de un socio) hasta hoy o hasta
  * ayer. Antes de confirmar se enseña lo que el panel tenía calculado y la
  * diferencia: al confirmar, ese día el saldo pasa a ser lo contado y los
- * saldos siguientes parten de ahí.
+ * saldos siguientes parten de ahí. Los lugares de un socio de baja con saldo se
+ * pueden cuadrar solo para saldarlos: acercarlos a 0, sin pasarse.
  */
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { CustomSelect, Field, Input } from "@/components/admin/form";
 import { SchoolDialog } from "@/components/admin/school-dialog";
@@ -22,8 +23,8 @@ import { accountsErrorText } from "@/lib/utils/booking-parts";
 import { formatCents } from "@/lib/utils/booking-price";
 import { formatDayKey } from "@/lib/utils/time-zone";
 import {
-  allowsNegativeCount, beforeStartBalance, countDay, countDiffText, NOTE_MAX, parsePlaceKey, parseSignedCents,
-  placeKey, signedCents, TREASURY_MAX_CENTS, writablePlaces, type CountUpTo,
+  allowsNegativeCount, beforeStartBalance, countablePlaces, countDay, countDiffText, NOTE_MAX, parsePlaceKey,
+  parseSignedCents, placeKey, settleCountNote, signedCents, TREASURY_MAX_CENTS, type CountUpTo,
 } from "@/lib/utils/treasury";
 
 const DAY: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" };
@@ -36,7 +37,9 @@ export function TreasuryCountDialog({ clubId, summary, initialKey = "CASH", onCl
   onClose:     () => void;
 }) {
   const qc = useQueryClient();
-  const places = writablePlaces(summary.places, new Set(summary.partners.filter((p) => p.active).map((p) => p.partnerId)));
+  const activePartners = new Set(summary.partners.filter((p) => p.active).map((p) => p.partnerId));
+  // Un socio de baja solo se ofrece mientras tenga saldo: cuadrarlo es una forma de saldarlo
+  const places = countablePlaces(summary.places, activePartners);
   const [key, setKey] = useState(places.some((p) => placeKey(p) === initialKey) ? initialKey : "CASH");
   const [upTo, setUpTo] = useState<CountUpTo>("today");
   const [counted, setCounted] = useState("");
@@ -45,6 +48,7 @@ export function TreasuryCountDialog({ clubId, summary, initialKey = "CASH", onCl
 
   const ref = parsePlaceKey(key);
   const balance = summary.places.find((p) => placeKey(p) === key);
+  const inactivePartner = ref.partnerId ? summary.partners.find((p) => p.partnerId === ref.partnerId && !p.active) : undefined;
   const day = countDay(upTo, summary.today);
   // Un día anterior al inicio no tiene extracto: vale 0 salvo que ese día ya se cuadrara
   const beforeStart = day < summary.startDate;
@@ -102,11 +106,20 @@ export function TreasuryCountDialog({ clubId, summary, initialKey = "CASH", onCl
       >
         <Field label="Qué se cuenta">
           <CustomSelect
-            options={places.map((p) => ({ value: placeKey(p), label: p.label }))}
+            options={places.map((p) => ({
+              value: placeKey(p),
+              label: p.partnerId && !activePartners.has(p.partnerId) ? `${p.label} (de baja)` : p.label,
+            }))}
             value={key}
             onChange={setKey}
           />
         </Field>
+        {inactivePartner && balance && (
+          <p role="note" className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
+            <span>{settleCountNote(inactivePartner.name, balance.balanceCents)}</span>
+          </p>
+        )}
 
         <div role="group" aria-label="Hasta cuándo">
           <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hasta cuándo</span>
