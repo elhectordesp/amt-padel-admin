@@ -272,6 +272,12 @@ describe("los errores de reservas fijas", () => {
     expect(seriesErrorText(err("BOOKING_SERIES_EMPTY", "Ninguna de las fechas está libre"))).toMatch(/otra hora, otra pista o más semanas/);
   });
 
+  it("una reserva fija repetida (409) dice dónde buscarla, no el mensaje del back", () => {
+    expect(seriesErrorText(err("BOOKING_SERIES_DUPLICATE", "Serie duplicada"))).toBe(
+      "Este cliente ya tiene una reserva fija ese día, a esa hora y en esa pista. Búscala en Reservas fijas.",
+    );
+  });
+
   it("en «no valen los datos» manda el mensaje del back, que dice cuál falla", () => {
     expect(seriesErrorText(err("BOOKING_SERIES_INVALID", "Esa pista no admite esa duración"))).toBe("Esa pista no admite esa duración");
     expect(seriesErrorText(err("BOOKING_SERIES_INVALID", ""))).toMatch(/Revisa la pista, la hora y las fechas/);

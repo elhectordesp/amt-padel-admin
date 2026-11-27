@@ -234,6 +234,7 @@ export const SERIES_ERROR_MESSAGES: Record<string, string> = {
   BOOKING_SERIES_INVALID:   "Los datos de la reserva fija no valen. Revisa la pista, la hora y las fechas.",
   BOOKING_SERIES_ENDED:     "Esta reserva fija ya está terminada. Para seguir, crea otra desde el calendario.",
   BOOKING_SERIES_EMPTY:     "Ninguna de las fechas está libre, así que no se ha creado la reserva fija. Prueba con otra hora, otra pista o más semanas.",
+  BOOKING_SERIES_DUPLICATE: "Este cliente ya tiene una reserva fija ese día, a esa hora y en esa pista. Búscala en Reservas fijas.",
 };
 
 /** El mensaje de un error de reservas fijas: el del código; en INVALID, el del back, que dice qué dato falla. */
