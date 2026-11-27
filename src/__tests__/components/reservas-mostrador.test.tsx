@@ -327,6 +327,22 @@ describe("Alta de reserva — mostrador", () => {
     expect(payload).not.toHaveProperty("clubCustomerId");
   });
 
+  it("cliente nuevo sin teléfono: avisa de que no podrá escribirle, pero lo da de alta con solo el nombre", async () => {
+    customersSvc.list.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 6 });
+    customersSvc.create.mockResolvedValue({ id: "cc8", name: "Hugo", phone: null });
+    await open();
+    fireEvent.change(screen.getByLabelText("Buscar cliente"), { target: { value: "Hugo" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Dar de alta/ }));
+    expect(screen.getByText("Sin teléfono ni email no podrás escribirle desde el club.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Añadir cliente" }));
+
+    await waitFor(() => expect(customersSvc.create).toHaveBeenCalledWith("c1", { name: "Hugo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Crear reserva" }));
+    await waitFor(() =>
+      expect(svc.bookings.create).toHaveBeenCalledWith(expect.objectContaining({ clubCustomerId: "cc8" })),
+    );
+  });
+
   it("cliente nuevo: alta rápida con nombre y teléfono, y se asigna a la reserva", async () => {
     customersSvc.list.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 6 });
     customersSvc.create.mockResolvedValue({ id: "cc9", name: "Luis", phone: "611222333" });

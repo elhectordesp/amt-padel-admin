@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { CustomerNoContactNotice } from "@/components/admin/customer-no-contact-notice";
 import { Field, Input } from "@/components/admin/form";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
@@ -49,10 +50,11 @@ export async function findDuplicateCustomers(
 }
 
 /**
- * «Nuevo cliente»: quien no tiene la app (nombre y teléfono o email) o, si ya
- * juega en AMT, se busca su cuenta y el contacto se lee de ella. Con una fecha
- * de nacimiento de menor aparecen los datos de su padre, madre o tutor y, si
- * ya ha consentido, se deja constancia al darlo de alta.
+ * «Nuevo cliente»: quien no tiene la app (solo el nombre es obligatorio; el
+ * teléfono y el email, para poder escribirle) o, si ya juega en AMT, se busca
+ * su cuenta y el contacto se lee de ella. Con una fecha de nacimiento de menor
+ * aparecen los datos de su padre, madre o tutor y, si ya ha consentido, se deja
+ * constancia al darlo de alta.
  */
 export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Props) {
   const qc = useQueryClient();
@@ -76,6 +78,9 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
   // Solo un aviso para el formulario: el servidor cuenta la edad con la zona del club
   const age = birthDate ? ageOn(birthDate, localDayKey(new Date())) : null;
   const isMinor = age !== null && age >= 0 && age < ADULT_AGE;
+  // Solo el nombre es obligatorio: sin ningún contacto (ni suyo ni del tutor) se avisa, no se bloquea
+  const hasGuardianContact = isMinor && (!!guardianPhone.trim() || !!guardianEmail.trim());
+  const noContact = !!name.trim() && !phone.trim() && !email.trim() && !hasGuardianContact;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -117,17 +122,10 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
     setNoRelation(false);
     // Con el aviso a la vista, «Crear de todos modos» es el botón de enviar
     const confirmedDuplicate = duplicates.length > 0;
-    const hasGuardianContact = isMinor && (!!guardianPhone.trim() || !!guardianEmail.trim());
     if (withAccount) {
       if (!picked) return setError("Elige a la persona de la lista");
     } else {
       if (!name.trim()) return setError("Escribe el nombre");
-      if (!phone.trim() && !email.trim() && !hasGuardianContact)
-        return setError(
-          isMinor
-            ? "Escribe un teléfono o un email, el suyo o el de su tutor, para poder localizarlo"
-            : "Escribe un teléfono o un email para poder localizarlo",
-        );
       if (email.trim() && !EMAIL.test(email.trim())) return setError("El email no es válido");
     }
     if (birthDate && age !== null && age < 0) return setError("La fecha de nacimiento no puede ser futura");
@@ -167,12 +165,13 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
               <Field label="Nombre">
                 <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
               </Field>
-              <Field label="Teléfono">
+              <Field label="Teléfono (opcional)">
                 <Input type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setDuplicates([]); }} maxLength={30} />
               </Field>
               <Field label="Email (opcional)">
                 <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setDuplicates([]); }} maxLength={254} />
               </Field>
+              {noContact && <CustomerNoContactNotice />}
             </>
           )}
 

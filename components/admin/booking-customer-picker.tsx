@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Search, X } from "lucide-react";
+import { CustomerNoContactNotice } from "@/components/admin/customer-no-contact-notice";
 import { Button } from "@/components/ui/button";
 import { clubCustomersQK, clubCustomersService, type ClubCustomer } from "@/lib/services/club-customers";
 
@@ -44,7 +45,8 @@ export function BookingCustomerPicker({
   });
 
   const create = useMutation({
-    mutationFn: () => clubCustomersService.create(clubId, { name: name.trim(), phone: phone.trim() }),
+    // Solo el nombre es obligatorio: sin teléfono se da de alta igual (el aviso va en el formulario)
+    mutationFn: () => clubCustomersService.create(clubId, { name: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}) }),
     onSuccess: (c) => {
       void qc.invalidateQueries({ queryKey: clubCustomersQK.all(clubId) });
       pick(c);
@@ -94,7 +96,6 @@ export function BookingCustomerPicker({
   const submitNew = () => {
     setError(null);
     if (!name.trim()) return setError("Escribe el nombre del cliente");
-    if (!phone.trim()) return setError("Escribe su teléfono para poder localizarle");
     create.mutate();
   };
 
@@ -115,12 +116,13 @@ export function BookingCustomerPicker({
         <input
           type="tel"
           aria-label="Teléfono del cliente"
-          placeholder="Teléfono"
+          placeholder="Teléfono (opcional)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           maxLength={30}
           className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
         />
+        {name.trim() && !phone.trim() && <CustomerNoContactNotice />}
         {error && (
           <p role="alert" className="text-xs text-destructive">
             {error}

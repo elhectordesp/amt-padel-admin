@@ -107,7 +107,7 @@ export function ClubCustomerImportDialog({ open, clubId, onClose }: Props) {
             <>
               <p className="text-muted-foreground">
                 Sube un CSV con tu lista de clientes y socios (máximo 2.000 filas y 1 MB). En Excel: Guardar como «CSV UTF-8».
-                Solo es obligatorio el nombre y, para localizar a cada persona, un teléfono o un email.
+                Solo es obligatorio el nombre.
                 La columna fecha_nacimiento (dd/mm/aaaa) es opcional: con ella se sabe quién es menor.
                 Antes de guardar nada verás qué entra y qué no.
               </p>
