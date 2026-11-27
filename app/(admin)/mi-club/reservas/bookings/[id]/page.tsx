@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { BookingCollectPanel } from "@/components/admin/booking-collect-panel";
+import { FixedBadge } from "@/components/admin/booking-fixed-badge";
+import { BookingSeriesNotice } from "@/components/admin/booking-series-notice";
 import { BookingShopSales } from "@/components/admin/booking-shop-sales";
 import { BookingResultPanel } from "@/components/admin/booking-result-panel";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
@@ -34,6 +36,7 @@ import { useClubAccess } from "@/lib/use-club-access";
 import { useClubTimeZone } from "@/lib/use-club-time-zone";
 import { useRole, isClub } from "@/lib/use-role";
 import { MODE_LABELS } from "@/lib/utils/booking-labels";
+import { isFixedBooking } from "@/lib/utils/booking-series";
 import { bookingCapacity } from "@/lib/utils/booking-participants";
 import { partsDebtLabel, partsDescription, partsOpenDebtCents } from "@/lib/utils/booking-parts";
 import { paymentAction, paymentMethodLabel } from "@/lib/utils/booking-payment";
@@ -264,6 +267,7 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
             <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               {MODE_LABELS[b.matchMode]}
             </span>
+            {isFixedBooking(b) && <FixedBadge className="rounded-md bg-primary/15 px-2 py-0.5 text-xs text-primary" />}
             {b.isCompetitive && (
               <span className="inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-0.5 text-xs text-primary">
                 <Trophy className="h-3 w-3" /> Competitivo
@@ -291,6 +295,9 @@ function BookingDetail({ params }: { params: Promise<{ id: string }> }) {
           </div>
         )}
       </div>
+
+      {/* De una reserva fija: de quién, qué día y hora, hasta cuándo, y su enlace */}
+      {b.recurringGroupId && <BookingSeriesNotice clubId={clubId} seriesId={b.recurringGroupId} />}
 
       {/* Resumen */}
       <Section title="Resumen">

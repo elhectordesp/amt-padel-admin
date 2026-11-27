@@ -104,8 +104,8 @@ export function canAccess(
 
 /**
  * El área de una página del panel del club, o null si es de libre acceso
- * (portada, perfil...). Reservas: calendario y listado son del área
- * «bookings»; el resto de ajustes de reservas (pistas, precios, horarios...)
+ * (portada, perfil...). Reservas: calendario, listado y reservas fijas son del
+ * área «bookings»; el resto de ajustes de reservas (pistas, precios, horarios...)
  * son configuración del club. La escuela (`/mi-club/escuela`) es la suya, antes
  * del comodín de `/mi-club`.
  */
@@ -122,7 +122,9 @@ export function areaForPath(pathname: string): ClubArea | null {
   ) return "tournaments";
   if (under("/resultados")) return "results";
   if (under("/caja")) return "cash";
-  if (under("/mi-club/reservas/calendario") || under("/mi-club/reservas/bookings")) return "bookings";
+  if (
+    under("/mi-club/reservas/calendario") || under("/mi-club/reservas/bookings") || under("/mi-club/reservas/fijas")
+  ) return "bookings";
   if (under("/mi-club")) return "settings";
   return null;
 }
