@@ -198,9 +198,12 @@ describe("la marca «Fija» y el estado de una reserva fija", () => {
     expect(seriesState({ endedAt: "2026-11-01T10:00:00.000Z", endDate: "2027-01-01" }, "2026-12-01")).toBe("ended");
   });
 
-  it("se amplía mientras no se haya terminado a mano; se termina con alguna fecha por delante", () => {
-    expect(canExtendSeries({ endedAt: null })).toBe(true);
-    expect(canExtendSeries({ endedAt: "2026-11-01T10:00:00.000Z" })).toBe(false);
+  it("se amplía mientras no se haya terminado a mano y quede margen hasta el máximo; se termina con alguna fecha por delante", () => {
+    expect(canExtendSeries({ endedAt: null, endDate: "2027-03-31" }, "2026-12-01")).toBe(true);
+    expect(canExtendSeries({ endedAt: "2026-11-01T10:00:00.000Z", endDate: "2027-03-31" }, "2026-12-01")).toBe(false);
+    // El máximo desde el 1/12/2026 es el 30/11/2027: acabando ahí no queda ningún día que añadir.
+    expect(canExtendSeries({ endedAt: null, endDate: "2027-11-29" }, "2026-12-01")).toBe(true);
+    expect(canExtendSeries({ endedAt: null, endDate: "2027-11-30" }, "2026-12-01")).toBe(false);
     expect(canEndSeries({ endedAt: null, endDate: "2026-12-01" }, "2026-12-01")).toBe(true);
     expect(canEndSeries({ endedAt: null, endDate: "2026-11-30" }, "2026-12-01")).toBe(false);
     expect(canEndSeries({ endedAt: "2026-11-01T10:00:00.000Z", endDate: "2027-01-01" }, "2026-12-01")).toBe(false);

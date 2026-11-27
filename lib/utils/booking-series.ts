@@ -197,9 +197,12 @@ export const SERIES_STATE_LABEL: Record<SeriesState, string> = {
   finished: "Acabada",
 };
 
-/** Ampliar vale mientras no se haya terminado a mano (la ya acabada se puede alargar). */
-export function canExtendSeries(s: Pick<SeriesView, "endedAt">): boolean {
-  return !s.endedAt;
+/**
+ * Ampliar vale mientras no se haya terminado a mano (la ya acabada se puede alargar)
+ * y quede algún día entre su fin y el máximo (un año desde hoy).
+ */
+export function canExtendSeries(s: Pick<SeriesView, "endedAt" | "endDate">, today: string): boolean {
+  return !s.endedAt && s.endDate < extendMaxEndDate(today);
 }
 
 /** Terminar vale con la serie sin terminar y con alguna fecha por delante. */

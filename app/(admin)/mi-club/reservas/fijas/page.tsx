@@ -189,7 +189,7 @@ function ReservasFijas() {
                           <Button variant="outline" size="sm" onClick={() => setViewId(s.id)}>
                             Ver
                           </Button>
-                          {canWrite && canExtendSeries(s) && (
+                          {canWrite && canExtendSeries(s, today) && (
                             <Button variant="outline" size="sm" onClick={() => setExtending(s)}>
                               <Repeat className="h-3.5 w-3.5" /> Ampliar
                             </Button>
