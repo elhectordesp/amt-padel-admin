@@ -22,6 +22,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { FixedBadge } from "@/components/admin/booking-fixed-badge";
 import { CancelBookingDialog } from "@/components/admin/cancel-booking-dialog";
 import { CancelManyBookingsDialog } from "@/components/admin/cancel-many-bookings-dialog";
 import { ErrorState } from "@/components/admin/error-state";
@@ -36,6 +37,7 @@ import { useRole, isClub } from "@/lib/use-role";
 import { cancelFailureReason, cancelledSummary } from "@/lib/utils/booking-cancel-many";
 import { dayRangeIso } from "@/lib/utils/booking-day-grid";
 import { bookingHolder, isUnpaid, MODE_LABELS } from "@/lib/utils/booking-labels";
+import { isFixedBooking } from "@/lib/utils/booking-series";
 import { activeParticipants, playersLabel } from "@/lib/utils/booking-participants";
 import { paymentMethodLabel } from "@/lib/utils/booking-payment";
 import { formatCents } from "@/lib/utils/booking-price";
@@ -542,8 +544,9 @@ function BookingRow({
       <td className="px-3 py-2 align-top">
         <Link href={href} className="block cursor-pointer">
           <span className="font-medium tabular-nums">{timeStr}</span>
-          <span className="block text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             {dateStr} · {b.shortCode}
+            {isFixedBooking(b) && <FixedBadge className="bg-primary/10 text-primary" />}
           </span>
         </Link>
       </td>

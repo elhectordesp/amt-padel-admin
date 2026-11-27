@@ -5,9 +5,10 @@ import { canAccess, type ClubArea, type ClubStaffRole } from "@/lib/club-permiss
 describe("navForRole", () => {
   it("el gestor del club: lo diario arriba, sin Inscripciones ni Resultados", () => {
     expect(navForRole("club").map((i) => i.label)).toEqual([
-      "Hoy", "Calendario", "Reservas", "Caja", "Clientes", "Mensajes", "Escuela", "Torneos", "Ligas", "Mi club", "Equipo", "Historial", "Patrocinadores",
+      "Hoy", "Calendario", "Reservas", "Reservas fijas", "Caja", "Clientes", "Mensajes", "Escuela", "Torneos", "Ligas", "Mi club", "Equipo", "Historial", "Patrocinadores",
     ]);
     expect(navForRole("club").find((i) => i.label === "Escuela")?.href).toBe("/mi-club/escuela");
+    expect(navForRole("club").find((i) => i.label === "Reservas fijas")?.href).toBe("/mi-club/reservas/fijas");
     const hrefs = navForRole("club").map((i) => i.href);
     expect(hrefs).toContain("/caja");
     expect(hrefs).not.toContain("/inscripciones");
@@ -16,7 +17,10 @@ describe("navForRole", () => {
 
   it("el equipo solo ve lo que su rol puede leer", () => {
     const can = (roles: ClubStaffRole[]) => ({ can: (a: ClubArea, l: "read" | "write" = "read") => canAccess(roles, a, l) });
-    expect(navForRole("club", can(["COACH"])).map((i) => i.label)).toEqual(["Hoy", "Calendario", "Reservas", "Escuela"]);
+    expect(navForRole("club", can(["COACH"])).map((i) => i.label)).toEqual(["Hoy", "Calendario", "Reservas", "Reservas fijas", "Escuela"]);
+    // Las reservas fijas son del área «bookings»: las ven quienes leen reservas (Recepción, Torneos y el entrenador), no Resultados
+    expect(navForRole("club", can(["RECEPTION"])).map((i) => i.label)).toContain("Reservas fijas");
+    expect(navForRole("club", can(["RESULTS"])).map((i) => i.label)).not.toContain("Reservas fijas");
     // Patrocinadores sigue al área de torneos (la que pide el back), no a la de ajustes:
     // Resultados, que lee los torneos pero no los ajustes, los ve
     expect(navForRole("club", can(["RESULTS"])).map((i) => i.label)).toEqual(["Hoy", "Torneos", "Ligas", "Patrocinadores"]);

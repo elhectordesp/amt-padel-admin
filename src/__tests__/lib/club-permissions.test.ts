@@ -130,6 +130,7 @@ describe("areaForPath", () => {
     ["/caja", "cash"],
     ["/mi-club/reservas/calendario", "bookings"],
     ["/mi-club/reservas/bookings/b1", "bookings"],
+    ["/mi-club/reservas/fijas", "bookings"],
     ["/mi-club/reservas/precios", "settings"],
     ["/mi-club/escuela", "school"],
     ["/mi-club/escuela/grupos/g1", "school"],

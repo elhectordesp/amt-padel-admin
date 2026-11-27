@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/admin/header", () => ({
@@ -73,6 +74,23 @@ describe("Ficha de un cliente del club", () => {
     expect(screen.getByRole("button", { name: /Guardar socio/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Guardar notas/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Añadir etiqueta")).toBeInTheDocument();
+  });
+
+  it("vaciar el teléfono y el email avisa de que no podrá escribirle, pero guarda el contacto igualmente", async () => {
+    service.update.mockResolvedValue({ ...ANA, phone: null });
+    await renderPage(asRole("RECEPTION"));
+    expect(await screen.findByRole("button", { name: /Guardar contacto/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Sin teléfono ni email no podrás escribirle/)).not.toBeInTheDocument();
+
+    const [, phone] = screen.getAllByRole("textbox");
+    fireEvent.change(phone, { target: { value: "" } });
+    expect(screen.getByText("Sin teléfono ni email no podrás escribirle desde el club.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar contacto/ }));
+    await waitFor(() =>
+      expect(service.update).toHaveBeenCalledWith("c1", "cc-1", { name: "Ana Pérez", phone: null, email: null }),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("con un rol de solo lectura (Torneos): ve el contacto, el socio, las etiquetas y las notas, sin botones ni formularios", async () => {

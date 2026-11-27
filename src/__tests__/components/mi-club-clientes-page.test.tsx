@@ -75,24 +75,43 @@ describe("Clientes del club", () => {
     await waitFor(() => expect(service.list).toHaveBeenCalledWith("c1", expect.objectContaining({ q: "ana", page: 1 })), WAIT);
   });
 
-  it("Nuevo cliente: sin teléfono ni email no se manda; con nombre y teléfono, se da de alta", async () => {
+  it("Nuevo cliente: solo el nombre es obligatorio; sin teléfono ni email avisa, pero lo da de alta", async () => {
     renderPage();
     await screen.findByText("Ana Pérez", {}, WAIT);
     fireEvent.click(screen.getByRole("button", { name: /Nuevo cliente/ }));
 
     const dialog = screen.getByRole("dialog", { name: "Nuevo cliente" });
+    const [name] = within(dialog).getAllByRole("textbox");
+    const submit = () => fireEvent.click(within(dialog).getByRole("button", { name: "Añadir cliente" }));
+
+    // Sin nombre no se manda, y el aviso de contacto aún no sale
+    submit();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Escribe el nombre");
+    expect(service.create).not.toHaveBeenCalled();
+    expect(within(dialog).queryByText(/Sin teléfono ni email no podrás escribirle/)).not.toBeInTheDocument();
+
+    // Con nombre y sin teléfono ni email: aviso bajo los campos y se da de alta igualmente
+    fireEvent.change(name, { target: { value: "  Luis Gómez " } });
+    expect(within(dialog).getByText("Sin teléfono ni email no podrás escribirle desde el club.")).toBeInTheDocument();
+    submit();
+    await waitFor(() => expect(service.create).toHaveBeenCalledWith("c1", { name: "Luis Gómez", phone: undefined, email: undefined }), WAIT);
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/clientes/cc-2"), WAIT);
+  });
+
+  it("Nuevo cliente: con un teléfono el aviso de contacto se va y el teléfono viaja limpio", async () => {
+    renderPage();
+    await screen.findByText("Ana Pérez", {}, WAIT);
+    fireEvent.click(screen.getByRole("button", { name: /Nuevo cliente/ }));
+    const dialog = screen.getByRole("dialog", { name: "Nuevo cliente" });
     const [name, phone] = within(dialog).getAllByRole("textbox");
     const submit = () => fireEvent.click(within(dialog).getByRole("button", { name: "Añadir cliente" }));
 
     fireEvent.change(name, { target: { value: "  Luis Gómez " } });
-    submit();
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("teléfono o un email");
-    expect(service.create).not.toHaveBeenCalled();
-
+    expect(within(dialog).getByText(/Sin teléfono ni email no podrás escribirle/)).toBeInTheDocument();
     fireEvent.change(phone, { target: { value: " 699000111 " } });
+    expect(within(dialog).queryByText(/Sin teléfono ni email no podrás escribirle/)).not.toBeInTheDocument();
     submit();
     await waitFor(() => expect(service.create).toHaveBeenCalledWith("c1", { name: "Luis Gómez", phone: "699000111", email: undefined }), WAIT);
-    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/mi-club/clientes/cc-2"), WAIT);
   });
 
   it("marca a los menores y avisa de los menores de 14 a los que falta el consentimiento del tutor", async () => {
@@ -140,13 +159,12 @@ describe("Clientes del club", () => {
     expect(await within(dialog).findByLabelText("Nombre del tutor")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Es obligatorio por debajo de 14 años");
 
-    // Sin teléfono ni email suyos ni del tutor, no se manda
-    submit();
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("el suyo o el de su tutor");
-    expect(service.create).not.toHaveBeenCalled();
-
-    // El consentimiento sin nombre del tutor tampoco
+    // Sin teléfono ni email suyos ni del tutor, se avisa pero no se bloquea; con el del tutor, el aviso se va
+    expect(within(dialog).getByText(/Sin teléfono ni email no podrás escribirle/)).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Email del tutor"), { target: { value: "marta@ejemplo.com" } });
+    expect(within(dialog).queryByText(/Sin teléfono ni email no podrás escribirle/)).not.toBeInTheDocument();
+
+    // El consentimiento sin nombre del tutor no se manda
     fireEvent.click(within(dialog).getByRole("checkbox"));
     submit();
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("nombre del tutor");

@@ -17,15 +17,17 @@
  * para el dedo.
  *
  * Cada bloque dice quién es el titular, si está cobrada o se debe, y las que
- * esperan invitaciones van con el borde discontinuo (leyenda debajo). El
- * enlace a la ficha lleva la vuelta a este día y esta franja.
+ * esperan invitaciones van con el borde discontinuo (leyenda debajo). Las de una
+ * reserva fija llevan la marca «Fija». El enlace a la ficha lleva la vuelta a
+ * este día y esta franja.
  */
 
 "use client";
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { Check, CircleAlert } from "lucide-react";
+import { Check, CircleAlert, Repeat } from "lucide-react";
+import { FixedBadge } from "@/components/admin/booking-fixed-badge";
 import { BookingPartsDots, PartsLegendItems } from "@/components/admin/booking-parts-dots";
 import { OccupationLegendItems } from "@/components/admin/occupation-legend";
 import {
@@ -38,6 +40,7 @@ import {
 } from "@/lib/utils/booking-day-grid";
 import { bookingHolder, isUnpaid } from "@/lib/utils/booking-labels";
 import { partsDebtLabel, partsOpenDebtCents } from "@/lib/utils/booking-parts";
+import { isFixedBooking } from "@/lib/utils/booking-series";
 import { occupationKindInfo } from "@/lib/utils/court-occupation";
 import { activeParticipants, bookingCapacity } from "@/lib/utils/booking-participants";
 import { zonedTime, zonedToDate } from "@/lib/utils/time-zone";
@@ -246,7 +249,7 @@ export function ReservasDayGrid({
           })}
         </tbody>
       </table>
-      <Legend showParts={bookings.some((b) => b.partsSummary != null)} />
+      <Legend showParts={bookings.some((b) => b.partsSummary != null)} showFixed={bookings.some(isFixedBooking)} />
     </>
   );
 }
@@ -257,7 +260,7 @@ export function calendarDayHref(date: string, period: DayPeriod): string {
   return `/mi-club/reservas/calendario?fecha=${date}${franja}`;
 }
 
-function Legend({ showParts }: { showParts: boolean }) {
+function Legend({ showParts, showFixed }: { showParts: boolean; showFixed: boolean }) {
   return (
     <ul aria-label="Leyenda" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
       <li className="flex items-center gap-1.5">
@@ -275,6 +278,11 @@ function Legend({ showParts }: { showParts: boolean }) {
       <li className="flex items-center gap-1.5">
         <CircleAlert className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden /> Sin cobrar
       </li>
+      {showFixed && (
+        <li className="flex items-center gap-1.5">
+          <Repeat className="h-3.5 w-3.5" aria-hidden /> Fija: se repite cada semana
+        </li>
+      )}
       {showParts && (
         <li className="flex items-center gap-1.5">
           <CircleAlert className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" aria-hidden /> Cobrada con partes a deber
@@ -318,6 +326,7 @@ function BookingBlock({
   const isOpen = b.matchMode === "OPEN";
   const holder = bookingHolder(b);
   const unpaid = isUnpaid(b);
+  const fixed = isFixedBooking(b);
   // Cobrada: con método de cobro y no pendiente (null: datos de cobro ya borrados)
   const owed = partsOpenDebtCents(b.partsSummary) > 0;
   const paid = !owed && b.paymentMethod !== null && b.paymentMethod !== "PENDING" && b.priceCents > 0;
@@ -332,7 +341,7 @@ function BookingBlock({
     <Link
       href={`/mi-club/reservas/bookings/${b.id}?volver=${encodeURIComponent(backHref)}`}
       className={`absolute inset-0.5 flex flex-col justify-start gap-0.5 overflow-hidden rounded px-2 py-1 transition-colors ${bg} ${border}`}
-      title={`${b.shortCode} · ${b.durationMinutes} min${holder ? ` · ${holder}` : ""}`}
+      title={`${b.shortCode} · ${b.durationMinutes} min${holder ? ` · ${holder}` : ""}${fixed ? " · Reserva fija" : ""}`}
     >
       <span className="flex items-center justify-between gap-1 font-medium tabular-nums">
         <span>
@@ -357,7 +366,10 @@ function BookingBlock({
           </span>
         )}
       </span>
-      <span className="truncate opacity-80">{holder ?? people}</span>
+      <span className="flex items-center justify-between gap-1">
+        <span className="min-w-0 truncate opacity-80">{holder ?? people}</span>
+        {fixed && <FixedBadge className="bg-background/60" />}
+      </span>
       {holder && !isOpen && <span className="truncate text-[11px] opacity-60">{people}</span>}
       {b.partsSummary && <BookingPartsDots summary={b.partsSummary} />}
     </Link>

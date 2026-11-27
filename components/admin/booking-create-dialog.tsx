@@ -14,6 +14,11 @@
  * si paga ya, «Cobrada ahora» la crea cobrada (`payNow`, en la misma operación
  * del back). El pie de botones queda fijo: el formulario se desplaza por dentro.
  *
+ * En «Por teléfono» y con cliente, «Repetir cada semana» hasta una fecha crea una
+ * reserva fija: «Ver fechas» enseña cada fecha con su estado y su precio y, desde
+ * ahí, «Crear N reservas» las crea todas (bookingSeriesService). Sin avisos a
+ * jugadores, sin «Cobrada ahora» y sin competitiva: se cobra cada una a su tiempo.
+ *
  * Submit → bookingsService.bookings.create. Al éxito cierra + refresca la lista.
  */
 
@@ -26,8 +31,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { adminService } from "@/lib/services/admin";
 import { bookingsService, bookingsQK } from "@/lib/services/bookings";
+import { bookingSeriesQK, bookingSeriesService, type SeriesPreview } from "@/lib/services/booking-series";
 import type { ClubCustomer } from "@/lib/services/club-customers";
 import { BookingCustomerPicker } from "@/components/admin/booking-customer-picker";
+import { SeriesPreviewPanel } from "@/components/admin/booking-series-preview";
+import { SeriesRepeatFields } from "@/components/admin/booking-series-repeat-fields";
+import { SeriesDialogShell } from "@/components/admin/booking-series-shell";
 import { AmountField } from "@/components/admin/payment-fields";
 import {
   PAYMENT_METHOD_OPTIONS,
@@ -36,6 +45,20 @@ import {
   type CounterPaymentMethod,
 } from "@/lib/utils/payment-methods";
 import { formatCents } from "@/lib/utils/booking-price";
+import {
+  buildSeriesPlan,
+  createButtonLabel,
+  createdCount,
+  createdMessage,
+  defaultSeriesEndDate,
+  everyWeekdayText,
+  isoWeekday,
+  seriesEndDateError,
+  seriesErrorText,
+  seriesMaxEndDate,
+  seriesRangeLabel,
+  seriesSlotLabel,
+} from "@/lib/utils/booking-series";
 import { zonedDayKey, zonedTime } from "@/lib/utils/time-zone";
 import type { Court, Player } from "@/types";
 import type { CreateBookingPayload } from "@/types/bookings";
@@ -123,6 +146,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   // El importe cobrado, en euros; sin tocar, el precio de la reserva
   const [payAmount, setPayAmount] = useState<string | null>(null);
 
+  // Reserva fija: repetir cada semana hasta una fecha. «Hasta» sin tocar es el 30 de
+  // junio siguiente (sigue a la fecha de inicio); «preview» es el segundo paso
+  const [repeat, setRepeat] = useState(false);
+  const [until, setUntil] = useState<string | null>(null);
+  const [preview, setPreview] = useState<SeriesPreview | null>(null);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+
   const courtsQuery = useQuery({
     queryKey: ["admin-courts", clubId],
     queryFn: () => adminService.courts.list(clubId),
@@ -209,7 +239,17 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
   // Lo cobrado ahora: lo escrito o, sin tocar, el precio del hueco
   const payAmountText = payAmount ?? centsToEurosInput(pickedSlot?.priceCents ?? 0);
   const payCents = eurosToCents(payAmountText);
-  const payInvalid = payNow && payCents === null;
+
+  // «Repetir cada semana»: solo en «Por teléfono», con cliente y con una hora que aún no ha empezado
+  const canRepeat = mode === "PHONE" && !!customer;
+  const repeatBlocked = started ? "Esa hora ya ha empezado: no se puede repetir." : null;
+  const repeatOn = repeat && canRepeat && !repeatBlocked;
+  const startDay = startsAt ? zonedDayKey(startsAt, timeZone) : date;
+  const untilValue = until ?? defaultSeriesEndDate(startDay);
+  const untilError = repeatOn ? seriesEndDateError(startDay, untilValue) : null;
+  const startTime = startsAt ? zonedTime(startsAt, timeZone) : "";
+  const courtName = courts.find((c) => c.id === courtId)?.name ?? "";
+  const payInvalid = !repeatOn && payNow && payCents === null;
 
   const create = useMutation({
     mutationFn: () => bookingsService.bookings.create(buildPayload()),
@@ -226,6 +266,39 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
         "No se pudo crear la reserva";
       toast.error(msg);
     },
+  });
+
+  const seriesPlan = repeatOn
+    ? buildSeriesPlan({
+        courtId,
+        clubCustomerId: customer?.id,
+        startDate: startDay,
+        endDate: untilValue,
+        startTime,
+        durationMinutes: duration,
+      })
+    : null;
+
+  const previewSeries = useMutation({
+    mutationFn: () => bookingSeriesService.preview(clubId, seriesPlan!),
+    onSuccess: (result) => {
+      setSeriesError(null);
+      setPreview(result);
+    },
+    onError: (err: unknown) => setSeriesError(seriesErrorText(err)),
+  });
+
+  const createSeries = useMutation({
+    mutationFn: () =>
+      bookingSeriesService.create(clubId, { ...seriesPlan!, ...(notes.trim() ? { notes: notes.trim() } : {}) }),
+    onSuccess: (result) => {
+      toast.success(createdMessage(result.occurrences));
+      // Las reservas nuevas, en las listas y en el calendario (cuelgan de «list»)
+      qc.invalidateQueries({ queryKey: ["bookings", "list"] });
+      qc.invalidateQueries({ queryKey: bookingSeriesQK.all(clubId) });
+      resetAndClose();
+    },
+    onError: (err: unknown) => setSeriesError(seriesErrorText(err)),
   });
 
   if (!open) return null;
@@ -249,7 +322,16 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     setSkipPlayerNotices(false);
     setPayMethod("CASH");
     setPayAmount(null);
+    setRepeat(false);
+    setUntil(null);
+    setPreview(null);
+    setSeriesError(null);
     onClose();
+  }
+
+  function backToForm() {
+    setPreview(null);
+    setSeriesError(null);
   }
 
   function addPlayer(p: Player) {
@@ -281,7 +363,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(customer ? { clubCustomerId: customer.id } : {}),
       ...(skipPlayerNotices ? { skipPlayerNotices: true } : {}),
-      ...(payNow && (pickedSlot?.priceCents ?? 0) > 0
+      ...(!repeatOn && payNow && (pickedSlot?.priceCents ?? 0) > 0
         ? { payNow: { method: payMethod, ...(payCents !== null ? { amountCents: payCents } : {}) } }
         : {}),
     };
@@ -327,7 +409,51 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
     !tooManyPlayers &&
     !openButStarted &&
     !payInvalid &&
-    !create.isPending;
+    !untilError &&
+    !create.isPending &&
+    !previewSeries.isPending;
+
+  // Segundo paso de una reserva fija: cada fecha con su estado y el total
+  if (preview) {
+    const n = createdCount(preview.totals);
+    return (
+      <SeriesDialogShell
+        title="Reserva fija"
+        subtitle="Revisa las fechas antes de crearlas"
+        busy={createSeries.isPending}
+        onClose={resetAndClose}
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={backToForm} disabled={createSeries.isPending}>
+              Atrás
+            </Button>
+            <Button size="sm" onClick={() => createSeries.mutate()} disabled={n === 0 || createSeries.isPending}>
+              {createSeries.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+              {createButtonLabel(n)}
+            </Button>
+          </>
+        }
+      >
+        <div className="text-sm">
+          <p className="font-medium">{customer?.name ?? "Cliente"}</p>
+          <p className="text-muted-foreground">
+            {seriesSlotLabel({ weekday: preview.weekday, startTime, durationMinutes: duration })}
+            {courtName ? ` · ${courtName}` : ""}
+          </p>
+          <p className="text-muted-foreground">{seriesRangeLabel({ startDate: startDay, endDate: untilValue })}</p>
+        </div>
+        <SeriesPreviewPanel
+          preview={preview}
+          emptyHint="Ninguna de las fechas está libre. Vuelve atrás y prueba con otra hora, otra pista o más semanas."
+        />
+        {seriesError && (
+          <p role="alert" className="text-sm text-destructive">
+            {seriesError}
+          </p>
+        )}
+      </SeriesDialogShell>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -633,19 +759,42 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           {/* Cliente del club: se busca, o se da de alta ahí mismo */}
           <BookingCustomerPicker clubId={clubId} value={customer} onChange={setCustomer} />
 
-          {/* Para copiar reservas que ya existen en otro sistema sin avisar dos veces */}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={skipPlayerNotices}
-              onChange={(e) => setSkipPlayerNotices(e.target.checked)}
-              className="h-4 w-4 accent-primary"
+          {/* Reserva fija: el mismo hueco cada semana, para quien ya es cliente */}
+          {canRepeat && (
+            <SeriesRepeatFields
+              checked={repeatOn}
+              onCheckedChange={(on) => {
+                setRepeat(on);
+                setSeriesError(null);
+              }}
+              blockedReason={repeatBlocked}
+              until={untilValue}
+              onUntilChange={(day) => {
+                setUntil(day);
+                setSeriesError(null);
+              }}
+              min={startDay}
+              max={seriesMaxEndDate(startDay)}
+              whenText={`${everyWeekdayText(isoWeekday(startDay))} a las ${startTime || "la hora elegida"}`}
+              error={untilError ?? seriesError}
             />
-            No avisar al jugador
-          </label>
+          )}
 
-          {/* Cobrada ahora: solo si la reserva tiene importe */}
-          {pickedSlot && pickedSlot.priceCents > 0 && (
+          {/* Para copiar reservas que ya existen en otro sistema sin avisar dos veces */}
+          {!repeatOn && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={skipPlayerNotices}
+                onChange={(e) => setSkipPlayerNotices(e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              No avisar al jugador
+            </label>
+          )}
+
+          {/* Cobrada ahora: solo si la reserva tiene importe (una fija se cobra cada fecha a su tiempo) */}
+          {!repeatOn && pickedSlot && pickedSlot.priceCents > 0 && (
             <div className="rounded-md border border-border bg-background p-3">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -676,25 +825,27 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             </div>
           )}
 
-          {/* Competitivo (no en una reserva ya empezada: fila 39) */}
-          <div>
-            <label className={`flex items-center gap-2 text-sm ${started ? "opacity-50" : ""}`}>
-              <input
-                type="checkbox"
-                checked={isCompetitive && !started}
-                onChange={(e) => setIsCompetitive(e.target.checked)}
-                disabled={started}
-                className="h-4 w-4 accent-primary"
-              />
-              Partido competitivo (puntúa en el ranking)
-            </label>
-            {started && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Esa hora ya ha empezado: se apunta como registro de la pista y su
-                resultado no puntúa.
-              </p>
-            )}
-          </div>
+          {/* Competitivo (no en una reserva ya empezada: fila 39, ni en una fija) */}
+          {!repeatOn && (
+            <div>
+              <label className={`flex items-center gap-2 text-sm ${started ? "opacity-50" : ""}`}>
+                <input
+                  type="checkbox"
+                  checked={isCompetitive && !started}
+                  onChange={(e) => setIsCompetitive(e.target.checked)}
+                  disabled={started}
+                  className="h-4 w-4 accent-primary"
+                />
+                Partido competitivo (puntúa en el ranking)
+              </label>
+              {started && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Esa hora ya ha empezado: se apunta como registro de la pista y su
+                  resultado no puntúa.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Notas */}
           <label className="block">
@@ -704,6 +855,7 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              maxLength={repeatOn ? 500 : undefined}
               rows={2}
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
             />
@@ -721,13 +873,13 @@ export function BookingCreateDialog({ open, onClose, clubId, timeZone, initial }
           </Button>
           <Button
             size="sm"
-            onClick={() => create.mutate()}
-            disabled={!canSubmit}
+            onClick={() => (repeatOn ? previewSeries.mutate() : create.mutate())}
+            disabled={!canSubmit || (repeatOn && !seriesPlan)}
           >
-            {create.isPending && (
+            {(create.isPending || previewSeries.isPending) && (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
             )}
-            Crear reserva
+            {repeatOn ? "Ver fechas" : "Crear reserva"}
           </Button>
         </div>
       </div>

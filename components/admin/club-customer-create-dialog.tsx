@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { CustomerNoContactNotice } from "@/components/admin/customer-no-contact-notice";
 import { Field, Input } from "@/components/admin/form";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/services/club-customers";
 import { ADULT_AGE, GUARDIAN_CONSENT_AGE, ageOn } from "@/lib/utils/customer-age";
 import { localDayKey } from "@/lib/utils/date-keys";
+import { foldText } from "@/lib/utils/search";
 import type { Player } from "@/types";
 
 interface Props {
@@ -49,10 +51,23 @@ export async function findDuplicateCustomers(
 }
 
 /**
- * «Nuevo cliente»: quien no tiene la app (nombre y teléfono o email) o, si ya
- * juega en AMT, se busca su cuenta y el contacto se lee de ella. Con una fecha
- * de nacimiento de menor aparecen los datos de su padre, madre o tutor y, si
- * ya ha consentido, se deja constancia al darlo de alta.
+ * Quien del club se llama igual, sin mirar tildes, mayúsculas ni espacios de
+ * sobra: el aviso del alta sin teléfono ni email, donde el nombre es lo único
+ * que identifica a la persona.
+ */
+export async function findCustomersWithSameName(clubId: string, name: string): Promise<ClubCustomer[]> {
+  const wanted = foldText(name);
+  if (!wanted) return [];
+  const page = await clubCustomersService.list(clubId, { q: wanted, pageSize: 20 });
+  return (page?.items ?? []).filter((c) => foldText(c.name) === wanted);
+}
+
+/**
+ * «Nuevo cliente»: quien no tiene la app (solo el nombre es obligatorio; el
+ * teléfono y el email, para poder escribirle) o, si ya juega en AMT, se busca
+ * su cuenta y el contacto se lee de ella. Con una fecha de nacimiento de menor
+ * aparecen los datos de su padre, madre o tutor y, si ya ha consentido, se deja
+ * constancia al darlo de alta.
  */
 export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Props) {
   const qc = useQueryClient();
@@ -69,13 +84,17 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
   const [error, setError] = useState<string | null>(null);
   // El back no enlaza una cuenta sin trato previo con el club (409): se propone el alta sin cuenta
   const [noRelation, setNoRelation] = useState(false);
-  // Clientes del club con el mismo teléfono o email: se avisa antes de duplicar
+  // Clientes del club con el mismo teléfono o email (o, sin ninguno de los dos, el mismo nombre): se avisa antes de duplicar
   const [duplicates, setDuplicates] = useState<ClubCustomer[]>([]);
+  const [duplicatesByName, setDuplicatesByName] = useState(false);
   const [checking, setChecking] = useState(false);
 
   // Solo un aviso para el formulario: el servidor cuenta la edad con la zona del club
   const age = birthDate ? ageOn(birthDate, localDayKey(new Date())) : null;
   const isMinor = age !== null && age >= 0 && age < ADULT_AGE;
+  // Solo el nombre es obligatorio: sin ningún contacto (ni suyo ni del tutor) se avisa, no se bloquea
+  const hasGuardianContact = isMinor && (!!guardianPhone.trim() || !!guardianEmail.trim());
+  const noContact = !!name.trim() && !phone.trim() && !email.trim() && !hasGuardianContact;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -117,17 +136,10 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
     setNoRelation(false);
     // Con el aviso a la vista, «Crear de todos modos» es el botón de enviar
     const confirmedDuplicate = duplicates.length > 0;
-    const hasGuardianContact = isMinor && (!!guardianPhone.trim() || !!guardianEmail.trim());
     if (withAccount) {
       if (!picked) return setError("Elige a la persona de la lista");
     } else {
       if (!name.trim()) return setError("Escribe el nombre");
-      if (!phone.trim() && !email.trim() && !hasGuardianContact)
-        return setError(
-          isMinor
-            ? "Escribe un teléfono o un email, el suyo o el de su tutor, para poder localizarlo"
-            : "Escribe un teléfono o un email para poder localizarlo",
-        );
       if (email.trim() && !EMAIL.test(email.trim())) return setError("El email no es válido");
     }
     if (birthDate && age !== null && age < 0) return setError("La fecha de nacimiento no puede ser futura");
@@ -135,13 +147,19 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
       if (guardianEmail.trim() && !EMAIL.test(guardianEmail.trim())) return setError("El email del tutor no es válido");
       if (consent && !guardianName.trim()) return setError("Escribe el nombre del tutor que ha dado su consentimiento");
     }
-    if (withAccount || confirmedDuplicate || (!phone.trim() && !email.trim())) {
+    if (withAccount || confirmedDuplicate) {
       create.mutate();
       return;
     }
+    // Sin teléfono ni email solo queda el nombre para saber si ya está
+    const byName = !phone.trim() && !email.trim();
     setChecking(true);
-    findDuplicateCustomers(clubId, phone, email)
-      .then((dups) => (dups.length > 0 ? setDuplicates(dups) : create.mutate()))
+    (byName ? findCustomersWithSameName(clubId, name) : findDuplicateCustomers(clubId, phone, email))
+      .then((dups) => {
+        if (dups.length === 0) return create.mutate();
+        setDuplicatesByName(byName);
+        setDuplicates(dups);
+      })
       // Si la comprobación falla, no se bloquea el alta: el aviso es una ayuda
       .catch(() => create.mutate())
       .finally(() => setChecking(false));
@@ -165,14 +183,24 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
           ) : (
             <>
               <Field label="Nombre">
-                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    // El aviso por nombre deja de valer al cambiarlo; el de teléfono o email, no
+                    if (duplicatesByName) setDuplicates([]);
+                  }}
+                  maxLength={120}
+                  autoFocus
+                />
               </Field>
-              <Field label="Teléfono">
+              <Field label="Teléfono (opcional)">
                 <Input type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setDuplicates([]); }} maxLength={30} />
               </Field>
               <Field label="Email (opcional)">
                 <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setDuplicates([]); }} maxLength={254} />
               </Field>
+              {noContact && <CustomerNoContactNotice />}
             </>
           )}
 
@@ -216,7 +244,9 @@ export function ClubCustomerCreateDialog({ open, clubId, onClose, onDone }: Prop
 
           {duplicates.length > 0 && (
             <div role="alert" className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-              <p className="font-medium">Ya hay un cliente con ese teléfono o email:</p>
+              <p className="font-medium">
+                {duplicatesByName ? "Ya hay un cliente con ese nombre:" : "Ya hay un cliente con ese teléfono o email:"}
+              </p>
               <ul className="space-y-1">
                 {duplicates.map((d) => (
                   <li key={d.id} className="flex items-center justify-between gap-2">

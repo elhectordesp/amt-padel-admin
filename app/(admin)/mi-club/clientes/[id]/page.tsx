@@ -19,6 +19,7 @@ import { AlertTriangle, Archive, ArchiveRestore, Loader2, Save, UserX } from "lu
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import { CustomerDebtsSection } from "@/components/admin/customer-debts-section";
+import { CustomerNoContactNotice } from "@/components/admin/customer-no-contact-notice";
 import { CustomerOpenAccount } from "@/components/admin/customer-open-account";
 import { CustomerVouchersSection } from "@/components/admin/customer-vouchers-section";
 import { ErrorState } from "@/components/admin/error-state";
@@ -201,7 +202,6 @@ function CustomerView({
 
   const saveContact = () => {
     if (!name.trim()) return toast.error("El nombre no puede quedar vacío");
-    if (!phone.trim() && !email.trim()) return toast.error("Deja un teléfono o un email para poder localizarlo");
     save.mutate({ name: name.trim(), phone: phone.trim() || null, email: email.trim() || null });
   };
   const saveMember = () => {
@@ -286,6 +286,7 @@ function CustomerView({
               <Field label="Nombre"><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} /></Field>
               <Field label="Teléfono"><Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} /></Field>
               <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} /></Field>
+              {!phone.trim() && !email.trim() && <CustomerNoContactNotice />}
               <Button size="sm" onClick={saveContact} disabled={save.isPending}><Save className="h-3.5 w-3.5" /> Guardar contacto</Button>
             </>
           )}
